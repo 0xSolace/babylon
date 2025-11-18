@@ -1,25 +1,25 @@
 /**
  * HuggingFace Upload Utility
- * 
+ *
  * Shared utility for uploading files to HuggingFace Hub.
  * Consolidates upload logic used across different services.
  */
 
 import { logger } from '@/lib/logger';
-import { promises as fs } from 'fs';
-import * as path from 'path';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 
-export interface UploadFileOptions {
+export type UploadFileOptions = {
   repo: { type: 'model' | 'dataset'; name: string };
   file: { path: string; content: Blob };
   credentials: { accessToken: string };
-}
+};
 
-export interface CreateRepoOptions {
+export type CreateRepoOptions = {
   repo: { type: 'model' | 'dataset'; name: string };
   credentials: { accessToken: string };
   private?: boolean;
-}
+};
 
 export class HuggingFaceUploadUtil {
   /**
@@ -70,8 +70,8 @@ export class HuggingFaceUploadUtil {
 
       if (stats.isFile()) {
         const content = await fs.readFile(filePath, 'utf-8');
-        
-        await this.uploadFile(repoName, repoType, file, content, token);
+
+        await HuggingFaceUploadUtil.uploadFile(repoName, repoType, file, content, token);
         uploadCount++;
       }
     }
@@ -103,13 +103,25 @@ export class HuggingFaceUploadUtil {
           credentials: { accessToken: token },
           private: isPrivate,
         });
-        logger.info('Created new repository', { repo: repoName, type: repoType });
+        logger.info('Created new repository', {
+          repo: repoName,
+          type: repoType,
+        });
       } catch (error) {
         // Repository might already exist, which is fine
-        if (error instanceof Error && (error.message.includes('already exists') || error.message.includes('Repository not found'))) {
-          logger.info('Repository already exists or accessible', { repo: repoName });
+        if (
+          error instanceof Error &&
+          (error.message.includes('already exists') ||
+            error.message.includes('Repository not found'))
+        ) {
+          logger.info('Repository already exists or accessible', {
+            repo: repoName,
+          });
         } else {
-          logger.warn('Could not ensure repository exists', { error, repo: repoName });
+          logger.warn('Could not ensure repository exists', {
+            error,
+            repo: repoName,
+          });
         }
       }
     } catch (error) {
@@ -138,8 +150,10 @@ export class HuggingFaceUploadUtil {
       console.log(`Uploading ${localDir} to ${repoName} via huggingface-cli...`);
 
       await execAsync(`huggingface-cli upload ${repoName} ${localDir} --repo-type ${repoType}`);
-      
-      logger.info('Successfully uploaded via huggingface-cli', { repo: repoName });
+
+      logger.info('Successfully uploaded via huggingface-cli', {
+        repo: repoName,
+      });
     } catch (error) {
       logger.error('CLI upload failed', { error });
       throw error;
@@ -161,4 +175,3 @@ export class HuggingFaceUploadUtil {
     ];
   }
 }
-

@@ -7643,9 +7643,7 @@
         "type": "regulatory_announcement",
         "description": "Hidden regulatory_announcement event occurred at tick 0",
         "impact": {
-          "affectedMarkets": [
-            "market-0"
-          ],
+          "affectedMarkets": ["market-0"],
           "severity": 0.7708547671791166
         }
       },
@@ -7654,10 +7652,7 @@
         "type": "whale_movement",
         "description": "Hidden whale_movement event occurred at tick 3",
         "impact": {
-          "affectedMarkets": [
-            "market-0",
-            "market-1"
-          ],
+          "affectedMarkets": ["market-0", "market-1"],
           "severity": 0.3195993909612298
         }
       },
@@ -7666,11 +7661,7 @@
         "type": "whale_movement",
         "description": "Hidden whale_movement event occurred at tick 6",
         "impact": {
-          "affectedMarkets": [
-            "market-0",
-            "market-1",
-            "market-2"
-          ],
+          "affectedMarkets": ["market-0", "market-1", "market-2"],
           "severity": 0.7437394403386861
         }
       },
@@ -7679,10 +7670,7 @@
         "type": "regulatory_announcement",
         "description": "Hidden regulatory_announcement event occurred at tick 9",
         "impact": {
-          "affectedMarkets": [
-            "market-0",
-            "market-1"
-          ],
+          "affectedMarkets": ["market-0", "market-1"],
           "severity": 0.9901250251568854
         }
       },
@@ -7691,9 +7679,7 @@
         "type": "regulatory_announcement",
         "description": "Hidden regulatory_announcement event occurred at tick 12",
         "impact": {
-          "affectedMarkets": [
-            "market-0"
-          ],
+          "affectedMarkets": ["market-0"],
           "severity": 0.3855181697290391
         }
       },
@@ -7702,11 +7688,7 @@
         "type": "partnership_news",
         "description": "Hidden partnership_news event occurred at tick 15",
         "impact": {
-          "affectedMarkets": [
-            "market-0",
-            "market-1",
-            "market-2"
-          ],
+          "affectedMarkets": ["market-0", "market-1", "market-2"],
           "severity": 0.41559625416994095
         }
       },
@@ -7715,10 +7697,7 @@
         "type": "exchange_hack",
         "description": "Hidden exchange_hack event occurred at tick 18",
         "impact": {
-          "affectedMarkets": [
-            "market-0",
-            "market-1"
-          ],
+          "affectedMarkets": ["market-0", "market-1"],
           "severity": 0.22105583758093417
         }
       },
@@ -7727,11 +7706,7 @@
         "type": "regulatory_announcement",
         "description": "Hidden regulatory_announcement event occurred at tick 21",
         "impact": {
-          "affectedMarkets": [
-            "market-0",
-            "market-1",
-            "market-2"
-          ],
+          "affectedMarkets": ["market-0", "market-1", "market-2"],
           "severity": 0.7342759161256254
         }
       },
@@ -7740,9 +7715,7 @@
         "type": "partnership_news",
         "description": "Hidden partnership_news event occurred at tick 24",
         "impact": {
-          "affectedMarkets": [
-            "market-0"
-          ],
+          "affectedMarkets": ["market-0"],
           "severity": 0.4196153001394123
         }
       },
@@ -7751,11 +7724,7 @@
         "type": "whale_movement",
         "description": "Hidden whale_movement event occurred at tick 27",
         "impact": {
-          "affectedMarkets": [
-            "market-0",
-            "market-1",
-            "market-2"
-          ],
+          "affectedMarkets": ["market-0", "market-1", "market-2"],
           "severity": 0.1491634538397193
         }
       }

@@ -1,189 +1,188 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { Search, Shield, RefreshCw, UserPlus, UserMinus, AlertTriangle, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { Avatar } from '@/components/shared/Avatar'
-import { toast } from 'sonner'
-import { Skeleton } from '@/components/shared/Skeleton'
-import { logger } from '@/lib/logger'
+import { Avatar } from '@/components/shared/Avatar';
+import { Skeleton } from '@/components/shared/Skeleton';
+import { logger } from '@/lib/logger';
+import { cn } from '@/lib/utils';
+import { AlertTriangle, RefreshCw, Search, Shield, UserMinus, UserPlus, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
-interface AdminUser {
-  id: string
-  username: string | null
-  displayName: string | null
-  walletAddress: string | null
-  profileImageUrl: string | null
-  isActor: boolean
-  isAdmin: boolean
-  createdAt: string
-  updatedAt: string
-  onChainRegistered: boolean
-  hasFarcaster: boolean
-  hasTwitter: boolean
-}
+type AdminUser = {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  walletAddress: string | null;
+  profileImageUrl: string | null;
+  isActor: boolean;
+  isAdmin: boolean;
+  createdAt: string;
+  updatedAt: string;
+  onChainRegistered: boolean;
+  hasFarcaster: boolean;
+  hasTwitter: boolean;
+};
 
-interface AvailableUser {
-  id: string
-  username: string | null
-  displayName: string | null
-  profileImageUrl: string | null
-  walletAddress: string | null
-  isActor: boolean
-}
+type AvailableUser = {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  profileImageUrl: string | null;
+  walletAddress: string | null;
+  isActor: boolean;
+};
 
 export function AdminManagementTab() {
-  const [admins, setAdmins] = useState<AdminUser[]>([])
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [showRemoveModal, setShowRemoveModal] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([])
-  const [loadingUsers, setLoadingUsers] = useState(false)
-  const [processing, setProcessing] = useState(false)
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [processing, setProcessing] = useState(false);
+
+  const fetchAdmins = useCallback(async (showRefreshing = false) => {
+    if (showRefreshing) setRefreshing(true);
+    const response = await fetch('/api/admin/admins');
+    if (!response.ok) throw new Error('Failed to fetch admins');
+    const data = await response.json();
+    setAdmins(data.admins || []);
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
 
   useEffect(() => {
     const loadAdmins = async () => {
       try {
-        await fetchAdmins()
+        await fetchAdmins();
       } catch (err) {
-        logger.error('Failed to load admins', { error: err }, 'AdminManagementTab')
-        setLoading(false)
-        setRefreshing(false)
+        logger.error('Failed to load admins', { error: err }, 'AdminManagementTab');
+        setLoading(false);
+        setRefreshing(false);
       }
-    }
-    loadAdmins()
-  }, [])
-
-  const fetchAdmins = async (showRefreshing = false) => {
-    if (showRefreshing) setRefreshing(true)
-    const response = await fetch('/api/admin/admins')
-    if (!response.ok) throw new Error('Failed to fetch admins')
-    const data = await response.json()
-    setAdmins(data.admins || [])
-    setLoading(false)
-    setRefreshing(false)
-  }
+    };
+    loadAdmins();
+  }, [fetchAdmins]);
 
   const searchUsers = async (query: string) => {
     if (!query.trim()) {
-      setAvailableUsers([])
-      return
+      setAvailableUsers([]);
+      return;
     }
 
-    setLoadingUsers(true)
+    setLoadingUsers(true);
     try {
       const params = new URLSearchParams({
         search: query,
         limit: '10',
         filter: 'users', // Only real users, not actors
-      })
-      const response = await fetch(`/api/admin/users?${params}`)
-      if (!response.ok) throw new Error('Failed to search users')
-      const data = await response.json()
-      
+      });
+      const response = await fetch(`/api/admin/users?${params}`);
+      if (!response.ok) throw new Error('Failed to search users');
+      const data = await response.json();
+
       // Filter out users who are already admins
-      const adminIds = new Set(admins.map(a => a.id))
-      const nonAdminUsers = (data.users || [])
-        .filter((u: AvailableUser) => !adminIds.has(u.id) && !u.isActor)
-      
-      setAvailableUsers(nonAdminUsers)
+      const adminIds = new Set(admins.map((a) => a.id));
+      const nonAdminUsers = (data.users || []).filter(
+        (u: AvailableUser) => !adminIds.has(u.id) && !u.isActor
+      );
+
+      setAvailableUsers(nonAdminUsers);
     } catch (err) {
-      logger.error('Failed to search users', { error: err }, 'AdminManagementTab')
-      setAvailableUsers([])
+      logger.error('Failed to search users', { error: err }, 'AdminManagementTab');
+      setAvailableUsers([]);
     } finally {
-      setLoadingUsers(false)
+      setLoadingUsers(false);
     }
-  }
+  };
 
   const handleAddAdmin = async (userId: string) => {
-    setProcessing(true)
+    setProcessing(true);
     const response = await fetch(`/api/admin/admins/${userId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'promote' }),
-    })
+    });
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Failed to add admin')
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to add admin');
     }
 
-    const result = await response.json()
-    toast.success(`${result.user.displayName || result.user.username || 'User'} is now an admin`)
-    setShowAddModal(false)
-    setSearchQuery('')
-    setAvailableUsers([])
-    fetchAdmins(true)
-    setProcessing(false)
-  }
+    const result = await response.json();
+    toast.success(`${result.user.displayName || result.user.username || 'User'} is now an admin`);
+    setShowAddModal(false);
+    setSearchQuery('');
+    setAvailableUsers([]);
+    fetchAdmins(true);
+    setProcessing(false);
+  };
 
   const handleRemoveAdmin = async () => {
-    if (!selectedUser) return
+    if (!selectedUser) return;
 
-    setProcessing(true)
+    setProcessing(true);
     const response = await fetch(`/api/admin/admins/${selectedUser.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'demote' }),
-    })
+    });
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Failed to remove admin')
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to remove admin');
     }
 
-    const result = await response.json()
-    toast.success(`${result.user.displayName || result.user.username || 'User'} is no longer an admin`)
-    setShowRemoveModal(false)
-    setSelectedUser(null)
-    fetchAdmins(true)
-    setProcessing(false)
-  }
+    const result = await response.json();
+    toast.success(
+      `${result.user.displayName || result.user.username || 'User'} is no longer an admin`
+    );
+    setShowRemoveModal(false);
+    setSelectedUser(null);
+    fetchAdmins(true);
+    setProcessing(false);
+  };
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    })
-  }
+    });
+  };
 
   const AdminRow = ({ admin }: { admin: AdminUser }) => {
-    const displayName = admin.displayName || admin.username || 'Anonymous'
+    const displayName = admin.displayName || admin.username || 'Anonymous';
 
     return (
-      <div className="bg-card border border-border rounded-2xl p-4 hover:border-primary/50 transition-colors">
+      <div className="rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/50">
         <div className="flex items-start gap-4">
           {/* Avatar and Basic Info */}
-          <Avatar
-            src={admin.profileImageUrl || undefined}
-            alt={displayName}
-            size="md"
-          />
+          <Avatar src={admin.profileImageUrl || undefined} alt={displayName} size="md" />
 
-          <div className="flex-1 min-w-0 space-y-2">
+          <div className="min-w-0 flex-1 space-y-2">
             {/* Name and Badges */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-lg truncate">{displayName}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate font-bold text-lg">{displayName}</span>
               {admin.username && admin.displayName !== admin.username && (
-                <span className="text-sm text-muted-foreground">@{admin.username}</span>
+                <span className="text-muted-foreground text-sm">@{admin.username}</span>
               )}
-              <span className="px-2 py-0.5 text-xs rounded bg-orange-500/20 text-orange-500 flex items-center gap-1">
-                <Shield className="w-3 h-3" />
+              <span className="flex items-center gap-1 rounded bg-orange-500/20 px-2 py-0.5 text-orange-500 text-xs">
+                <Shield className="h-3 w-3" />
                 Admin
               </span>
               {admin.onChainRegistered && (
-                <span className="px-2 py-0.5 text-xs rounded bg-green-500/20 text-green-500">
+                <span className="rounded bg-green-500/20 px-2 py-0.5 text-green-500 text-xs">
                   On-chain
                 </span>
               )}
             </div>
 
             {/* Stats */}
-            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+            <div className="flex flex-wrap gap-4 text-muted-foreground text-sm">
               {admin.hasFarcaster && (
                 <span className="flex items-center gap-1">
                   <span className="text-purple-500">●</span>
@@ -201,7 +200,7 @@ export function AdminManagementTab() {
 
             {/* Wallet Address */}
             {admin.walletAddress && (
-              <div className="text-xs text-muted-foreground font-mono truncate">
+              <div className="truncate font-mono text-muted-foreground text-xs">
                 {admin.walletAddress}
               </div>
             )}
@@ -210,32 +209,33 @@ export function AdminManagementTab() {
           {/* Actions */}
           <div className="flex flex-col gap-2">
             <button
+              type="button"
               onClick={() => {
-                setSelectedUser(admin)
-                setShowRemoveModal(true)
+                setSelectedUser(admin);
+                setShowRemoveModal(true);
               }}
               disabled={processing}
-              className="px-3 py-1.5 text-sm font-medium rounded bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-colors disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
+              className="flex items-center gap-1 whitespace-nowrap rounded bg-red-500/20 px-3 py-1.5 font-medium text-red-500 text-sm transition-colors hover:bg-red-500/30 disabled:opacity-50"
             >
-              <UserMinus className="w-4 h-4" />
+              <UserMinus className="h-4 w-4" />
               Remove Admin
             </button>
           </div>
         </div>
       </div>
-    )
-  }
+    );
+  };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="space-y-3 w-full">
+      <div className="flex h-64 items-center justify-center">
+        <div className="w-full space-y-3">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -243,30 +243,32 @@ export function AdminManagementTab() {
       {/* Header with Actions */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Shield className="w-5 h-5 text-orange-500" />
+          <h2 className="flex items-center gap-2 font-semibold text-xl">
+            <Shield className="h-5 w-5 text-orange-500" />
             Admin Management
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="mt-1 text-muted-foreground text-sm">
             {admins.length} {admins.length === 1 ? 'admin' : 'admins'} with full system access
           </p>
         </div>
 
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => fetchAdmins(true)}
             disabled={refreshing}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 rounded bg-muted px-3 py-2 font-medium text-sm transition-colors hover:bg-muted/80 disabled:opacity-50"
           >
-            <RefreshCw className={cn('w-4 h-4', refreshing && 'animate-spin')} />
+            <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
             Refresh
           </button>
-          
+
           <button
+            type="button"
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="flex items-center gap-2 rounded bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="h-4 w-4" />
             Add Admin
           </button>
         </div>
@@ -274,8 +276,8 @@ export function AdminManagementTab() {
 
       {/* Admins List */}
       {admins.length === 0 ? (
-        <div className="text-center text-muted-foreground py-12 bg-card border border-border rounded-2xl">
-          <Shield className="w-12 h-12 mx-auto mb-3 opacity-50" />
+        <div className="rounded-2xl border border-border bg-card py-12 text-center text-muted-foreground">
+          <Shield className="mx-auto mb-3 h-12 w-12 opacity-50" />
           <p>No admins found</p>
         </div>
       ) : (
@@ -288,86 +290,87 @@ export function AdminManagementTab() {
 
       {/* Add Admin Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">Add Admin</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl border border-border bg-card p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-bold text-xl">Add Admin</h2>
               <button
+                type="button"
                 onClick={() => {
-                  setShowAddModal(false)
-                  setSearchQuery('')
-                  setAvailableUsers([])
+                  setShowAddModal(false);
+                  setSearchQuery('');
+                  setAvailableUsers([]);
                 }}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-muted-foreground transition-colors hover:text-foreground"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <p className="text-muted-foreground mb-4 text-sm">
-              Search for a user to grant admin privileges. Admins have full access to all system functions.
+            <p className="mb-4 text-muted-foreground text-sm">
+              Search for a user to grant admin privileges. Admins have full access to all system
+              functions.
             </p>
-            
+
             {/* Search Input */}
             <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search by username, display name, or wallet..."
                 value={searchQuery}
                 onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  searchUsers(e.target.value)
+                  setSearchQuery(e.target.value);
+                  searchUsers(e.target.value);
                 }}
-                className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:border-primary"
-                autoFocus
+                className="w-full rounded-lg border border-border bg-background py-2 pr-4 pl-10 focus:border-primary focus:outline-none"
               />
             </div>
 
             {/* Search Results */}
-            <div className="flex-1 overflow-auto space-y-2">
+            <div className="flex-1 space-y-2 overflow-auto">
               {loadingUsers && (
-                <div className="text-center py-4 text-muted-foreground">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
+                <div className="py-4 text-center text-muted-foreground">
+                  <RefreshCw className="mx-auto mb-2 h-5 w-5 animate-spin" />
                   Searching...
                 </div>
               )}
 
               {!loadingUsers && searchQuery && availableUsers.length === 0 && (
-                <div className="text-center py-4 text-muted-foreground">
-                  No users found
-                </div>
+                <div className="py-4 text-center text-muted-foreground">No users found</div>
               )}
 
-              {!loadingUsers && availableUsers.map((user) => (
-                <div
-                  key={user.id}
-                  className="flex items-center gap-3 p-3 bg-background border border-border rounded-lg hover:border-primary/50 transition-colors"
-                >
-                  <Avatar
-                    src={user.profileImageUrl || undefined}
-                    alt={user.displayName || user.username || 'User'}
-                    size="sm"
-                  />
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">
-                      {user.displayName || user.username || 'Anonymous'}
-                    </div>
-                    {user.username && user.displayName !== user.username && (
-                      <div className="text-xs text-muted-foreground">@{user.username}</div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => handleAddAdmin(user.id)}
-                    disabled={processing}
-                    className="px-3 py-1.5 text-sm font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+              {!loadingUsers &&
+                availableUsers.map((user) => (
+                  <div
+                    key={user.id}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:border-primary/50"
                   >
-                    {processing ? 'Adding...' : 'Add'}
-                  </button>
-                </div>
-              ))}
+                    <Avatar
+                      src={user.profileImageUrl || undefined}
+                      alt={user.displayName || user.username || 'User'}
+                      size="sm"
+                    />
+
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">
+                        {user.displayName || user.username || 'Anonymous'}
+                      </div>
+                      {user.username && user.displayName !== user.username && (
+                        <div className="text-muted-foreground text-xs">@{user.username}</div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleAddAdmin(user.id)}
+                      disabled={processing}
+                      className="rounded bg-primary px-3 py-1.5 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {processing ? 'Adding...' : 'Add'}
+                    </button>
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -375,48 +378,51 @@ export function AdminManagementTab() {
 
       {/* Remove Admin Confirmation Modal */}
       {showRemoveModal && selectedUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full">
-            <div className="flex items-center gap-3 mb-4 text-orange-500">
-              <AlertTriangle className="w-6 h-6" />
-              <h2 className="text-xl font-bold">Remove Admin Privileges</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6">
+            <div className="mb-4 flex items-center gap-3 text-orange-500">
+              <AlertTriangle className="h-6 w-6" />
+              <h2 className="font-bold text-xl">Remove Admin Privileges</h2>
             </div>
-            
-            <p className="text-muted-foreground mb-4">
+
+            <p className="mb-4 text-muted-foreground">
               Are you sure you want to remove admin privileges from{' '}
               <strong className="text-foreground">
                 {selectedUser.displayName || selectedUser.username || 'this user'}
-              </strong>?
+              </strong>
+              ?
             </p>
 
-            <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 mb-4">
-              <p className="text-sm text-muted-foreground">
-                This user will lose access to all admin functions including user management, 
-                system stats, and configuration settings.
+            <div className="mb-4 rounded-lg border border-orange-500/20 bg-orange-500/10 p-3">
+              <p className="text-muted-foreground text-sm">
+                This user will lose access to all admin functions including user management, system
+                stats, and configuration settings.
               </p>
             </div>
 
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => {
-                  setShowRemoveModal(false)
-                  setSelectedUser(null)
+                  setShowRemoveModal(false);
+                  setSelectedUser(null);
                 }}
                 disabled={processing}
-                className="flex-1 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
+                className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleRemoveAdmin}
                 disabled={processing}
-                className="flex-1 px-4 py-2 bg-red-500 text-primary-foreground rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-primary-foreground transition-colors hover:bg-red-600 disabled:opacity-50"
               >
                 {processing ? (
                   'Removing...'
                 ) : (
                   <>
-                    <UserMinus className="w-4 h-4" />
+                    <UserMinus className="h-4 w-4" />
                     Remove Admin
                   </>
                 )}
@@ -426,7 +432,5 @@ export function AdminManagementTab() {
         </div>
       )}
     </div>
-  )
+  );
 }
-
-

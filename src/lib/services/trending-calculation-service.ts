@@ -1,20 +1,16 @@
 /**
  * Trending Calculation Service
- * 
+ *
  * Calculates trending tags using time-weighted algorithm
  * Similar to X/Twitter trending topics
  */
 
-import { logger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
-import {
-  getTagStatistics,
-  storeTrendingTags,
-  getRelatedTags,
-} from './tag-storage-service'
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { getRelatedTags, getTagStatistics, storeTrendingTags } from './tag-storage-service';
 
-const CALCULATION_INTERVAL_MS = 30 * 60 * 1000 // 30 minutes
-const TRENDING_WINDOW_DAYS = 7 // Look at last 7 days
+const CALCULATION_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+const TRENDING_WINDOW_DAYS = 7; // Look at last 7 days
 
 /**
  * Check if we should recalculate trending tags
@@ -23,19 +19,19 @@ export async function shouldRecalculateTrending(): Promise<boolean> {
   const lastCalculation = await prisma.trendingTag.findFirst({
     orderBy: { calculatedAt: 'desc' },
     select: { calculatedAt: true },
-  })
+  });
 
   if (!lastCalculation) {
-    return true // Never calculated before
+    return true; // Never calculated before
   }
 
-  const timeSinceLastCalc = Date.now() - lastCalculation.calculatedAt.getTime()
-  return timeSinceLastCalc >= CALCULATION_INTERVAL_MS
+  const timeSinceLastCalc = Date.now() - lastCalculation.calculatedAt.getTime();
+  return timeSinceLastCalc >= CALCULATION_INTERVAL_MS;
 }
 
 /**
  * Calculate trending score for a tag
- * 
+ *
  * Algorithm:
  * - Time decay: More recent posts weighted higher
  * - Volume boost: More posts = higher score
@@ -49,57 +45,61 @@ function calculateTrendingScore(
   windowEnd: Date
 ): number {
   // Base score from total post count
-  let score = postCount
+  let score = postCount;
 
   // Time decay factor (exponential decay over 7 days)
-  const avgPostAge = (windowEnd.getTime() - oldestPostDate.getTime()) / 2
-  const daysSinceAvgPost = avgPostAge / (1000 * 60 * 60 * 24)
-  const decayFactor = Math.exp(-daysSinceAvgPost / 3) // Decay half-life of 3 days
-  score *= decayFactor
+  const avgPostAge = (windowEnd.getTime() - oldestPostDate.getTime()) / 2;
+  const daysSinceAvgPost = avgPostAge / (1000 * 60 * 60 * 24);
+  const decayFactor = Math.exp(-daysSinceAvgPost / 3); // Decay half-life of 3 days
+  score *= decayFactor;
 
   // Velocity boost (recent activity)
   if (postCount > 0) {
-    const recentRatio = recentPostCount / postCount
-    const velocityBoost = 1 + (recentRatio * 2) // Up to 3x multiplier for very recent activity
-    score *= velocityBoost
+    const recentRatio = recentPostCount / postCount;
+    const velocityBoost = 1 + recentRatio * 2; // Up to 3x multiplier for very recent activity
+    score *= velocityBoost;
   }
 
   // Recency boost (how fresh is the newest post)
-  const hoursSinceNewest = (windowEnd.getTime() - newestPostDate.getTime()) / (1000 * 60 * 60)
+  const hoursSinceNewest = (windowEnd.getTime() - newestPostDate.getTime()) / (1000 * 60 * 60);
   if (hoursSinceNewest < 1) {
-    score *= 1.5 // 50% boost for posts in last hour
+    score *= 1.5; // 50% boost for posts in last hour
   } else if (hoursSinceNewest < 6) {
-    score *= 1.2 // 20% boost for posts in last 6 hours
+    score *= 1.2; // 20% boost for posts in last 6 hours
   }
 
-  return score
+  return score;
 }
 
 /**
  * Calculate trending tags
  */
 export async function calculateTrendingTags(): Promise<void> {
-  const startTime = Date.now()
-  logger.info('Starting trending tags calculation', undefined, 'TrendingCalculationService')
+  const startTime = Date.now();
+  logger.info('Starting trending tags calculation', undefined, 'TrendingCalculationService');
 
   // Define time window (last 7 days)
-  const windowEnd = new Date()
-  const windowStart = new Date(windowEnd.getTime() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+  const windowEnd = new Date();
+  const windowStart = new Date(windowEnd.getTime() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   // Get tag statistics
-  const tagStats = await getTagStatistics(windowStart, windowEnd)
-  
+  const tagStats = await getTagStatistics(windowStart, windowEnd);
+
   if (tagStats.length === 0) {
-    logger.info('No tags to calculate trending for', undefined, 'TrendingCalculationService')
-    return
+    logger.info('No tags to calculate trending for', undefined, 'TrendingCalculationService');
+    return;
   }
 
-  logger.debug('Retrieved tag statistics', {
-    tagCount: tagStats.length,
-  }, 'TrendingCalculationService')
+  logger.debug(
+    'Retrieved tag statistics',
+    {
+      tagCount: tagStats.length,
+    },
+    'TrendingCalculationService'
+  );
 
   // Calculate scores for each tag
-  const scoredTags = tagStats.map(tag => ({
+  const scoredTags = tagStats.map((tag) => ({
     tagId: tag.tagId,
     tagName: tag.tagName,
     tagDisplayName: tag.tagDisplayName,
@@ -112,23 +112,23 @@ export async function calculateTrendingTags(): Promise<void> {
       tag.newestPostDate,
       windowEnd
     ),
-  }))
+  }));
 
   // Sort by score and assign ranks
-  scoredTags.sort((a, b) => b.score - a.score)
-  
+  scoredTags.sort((a, b) => b.score - a.score);
+
   // Take top 20 trending tags
-  const topTrending = scoredTags.slice(0, 20)
+  const topTrending = scoredTags.slice(0, 20);
 
   // Get related tags for context (async)
   const trendingWithContext = await Promise.all(
     topTrending.map(async (tag, index) => {
       // Only add "Trending with" context for some tags
-      let relatedContext: string | undefined
+      let relatedContext: string | undefined;
       if (index < 10 && Math.random() > 0.5) {
-        const relatedTags = await getRelatedTags(tag.tagId, 1)
+        const relatedTags = await getRelatedTags(tag.tagId, 1);
         if (relatedTags.length > 0) {
-          relatedContext = `Trending with ${relatedTags[0]}`
+          relatedContext = `Trending with ${relatedTags[0]}`;
         }
       }
 
@@ -138,33 +138,36 @@ export async function calculateTrendingTags(): Promise<void> {
         postCount: tag.postCount,
         rank: index + 1,
         relatedContext,
-      }
+      };
     })
-  )
+  );
 
   // Store trending tags
-  await storeTrendingTags(trendingWithContext, windowStart, windowEnd)
+  await storeTrendingTags(trendingWithContext, windowStart, windowEnd);
 
-  const duration = Date.now() - startTime
-  logger.info('Trending tags calculation completed', {
-    duration: `${duration}ms`,
-    tagsCalculated: topTrending.length,
-    topTag: topTrending[0]?.tagDisplayName,
-  }, 'TrendingCalculationService')
+  const duration = Date.now() - startTime;
+  logger.info(
+    'Trending tags calculation completed',
+    {
+      duration: `${duration}ms`,
+      tagsCalculated: topTrending.length,
+      topTag: topTrending[0]?.tagDisplayName,
+    },
+    'TrendingCalculationService'
+  );
 }
 
 /**
  * Calculate trending tags if needed (called from cron)
  */
 export async function calculateTrendingIfNeeded(): Promise<boolean> {
-  const shouldCalculate = await shouldRecalculateTrending()
-  
+  const shouldCalculate = await shouldRecalculateTrending();
+
   if (!shouldCalculate) {
-    logger.debug('Trending calculation not needed yet', undefined, 'TrendingCalculationService')
-    return false
+    logger.debug('Trending calculation not needed yet', undefined, 'TrendingCalculationService');
+    return false;
   }
 
-  await calculateTrendingTags()
-  return true
+  await calculateTrendingTags();
+  return true;
 }
-

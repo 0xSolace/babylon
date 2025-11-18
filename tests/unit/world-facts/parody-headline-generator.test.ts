@@ -2,27 +2,29 @@
  * Parody Headline Generator Tests
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { prisma } from '@/lib/prisma';
 import { ParodyHeadlineGenerator } from '@/lib/services/parody-headline-generator';
 import { generateSnowflakeId } from '@/lib/snowflake';
 import type { BabylonLLMClient } from '@/generator/llm/openai-client';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // Check if parody/RSS models are available
-const parodyModelsAvailable = !!(prisma && prisma.rSSFeedSource && prisma.rSSHeadline);
+const parodyModelsAvailable = !!(prisma?.rSSFeedSource && prisma.rSSHeadline);
 
 describe('ParodyHeadlineGenerator', () => {
-  const testFeedId = 'test-feed-parody-' + Date.now();
-  const testHeadlineId = 'test-headline-parody-' + Date.now();
-  
+  const testFeedId = `test-feed-parody-${Date.now()}`;
+  const testHeadlineId = `test-headline-parody-${Date.now()}`;
+
   // Mock LLM client that doesn't require API keys
   // Returns XML-parsed format (nested response structure)
   const createMockLLMClient = (): BabylonLLMClient => {
     return {
       generateJSON: mock(async () => ({
         response: {
-          parodyTitle: 'AIlon Musk announces revolutionary new Tesla AI product that will change everything',
-          parodyContent: 'In a stunning move that shocked absolutely no one, AIlon Musk unveiled yet another "revolutionary" product that promises to solve all of humanity\'s problems while simultaneously creating new ones.',
+          parodyTitle:
+            'AIlon Musk announces revolutionary new Tesla AI product that will change everything',
+          parodyContent:
+            'In a stunning move that shocked absolutely no one, AIlon Musk unveiled yet another "revolutionary" product that promises to solve all of humanity\'s problems while simultaneously creating new ones.',
         },
       })),
     } as unknown as BabylonLLMClient;
@@ -30,7 +32,7 @@ describe('ParodyHeadlineGenerator', () => {
 
   beforeEach(async () => {
     if (!parodyModelsAvailable) return;
-    
+
     // Create test feed source
     await prisma.rSSFeedSource.create({
       data: {
@@ -58,7 +60,7 @@ describe('ParodyHeadlineGenerator', () => {
   afterEach(async () => {
     if (!prisma) return;
     if (!parodyModelsAvailable) return;
-    
+
     // Cleanup parodies first (foreign key constraint)
     await prisma.parodyHeadline.deleteMany({
       where: {
@@ -96,11 +98,11 @@ describe('ParodyHeadlineGenerator', () => {
     expect(parody.parodyTitle).toBeDefined();
     expect(typeof parody.parodyTitle).toBe('string');
     expect(parody.parodyTitle.length).toBeGreaterThan(0);
-    
+
     // Should replace Elon Musk with parody name if character mapping exists
     expect(parody.characterMappings).toBeDefined();
     expect(typeof parody.characterMappings).toBe('object');
-    
+
     expect(parody.organizationMappings).toBeDefined();
     expect(typeof parody.organizationMappings).toBe('object');
   });
@@ -122,7 +124,7 @@ describe('ParodyHeadlineGenerator', () => {
     expect(parodies).toBeDefined();
     expect(Array.isArray(parodies)).toBe(true);
     expect(parodies.length).toBeGreaterThan(0);
-    
+
     const parody = parodies[0];
     expect(parody?.parodyTitle).toBeDefined();
     expect(parody?.originalTitle).toBe('Elon Musk announces new Tesla product');
@@ -152,7 +154,7 @@ describe('ParodyHeadlineGenerator', () => {
 
     expect(parodies).toBeDefined();
     expect(Array.isArray(parodies)).toBe(true);
-    expect(parodies.some(p => p.parodyTitle === 'Test Parody')).toBe(true);
+    expect(parodies.some((p) => p.parodyTitle === 'Test Parody')).toBe(true);
   });
 
   test('should mark parodies as used', async () => {
@@ -198,7 +200,7 @@ describe('ParodyHeadlineGenerator', () => {
     for (let i = 0; i < 3; i++) {
       const hId = await generateSnowflakeId();
       headlineIds.push(hId);
-      
+
       // Create unique headline
       await prisma.rSSHeadline.create({
         data: {
@@ -254,4 +256,3 @@ describe('ParodyHeadlineGenerator', () => {
     expect(parodies).toHaveLength(0);
   });
 });
-

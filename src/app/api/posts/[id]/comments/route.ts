@@ -1,7 +1,7 @@
 /**
  * API Route: /api/posts/[id]/comments
  * Methods: GET (get comments), POST (add comment)
- * 
+ *
  * @openapi
  * /api/posts/{id}/comments:
  *   get:
@@ -73,17 +73,25 @@
  */
 
 import { authenticate, optionalAuth } from '@/lib/api/auth-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
 import { BusinessLogicError, NotFoundError } from '@/lib/errors';
-import { CreateCommentSchema, PostIdParamSchema } from '@/lib/validation/schemas';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
-import { notifyCommentOnPost, notifyReplyToComment, notifyMention } from '@/lib/services/notification-service';
-import { prisma } from '@/lib/prisma';
-import { ensureUserForAuth, getCanonicalUserId } from '@/lib/users/ensure-user';
-import type { NextRequest } from 'next/server';
-import { generateSnowflakeId } from '@/lib/snowflake';
-import { checkRateLimitAndDuplicates, RATE_LIMIT_CONFIGS, DUPLICATE_DETECTION_CONFIGS } from '@/lib/rate-limiting';
 import { hasBlocked } from '@/lib/moderation/filters';
+import { prisma } from '@/lib/prisma';
+import {
+  DUPLICATE_DETECTION_CONFIGS,
+  RATE_LIMIT_CONFIGS,
+  checkRateLimitAndDuplicates,
+} from '@/lib/rate-limiting';
+import {
+  notifyCommentOnPost,
+  notifyMention,
+  notifyReplyToComment,
+} from '@/lib/services/notification-service';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import { ensureUserForAuth, getCanonicalUserId } from '@/lib/users/ensure-user';
+import { CreateCommentSchema, PostIdParamSchema } from '@/lib/validation/schemas';
+import type { NextRequest } from 'next/server';
 
 /**
  * Build threaded comment structure recursively
@@ -104,7 +112,7 @@ type CommentTreeItem = {
   replies: CommentTreeItem[];
 };
 
-interface CommentInput {
+type CommentInput = {
   id: string;
   content: string;
   authorId: string;
@@ -121,7 +129,7 @@ interface CommentInput {
   };
   Reaction: Array<{ id: string; userId: string; type: string }>;
   _count: { Reaction: number };
-}
+};
 
 function buildCommentTree(
   comments: CommentInput[],
@@ -130,7 +138,7 @@ function buildCommentTree(
   // Helper to find parent comment author name
   const findParentAuthorName = (parentCommentId: string | null): string | undefined => {
     if (!parentCommentId) return undefined;
-    const parentComment = comments.find(c => c.id === parentCommentId);
+    const parentComment = comments.find((c) => c.id === parentCommentId);
     if (parentComment) {
       return parentComment.User.displayName || parentComment.User.username || 'Anonymous';
     }
@@ -160,40 +168,38 @@ function buildCommentTree(
  * GET /api/posts/[id]/comments
  * Get threaded comments for a post
  */
-export const GET = withErrorHandling(async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) => {
-  const { id: postId } = await context.params;
+export const GET = withErrorHandling(
+  async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
+    const { id: postId } = await context.params;
 
-  // Optional authentication (to show liked status for logged-in users)
-  const user = await optionalAuth(request);
+    // Optional authentication (to show liked status for logged-in users)
+    const user = await optionalAuth(request);
 
-  // Validate post ID
-  if (!postId) {
-    throw new BusinessLogicError('Post ID is required', 'POST_ID_REQUIRED');
-  }
+    // Validate post ID
+    if (!postId) {
+      throw new BusinessLogicError('Post ID is required', 'POST_ID_REQUIRED');
+    }
 
-  const canonicalUserId = user ? getCanonicalUserId(user) : undefined;
+    const canonicalUserId = user ? getCanonicalUserId(user) : undefined;
 
-  // Check if post exists and is not in the future
-  const now = new Date();
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-  });
+    // Check if post exists and is not in the future
+    const now = new Date();
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+    });
 
-  if (!post) {
-    throw new NotFoundError('Post', postId);
-  }
+    if (!post) {
+      throw new NotFoundError('Post', postId);
+    }
 
-  if (post.deletedAt) {
-    throw new NotFoundError('Post (deleted)', postId);
-  }
+    if (post.deletedAt) {
+      throw new NotFoundError('Post (deleted)', postId);
+    }
 
-  // ✅ Don't allow access to future posts
-  if (post.timestamp > now) {
-    throw new NotFoundError('Post', postId); // Return 404 to hide existence of future posts
-  }
+    // ✅ Don't allow access to future posts
+    if (post.timestamp > now) {
+      throw new NotFoundError('Post', postId); // Return 404 to hide existence of future posts
+    }
 
     // Get all comments for the post (including nested replies)
     const comments = await prisma.comment.findMany({
@@ -243,47 +249,50 @@ export const GET = withErrorHandling(async (
     // Get total comment count (including replies)
     const totalComments = comments.length;
 
-  logger.info('Comments fetched successfully', { postId, total: totalComments }, 'GET /api/posts/[id]/comments');
+    logger.info(
+      'Comments fetched successfully',
+      { postId, total: totalComments },
+      'GET /api/posts/[id]/comments'
+    );
 
-  return successResponse({
-    data: {
-      comments: threadedComments,
-      total: totalComments,
-    },
-  });
-});
+    return successResponse({
+      data: {
+        comments: threadedComments,
+        total: totalComments,
+      },
+    });
+  }
+);
 
 /**
  * POST /api/posts/[id]/comments
  * Add a comment to a post
  */
-export const POST = withErrorHandling(async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) => {
-  // Authenticate user
-  const user = await authenticate(request);
-  const { id: postId } = PostIdParamSchema.parse(await context.params);
+export const POST = withErrorHandling(
+  async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
+    // Authenticate user
+    const user = await authenticate(request);
+    const { id: postId } = PostIdParamSchema.parse(await context.params);
 
-  // Parse and validate request body
-  const body = await request.json();
-  const validatedData = CreateCommentSchema.parse(body);
-  const { content, parentCommentId } = validatedData;
+    // Parse and validate request body
+    const body = await request.json();
+    const validatedData = CreateCommentSchema.parse(body);
+    const { content, parentCommentId } = validatedData;
 
-  if (content.length > 5000) {
-    throw new BusinessLogicError('Comment is too long (max 5000 characters)', 'COMMENT_TOO_LONG');
-  }
+    if (content.length > 5000) {
+      throw new BusinessLogicError('Comment is too long (max 5000 characters)', 'COMMENT_TOO_LONG');
+    }
 
-  // Apply rate limiting and duplicate detection
-  const rateLimitError = checkRateLimitAndDuplicates(
-    user.userId,
-    content,
-    RATE_LIMIT_CONFIGS.CREATE_COMMENT,
-    DUPLICATE_DETECTION_CONFIGS.COMMENT
-  );
-  if (rateLimitError) {
-    return rateLimitError;
-  }
+    // Apply rate limiting and duplicate detection
+    const rateLimitError = checkRateLimitAndDuplicates(
+      user.userId,
+      content,
+      RATE_LIMIT_CONFIGS.CREATE_COMMENT,
+      DUPLICATE_DETECTION_CONFIGS.COMMENT
+    );
+    if (rateLimitError) {
+      return rateLimitError;
+    }
 
     const displayName = user.walletAddress
       ? `${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}`
@@ -311,7 +320,7 @@ export const POST = withErrorHandling(async (
       // Check Format 1: Has ISO timestamp at the end
       const isoTimestampMatch = postId.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)$/);
 
-      if (isoTimestampMatch && isoTimestampMatch[1]) {
+      if (isoTimestampMatch?.[1]) {
         // Format 1: gameId-gameTimestamp-authorId-isoTimestamp
         const timestampStr = isoTimestampMatch[1];
         timestamp = new Date(timestampStr);
@@ -326,7 +335,10 @@ export const POST = withErrorHandling(async (
           const secondHyphenIndex = withoutGameId.indexOf('-');
           if (secondHyphenIndex !== -1) {
             const afterGameTimestamp = withoutGameId.substring(secondHyphenIndex + 1);
-            authorId = afterGameTimestamp.substring(0, afterGameTimestamp.lastIndexOf('-' + timestampStr));
+            authorId = afterGameTimestamp.substring(
+              0,
+              afterGameTimestamp.lastIndexOf(`-${timestampStr}`)
+            );
           }
         }
       } else if (postId.startsWith('post-')) {
@@ -338,7 +350,7 @@ export const POST = withErrorHandling(async (
           const timestampPart = parts[1];
           const timestampNum = parseInt(timestampPart, 10);
 
-          if (!isNaN(timestampNum) && timestampNum > 1000000000000) {
+          if (!Number.isNaN(timestampNum) && timestampNum > 1000000000000) {
             // Valid timestamp (milliseconds since epoch)
             timestamp = new Date(timestampNum);
 
@@ -359,16 +371,16 @@ export const POST = withErrorHandling(async (
       // Ensure post exists (upsert pattern)
       const upsertedPost = await prisma.post.upsert({
         where: { id: postId },
-        update: {},  // Don't update if exists
+        update: {}, // Don't update if exists
         create: {
           id: postId,
-          content: '[Game-generated post]',  // Placeholder content
+          content: '[Game-generated post]', // Placeholder content
           authorId,
           gameId,
           timestamp,
         },
       });
-      
+
       // Check if the upserted/existing post is deleted
       if (upsertedPost.deletedAt) {
         throw new BusinessLogicError('Cannot comment on deleted post', 'POST_DELETED');
@@ -389,7 +401,10 @@ export const POST = withErrorHandling(async (
       }
 
       if (parentComment.postId !== postId) {
-        throw new BusinessLogicError('Parent comment does not belong to this post', 'PARENT_COMMENT_MISMATCH');
+        throw new BusinessLogicError(
+          'Parent comment does not belong to this post',
+          'PARENT_COMMENT_MISMATCH'
+        );
       }
     }
 
@@ -397,7 +412,7 @@ export const POST = withErrorHandling(async (
     // Check if author is a User (not an Actor) - only Users can receive notifications
     const postRecord = await prisma.post.findUnique({
       where: { id: postId },
-      select: { 
+      select: {
         id: true,
         authorId: true,
       },
@@ -466,71 +481,71 @@ export const POST = withErrorHandling(async (
     } else {
       // Comment on post - notify the post author only if they're a User (not an Actor)
       // Check if authorId references a User (not an Actor)
-      if (
-        postRecord && 
-        postRecord.authorId && 
-        postRecord.authorId !== canonicalUserId
-      ) {
+      if (postRecord?.authorId && postRecord.authorId !== canonicalUserId) {
         // Check if the authorId references a User (not an Actor)
         const postAuthorUser = await prisma.user.findUnique({
           where: { id: postRecord.authorId },
           select: { id: true },
         });
-        
+
         if (postAuthorUser) {
-          await notifyCommentOnPost(
-            postRecord.authorId,
-            canonicalUserId,
-            postId,
-            comment.id
-          );
+          await notifyCommentOnPost(postRecord.authorId, canonicalUserId, postId, comment.id);
         }
       }
     }
 
-    const mentions = content.match(/@(\w+)/g) || []
-    const usernames = [...new Set(mentions.map(m => m.substring(1)))]
-    
+    const mentions = content.match(/@(\w+)/g) || [];
+    const usernames = [...new Set(mentions.map((m) => m.substring(1)))];
+
     const mentionedUsers = await prisma.user.findMany({
       where: {
         username: { in: usernames },
       },
       select: { id: true, username: true },
-    })
+    });
 
     await Promise.all(
-      mentionedUsers.map(mentionedUser =>
-        notifyMention(
-          mentionedUser.id,
-          canonicalUserId,
-          postId,
-          comment.id
-        )
+      mentionedUsers.map((mentionedUser) =>
+        notifyMention(mentionedUser.id, canonicalUserId, postId, comment.id)
       )
-    )
+    );
 
-    logger.info('Sent mention notifications from comment', { 
-      postId, 
-      commentId: comment.id,
-      mentionCount: mentionedUsers.length,
-      mentionedUsernames: mentionedUsers.map(u => u.username)
-    }, 'POST /api/posts/[id]/comments')
+    logger.info(
+      'Sent mention notifications from comment',
+      {
+        postId,
+        commentId: comment.id,
+        mentionCount: mentionedUsers.length,
+        mentionedUsernames: mentionedUsers.map((u) => u.username),
+      },
+      'POST /api/posts/[id]/comments'
+    );
 
-  logger.info('Comment created successfully', { postId, userId: canonicalUserId, commentId: comment.id, parentCommentId }, 'POST /api/posts/[id]/comments');
+    logger.info(
+      'Comment created successfully',
+      {
+        postId,
+        userId: canonicalUserId,
+        commentId: comment.id,
+        parentCommentId,
+      },
+      'POST /api/posts/[id]/comments'
+    );
 
-  return successResponse(
-    {
-      id: comment.id,
-      content: comment.content,
-      postId: comment.postId,
-      authorId: comment.authorId,
-      parentCommentId: comment.parentCommentId,
-      createdAt: comment.createdAt,
-      updatedAt: comment.updatedAt,
-      author: comment.User,
-      likeCount: comment._count.Reaction,
-      replyCount: comment._count.other_Comment,
-    },
-    201
-  );
-});
+    return successResponse(
+      {
+        id: comment.id,
+        content: comment.content,
+        postId: comment.postId,
+        authorId: comment.authorId,
+        parentCommentId: comment.parentCommentId,
+        createdAt: comment.createdAt,
+        updatedAt: comment.updatedAt,
+        author: comment.User,
+        likeCount: comment._count.Reaction,
+        replyCount: comment._count.other_Comment,
+      },
+      201
+    );
+  }
+);

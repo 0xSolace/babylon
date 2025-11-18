@@ -1,13 +1,13 @@
 /**
  * Points Purchase Verify Payment API
- * 
+ *
  * @route POST /api/points/purchase/verify-payment - Verify payment
  * @access Authenticated
- * 
+ *
  * @description
  * Verifies an x402 payment and credits points to user's account. Checks
  * transaction hash and updates payment status. Credits points on success.
- * 
+ *
  * @openapi
  * /api/points/purchase/verify-payment:
  *   post:
@@ -51,7 +51,7 @@
  *         description: Invalid payment or transaction
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/points/purchase/verify-payment', {
@@ -68,34 +68,37 @@
  * ```
  */
 
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { X402Manager } from '@/lib/a2a/payments/x402-manager'
-import { PointsService } from '@/lib/services/points-service'
-import { logger } from '@/lib/logger'
-import { trackServerEvent } from '@/lib/posthog/server'
+import { X402Manager } from '@/lib/a2a/payments/x402-manager';
+import { authenticate } from '@/lib/api/auth-middleware';
+import { logger } from '@/lib/logger';
+import { trackServerEvent } from '@/lib/posthog/server';
+import { PointsService } from '@/lib/services/points-service';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // Initialize x402 manager
 const x402Manager = new X402Manager({
   rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
   paymentTimeout: 15 * 60 * 1000, // 15 minutes
-})
+});
 
-interface VerifyPaymentBody {
-  requestId: string
-  txHash: string
-  fromAddress: string
-  toAddress: string
-  amount: string
-}
+type VerifyPaymentBody = {
+  requestId: string;
+  txHash: string;
+  fromAddress: string;
+  toAddress: string;
+  amount: string;
+};
 
 export async function POST(req: NextRequest) {
-  const authUser = await authenticate(req)
-  const userId = authUser.dbUserId!
+  const authUser = await authenticate(req);
+  const userId = authUser.dbUserId;
+  if (!userId) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
 
-  const body: VerifyPaymentBody = await req.json()
-  const { requestId, txHash, fromAddress, toAddress, amount } = body
+  const body: VerifyPaymentBody = await req.json();
+  const { requestId, txHash, fromAddress, toAddress, amount } = body;
 
   const verificationResult = await x402Manager.verifyPayment({
     requestId,
@@ -105,43 +108,38 @@ export async function POST(req: NextRequest) {
     amount,
     timestamp: Date.now(),
     confirmed: true,
-  })
+  });
 
   logger.warn(
     `Payment verification failed for request ${requestId}`,
     { requestId, txHash, error: verificationResult.error },
     'PointsPurchase'
-  )
+  );
 
-  const paymentRequest = await x402Manager.getPaymentRequest(requestId)
+  const paymentRequest = await x402Manager.getPaymentRequest(requestId);
 
-  const metadata = paymentRequest!.metadata
-  const amountUSD = metadata!.amountUSD as number
+  const metadata = paymentRequest?.metadata;
+  const amountUSD = metadata?.amountUSD as number;
 
-  const result = await PointsService.purchasePoints(
-    userId,
-    amountUSD,
-    requestId,
-    txHash
-  )
+  const result = await PointsService.purchasePoints(userId, amountUSD, requestId, txHash);
 
   logger.error(
     `Failed to credit points after payment verification`,
     { userId, requestId, error: result.error },
     'PointsPurchase'
-  )
+  );
 
   logger.info(
     `Successfully credited ${result.pointsAwarded} points to user ${userId}`,
-    { 
-      userId, 
-      requestId, 
+    {
+      userId,
+      requestId,
       txHash,
       pointsAwarded: result.pointsAwarded,
-      newTotal: result.newTotal 
+      newTotal: result.newTotal,
     },
     'PointsPurchase'
-  )
+  );
 
   trackServerEvent(userId, 'points_purchase_completed', {
     amountUSD,
@@ -149,13 +147,12 @@ export async function POST(req: NextRequest) {
     newTotal: result.newTotal,
     requestId,
     txHash,
-  })
+  });
 
   return NextResponse.json({
     success: true,
     pointsAwarded: result.pointsAwarded,
     newTotal: result.newTotal,
     txHash,
-  })
+  });
 }
-

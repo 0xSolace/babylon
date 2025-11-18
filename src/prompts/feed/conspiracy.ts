@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating conspiracy theorist takes on world events.
- * 
+ *
  * Creates satirical conspiracy theory posts from characters who see
  * hidden connections and secret plots in events. Uses conspiratorial
  * tone with wild connections and speculation.
- * 
+ *
  * Returns XML with conspiracy theory posts and metadata.
  */
 export const conspiracy = definePrompt({
@@ -74,5 +74,5 @@ Respond with ONLY this XML format (example for 2 conspiracists):
 </response>
 
 CRITICAL: Return EXACTLY {{conspiracistCount}} conspiracy posts. Each must have post, sentiment, clueStrength, pointsToward elements.
-`.trim()
+`.trim(),
 });

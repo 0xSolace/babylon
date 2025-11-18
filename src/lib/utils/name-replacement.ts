@@ -3,20 +3,17 @@
  * Handles various case formats: first, last, firstlast, FirstLast, FIRSTLAST, FIRST, First, LAST, Last, First Last, first last, FIRST LAST, etc.
  */
 
-export interface NameParts {
+export type NameParts = {
   firstName: string;
   lastName: string;
   originalFirstName: string;
   originalLastName: string;
-}
+};
 
 /**
  * Generates all possible name variations for replacement checking
  */
-export function generateNameVariations(
-  firstName: string,
-  lastName: string
-): string[] {
+export function generateNameVariations(firstName: string, lastName: string): string[] {
   const variations: Set<string> = new Set();
 
   // Individual parts
@@ -48,46 +45,39 @@ export function generateNameVariations(
   variations.add(firstLower + lastTitle);
 
   // First_Last (with underscore)
-  variations.add(firstTitle + '_' + lastTitle);
-  variations.add(firstLower + '_' + lastLower);
-  variations.add(firstUpper + '_' + lastUpper);
+  variations.add(`${firstTitle}_${lastTitle}`);
+  variations.add(`${firstLower}_${lastLower}`);
+  variations.add(`${firstUpper}_${lastUpper}`);
 
   // First-Last (with hyphen)
-  variations.add(firstTitle + '-' + lastTitle);
-  variations.add(firstLower + '-' + lastLower);
-  variations.add(firstUpper + '-' + lastUpper);
+  variations.add(`${firstTitle}-${lastTitle}`);
+  variations.add(`${firstLower}-${lastLower}`);
+  variations.add(`${firstUpper}-${lastUpper}`);
 
   // First Last (with space)
-  variations.add(firstTitle + ' ' + lastTitle);
-  variations.add(firstLower + ' ' + lastLower);
-  variations.add(firstUpper + ' ' + lastUpper);
+  variations.add(`${firstTitle} ${lastTitle}`);
+  variations.add(`${firstLower} ${lastLower}`);
+  variations.add(`${firstUpper} ${lastUpper}`);
 
   // First, Last (with comma)
-  variations.add(firstTitle + ', ' + lastTitle);
-  variations.add(firstLower + ', ' + lastLower);
-  variations.add(firstUpper + ', ' + lastUpper);
+  variations.add(`${firstTitle}, ${lastTitle}`);
+  variations.add(`${firstLower}, ${lastLower}`);
+  variations.add(`${firstUpper}, ${lastUpper}`);
 
-  return Array.from(variations).filter(v => v.length > 0);
+  return Array.from(variations).filter((v) => v.length > 0);
 }
 
 /**
  * Checks if a text contains any name variations
  */
-export function containsNameVariation(
-  text: string,
-  firstName: string,
-  lastName: string
-): boolean {
+export function containsNameVariation(text: string, firstName: string, lastName: string): boolean {
   const variations = generateNameVariations(firstName, lastName);
   const lowerText = text.toLowerCase();
 
-  return variations.some(variation => {
+  return variations.some((variation) => {
     const lowerVariation = variation.toLowerCase();
     // Check for exact word boundaries or as part of larger words
-    const regex = new RegExp(
-      `\\b${lowerVariation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
-      'i'
-    );
+    const regex = new RegExp(`\\b${lowerVariation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
     return regex.test(lowerText);
   });
 }
@@ -116,13 +106,10 @@ export function replaceNameVariations(
     if (!oldVar) {
       continue;
     }
-    const newVar = sortedNew[i] || newFirstName + ' ' + newLastName;
+    const newVar = sortedNew[i] || `${newFirstName} ${newLastName}`;
 
     // Use word boundaries for replacement
-    const regex = new RegExp(
-      `\\b${oldVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
-      'gi'
-    );
+    const regex = new RegExp(`\\b${oldVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
     result = result.replace(regex, newVar);
   }
 
@@ -154,4 +141,3 @@ export function extractNameParts(actor: {
     originalLastName: actor.originalLastName,
   };
 }
-

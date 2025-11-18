@@ -1,37 +1,30 @@
 /**
  * Fail-Fast Validation Tests
- * 
+ *
  * @description
  * Ensures the system fails immediately on invalid data rather than
  * propagating bad state. Critical for data integrity.
  */
 
-import { describe, test, expect } from 'bun:test';
-import { FeedGenerator } from '../FeedGenerator';
 import { BabylonLLMClient } from '@/generator/llm/openai-client';
-import { ContentValidator } from '@/lib/validation/content-validator';
+import { describe, expect, test } from 'bun:test';
+import { FeedGenerator } from '../FeedGenerator';
 
 describe('Fail-Fast Validation', () => {
   test('generateDayFeed throws on invalid day number', async () => {
     const llm = new BabylonLLMClient();
     const feed = new FeedGenerator(llm);
 
-    await expect(
-      feed.generateDayFeed(0, [], [])
-    ).rejects.toThrow('day must be between 1 and 30');
+    await expect(feed.generateDayFeed(0, [], [])).rejects.toThrow('day must be between 1 and 30');
 
-    await expect(
-      feed.generateDayFeed(31, [], [])
-    ).rejects.toThrow('day must be between 1 and 30');
+    await expect(feed.generateDayFeed(31, [], [])).rejects.toThrow('day must be between 1 and 30');
   });
 
   test('generateDayFeed throws on empty actors array', async () => {
     const llm = new BabylonLLMClient();
     const feed = new FeedGenerator(llm);
 
-    await expect(
-      feed.generateDayFeed(1, [], [])
-    ).rejects.toThrow('cannot be empty');
+    await expect(feed.generateDayFeed(1, [], [])).rejects.toThrow('cannot be empty');
   });
 
   test('skips posts with empty content', () => {
@@ -43,7 +36,7 @@ describe('Fail-Fast Validation', () => {
       { post: 'Another valid', sentiment: 0, clueStrength: 0.5 },
     ];
 
-    const valid = posts.filter(p => p.post && p.post.trim().length > 0);
+    const valid = posts.filter((p) => p.post && p.post.trim().length > 0);
     expect(valid.length).toBe(2);
   });
 
@@ -54,7 +47,7 @@ describe('Fail-Fast Validation', () => {
       { event: 'Another valid event' },
     ];
 
-    const valid = events.filter(e => e.event && e.event.trim().length > 0);
+    const valid = events.filter((e) => e.event && e.event.trim().length > 0);
     expect(valid.length).toBe(2);
   });
 
@@ -73,5 +66,3 @@ describe('Fail-Fast Validation', () => {
     }
   });
 });
-
-

@@ -1,6 +1,6 @@
 /**
  * Swagger/OpenAPI Configuration
- * 
+ *
  * @module lib/swagger/config
  */
 
@@ -23,7 +23,8 @@ export const swaggerDefinition = {
       url: process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
       description: 'Development server',
     },
-    ...(process.env.NEXT_PUBLIC_BASE_URL && process.env.NEXT_PUBLIC_BASE_URL !== 'http://localhost:3000'
+    ...(process.env.NEXT_PUBLIC_BASE_URL &&
+    process.env.NEXT_PUBLIC_BASE_URL !== 'http://localhost:3000'
       ? []
       : [
           {
@@ -62,4 +63,3 @@ export const swaggerOptions = {
   swaggerDefinition,
   apis: ['./src/app/api/**/*.ts'],
 };
-

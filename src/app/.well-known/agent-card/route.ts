@@ -1,20 +1,20 @@
 /**
  * Official A2A Agent Card Endpoint
- * 
+ *
  * Returns agent card following official A2A protocol spec
  * from https://a2a-protocol.org
- * 
+ *
  * Standard location: /.well-known/agent-card.json
  */
 
-import { NextResponse } from 'next/server'
-import { babylonAgentCard } from '@/lib/a2a/babylon-agent-card'
+import { babylonAgentCard } from '@/lib/a2a/babylon-agent-card';
+import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 /**
  * GET /.well-known/agent-card.json
- * 
+ *
  * Returns the official A2A AgentCard with:
  * - Protocol version 0.3.0
  * - 10 Babylon game skills
@@ -25,8 +25,7 @@ export async function GET() {
   return NextResponse.json(babylonAgentCard, {
     headers: {
       'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
-    }
-  })
+      'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+    },
+  });
 }
-

@@ -1,15 +1,15 @@
 /**
  * Group Members API
- * 
+ *
  * @route GET /api/groups/[groupId]/members - Get group members
  * @route POST /api/groups/[groupId]/members - Add member to group
  * @route DELETE /api/groups/[groupId]/members - Remove member from group
  * @access Authenticated (members can view, admins can add/remove)
- * 
+ *
  * @description
  * Manages group membership. GET returns list of members. POST adds a new member
  * (admin only, sends notification). DELETE removes a member (admin only or self-remove).
- * 
+ *
  * @openapi
  * /api/groups/{groupId}/members:
  *   get:
@@ -116,14 +116,14 @@
  *         description: Not authorized to remove member
  *       404:
  *         description: Group or member not found
- * 
+ *
  * @example
  * ```typescript
  * // Get members
  * const members = await fetch(`/api/groups/${groupId}/members`, {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
- * 
+ *
  * // Add member
  * await fetch(`/api/groups/${groupId}/members`, {
  *   method: 'POST',
@@ -131,24 +131,24 @@
  *   body: JSON.stringify({ userId: 'user_123' })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/services/notification-service} Notification service
  */
 
-import type { NextRequest } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { ApiError } from '@/lib/errors/api-errors'
-import { logger } from '@/lib/logger'
-import { asUser } from '@/lib/db/context'
-import { z } from 'zod'
-import { nanoid } from 'nanoid'
-import { notifyUserGroupInvite } from '@/lib/services/notification-service'
-import { Prisma } from '@prisma/client'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { asUser } from '@/lib/db/context';
+import { ApiError } from '@/lib/errors/api-errors';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { notifyUserGroupInvite } from '@/lib/services/notification-service';
+import { Prisma } from '@prisma/client';
+import { nanoid } from 'nanoid';
+import type { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 const AddMemberSchema = z.object({
   userId: z.string(),
-})
+});
 
 /**
  * POST /api/groups/[groupId]/members
@@ -156,13 +156,13 @@ const AddMemberSchema = z.object({
  */
 export const POST = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) => {
-    const user = await authenticate(request)
-    const { groupId } = await params
-    const body = await request.json()
-    const data = AddMemberSchema.parse(body)
+    const user = await authenticate(request);
+    const { groupId } = await params;
+    const body = await request.json();
+    const data = AddMemberSchema.parse(body);
 
-    let groupName = 'Unknown'
-    let inviteId = ''
+    let groupName = 'Unknown';
+    let inviteId = '';
 
     await asUser(user, async (db) => {
       // Check if user is admin
@@ -171,10 +171,10 @@ export const POST = withErrorHandling(
           groupId,
           userId: user.userId,
         },
-      })
+      });
 
       if (!isAdmin) {
-        throw new ApiError('Only group admins can add members', 403)
+        throw new ApiError('Only group admins can add members', 403);
       }
 
       // Check if user is already a member
@@ -183,10 +183,10 @@ export const POST = withErrorHandling(
           groupId,
           userId: data.userId,
         },
-      })
+      });
 
       if (existingMember) {
-        throw new ApiError('User is already a member of this group', 400)
+        throw new ApiError('User is already a member of this group', 400);
       }
 
       // Check if there's already a pending invite
@@ -196,21 +196,21 @@ export const POST = withErrorHandling(
           invitedUserId: data.userId,
           status: 'pending',
         },
-      })
+      });
 
       if (existingInvite) {
-        throw new ApiError('User already has a pending invite', 400)
+        throw new ApiError('User already has a pending invite', 400);
       }
 
       // Get group details for notification
       const group = await db.userGroup.findUnique({
         where: { id: groupId },
         select: { name: true },
-      })
-      groupName = group?.name || 'Unknown'
+      });
+      groupName = group?.name || 'Unknown';
 
       // Create invite - handle unique constraint race condition
-      inviteId = nanoid()
+      inviteId = nanoid();
       try {
         await db.userGroupInvite.create({
           data: {
@@ -221,51 +221,45 @@ export const POST = withErrorHandling(
             status: 'pending',
             invitedAt: new Date(),
           },
-        })
+        });
       } catch (error: unknown) {
         // Handle unique constraint violation (race condition)
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          const target = error.meta?.target as string[] | undefined
+          const target = error.meta?.target as string[] | undefined;
           if (target?.includes('groupId') && target?.includes('invitedUserId')) {
-          // Check if there's now a pending invite (another request created it)
-          const raceConditionInvite = await db.userGroupInvite.findUnique({
-            where: {
-              groupId_invitedUserId: {
-                groupId,
-                invitedUserId: data.userId,
+            // Check if there's now a pending invite (another request created it)
+            const raceConditionInvite = await db.userGroupInvite.findUnique({
+              where: {
+                groupId_invitedUserId: {
+                  groupId,
+                  invitedUserId: data.userId,
+                },
               },
-            },
-          })
+            });
             if (raceConditionInvite?.status === 'pending') {
-              inviteId = raceConditionInvite.id
-              throw new ApiError('User already has a pending invite', 400)
+              inviteId = raceConditionInvite.id;
+              throw new ApiError('User already has a pending invite', 400);
             }
             // If it's not pending, we can retry or handle differently
-            throw new ApiError('Failed to create invite due to existing record', 400)
+            throw new ApiError('Failed to create invite due to existing record', 400);
           }
         }
-        throw error
+        throw error;
       }
-    })
+    });
 
     // Send notification to the invited user (outside of asUser context)
-    await notifyUserGroupInvite(
-      data.userId,
-      user.userId,
-      groupId,
-      groupName,
-      inviteId
-    )
+    await notifyUserGroupInvite(data.userId, user.userId, groupId, groupName, inviteId);
 
     logger.info(
       'Member added to group',
       { userId: user.userId, groupId, newMemberId: data.userId },
       'POST /api/groups/:groupId/members'
-    )
+    );
 
-    return successResponse({ success: true })
+    return successResponse({ success: true });
   }
-)
+);
 
 /**
  * DELETE /api/groups/[groupId]/members
@@ -273,13 +267,13 @@ export const POST = withErrorHandling(
  */
 export const DELETE = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) => {
-    const user = await authenticate(request)
-    const { groupId } = await params
-    const { searchParams } = new URL(request.url)
-    const userIdToRemove = searchParams.get('userId')
+    const user = await authenticate(request);
+    const { groupId } = await params;
+    const { searchParams } = new URL(request.url);
+    const userIdToRemove = searchParams.get('userId');
 
     if (!userIdToRemove) {
-      throw new ApiError('userId parameter is required', 400)
+      throw new ApiError('userId parameter is required', 400);
     }
 
     await asUser(user, async (db) => {
@@ -289,21 +283,21 @@ export const DELETE = withErrorHandling(
           groupId,
           userId: user.userId,
         },
-      })
+      });
 
-      const isSelf = user.userId === userIdToRemove
+      const isSelf = user.userId === userIdToRemove;
 
       if (!isAdmin && !isSelf) {
-        throw new ApiError('Only group admins can remove members', 403)
+        throw new ApiError('Only group admins can remove members', 403);
       }
 
       // Cannot remove the creator
       const group = await db.userGroup.findUnique({
         where: { id: groupId },
-      })
+      });
 
       if (group?.createdById === userIdToRemove) {
-        throw new ApiError('Cannot remove the group creator', 400)
+        throw new ApiError('Cannot remove the group creator', 400);
       }
 
       // Remove member
@@ -312,7 +306,7 @@ export const DELETE = withErrorHandling(
           groupId,
           userId: userIdToRemove,
         },
-      })
+      });
 
       // Also remove admin status if they have it
       await db.userGroupAdmin.deleteMany({
@@ -320,7 +314,7 @@ export const DELETE = withErrorHandling(
           groupId,
           userId: userIdToRemove,
         },
-      })
+      });
 
       // Remove from associated chat
       const chat = await db.chat.findFirst({
@@ -328,7 +322,7 @@ export const DELETE = withErrorHandling(
           groupId: groupId,
           isGroup: true,
         },
-      })
+      });
 
       if (chat) {
         await db.chatParticipant.deleteMany({
@@ -336,17 +330,16 @@ export const DELETE = withErrorHandling(
             chatId: chat.id,
             userId: userIdToRemove,
           },
-        })
+        });
       }
-    })
+    });
 
     logger.info(
       'Member removed from group',
       { userId: user.userId, groupId, removedUserId: userIdToRemove },
       'DELETE /api/groups/:groupId/members'
-    )
+    );
 
-    return successResponse({ success: true })
+    return successResponse({ success: true });
   }
-)
-
+);

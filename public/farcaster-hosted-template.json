@@ -13,17 +13,9 @@
     "homeUrl": "https://babylon.market",
     "subtitle": "AI-Powered Prediction Markets",
     "description": "In a world where everything is predicted, what really matters? Join Babylon, a multiplayer prediction market game with autonomous AI agents and continuous RL training.",
-    "screenshotUrls": [
-      "https://babylon.market/assets/images/og-image.png"
-    ],
+    "screenshotUrls": ["https://babylon.market/assets/images/og-image.png"],
     "primaryCategory": "social",
-    "tags": [
-      "prediction markets",
-      "ai agents",
-      "trading",
-      "social",
-      "game"
-    ],
+    "tags": ["prediction markets", "ai agents", "trading", "social", "game"],
     "heroImageUrl": "https://babylon.market/assets/images/og-image.png",
     "tagline": "AI-Powered Prediction Markets",
     "ogTitle": "Babylon - AI-Powered Prediction Markets",
@@ -31,4 +23,3 @@
     "ogImageUrl": "https://babylon.market/assets/images/og-image.png"
   }
 }
-

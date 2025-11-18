@@ -1,23 +1,23 @@
 /**
  * Upload Model to HuggingFace
- * 
+ *
  * Manually upload trained model to HuggingFace Hub with benchmarks.
- * 
+ *
  * Usage:
  *   npx ts-node scripts/upload-model-to-huggingface.ts --model=babylon-agent-v1.0.0 --hf-name=babylonlabs/babylon-agent
  */
 
-import { HuggingFaceModelUploader } from '@/lib/huggingface/HuggingFaceModelUploader';
 import { ModelBenchmarkService } from '@/lib/benchmark/ModelBenchmarkService';
-import { prisma } from '@/lib/prisma';
+import { HuggingFaceModelUploader } from '@/lib/huggingface/HuggingFaceModelUploader';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 
 async function main() {
   const args = process.argv.slice(2);
 
-  const modelId = args.find(a => a.startsWith('--model='))?.split('=')[1];
-  const hfModelName = args.find(a => a.startsWith('--hf-name='))?.split('=')[1];
-  const description = args.find(a => a.startsWith('--description='))?.split('=')[1];
+  const modelId = args.find((a) => a.startsWith('--model='))?.split('=')[1];
+  const hfModelName = args.find((a) => a.startsWith('--hf-name='))?.split('=')[1];
+  const description = args.find((a) => a.startsWith('--description='))?.split('=')[1];
   const isPrivate = args.includes('--private');
   const includeWeights = !args.includes('--no-weights');
   const benchmark = args.includes('--benchmark');
@@ -26,13 +26,15 @@ async function main() {
   if (!modelId || !hfModelName) {
     console.error('❌ Error: --model and --hf-name arguments are required');
     console.log('\nUsage:');
-    console.log('  npx ts-node scripts/upload-model-to-huggingface.ts --model=babylon-agent-v1.0.0 --hf-name=babylonlabs/babylon-agent');
+    console.log(
+      '  npx ts-node scripts/upload-model-to-huggingface.ts --model=babylon-agent-v1.0.0 --hf-name=babylonlabs/babylon-agent'
+    );
     console.log('\nOptions:');
     console.log('  --model=ID            Model ID from database (required)');
     console.log('  --hf-name=NAME        HuggingFace model name (required)');
     console.log('  --description=DESC    Model description');
     console.log('  --private             Make model private');
-    console.log('  --no-weights          Don\'t upload model weights');
+    console.log("  --no-weights          Don't upload model weights");
     console.log('  --benchmark           Run benchmarks before upload');
     console.log('  --force               Force upload even if exists');
     console.log('\nEnvironment variables:');
@@ -52,7 +54,7 @@ async function main() {
   console.log('\n╔════════════════════════════════════════════════════════╗');
   console.log('║       HUGGINGFACE MODEL UPLOADER                       ║');
   console.log('╚════════════════════════════════════════════════════════╝\n');
-  
+
   console.log(`Model ID: ${modelId}`);
   console.log(`HuggingFace Name: ${hfModelName}`);
   console.log(`Private: ${isPrivate ? 'yes' : 'no'}`);
@@ -79,7 +81,7 @@ async function main() {
       console.log('📊 Running benchmarks...\n');
 
       const benchmarkPaths = await ModelBenchmarkService.getStandardBenchmarkPaths();
-      
+
       if (benchmarkPaths.length === 0) {
         console.warn('⚠️  No standard benchmarks found, skipping benchmarking');
       } else {
@@ -97,9 +99,11 @@ async function main() {
         for (const result of benchmarkResults) {
           console.log(`  ${result.benchmarkId}:`);
           console.log(`    P&L: ${result.metrics.totalPnl.toFixed(2)}`);
-          console.log(`    Accuracy: ${(result.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%`);
+          console.log(
+            `    Accuracy: ${(result.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%`
+          );
           console.log(`    Optimality: ${result.metrics.optimalityScore.toFixed(1)}`);
-          
+
           if (result.comparisonToBaseline) {
             const delta = result.comparisonToBaseline.pnlDelta;
             const symbol = delta > 0 ? '📈' : delta < 0 ? '📉' : '➡️';
@@ -111,8 +115,12 @@ async function main() {
         // Compare to baseline
         const comparison = await ModelBenchmarkService.compareToBaseline(modelId);
         console.log('📊 Overall Comparison to Baseline:\n');
-        console.log(`  P&L Delta: ${comparison.improvement.pnlDelta > 0 ? '+' : ''}${comparison.improvement.pnlDelta.toFixed(2)}`);
-        console.log(`  Accuracy Delta: ${comparison.improvement.accuracyDelta > 0 ? '+' : ''}${(comparison.improvement.accuracyDelta * 100).toFixed(1)}%`);
+        console.log(
+          `  P&L Delta: ${comparison.improvement.pnlDelta > 0 ? '+' : ''}${comparison.improvement.pnlDelta.toFixed(2)}`
+        );
+        console.log(
+          `  Accuracy Delta: ${comparison.improvement.accuracyDelta > 0 ? '+' : ''}${(comparison.improvement.accuracyDelta * 100).toFixed(1)}%`
+        );
         console.log(`  Recommendation: ${comparison.recommendation.toUpperCase()}\n`);
 
         if (comparison.recommendation !== 'deploy' && !force) {
@@ -161,11 +169,8 @@ async function main() {
   }
 }
 
-main().catch(async error => {
+main().catch(async (error) => {
   console.error('Fatal error:', error);
   await prisma.$disconnect();
   process.exit(1);
 });
-
-
-

@@ -1,4 +1,4 @@
-import type { UUID, Memory, ServiceTypeRegistry } from '@elizaos/core';
+import type { Memory, ServiceTypeRegistry, UUID } from '@elizaos/core';
 
 // Extend the core service types with experience service
 declare module '@elizaos/core' {
@@ -30,7 +30,7 @@ export enum OutcomeType {
   MIXED = 'mixed',
 }
 
-export interface Experience {
+export type Experience = {
   id: UUID;
   agentId: UUID;
   type: ExperienceType;
@@ -67,9 +67,9 @@ export interface Experience {
   // Memory integration
   embedding?: number[]; // For semantic search
   memoryIds?: UUID[]; // Related memory IDs
-}
+};
 
-export interface ExperienceQuery {
+export type ExperienceQuery = {
   query?: string; // Text query for semantic search
   type?: ExperienceType | ExperienceType[];
   outcome?: OutcomeType | OutcomeType[];
@@ -83,22 +83,22 @@ export interface ExperienceQuery {
   };
   limit?: number;
   includeRelated?: boolean;
-}
+};
 
-export interface ExperienceAnalysis {
+export type ExperienceAnalysis = {
   pattern?: string; // Detected pattern
   frequency?: number; // How often this occurs
   reliability?: number; // How reliable this knowledge is
   alternatives?: string[]; // Alternative approaches discovered
   recommendations?: string[]; // Recommendations based on experience
-}
+};
 
-export interface ExperienceEvent {
+export type ExperienceEvent = {
   experienceId: UUID;
   eventType: 'created' | 'accessed' | 'updated' | 'superseded';
   timestamp: number;
   metadata?: Record<string, unknown>;
-}
+};
 
 export interface ExperienceMemory extends Memory {
   experienceId: string;

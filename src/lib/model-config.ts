@@ -1,6 +1,6 @@
 /**
  * AI Model Configuration
- * 
+ *
  * Centralized model selection based on use case:
  * - Content Generation (events, articles, posts, chats): High quality, user-visible
  * - Background Operations (market decisions, trading): Speed and reliability
@@ -44,18 +44,18 @@ export const MODEL_CONFIG = {
   articles: CONTENT_GENERATION_MODEL,
   posts: CONTENT_GENERATION_MODEL,
   groupChats: CONTENT_GENERATION_MODEL,
-  
+
   // Background operations (not user-facing)
   marketDecisions: BACKGROUND_WORKER_MODEL,
   trading: BACKGROUND_WORKER_MODEL,
   dataProcessing: BACKGROUND_WORKER_MODEL,
-  
+
   // Fast evaluation (frequent, small operations)
   comments: FAST_EVAL_MODEL,
   dms: FAST_EVAL_MODEL,
   tags: FAST_EVAL_MODEL,
   evaluation: FAST_EVAL_MODEL,
-  
+
   // Agents
   agentDefault: AGENT_DEFAULT_MODEL,
 } as const;
@@ -72,10 +72,7 @@ export function getModelForUseCase(useCase: keyof typeof MODEL_CONFIG): string {
  * These models are supported on Groq's API
  */
 export function isGroqModel(model: string): boolean {
-  const groqModels = [
-    'llama-3.1-8b-instant',
-    'qwen/qwen3-32b',
-  ];
+  const groqModels = ['llama-3.1-8b-instant', 'qwen/qwen3-32b'];
   return groqModels.includes(model);
 }
 
@@ -85,10 +82,9 @@ export function isGroqModel(model: string): boolean {
  */
 export function isWandbModel(model: string): boolean {
   const wandbModels = [
-    'OpenPipe/Qwen3-14B-Instruct',      // Our trained model (for Eliza agents)
+    'OpenPipe/Qwen3-14B-Instruct', // Our trained model (for Eliza agents)
     'meta-llama/Llama-3.1-8B-Instruct',
     'Qwen/Qwen2.5-32B-Instruct',
   ];
   return wandbModels.includes(model);
 }
-

@@ -6,7 +6,6 @@
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
-
 import type { GeneratedTag } from './tag-generation-service';
 
 /**
@@ -14,10 +13,7 @@ import type { GeneratedTag } from './tag-generation-service';
  * - Creates tags if they don't exist
  * - Links tags to post via PostTag join table
  */
-export async function storeTagsForPost(
-  postId: string,
-  tags: GeneratedTag[]
-): Promise<void> {
+export async function storeTagsForPost(postId: string, tags: GeneratedTag[]): Promise<void> {
   if (tags.length === 0) {
     return;
   }
@@ -59,18 +55,14 @@ export async function storeTagsForPost(
       },
     });
 
-    createdTags.forEach((t) => existingTagMap.set(t.name, t));
-    logger.debug(
-      'Created/fetched new tags',
-      { count: createdTags.length },
-      'TagStorageService'
-    );
+    createdTags.forEach((t) => {
+      existingTagMap.set(t.name, t);
+    });
+    logger.debug('Created/fetched new tags', { count: createdTags.length }, 'TagStorageService');
   }
 
   // Pre-generate IDs for post tags
-  const postTagIds = await Promise.all(
-    tags.map(() => generateSnowflakeId())
-  );
+  const postTagIds = await Promise.all(tags.map(() => generateSnowflakeId()));
 
   const postTagData = tags.map((tag, idx) => {
     const dbTag = existingTagMap.get(tag.name);
@@ -85,8 +77,8 @@ export async function storeTagsForPost(
       id: postTagId,
       postId,
       tagId: dbTag.id,
-    }
-  })
+    };
+  });
 
   await prisma.postTag.createMany({
     data: postTagData,
@@ -163,7 +155,9 @@ export async function getPostsByTag(
 
   return {
     tag,
-    posts: postTags.map((pt) => pt.Post).filter((post): post is NonNullable<typeof post> => post !== null),
+    posts: postTags
+      .map((pt) => pt.Post)
+      .filter((post): post is NonNullable<typeof post> => post !== null),
     total,
   };
 }
@@ -207,13 +201,21 @@ export async function getTagStatistics(
   });
 
   // Aggregate manually (Prisma Accelerate doesn't support complex raw SQL)
-  const tagStats = new Map<string, {
-    tag: { id: string; name: string; displayName: string; category: string | null };
-    postCount: number;
-    recentPostCount: number;
-    oldestPostDate: Date;
-    newestPostDate: Date;
-  }>();
+  const tagStats = new Map<
+    string,
+    {
+      tag: {
+        id: string;
+        name: string;
+        displayName: string;
+        category: string | null;
+      };
+      postCount: number;
+      recentPostCount: number;
+      oldestPostDate: Date;
+      newestPostDate: Date;
+    }
+  >();
 
   postTags.forEach((pt) => {
     const existing = tagStats.get(pt.tagId);
@@ -266,9 +268,7 @@ export async function storeTrendingTags(
   windowEnd: Date
 ): Promise<void> {
   // Pre-generate IDs for trending tags
-  const trendingTagIds = await Promise.all(
-    tags.map(() => generateSnowflakeId())
-  );
+  const trendingTagIds = await Promise.all(tags.map(() => generateSnowflakeId()));
 
   // Store all trending tags in a transaction
   await prisma.$transaction(async (tx) => {
@@ -343,10 +343,7 @@ export async function getCurrentTrendingTags(limit = 10) {
  * Get related/co-occurring tags for a given tag
  * (for "Trending with X" context)
  */
-export async function getRelatedTags(
-  tagId: string,
-  limit = 3
-): Promise<string[]> {
+export async function getRelatedTags(tagId: string, limit = 3): Promise<string[]> {
   // Find posts with this tag
   const postsWithTag = await prisma.postTag.findMany({
     where: { tagId },
@@ -400,7 +397,5 @@ export async function getRelatedTags(
 
   // Map back to preserve order
   const tagMap = new Map(tags.map((t) => [t.id, t.displayName]));
-  return tagIds
-    .map((id) => tagMap.get(id))
-    .filter((name): name is string => name !== undefined);
+  return tagIds.map((id) => tagMap.get(id)).filter((name): name is string => name !== undefined);
 }

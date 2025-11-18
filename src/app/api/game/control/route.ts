@@ -1,15 +1,15 @@
 /**
  * Game Control API
- * 
+ *
  * @route GET /api/game/control - Get game state
  * @route POST /api/game/control - Start/pause game
  * @access GET: Public
  * @access POST: Admin (ADMIN_TOKEN or dev)
- * 
+ *
  * @description
  * Controls the main continuous game engine. GET returns current game state.
  * POST starts or pauses the game (admin only).
- * 
+ *
  * @openapi
  * /api/game/control:
  *   get:
@@ -61,12 +61,12 @@
  *         description: Game control action completed successfully
  *       401:
  *         description: Unauthorized (admin token required)
- * 
+ *
  * @example
  * ```typescript
  * // Get state
  * const { game } = await fetch('/api/game/control').then(r => r.json());
- * 
+ *
  * // Control game
  * await fetch('/api/game/control', {
  *   method: 'POST',
@@ -77,11 +77,11 @@
  * @property {string} pausedAt - When game was paused (ISO)
  * @property {string} lastTickAt - Last game tick timestamp (ISO)
  * @property {number} activeQuestions - Number of active questions
- * 
+ *
  * @throws {400} Invalid action (POST)
  * @throws {401} Unauthorized - admin token required (POST)
  * @throws {500} Internal server error
- * 
+ *
  * @example
  * ```typescript
  * // Start the game (admin only)
@@ -92,45 +92,45 @@
  *   },
  *   body: JSON.stringify({ action: 'start' })
  * });
- * 
+ *
  * // Pause the game (admin only)
  * await fetch('/api/game/control', {
  *   method: 'POST',
  *   headers: { 'x-admin-token': process.env.ADMIN_TOKEN },
  *   body: JSON.stringify({ action: 'pause' })
  * });
- * 
+ *
  * // Get current game state (public)
  * const state = await fetch('/api/game/control');
  * const { game } = await state.json();
  * console.log(`Game is ${game.isRunning ? 'running' : 'paused'}`);
  * console.log(`Current day: ${game.currentDay}`);
  * ```
- * 
+ *
  * **Admin Authentication:**
  * ```typescript
  * // Set in environment
  * ADMIN_TOKEN=your-secret-token
- * 
+ *
  * // Use in requests
  * headers: { 'x-admin-token': process.env.ADMIN_TOKEN }
  * ```
- * 
+ *
  * @see {@link /lib/game-service} Game engine implementation
  * @see {@link /lib/serverless-game-tick} Game tick logic
  * @see {@link /api/cron/game-tick} Game tick cron job
  */
 
-import type { NextRequest } from 'next/server';
 import { asSystem } from '@/lib/db/context';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { BadRequestError, AuthorizationError } from '@/lib/errors';
+import { AuthorizationError, BadRequestError } from '@/lib/errors';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
 import { generateSnowflakeId } from '@/lib/snowflake';
+import type { NextRequest } from 'next/server';
 
-interface ControlRequest {
+type ControlRequest = {
   action: 'start' | 'pause';
-}
+};
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   // Check for admin authorization
@@ -143,7 +143,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw new AuthorizationError('Admin authorization required', 'game', 'control');
   }
 
-  const body = await request.json() as ControlRequest;
+  const body = (await request.json()) as ControlRequest;
   const { action } = body;
 
   if (!action || !['start', 'pause'].includes(action)) {
@@ -170,7 +170,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           updatedAt: now,
         },
       });
-      logger.info(`Game created and ${action === 'start' ? 'started' : 'paused'}`, { gameId: gameState.id }, 'Game Control');
+      logger.info(
+        `Game created and ${action === 'start' ? 'started' : 'paused'}`,
+        { gameId: gameState.id },
+        'Game Control'
+      );
     } else {
       // Update the existing game
       const isRunning = action === 'start';
@@ -194,11 +198,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         data: updateData,
       });
 
-      logger.info(`Game ${action === 'start' ? 'started' : 'paused'}`, { 
-        gameId: gameState.id,
-        isRunning: gameState.isRunning,
-        currentDay: gameState.currentDay 
-      }, 'Game Control');
+      logger.info(
+        `Game ${action === 'start' ? 'started' : 'paused'}`,
+        {
+          gameId: gameState.id,
+          isRunning: gameState.isRunning,
+          currentDay: gameState.currentDay,
+        },
+        'Game Control'
+      );
     }
 
     return gameState;
@@ -251,4 +259,3 @@ export const GET = withErrorHandling(async (_request: NextRequest) => {
     },
   });
 });
-

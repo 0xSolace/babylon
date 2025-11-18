@@ -1,26 +1,26 @@
 /**
  * Training Benchmark Service
- * 
+ *
  * Handles model benchmarking during the training pipeline.
- * 
+ *
  * **Purpose:** Evaluate models as part of continuous training
  * **Used by:** AutomationPipeline, continuous training scripts
  * **Storage:** trainedModel.evalMetrics (JSON field)
  * **Focus:** Training pipeline integration, deployment decisions
- * 
+ *
  * **Note:** For HuggingFace upload benchmarking, see ModelBenchmarkService
- * 
+ *
  * @see ModelBenchmarkService - For HuggingFace upload evaluation
  */
 
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
-import { BenchmarkRunner } from '@/lib/benchmark/BenchmarkRunner';
 import { agentRuntimeManager } from '@/lib/agents/runtime/AgentRuntimeManager';
-import path from 'node:path';
+import { BenchmarkRunner } from '@/lib/benchmark/BenchmarkRunner';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 
-export interface BenchmarkResults {
+export type BenchmarkResults = {
   modelId: string;
   benchmarkScore: number; // Overall composite score
   pnl: number;
@@ -31,9 +31,9 @@ export interface BenchmarkResults {
   totalPositions: number;
   duration: number;
   timestamp: Date;
-}
+};
 
-export interface ComparisonResults {
+export type ComparisonResults = {
   newModel: string;
   previousModel: string | null;
   newScore: number;
@@ -41,20 +41,22 @@ export interface ComparisonResults {
   improvement: number | null; // Percentage improvement
   shouldDeploy: boolean;
   reason: string;
-}
+};
 
 export class BenchmarkService {
-  private readonly DEPLOYMENT_THRESHOLD = 0.95; // Deploy if new model >= 95% of best
   // Use the 1-week benchmark we generated for comprehensive evaluation
-  private readonly DEFAULT_BENCHMARK_PATH = path.resolve(process.cwd(), 'benchmarks/benchmark-week-10080-60-10-5-8-12345.json');
+  private readonly DEFAULT_BENCHMARK_PATH = path.resolve(
+    process.cwd(),
+    'benchmarks/benchmark-week-10080-60-10-5-8-12345.json'
+  );
   private readonly RESULTS_DIR = path.resolve(process.cwd(), 'benchmark-results/models');
 
   /**
    * Get benchmark path with fallback to first available benchmark
-   * 
+   *
    * Attempts to use the default benchmark file, falling back to any
    * available benchmark file if the default is not found.
-   * 
+   *
    * @returns Path to benchmark JSON file
    * @throws Error if no benchmark files are found
    */
@@ -68,32 +70,40 @@ export class BenchmarkService {
       try {
         const benchmarkDir = path.resolve(process.cwd(), 'benchmarks');
         const files = await fs.readdir(benchmarkDir);
-        const benchmarkFiles = files.filter(f => f.startsWith('benchmark-') && f.endsWith('.json'));
-        
+        const benchmarkFiles = files.filter(
+          (f) => f.startsWith('benchmark-') && f.endsWith('.json')
+        );
+
         if (benchmarkFiles.length > 0) {
-          const fallbackPath = path.join(benchmarkDir, benchmarkFiles[0]!);
-          logger.warn(`Default benchmark not found, using: ${fallbackPath}`, undefined, 'BenchmarkService');
+          const fallbackPath = path.join(benchmarkDir, benchmarkFiles[0]);
+          logger.warn(
+            `Default benchmark not found, using: ${fallbackPath}`,
+            undefined,
+            'BenchmarkService'
+          );
           return fallbackPath;
         }
       } catch {
         // Ignore fallback errors
       }
     }
-    
-    throw new Error(`No benchmark files found. Generate one with: bun run tsx scripts/generate-benchmark.ts`);
+
+    throw new Error(
+      `No benchmark files found. Generate one with: bun run tsx scripts/generate-benchmark.ts`
+    );
   }
 
   /**
    * Run benchmark on a trained model
-   * 
+   *
    * Executes a full benchmark run using the BenchmarkRunner, evaluates
    * the model's performance, and stores results in the database.
-   * 
+   *
    * @param modelId - Unique identifier for the trained model
    * @param benchmarkPath - Optional path to benchmark file (uses default if not provided)
    * @returns BenchmarkResults with comprehensive performance metrics
    * @throws Error if model not found or benchmark fails
-   * 
+   *
    * @example
    * ```typescript
    * const results = await benchmarkService.benchmarkModel('model-123');
@@ -101,26 +111,19 @@ export class BenchmarkService {
    * console.log(`Accuracy: ${results.accuracy}`);
    * ```
    */
-  async benchmarkModel(
-    modelId: string,
-    benchmarkPath?: string
-  ): Promise<BenchmarkResults> {
+  async benchmarkModel(modelId: string, benchmarkPath?: string): Promise<BenchmarkResults> {
     logger.info(`Benchmarking model: ${modelId}`, undefined, 'BenchmarkService');
 
     const startTime = Date.now();
 
     // Get benchmark file (with fallback logic)
-    const bmPath = benchmarkPath || await this.getBenchmarkPath();
+    const bmPath = benchmarkPath || (await this.getBenchmarkPath());
 
     // Get test agent
     const agent = await this.getTestAgent();
 
     // Create output directory
-    const outputDir = path.join(
-      this.RESULTS_DIR,
-      modelId,
-      Date.now().toString()
-    );
+    const outputDir = path.join(this.RESULTS_DIR, modelId, Date.now().toString());
     await fs.mkdir(outputDir, { recursive: true });
 
     // Get agent runtime
@@ -129,7 +132,7 @@ export class BenchmarkService {
     // Force the runtime to use the specific model we're benchmarking
     // by temporarily overriding the model selection
     const model = await prisma.trainedModel.findUnique({
-      where: { modelId }
+      where: { modelId },
     });
 
     if (!model) {
@@ -138,13 +141,17 @@ export class BenchmarkService {
 
     // Validate and get model identifier for inference
     const modelIdentifier = this.getValidModelIdentifier(model);
-    
+
     // Run benchmark
-    logger.info('Running benchmark...', { 
-      modelId, 
-      modelIdentifier,
-      agent: agent.username 
-    }, 'BenchmarkService');
+    logger.info(
+      'Running benchmark...',
+      {
+        modelId,
+        modelIdentifier,
+        agent: agent.username,
+      },
+      'BenchmarkService'
+    );
 
     const result = await BenchmarkRunner.runSingle({
       benchmarkPath: bmPath,
@@ -152,7 +159,7 @@ export class BenchmarkService {
       agentUserId: agent.id,
       saveTrajectory: true,
       outputDir,
-      forceModel: modelIdentifier // Use validated W&B model ID
+      forceModel: modelIdentifier, // Use validated W&B model ID
     });
 
     const duration = Date.now() - startTime;
@@ -160,7 +167,7 @@ export class BenchmarkService {
     // Calculate composite benchmark score
     // Formula: 0.4 * normalized_pnl + 0.3 * accuracy + 0.3 * optimality
     const normalizedPnl = this.normalizePnl(result.metrics.totalPnl);
-    const benchmarkScore = 
+    const benchmarkScore =
       0.4 * normalizedPnl +
       0.3 * result.metrics.predictionMetrics.accuracy +
       0.3 * (result.metrics.optimalityScore / 100);
@@ -175,7 +182,7 @@ export class BenchmarkService {
       correctPredictions: result.metrics.predictionMetrics.correctPredictions,
       totalPositions: result.metrics.predictionMetrics.totalPositions,
       duration,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     logger.info(
@@ -184,9 +191,9 @@ export class BenchmarkService {
         modelId,
         score: benchmarkScore.toFixed(3),
         pnl: result.metrics.totalPnl.toFixed(2),
-        accuracy: (result.metrics.predictionMetrics.accuracy * 100).toFixed(1) + '%',
-        optimality: result.metrics.optimalityScore.toFixed(1) + '%',
-        duration: `${(duration / 1000).toFixed(1)}s`
+        accuracy: `${(result.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%`,
+        optimality: `${result.metrics.optimalityScore.toFixed(1)}%`,
+        duration: `${(duration / 1000).toFixed(1)}s`,
       },
       'BenchmarkService'
     );
@@ -199,15 +206,15 @@ export class BenchmarkService {
 
   /**
    * Compare new model performance against previous best
-   * 
+   *
    * Evaluates whether a new model should be deployed based on its benchmark
    * score compared to the previous best model. Uses a configurable threshold.
-   * 
+   *
    * @param newModelId - Unique identifier for the new model to compare
    * @param threshold - Deployment threshold (default: 0.95, meaning 95% of best)
    * @returns ComparisonResults with deployment recommendation
    * @throws Error if model not found or not benchmarked
-   * 
+   *
    * @example
    * ```typescript
    * const comparison = await benchmarkService.compareModels('model-123');
@@ -224,7 +231,7 @@ export class BenchmarkService {
 
     // Get new model's benchmark results
     const newModel = await prisma.trainedModel.findUnique({
-      where: { modelId: newModelId }
+      where: { modelId: newModelId },
     });
 
     if (!newModel) {
@@ -242,20 +249,16 @@ export class BenchmarkService {
       where: {
         modelId: { not: newModelId },
         status: { in: ['ready', 'deployed'] },
-        benchmarkScore: { not: null }
+        benchmarkScore: { not: null },
       },
       orderBy: {
-        benchmarkScore: 'desc'
-      }
+        benchmarkScore: 'desc',
+      },
     });
 
     // If no previous model, always deploy
     if (!previousBest) {
-      logger.info(
-        'No previous model to compare - will deploy',
-        { newScore },
-        'BenchmarkService'
-      );
+      logger.info('No previous model to compare - will deploy', { newScore }, 'BenchmarkService');
       return {
         newModel: newModelId,
         previousModel: null,
@@ -263,11 +266,14 @@ export class BenchmarkService {
         previousScore: null,
         improvement: null,
         shouldDeploy: true,
-        reason: 'First model - no comparison available'
+        reason: 'First model - no comparison available',
       };
     }
 
-    const previousScore = previousBest.benchmarkScore!;
+    const previousScore = previousBest.benchmarkScore;
+    if (previousScore === null) {
+      throw new Error('Previous benchmark score is missing');
+    }
     const improvement = ((newScore - previousScore) / previousScore) * 100;
     const thresholdScore = previousScore * threshold;
     const shouldDeploy = newScore >= thresholdScore;
@@ -277,10 +283,10 @@ export class BenchmarkService {
       if (newScore > previousScore) {
         reason = `Improved by ${improvement.toFixed(1)}% (${newScore.toFixed(3)} > ${previousScore.toFixed(3)})`;
       } else {
-        reason = `Within acceptable range (${newScore.toFixed(3)} >= ${thresholdScore.toFixed(3)}, threshold: ${(threshold * 100)}%)`;
+        reason = `Within acceptable range (${newScore.toFixed(3)} >= ${thresholdScore.toFixed(3)}, threshold: ${threshold * 100}%)`;
       }
     } else {
-      reason = `Performance too low (${newScore.toFixed(3)} < ${thresholdScore.toFixed(3)}, need ${(threshold * 100)}% of best)`;
+      reason = `Performance too low (${newScore.toFixed(3)} < ${thresholdScore.toFixed(3)}, need ${threshold * 100}% of best)`;
     }
 
     logger.info(
@@ -290,9 +296,9 @@ export class BenchmarkService {
         newScore: newScore.toFixed(3),
         previousModel: previousBest.modelId,
         previousScore: previousScore.toFixed(3),
-        improvement: improvement.toFixed(1) + '%',
+        improvement: `${improvement.toFixed(1)}%`,
         shouldDeploy,
-        reason
+        reason,
       },
       'BenchmarkService'
     );
@@ -304,24 +310,21 @@ export class BenchmarkService {
       previousScore,
       improvement,
       shouldDeploy,
-      reason
+      reason,
     };
   }
 
   /**
    * Store benchmark results in database
-   * 
+   *
    * Saves benchmark metrics to the trainedModel record for tracking
    * and comparison purposes.
-   * 
+   *
    * @param modelId - Unique identifier for the trained model
    * @param results - Benchmark results to store
    * @throws Error if model not found or database update fails
    */
-  async storeBenchmarkResults(
-    modelId: string,
-    results: BenchmarkResults
-  ): Promise<void> {
+  async storeBenchmarkResults(modelId: string, results: BenchmarkResults): Promise<void> {
     await prisma.trainedModel.update({
       where: { modelId },
       data: {
@@ -335,9 +338,9 @@ export class BenchmarkService {
           correctPredictions: results.correctPredictions,
           totalPositions: results.totalPositions,
           duration: results.duration,
-          benchmarkedAt: results.timestamp.toISOString()
-        }
-      }
+          benchmarkedAt: results.timestamp.toISOString(),
+        },
+      },
     });
 
     logger.info(
@@ -349,10 +352,10 @@ export class BenchmarkService {
 
   /**
    * Determine if model should be deployed based on performance
-   * 
+   *
    * Convenience wrapper around compareModels() that returns only
    * the deployment decision boolean.
-   * 
+   *
    * @param modelId - Unique identifier for the model to evaluate
    * @param threshold - Deployment threshold (default: 0.95)
    * @returns True if model should be deployed, false otherwise
@@ -368,32 +371,36 @@ export class BenchmarkService {
 
   /**
    * Validate and get model identifier for inference
-   * 
+   *
    * Ensures storagePath is a valid W&B model ID or HuggingFace path.
    * Falls back to modelId or baseModel if storagePath is invalid.
-   * 
+   *
    * @param model - Model object with storagePath, modelId, and baseModel
    * @returns Valid model identifier string for inference
-   * 
+   *
    * @remarks
    * Valid formats:
    * - W&B: "entity/project/model-name:version"
    * - HuggingFace: "org/model-name"
    * - Falls back to baseModel if none valid
    */
-  private getValidModelIdentifier(model: { storagePath: string; modelId: string; baseModel: string }): string {
+  private getValidModelIdentifier(model: {
+    storagePath: string;
+    modelId: string;
+    baseModel: string;
+  }): string {
     const storagePath = model.storagePath;
-    
+
     // Validate storagePath format (should be W&B model ID or HuggingFace path)
     // W&B format: entity/project/model-name:version or entity/project/model-name:stepN
     // HuggingFace: org/model-name
-    
+
     if (storagePath && storagePath.trim().length > 0) {
       // Check if it looks like a valid model ID
       if (storagePath.includes('/') || storagePath.includes(':')) {
         return storagePath;
       }
-      
+
       // StoragePath is invalid, log warning
       logger.warn(
         `Invalid storagePath format: ${storagePath}, falling back to modelId`,
@@ -401,12 +408,12 @@ export class BenchmarkService {
         'BenchmarkService'
       );
     }
-    
+
     // Fallback to base model if modelId also doesn't look valid
     if (model.modelId.includes('/')) {
       return model.modelId;
     }
-    
+
     // Last resort: use base model from training
     logger.warn(
       `No valid model identifier found, using baseModel`,
@@ -418,10 +425,10 @@ export class BenchmarkService {
 
   /**
    * Get test agent for benchmarking
-   * 
+   *
    * Finds a suitable test agent for running benchmarks.
    * Prefers specific test agents, falls back to any agent if none found.
-   * 
+   *
    * @returns User record for the test agent
    * @throws Error if no agents found in database
    */
@@ -430,14 +437,16 @@ export class BenchmarkService {
     let agent = await prisma.user.findFirst({
       where: {
         isAgent: true,
-        username: { in: ['trader-aggressive', 'test-agent', 'benchmark-agent'] }
-      }
+        username: {
+          in: ['trader-aggressive', 'test-agent', 'benchmark-agent'],
+        },
+      },
     });
 
     // Fall back to any agent
     if (!agent) {
       agent = await prisma.user.findFirst({
-        where: { isAgent: true }
+        where: { isAgent: true },
       });
     }
 
@@ -465,29 +474,29 @@ export class BenchmarkService {
   async getBenchmarkSummary() {
     const models = await prisma.trainedModel.findMany({
       where: {
-        benchmarkScore: { not: null }
+        benchmarkScore: { not: null },
       },
       orderBy: {
-        benchmarkScore: 'desc'
+        benchmarkScore: 'desc',
       },
-      take: 10
+      take: 10,
     });
 
-    const summary = models.map(m => ({
+    const summary = models.map((m) => ({
       modelId: m.modelId,
       version: m.version,
       score: m.benchmarkScore,
       accuracy: m.accuracy,
       status: m.status,
-      createdAt: m.createdAt
+      createdAt: m.createdAt,
     }));
 
     return {
       totalBenchmarked: models.length,
       topModels: summary.slice(0, 5),
-      recentModels: summary.sort((a, b) => 
-        b.createdAt.getTime() - a.createdAt.getTime()
-      ).slice(0, 5)
+      recentModels: summary
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, 5),
     };
   }
 
@@ -505,11 +514,7 @@ export class BenchmarkService {
         const result = await this.benchmarkModel(modelId, benchmarkPath);
         results[modelId] = result;
       } catch (error) {
-        logger.error(
-          `Failed to benchmark model ${modelId}`,
-          error,
-          'BenchmarkService'
-        );
+        logger.error(`Failed to benchmark model ${modelId}`, error, 'BenchmarkService');
       }
     }
 
@@ -519,4 +524,3 @@ export class BenchmarkService {
 
 // Export singleton instance
 export const benchmarkService = new BenchmarkService();
-

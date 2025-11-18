@@ -1,15 +1,15 @@
 /**
  * Single Goal Management API
- * 
+ *
  * @route GET /api/agents/[agentId]/goals/[goalId] - Get goal
  * @route PUT /api/agents/[agentId]/goals/[goalId] - Update goal
  * @route DELETE /api/agents/[agentId]/goals/[goalId] - Delete goal
  * @access Authenticated (manager only)
- * 
+ *
  * @description
  * Manages a single agent goal. GET returns goal details. PUT updates goal.
  * DELETE removes goal. Only accessible by agent's manager.
- * 
+ *
  * @openapi
  * /api/agents/{agentId}/goals/{goalId}:
  *   get:
@@ -111,7 +111,7 @@
  *         description: Not agent manager
  *       404:
  *         description: Goal not found
- * 
+ *
  * @example
  * ```typescript
  * // Get goal
@@ -121,11 +121,11 @@
  * ```
  */
 
+import { authenticate } from '@/lib/api/auth-middleware';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { logger } from '@/lib/logger'
+import { NextResponse } from 'next/server';
 
 /**
  * GET - Get single goal
@@ -135,47 +135,44 @@ export async function GET(
   { params }: { params: Promise<{ agentId: string; goalId: string }> }
 ) {
   try {
-    const authUser = await authenticate(req)
-    const userId = authUser.userId
-    const { agentId, goalId } = await params
-    
+    const authUser = await authenticate(req);
+    const userId = authUser.userId;
+    const { agentId, goalId } = await params;
+
     // Verify ownership
     const agent = await prisma.user.findUnique({
       where: { id: agentId },
-      select: { isAgent: true, managedBy: true }
-    })
-    
+      select: { isAgent: true, managedBy: true },
+    });
+
     if (!agent?.isAgent || agent.managedBy !== userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
-    
+
     const goal = await prisma.agentGoal.findUnique({
       where: { id: goalId },
       include: {
         AgentGoalAction: {
           orderBy: { createdAt: 'desc' },
-          take: 20
-        }
-      }
-    })
-    
+          take: 20,
+        },
+      },
+    });
+
     if (!goal || goal.agentUserId !== agentId) {
-      return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
     }
-    
+
     return NextResponse.json({
       success: true,
       goal: {
         ...goal,
-        target: goal.target ? JSON.parse(JSON.stringify(goal.target)) : null
-      }
-    })
+        target: goal.target ? JSON.parse(JSON.stringify(goal.target)) : null,
+      },
+    });
   } catch (error) {
-    console.error('Error fetching goal:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch goal' },
-      { status: 500 }
-    )
+    console.error('Error fetching goal:', error);
+    return NextResponse.json({ error: 'Failed to fetch goal' }, { status: 500 });
   }
 }
 
@@ -187,98 +184,111 @@ export async function PUT(
   { params }: { params: Promise<{ agentId: string; goalId: string }> }
 ) {
   try {
-    const authUser = await authenticate(req)
-    const userId = authUser.userId
-    const { agentId, goalId } = await params
-    
+    const authUser = await authenticate(req);
+    const userId = authUser.userId;
+    const { agentId, goalId } = await params;
+
     // Verify ownership
     const agent = await prisma.user.findUnique({
       where: { id: agentId },
-      select: { isAgent: true, managedBy: true }
-    })
-    
+      select: { isAgent: true, managedBy: true },
+    });
+
     if (!agent?.isAgent || agent.managedBy !== userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
-    
+
     // Get existing goal
     const existingGoal = await prisma.agentGoal.findUnique({
-      where: { id: goalId }
-    })
-    
+      where: { id: goalId },
+    });
+
     if (!existingGoal || existingGoal.agentUserId !== agentId) {
-      return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
     }
-    
+
     // Parse updates
-    let body: { name?: string; description?: string; target?: string; priority?: number | null; status?: string }
+    let body: {
+      name?: string;
+      description?: string;
+      target?: string;
+      priority?: number | null;
+      status?: string;
+    };
     try {
-      body = await req.json() as { name?: string; description?: string; target?: string; priority?: number | null; status?: string }
+      body = (await req.json()) as {
+        name?: string;
+        description?: string;
+        target?: string;
+        priority?: number | null;
+        status?: string;
+      };
     } catch (error) {
-      logger.error('Failed to parse request body', { error, agentId, goalId }, 'PUT /api/agents/[agentId]/goals/[goalId]')
-      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+      logger.error(
+        'Failed to parse request body',
+        { error, agentId, goalId },
+        'PUT /api/agents/[agentId]/goals/[goalId]'
+      );
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
-    const { name, description, target, priority, status } = body
-    
+    const { name, description, target, priority, status } = body;
+
     // Build update object
     const updates: {
-      updatedAt: Date
-      name?: string
-      description?: string
-      target?: string
-      priority?: number
-      status?: string
-      completedAt?: Date
+      updatedAt: Date;
+      name?: string;
+      description?: string;
+      target?: string;
+      priority?: number;
+      status?: string;
+      completedAt?: Date;
     } = {
-      updatedAt: new Date()
-    }
-    
-    if (name !== undefined && typeof name === 'string') updates.name = name
-    if (description !== undefined && typeof description === 'string') updates.description = description
-    if (target !== undefined && typeof target === 'string') updates.target = target
+      updatedAt: new Date(),
+    };
+
+    if (name !== undefined && typeof name === 'string') updates.name = name;
+    if (description !== undefined && typeof description === 'string')
+      updates.description = description;
+    if (target !== undefined && typeof target === 'string') updates.target = target;
     if (priority !== undefined && priority !== null) {
       if (typeof priority !== 'number' || priority < 1 || priority > 10) {
-        return NextResponse.json(
-          { error: 'Priority must be between 1 and 10' },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: 'Priority must be between 1 and 10' }, { status: 400 });
       }
-      updates.priority = priority
+      updates.priority = priority;
     }
     if (status !== undefined) {
-      const validStatuses = ['active', 'paused', 'completed', 'failed']
+      const validStatuses = ['active', 'paused', 'completed', 'failed'];
       if (!validStatuses.includes(status)) {
         return NextResponse.json(
-          { error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
+          {
+            error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+          },
           { status: 400 }
-        )
+        );
       }
-      updates.status = status
-      
+      updates.status = status;
+
       if (status === 'completed' && !existingGoal.completedAt) {
-        updates.completedAt = new Date()
+        updates.completedAt = new Date();
       }
     }
-    
+
     // Update goal
     const updatedGoal = await prisma.agentGoal.update({
       where: { id: goalId },
-      data: updates
-    })
-    
+      data: updates,
+    });
+
     return NextResponse.json({
       success: true,
       goal: {
         ...updatedGoal,
-        target: updatedGoal.target ? JSON.parse(JSON.stringify(updatedGoal.target)) : null
-      }
-    })
+        target: updatedGoal.target ? JSON.parse(JSON.stringify(updatedGoal.target)) : null,
+      },
+    });
   } catch (error) {
-    console.error('Error updating goal:', error)
-    return NextResponse.json(
-      { error: 'Failed to update goal' },
-      { status: 500 }
-    )
+    console.error('Error updating goal:', error);
+    return NextResponse.json({ error: 'Failed to update goal' }, { status: 500 });
   }
 }
 
@@ -290,44 +300,40 @@ export async function DELETE(
   { params }: { params: Promise<{ agentId: string; goalId: string }> }
 ) {
   try {
-    const authUser = await authenticate(req)
-    const userId = authUser.userId
-    const { agentId, goalId } = await params
-    
+    const authUser = await authenticate(req);
+    const userId = authUser.userId;
+    const { agentId, goalId } = await params;
+
     // Verify ownership
     const agent = await prisma.user.findUnique({
       where: { id: agentId },
-      select: { isAgent: true, managedBy: true }
-    })
-    
+      select: { isAgent: true, managedBy: true },
+    });
+
     if (!agent?.isAgent || agent.managedBy !== userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
-    
+
     // Verify goal exists and belongs to agent
     const goal = await prisma.agentGoal.findUnique({
-      where: { id: goalId }
-    })
-    
+      where: { id: goalId },
+    });
+
     if (!goal || goal.agentUserId !== agentId) {
-      return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
     }
-    
+
     // Delete goal (cascades to goal actions)
     await prisma.agentGoal.delete({
-      where: { id: goalId }
-    })
-    
+      where: { id: goalId },
+    });
+
     return NextResponse.json({
       success: true,
-      message: 'Goal deleted successfully'
-    })
+      message: 'Goal deleted successfully',
+    });
   } catch (error) {
-    console.error('Error deleting goal:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete goal' },
-      { status: 500 }
-    )
+    console.error('Error deleting goal:', error);
+    return NextResponse.json({ error: 'Failed to delete goal' }, { status: 500 });
   }
 }
-

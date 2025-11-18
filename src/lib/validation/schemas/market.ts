@@ -2,13 +2,7 @@
  * Market and trading validation schemas
  */
 import { z } from 'zod';
-
-import {
-  NumericStringSchema,
-  PaginationSchema,
-  SnowflakeIdSchema,
-  UserIdSchema,
-} from './common';
+import { NumericStringSchema, PaginationSchema, SnowflakeIdSchema, UserIdSchema } from './common';
 
 /**
  * Open perp position schema
@@ -21,11 +15,7 @@ export const OpenPerpPositionSchema = z.object({
     .regex(/^[A-Z0-9-]+$/, 'Ticker must be uppercase alphanumeric'),
   side: z.enum(['LONG', 'SHORT']),
   size: NumericStringSchema, // Position size as string for precision
-  leverage: z
-    .number()
-    .int()
-    .min(1)
-    .max(100, 'Leverage must be between 1x and 100x'),
+  leverage: z.number().int().min(1).max(100, 'Leverage must be between 1x and 100x'),
   slippage: z.number().min(0).max(0.1).default(0.01), // 1% default max slippage
 });
 

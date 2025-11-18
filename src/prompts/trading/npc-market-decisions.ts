@@ -1,6 +1,6 @@
 /**
  * NPC Market Decisions Prompt
- * 
+ *
  * Batch generation of trading decisions for multiple NPCs based on:
  * - Feed posts they've seen
  * - Group chat messages (insider info)
@@ -13,15 +13,15 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating context-aware trading decisions for NPCs.
- * 
+ *
  * Simulates trading decisions for multiple NPCs based on their information
  * access (feed posts, group chats), personality, tier, and current market
  * conditions. Considers active questions, events, and narratives when
  * determining positions.
- * 
+ *
  * Returns XML with trading decisions for each NPC including market type,
  * ticker, side, size, and reasoning.
- * 
+ *
  * @example
  * ```ts
  * const prompt = renderPrompt(npcMarketDecisions, {
@@ -36,10 +36,11 @@ export const npcMarketDecisions = definePrompt({
   id: 'npc-market-decisions',
   version: '3.0.0',
   category: 'trading',
-  description: 'Generate context-aware trading decisions for NPCs based on active questions, events, and narratives',
+  description:
+    'Generate context-aware trading decisions for NPCs based on active questions, events, and narratives',
   temperature: 0.8,
   maxTokens: 8000,
-  
+
   template: `⚠️⚠️⚠️ CRITICAL XML FORMAT REQUIREMENT ⚠️⚠️⚠️
 
 You MUST respond with ONLY valid XML. NO text, NO explanations, NO reasoning, NO markdown, NO preamble.
@@ -139,6 +140,5 @@ DECISION RULES:
 - "hold" is valid - most NPCs should hold if no clear opportunity
 - Personality and tier affect risk-taking
 - ⚠️ CRITICAL: Use the EXACT npcId from the "ID:" field in each NPC's profile. Do NOT invent IDs or use slugified names.
-`.trim()
+`.trim(),
 });
-

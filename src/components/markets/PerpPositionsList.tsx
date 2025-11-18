@@ -1,21 +1,16 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
-
-import { AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
-import { toast } from 'sonner';
-
-import { TradeConfirmationDialog, type ClosePerpDetails } from './TradeConfirmationDialog';
-
 import { cn } from '@/lib/utils';
-
 import { useAuth } from '@/hooks/useAuth';
 import { useMarketPrices } from '@/hooks/useMarketPrices';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
-
 import { calculateUnrealizedPnL } from '@/shared/perps-types';
+import { AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { type ClosePerpDetails, TradeConfirmationDialog } from './TradeConfirmationDialog';
 
-interface PerpPosition {
+type PerpPosition = {
   id: string;
   ticker: string;
   side: 'long' | 'short';
@@ -28,17 +23,14 @@ interface PerpPosition {
   liquidationPrice: number;
   fundingPaid: number;
   openedAt: string;
-}
+};
 
-interface PerpPositionsListProps {
+type PerpPositionsListProps = {
   positions: PerpPosition[];
   onPositionClosed?: () => void;
-}
+};
 
-export function PerpPositionsList({
-  positions,
-  onPositionClosed,
-}: PerpPositionsListProps) {
+export function PerpPositionsList({ positions, onPositionClosed }: PerpPositionsListProps) {
   const [closingId, setClosingId] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingClose, setPendingClose] = useState<{
@@ -52,10 +44,7 @@ export function PerpPositionsList({
     getAccessToken,
   });
 
-  const tickers = useMemo(
-    () => positions.map((pos) => pos.ticker),
-    [positions]
-  );
+  const tickers = useMemo(() => positions.map((pos) => pos.ticker), [positions]);
   const livePrices = useMarketPrices(tickers);
 
   const handleCloseClick = useCallback(
@@ -110,11 +99,9 @@ export function PerpPositionsList({
 
   if (positions.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
+      <div className="py-8 text-center text-muted-foreground">
         <p>No open positions</p>
-        <p className="text-sm mt-1">
-          Open a long or short position to get started
-        </p>
+        <p className="mt-1 text-sm">Open a long or short position to get started</p>
       </div>
     );
   }
@@ -124,13 +111,12 @@ export function PerpPositionsList({
       {positions.map((position) => {
         const livePrice = livePrices.get(position.ticker)?.price;
         const currentPrice = livePrice ?? position.currentPrice;
-        const { pnl: dynamicPnL, pnlPercent: dynamicPnLPercent } =
-          calculateUnrealizedPnL(
-            position.entryPrice,
-            currentPrice,
-            position.side,
-            position.size
-          );
+        const { pnl: dynamicPnL, pnlPercent: dynamicPnLPercent } = calculateUnrealizedPnL(
+          position.entryPrice,
+          currentPrice,
+          position.side,
+          position.size
+        );
 
         const liquidationDistance =
           position.side === 'long'
@@ -144,49 +130,38 @@ export function PerpPositionsList({
           <div
             key={position.id}
             className={cn(
-              'p-4 rounded transition-all',
+              'rounded p-4 transition-all',
               isNearLiquidation ? 'bg-red-600/10' : 'bg-muted/40'
             )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span
                   className={cn(
-                    'text-xs font-bold px-2 py-1 rounded flex items-center gap-1',
+                    'flex items-center gap-1 rounded px-2 py-1 font-bold text-xs',
                     position.side === 'long'
                       ? 'bg-green-600/20 text-green-600'
                       : 'bg-red-600/20 text-red-600'
                   )}
                 >
-                  {position.side === 'long' ? (
-                    <TrendingUp size={12} />
-                  ) : (
-                    <TrendingDown size={12} />
-                  )}
+                  {position.side === 'long' ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                   {position.leverage}x {position.side.toUpperCase()}
                 </span>
-                <span className="font-bold text-foreground">
-                  ${position.ticker}
-                </span>
+                <span className="font-bold text-foreground">${position.ticker}</span>
               </div>
 
               <div className="text-right">
                 <div
                   className={cn(
-                    'text-lg font-bold',
+                    'font-bold text-lg',
                     dynamicPnL >= 0 ? 'text-green-600' : 'text-red-600'
                   )}
                 >
                   {dynamicPnL >= 0 ? '+' : ''}
                   {formatPrice(dynamicPnL)}
                 </div>
-                <div
-                  className={cn(
-                    'text-xs',
-                    dynamicPnL >= 0 ? 'text-green-600' : 'text-red-600'
-                  )}
-                >
+                <div className={cn('text-xs', dynamicPnL >= 0 ? 'text-green-600' : 'text-red-600')}>
                   {dynamicPnL >= 0 ? '+' : ''}
                   {dynamicPnLPercent.toFixed(2)}%
                 </div>
@@ -195,16 +170,16 @@ export function PerpPositionsList({
 
             {/* Liquidation Warning */}
             {isNearLiquidation && (
-              <div className="flex items-center gap-2 p-2 bg-red-600/20 rounded mb-3">
-                <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                <p className="text-xs text-red-600 font-medium">
+              <div className="mb-3 flex items-center gap-2 rounded bg-red-600/20 p-2">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-red-600" />
+                <p className="font-medium text-red-600 text-xs">
                   Near liquidation! {liquidationDistance.toFixed(2)}% away
                 </p>
               </div>
             )}
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+            <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
               <div>
                 <div className="text-muted-foreground">Entry</div>
                 <div className="font-medium text-foreground">
@@ -213,9 +188,7 @@ export function PerpPositionsList({
               </div>
               <div>
                 <div className="text-muted-foreground">Current</div>
-                <div className="font-medium text-foreground">
-                  {formatPrice(currentPrice)}
-                </div>
+                <div className="font-medium text-foreground">{formatPrice(currentPrice)}</div>
               </div>
               <div>
                 <div className="text-muted-foreground">Liquidation</div>
@@ -225,18 +198,14 @@ export function PerpPositionsList({
               </div>
               <div>
                 <div className="text-muted-foreground">Size</div>
-                <div className="font-medium text-foreground">
-                  {formatPrice(position.size)}
-                </div>
+                <div className="font-medium text-foreground">{formatPrice(position.size)}</div>
               </div>
               <div>
                 <div className="text-muted-foreground">Funding Paid</div>
                 <div
                   className={cn(
                     'font-medium',
-                    position.fundingPaid >= 0
-                      ? 'text-red-600'
-                      : 'text-green-600'
+                    position.fundingPaid >= 0 ? 'text-red-600' : 'text-green-600'
                   )}
                 >
                   {position.fundingPaid >= 0 ? '-' : '+'}
@@ -245,27 +214,28 @@ export function PerpPositionsList({
               </div>
               <div>
                 <div className="text-muted-foreground">Opened</div>
-                <div className="font-medium text-foreground">
-                  {formatDate(position.openedAt)}
-                </div>
+                <div className="font-medium text-foreground">{formatDate(position.openedAt)}</div>
               </div>
             </div>
 
             {/* Close Button */}
             <button
-              onClick={() => handleCloseClick(position, currentPrice, dynamicPnL, dynamicPnLPercent)}
+              type="button"
+              onClick={() =>
+                handleCloseClick(position, currentPrice, dynamicPnL, dynamicPnLPercent)
+              }
               disabled={isClosing}
               className={cn(
-                'w-full py-2 rounded font-medium transition-all cursor-pointer',
+                'w-full cursor-pointer rounded py-2 font-medium transition-all',
                 isNearLiquidation
-                  ? 'bg-red-600 hover:bg-red-700 text-primary-foreground'
-                  : 'bg-muted hover:bg-muted text-foreground',
-                isClosing && 'opacity-50 cursor-not-allowed'
+                  ? 'bg-red-600 text-primary-foreground hover:bg-red-700'
+                  : 'bg-muted text-foreground hover:bg-muted',
+                isClosing && 'cursor-not-allowed opacity-50'
               )}
             >
               {isClosing ? (
                 <span className="flex items-center justify-center gap-2">
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   Closing...
                 </span>
               ) : (

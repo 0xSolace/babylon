@@ -1,176 +1,176 @@
-'use client'
+'use client';
 
-import { useEffect, useState, useRef } from 'react'
-import { Award, Users, TrendingUp, UserPlus, ArrowRight } from 'lucide-react'
-import { Avatar } from '@/components/shared/Avatar'
-import Link from 'next/link'
-import { getProfileUrl } from '@/lib/profile-utils'
-import { Skeleton } from '@/components/shared/Skeleton'
+import { Avatar } from '@/components/shared/Avatar';
+import { Skeleton } from '@/components/shared/Skeleton';
+import { getProfileUrl } from '@/lib/profile-utils';
+import { ArrowRight, Award, TrendingUp, UserPlus, Users } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 
-interface ReferredUser {
-  id: string
-  username: string | null
-  displayName: string | null
-  profileImageUrl: string | null
-  createdAt: Date | string
-  reputationPoints: number
-  isFollowing: boolean
-  joinedAt: Date | string | null
-}
+type ReferredUser = {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  profileImageUrl: string | null;
+  createdAt: Date | string;
+  reputationPoints: number;
+  isFollowing: boolean;
+  joinedAt: Date | string | null;
+};
 
-interface ReferralStats {
-  totalReferrals: number
-  totalPointsEarned: number
-  pointsPerReferral: number
-  followingCount: number
-}
+type ReferralStats = {
+  totalReferrals: number;
+  totalPointsEarned: number;
+  pointsPerReferral: number;
+  followingCount: number;
+};
 
-interface ReferralWidgetData {
+type ReferralWidgetData = {
   user: {
-    id: string
-    username: string | null
-    displayName: string | null
-    profileImageUrl: string | null
-    referralCode: string | null
-    reputationPoints: number
-  }
-  stats: ReferralStats
-  referredUsers: ReferredUser[]
-  referralUrl: string | null
-}
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    profileImageUrl: string | null;
+    referralCode: string | null;
+    reputationPoints: number;
+  };
+  stats: ReferralStats;
+  referredUsers: ReferredUser[];
+  referralUrl: string | null;
+};
 
-interface RewardsWidgetProps {
-  userId: string
-}
+type RewardsWidgetProps = {
+  userId: string;
+};
 
 // Global fetch tracking to prevent duplicate calls
-let rewardsWidgetFetchInFlight = false
-let rewardsWidgetIntervalId: ReturnType<typeof setInterval> | null = null
+let rewardsWidgetFetchInFlight = false;
+let rewardsWidgetIntervalId: ReturnType<typeof setInterval> | null = null;
 
 export function RewardsWidget({ userId }: RewardsWidgetProps) {
-  const [data, setData] = useState<ReferralWidgetData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const lastFetchedUserIdRef = useRef<string | null>(null)
+  const [data, setData] = useState<ReferralWidgetData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const lastFetchedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId) return;
 
     // Don't refetch if userId hasn't changed
     if (lastFetchedUserIdRef.current === userId) {
-      return
+      return;
     }
 
     const fetchData = async () => {
-      if (!userId) return
+      if (!userId) return;
 
       // Prevent duplicate fetches globally
-      if (rewardsWidgetFetchInFlight) return
-      rewardsWidgetFetchInFlight = true
+      if (rewardsWidgetFetchInFlight) return;
+      rewardsWidgetFetchInFlight = true;
 
-      setLoading(true)
+      setLoading(true);
 
-      const token = typeof window !== 'undefined' ? window.__privyAccessToken : null
+      const token = typeof window !== 'undefined' ? window.__privyAccessToken : null;
       if (!token) {
-        setLoading(false)
-        rewardsWidgetFetchInFlight = false
-        return
+        setLoading(false);
+        rewardsWidgetFetchInFlight = false;
+        return;
       }
 
       const response = await fetch(`/api/users/${encodeURIComponent(userId)}/referrals`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
-      })
+      });
 
       if (!response.ok) {
-        setLoading(false)
-        rewardsWidgetFetchInFlight = false
-        throw new Error('Failed to fetch referral data')
+        setLoading(false);
+        rewardsWidgetFetchInFlight = false;
+        throw new Error('Failed to fetch referral data');
       }
 
-      const result = await response.json()
-      setData(result)
-      setLoading(false)
-      lastFetchedUserIdRef.current = userId
-      rewardsWidgetFetchInFlight = false
-    }
+      const result = await response.json();
+      setData(result);
+      setLoading(false);
+      lastFetchedUserIdRef.current = userId;
+      rewardsWidgetFetchInFlight = false;
+    };
 
     // Clear any existing interval
     if (rewardsWidgetIntervalId) {
-      clearInterval(rewardsWidgetIntervalId)
-      rewardsWidgetIntervalId = null
+      clearInterval(rewardsWidgetIntervalId);
+      rewardsWidgetIntervalId = null;
     }
 
-    fetchData()
+    fetchData();
 
     // Refresh every 30 seconds
-    rewardsWidgetIntervalId = setInterval(fetchData, 30000)
-    
+    rewardsWidgetIntervalId = setInterval(fetchData, 30000);
+
     return () => {
       if (rewardsWidgetIntervalId) {
-        clearInterval(rewardsWidgetIntervalId)
-        rewardsWidgetIntervalId = null
+        clearInterval(rewardsWidgetIntervalId);
+        rewardsWidgetIntervalId = null;
       }
-    }
-  }, [userId])
+    };
+  }, [userId]);
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-4 p-4 bg-sidebar-accent/30 rounded-2xl border border-border">
+      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-sidebar-accent/30 p-4">
         <div className="flex items-center gap-2">
-          <Award className="w-5 h-5 text-[#0066FF]" />
+          <Award className="h-5 w-5 text-[#0066FF]" />
           <h3 className="font-semibold text-foreground">Rewards</h3>
         </div>
         <div className="flex items-center justify-center py-8">
-          <div className="space-y-3 w-full">
+          <div className="w-full space-y-3">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-16 w-full" />
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   if (!data) {
     return (
-      <div className="flex flex-col gap-4 p-4 bg-sidebar-accent/30 rounded-2xl border border-border">
+      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-sidebar-accent/30 p-4">
         <div className="flex items-center gap-2">
-          <Award className="w-5 h-5 text-[#0066FF]" />
+          <Award className="h-5 w-5 text-[#0066FF]" />
           <h3 className="font-semibold text-foreground">Rewards</h3>
         </div>
-        <p className="text-sm text-muted-foreground">Unable to load rewards data</p>
+        <p className="text-muted-foreground text-sm">Unable to load rewards data</p>
       </div>
-    )
+    );
   }
 
   // Get recent referrals (last 5)
-  const recentReferrals = data.referredUsers.slice(0, 5)
+  const recentReferrals = data.referredUsers.slice(0, 5);
 
   return (
     <div className="flex flex-col gap-4">
       {/* Stats Summary */}
-      <div className="flex flex-col gap-3 p-4 bg-sidebar-accent/30 rounded-2xl border border-border">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-sidebar-accent/30 p-4">
         <div className="flex items-center gap-2">
-          <Award className="w-5 h-5 text-[#0066FF]" />
+          <Award className="h-5 w-5 text-[#0066FF]" />
           <h3 className="font-semibold text-foreground">Rewards</h3>
         </div>
 
         {/* Total Referrals */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Total</span>
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground text-sm">Total</span>
           </div>
-          <span className="text-lg font-bold text-foreground">{data.stats.totalReferrals}</span>
+          <span className="font-bold text-foreground text-lg">{data.stats.totalReferrals}</span>
         </div>
 
         {/* Points Earned */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-yellow-500" />
-            <span className="text-sm text-muted-foreground">Points Earned</span>
+            <TrendingUp className="h-4 w-4 text-yellow-500" />
+            <span className="text-muted-foreground text-sm">Points Earned</span>
           </div>
-          <span className="text-lg font-bold text-yellow-500">
+          <span className="font-bold text-lg text-yellow-500">
             {data.stats.totalPointsEarned.toLocaleString()}
           </span>
         </div>
@@ -178,33 +178,33 @@ export function RewardsWidget({ userId }: RewardsWidgetProps) {
         {/* Following */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-[#0066FF]" />
-            <span className="text-sm text-muted-foreground">Following</span>
+            <UserPlus className="h-4 w-4 text-[#0066FF]" />
+            <span className="text-muted-foreground text-sm">Following</span>
           </div>
-          <span className="text-lg font-bold text-[#0066FF]">{data.stats.followingCount}</span>
+          <span className="font-bold text-[#0066FF] text-lg">{data.stats.followingCount}</span>
         </div>
       </div>
 
       {/* Recent Referrals */}
-      <div className="flex flex-col gap-3 p-4 bg-sidebar-accent/30 rounded-2xl border border-border">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-sidebar-accent/30 p-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground text-sm">Recent Referrals</h3>
           {data.stats.totalReferrals > 5 && (
             <Link
               href="/rewards"
-              className="text-xs text-[#0066FF] hover:text-[#2952d9] transition-colors flex items-center gap-1"
+              className="flex items-center gap-1 text-[#0066FF] text-xs transition-colors hover:text-[#2952d9]"
             >
               View All
-              <ArrowRight className="w-3 h-3" />
+              <ArrowRight className="h-3 w-3" />
             </Link>
           )}
         </div>
 
         {recentReferrals.length === 0 ? (
-          <div className="text-center py-6">
-            <Users className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-            <p className="text-xs text-muted-foreground">No referrals yet</p>
-            <p className="text-xs text-muted-foreground mt-1">
+          <div className="py-6 text-center">
+            <Users className="mx-auto mb-2 h-8 w-8 text-muted-foreground opacity-50" />
+            <p className="text-muted-foreground text-xs">No referrals yet</p>
+            <p className="mt-1 text-muted-foreground text-xs">
               Share your referral link to start earning!
             </p>
           </div>
@@ -214,28 +214,26 @@ export function RewardsWidget({ userId }: RewardsWidgetProps) {
               <Link
                 key={referredUser.id}
                 href={getProfileUrl(referredUser.id, referredUser.username)}
-                className="flex items-center gap-2 p-2 rounded-lg hover:bg-sidebar-accent/50 transition-colors group"
+                className="group flex items-center gap-2 rounded-lg p-2 transition-colors hover:bg-sidebar-accent/50"
               >
                 <Avatar
                   src={referredUser.profileImageUrl || undefined}
                   alt={referredUser.displayName || referredUser.username || 'User'}
                   size="sm"
                 />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate group-hover:text-[#0066FF] transition-colors">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-foreground text-sm transition-colors group-hover:text-[#0066FF]">
                     {referredUser.displayName || referredUser.username || 'Anonymous'}
                   </p>
                   {referredUser.username && (
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="truncate text-muted-foreground text-xs">
                       @{referredUser.username}
                     </p>
                   )}
                 </div>
-                <div className="shrink-0 flex items-center gap-1">
-                  <span className="text-xs font-semibold text-yellow-500">+250</span>
-                  {referredUser.isFollowing && (
-                    <UserPlus className="w-3 h-3 text-[#0066FF]" />
-                  )}
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="font-semibold text-xs text-yellow-500">+250</span>
+                  {referredUser.isFollowing && <UserPlus className="h-3 w-3 text-[#0066FF]" />}
                 </div>
               </Link>
             ))}
@@ -243,7 +241,5 @@ export function RewardsWidget({ userId }: RewardsWidgetProps) {
         )}
       </div>
     </div>
-  )
+  );
 }
-
-

@@ -1,6 +1,6 @@
 /**
  * Dynamic Relationships System Tests
- * 
+ *
  * Tests the text-based relationship evolution system:
  * - Initial generation
  * - Interaction tracking
@@ -8,11 +8,11 @@
  * - Context generation
  */
 
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { PrismaClient } from '@prisma/client';
-import { RelationshipEvolutionEngine } from '@/engine/RelationshipEvolutionEngine';
 import { InteractionTracker } from '@/lib/services/InteractionTracker';
+import { RelationshipEvolutionEngine } from '@/engine/RelationshipEvolutionEngine';
 import type { Actor, Organization } from '@/shared/types';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -69,7 +69,7 @@ describe('Dynamic Relationships System', () => {
         ],
       },
     });
-    
+
     await prisma.actorRelationship.deleteMany({
       where: {
         OR: [
@@ -109,7 +109,7 @@ describe('Dynamic Relationships System', () => {
         ],
       },
     });
-    
+
     await prisma.actorRelationship.deleteMany({
       where: {
         OR: [
@@ -118,7 +118,7 @@ describe('Dynamic Relationships System', () => {
         ],
       },
     });
-    
+
     await prisma.actor.deleteMany({
       where: { id: { startsWith: 'test-actor-' } },
     });
@@ -144,7 +144,7 @@ describe('Dynamic Relationships System', () => {
       });
 
       expect(relationships.length).toBeGreaterThan(0);
-      
+
       // Each relationship should have a text description
       for (const rel of relationships) {
         expect(rel.history).toBeTruthy();
@@ -158,7 +158,7 @@ describe('Dynamic Relationships System', () => {
 
       console.log(`\n✅ Generated ${created} relationships`);
       console.log('Sample relationships:');
-      relationships.slice(0, 3).forEach(r => {
+      relationships.slice(0, 3).forEach((r) => {
         console.log(`  - ${r.relationshipType}: "${r.history}"`);
       });
     });
@@ -175,10 +175,13 @@ describe('Dynamic Relationships System', () => {
 
       // Actors 1 and 3 share test-company-1, should have relationship
       expect(relationships.length).toBeGreaterThan(0);
-      
-      const rel = relationships[0]!;
+
+      const [rel] = relationships;
+      if (!rel) {
+        throw new Error('Expected at least one shared affiliation relationship');
+      }
       expect(rel.history).toContain(''); // Has description
-      
+
       console.log(`\n✅ Shared affiliation relationship: "${rel.history}"`);
     });
   });
@@ -218,11 +221,11 @@ describe('Dynamic Relationships System', () => {
       });
 
       expect(interaction).toBeTruthy();
-      expect(interaction!.interactionType).toBe('mention');
-      expect(interaction!.sentiment).toBe(0.8);
-      expect(interaction!.context).toContain('mentioned');
-      
-      console.log(`\n✅ Tracked mention: ${interaction!.context}`);
+      expect(interaction?.interactionType).toBe('mention');
+      expect(interaction?.sentiment).toBe(0.8);
+      expect(interaction?.context).toContain('mentioned');
+
+      console.log(`\n✅ Tracked mention: ${interaction?.context}`);
     });
 
     test('should track replies with sentiment', async () => {
@@ -243,9 +246,9 @@ describe('Dynamic Relationships System', () => {
       });
 
       expect(interaction).toBeTruthy();
-      expect(interaction!.sentiment).toBe(-0.6);
-      
-      console.log(`\n✅ Tracked reply: ${interaction!.context}`);
+      expect(interaction?.sentiment).toBe(-0.6);
+
+      console.log(`\n✅ Tracked reply: ${interaction?.context}`);
     });
 
     test('should extract actor mentions from text', () => {
@@ -255,7 +258,7 @@ describe('Dynamic Relationships System', () => {
       expect(mentions).toContain('test-actor-1'); // Test AIlon
       expect(mentions).toContain('test-actor-2'); // Test Sam
       expect(mentions.length).toBeGreaterThanOrEqual(2);
-      
+
       console.log(`\n✅ Extracted mentions: ${mentions.join(', ')}`);
     });
 
@@ -271,7 +274,7 @@ describe('Dynamic Relationships System', () => {
       expect(posSentiment).toBeGreaterThan(0);
       expect(negSentiment).toBeLessThan(0);
       expect(neutralSentiment).toBe(0);
-      
+
       console.log(`\n✅ Sentiment analysis:`);
       console.log(`  Positive: ${posSentiment.toFixed(2)}`);
       console.log(`  Negative: ${negSentiment.toFixed(2)}`);
@@ -287,15 +290,15 @@ describe('Dynamic Relationships System', () => {
       if (context) {
         expect(context).toBeTruthy();
         expect(context.length).toBeGreaterThan(0);
-        
+
         // Should be simple text list
         expect(context).toContain('-');
         expect(context).toContain(':');
-        
+
         // Should NOT have complex formatting
         expect(context).not.toContain('✅');
         expect(context).not.toContain('How to use:');
-        
+
         console.log(`\n✅ Generated context for test-actor-1:`);
         console.log(context);
       }
@@ -305,10 +308,7 @@ describe('Dynamic Relationships System', () => {
       // Delete all relationships for test-actor-1
       await prisma.actorRelationship.deleteMany({
         where: {
-          OR: [
-            { actor1Id: 'test-actor-1' },
-            { actor2Id: 'test-actor-1' },
-          ],
+          OR: [{ actor1Id: 'test-actor-1' }, { actor2Id: 'test-actor-1' }],
         },
       });
 
@@ -316,21 +316,21 @@ describe('Dynamic Relationships System', () => {
       const context = await engine.getRelationshipContextForActor('test-actor-1');
 
       expect(context).toBe('');
-      
+
       console.log(`\n✅ Empty context for actor with no relationships`);
     });
 
     test('should limit to top 5 strongest relationships', async () => {
       const engine = new RelationshipEvolutionEngine();
-      
+
       // Regenerate relationships
       await engine.generateInitialRelationships(testActors, testOrgs);
-      
+
       const context = await engine.getRelationshipContextForActor('test-actor-1');
-      const lines = context.split('\n').filter(l => l.trim());
+      const lines = context.split('\n').filter((l) => l.trim());
 
       expect(lines.length).toBeLessThanOrEqual(5);
-      
+
       console.log(`\n✅ Context limited to ${lines.length} relationships`);
     });
   });
@@ -346,16 +346,16 @@ describe('Dynamic Relationships System', () => {
 
       for (const rel of relationships) {
         const desc = rel.history || '';
-        
+
         // Should be lowercase and casual
         expect(desc).toBe(desc.toLowerCase());
-        
+
         // Should be short
         expect(desc.length).toBeLessThan(100);
-        
+
         // Should be descriptive
         expect(desc.length).toBeGreaterThan(10);
-        
+
         console.log(`  ✓ "${desc}"`);
       }
 
@@ -367,7 +367,7 @@ describe('Dynamic Relationships System', () => {
     test('should have NPCInteraction table accessible', async () => {
       const count = await prisma.nPCInteraction.count();
       expect(count).toBeGreaterThanOrEqual(0);
-      
+
       console.log(`\n✅ NPCInteraction table accessible: ${count} interactions`);
     });
 
@@ -382,7 +382,7 @@ describe('Dynamic Relationships System', () => {
         expect('lastInteraction' in relationship).toBe(true);
         expect('interactionCount' in relationship).toBe(true);
         expect('evolutionCount' in relationship).toBe(true);
-        
+
         console.log(`\n✅ Evolution tracking fields present:`, {
           lastInteraction: relationship.lastInteraction,
           interactionCount: relationship.interactionCount,
@@ -393,8 +393,6 @@ describe('Dynamic Relationships System', () => {
   });
 });
 
-console.log('\n' + '='.repeat(60));
+console.log(`\n${'='.repeat(60)}`);
 console.log('DYNAMIC RELATIONSHIPS TESTS');
 console.log('='.repeat(60));
-
-

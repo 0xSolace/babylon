@@ -1,14 +1,18 @@
 /**
  * Tests for Generation Lock Service
- * 
+ *
  * @description
  * Verifies the distributed locking mechanism works correctly
  * to prevent concurrent tick generation.
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { acquireGenerationLock, releaseGenerationLock, checkGenerationLock } from '../generation-lock-service';
 import { prisma } from '@/lib/prisma';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import {
+  acquireGenerationLock,
+  checkGenerationLock,
+  releaseGenerationLock,
+} from '../generation-lock-service';
 
 describe('GenerationLockService', () => {
   // Clean up locks before and after each test
@@ -58,7 +62,7 @@ describe('GenerationLockService', () => {
 
     // Expiry should be ~5 minutes in future
     const now = new Date();
-    const expiryTime = lock!.expiresAt.getTime() - now.getTime();
+    const expiryTime = lock?.expiresAt.getTime() - now.getTime();
     expect(expiryTime).toBeGreaterThan(4 * 60 * 1000); // At least 4 min
     expect(expiryTime).toBeLessThan(6 * 60 * 1000); // At most 6 min
   });
@@ -77,4 +81,3 @@ describe('GenerationLockService', () => {
     expect(lock?.operation).toBe('game-tick');
   });
 });
-

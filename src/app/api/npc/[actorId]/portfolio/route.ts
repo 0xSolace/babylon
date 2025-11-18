@@ -1,13 +1,13 @@
 /**
  * NPC Portfolio API
- * 
+ *
  * @route GET /api/npc/[actorId]/portfolio - Get NPC portfolio
  * @access Public
- * 
+ *
  * @description
  * Returns comprehensive portfolio data for an NPC actor including total
  * portfolio value, PnL, position count, and risk metrics.
- * 
+ *
  * @openapi
  * /api/npc/{actorId}/portfolio:
  *   get:
@@ -42,7 +42,7 @@
  *                   type: number
  *       404:
  *         description: NPC actor not found
- * 
+ *
  * @example
  * ```typescript
  * const portfolio = await fetch(`/api/npc/${actorId}/portfolio`)
@@ -50,34 +50,44 @@
  * ```
  */
 
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { requireUserByIdentifier } from '@/lib/users/user-lookup'
-import { NPCInvestmentManager } from '@/lib/npc/npc-investment-manager'
+import { NPCInvestmentManager } from '@/lib/npc/npc-investment-manager';
+import { prisma } from '@/lib/prisma';
+import { requireUserByIdentifier } from '@/lib/users/user-lookup';
+import { NextResponse } from 'next/server';
 
-interface RouteParams {
+type RouteParams = {
   params: Promise<{
-    actorId: string
-  }>
-}
+    actorId: string;
+  }>;
+};
 
 export async function GET(_request: Request, { params }: RouteParams) {
-  const { actorId } = await params
+  const { actorId } = await params;
 
-  const actor = await requireUserByIdentifier(actorId)
+  const actor = await requireUserByIdentifier(actorId);
 
   const pool = await prisma.pool.findFirst({
     where: {
       npcActorId: actor.id,
       isActive: true,
     },
-  })
+  });
 
-  const metrics = await NPCInvestmentManager.getPortfolioMetrics(pool!.id)
+  if (!pool) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Active pool not found for this NPC',
+      },
+      { status: 404 }
+    );
+  }
+
+  const metrics = await NPCInvestmentManager.getPortfolioMetrics(pool.id);
 
   const positions = await prisma.poolPosition.findMany({
     where: {
-      poolId: pool!.id,
+      poolId: pool.id,
       closedAt: null,
     },
     select: {
@@ -96,7 +106,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     orderBy: {
       openedAt: 'desc',
     },
-  })
+  });
 
   const formattedPositions = positions.map((pos) => ({
     id: pos.id,
@@ -104,19 +114,19 @@ export async function GET(_request: Request, { params }: RouteParams) {
     ticker: pos.ticker,
     marketId: pos.marketId,
     side: pos.side,
-    size: parseFloat(pos.size!.toString()),
-    entryPrice: parseFloat(pos.entryPrice!.toString()),
-    currentPrice: parseFloat(pos.currentPrice!.toString()),
-    unrealizedPnL: parseFloat(pos.unrealizedPnL!.toString()),
+    size: parseFloat(pos.size?.toString()),
+    entryPrice: parseFloat(pos.entryPrice?.toString()),
+    currentPrice: parseFloat(pos.currentPrice?.toString()),
+    unrealizedPnL: parseFloat(pos.unrealizedPnL?.toString()),
     leverage: pos.leverage,
     createdAt: pos.openedAt.toISOString(),
-  }))
+  }));
 
   return NextResponse.json({
     success: true,
     actorId: actor.id,
-    actorName: actor.displayName!,
-    poolId: pool!.id,
+    actorName: actor.displayName ?? actor.username ?? actor.id,
+    poolId: pool.id,
     portfolio: {
       totalValue: metrics.totalValue,
       availableBalance: metrics.availableBalance,
@@ -127,5 +137,5 @@ export async function GET(_request: Request, { params }: RouteParams) {
       riskScore: metrics.riskScore,
     },
     positions: formattedPositions,
-  })
+  });
 }

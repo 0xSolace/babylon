@@ -1,13 +1,13 @@
 /**
  * Waitlist Position API
- * 
+ *
  * @route GET /api/waitlist/position - Get waitlist position
  * @access Public
- * 
+ *
  * @description
  * Returns user's waitlist position including leaderboard rank, percentile, points,
  * and referral statistics. Handles users not yet on waitlist gracefully.
- * 
+ *
  * @openapi
  * /api/waitlist/position:
  *   get:
@@ -54,45 +54,49 @@
  *                   type: object
  *                 referralCount:
  *                   type: integer
- * 
+ *
  * @example
  * ```typescript
  * const { position, points } = await fetch('/api/waitlist/position?userId=user-id')
  *   .then(r => r.json());
  * ```
- * 
+ *
  * @see {@link /lib/services/waitlist-service} Waitlist service
  */
 
-import type { NextRequest } from 'next/server'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { WaitlistService } from '@/lib/services/waitlist-service'
-import { logger } from '@/lib/logger'
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { WaitlistService } from '@/lib/services/waitlist-service';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const { searchParams } = new URL(request.url)
-  const userId = searchParams.get('userId')
+  const { searchParams } = new URL(request.url);
+  const userId = searchParams.get('userId');
 
   if (!userId) {
-    throw new Error('userId parameter is required')
+    throw new Error('userId parameter is required');
   }
 
-  logger.info('Waitlist position request', { userId }, 'GET /api/waitlist/position')
+  logger.info('Waitlist position request', { userId }, 'GET /api/waitlist/position');
 
-  const position = await WaitlistService.getWaitlistPosition(userId)
+  const position = await WaitlistService.getWaitlistPosition(userId);
 
   // If user doesn't exist or isn't on waitlist, return null gracefully
   // This handles new Privy users who haven't completed signup yet
   if (!position) {
-    logger.info('Waitlist position not found - user not on waitlist or doesn\'t exist yet', { userId }, 'GET /api/waitlist/position')
+    logger.info(
+      "Waitlist position not found - user not on waitlist or doesn't exist yet",
+      { userId },
+      'GET /api/waitlist/position'
+    );
     return successResponse({
       position: null,
-    })
+    });
   }
 
   return successResponse({
     // IMPORTANT: Return leaderboardRank as "position" for UI compatibility
-    position: position.leaderboardRank,      // Dynamic rank based on invite points
+    position: position.leaderboardRank, // Dynamic rank based on invite points
     leaderboardRank: position.leaderboardRank,
     waitlistPosition: position.waitlistPosition, // Historical record
     totalAhead: position.totalAhead,
@@ -107,6 +111,5 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       bonus: position.bonusPoints,
     },
     referralCount: position.referralCount,
-  })
-})
-
+  });
+});

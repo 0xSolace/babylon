@@ -1,22 +1,29 @@
 /**
  * Action-Level Instrumentation
- * 
+ *
  * Wraps actions with trajectory logging
  */
 
-import type { TrajectoryLoggerService } from './TrajectoryLoggerService';
-import type { Action, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions } from '@elizaos/core';
-import type { Plugin } from '@elizaos/core';
-import type { JsonValue } from '@/types/common';
 import { logger } from '@/lib/logger';
+import type { JsonValue } from '@/types/common';
+import type {
+  Action,
+  HandlerCallback,
+  HandlerOptions,
+  IAgentRuntime,
+  Memory,
+  Plugin,
+  State,
+} from '@elizaos/core';
+import type { TrajectoryLoggerService } from './TrajectoryLoggerService';
 
 /**
  * Context for trajectory logging during action execution
  */
-interface TrajectoryContext {
+type TrajectoryContext = {
   trajectoryId: string;
   logger: TrajectoryLoggerService;
-}
+};
 
 // Global context storage (per runtime instance)
 const trajectoryContexts = new WeakMap<IAgentRuntime, TrajectoryContext>();
@@ -61,7 +68,13 @@ export function wrapActionWithLogging(
       if (!context) {
         // No trajectory context - execute without logging
         if (originalHandler) {
-          await originalHandler(runtime, message, state, options as HandlerOptions | undefined, callback);
+          await originalHandler(
+            runtime,
+            message,
+            state,
+            options as HandlerOptions | undefined,
+            callback
+          );
         }
         return;
       }
@@ -75,7 +88,13 @@ export function wrapActionWithLogging(
           trajectoryId,
         });
         if (originalHandler) {
-          await originalHandler(runtime, message, state, options as HandlerOptions | undefined, callback);
+          await originalHandler(
+            runtime,
+            message,
+            state,
+            options as HandlerOptions | undefined,
+            callback
+          );
         }
         return;
       }
@@ -87,17 +106,27 @@ export function wrapActionWithLogging(
       try {
         // Execute action
         if (originalHandler) {
-          await originalHandler(runtime, message, state, options as HandlerOptions | undefined, callback);
+          await originalHandler(
+            runtime,
+            message,
+            state,
+            options as HandlerOptions | undefined,
+            callback
+          );
         }
         success = true;
         result = { executed: true };
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
-        logger.error('Action execution failed', {
-          action: action.name,
-          trajectoryId,
-          error,
-        }, 'ActionInterceptor');
+        logger.error(
+          'Action execution failed',
+          {
+            action: action.name,
+            trajectoryId,
+            error,
+          },
+          'ActionInterceptor'
+        );
         throw err;
       } finally {
         // Complete step with action result
@@ -163,7 +192,9 @@ export function logLLMCallFromAction(
     reasoning: (actionContext.reasoning as string) || undefined,
     temperature: (actionContext.temperature as number) || 0.7,
     maxTokens: (actionContext.maxTokens as number) || 8192,
-    purpose: (actionContext.purpose as 'action' | 'reasoning' | 'evaluation' | 'response' | 'other') || 'action',
+    purpose:
+      (actionContext.purpose as 'action' | 'reasoning' | 'evaluation' | 'response' | 'other') ||
+      'action',
     actionType: (actionContext.actionType as string) || undefined,
     promptTokens: (actionContext.promptTokens as number) || undefined,
     completionTokens: (actionContext.completionTokens as number) || undefined,
@@ -181,7 +212,9 @@ export function logProviderFromAction(
 ): void {
   const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
   if (!stepId) {
-    logger.warn('No active step for provider access from action', { trajectoryId });
+    logger.warn('No active step for provider access from action', {
+      trajectoryId,
+    });
     return;
   }
 
@@ -229,7 +262,7 @@ export function wrapProviderWithLogging(
       let result: import('@elizaos/core').ProviderResult = { text: '' };
 
       try {
-        result = await originalGet?.(runtime, message, state) || { text: '' };
+        result = (await originalGet?.(runtime, message, state)) || { text: '' };
         // Log provider access on success
         loggerService.logProviderAccess(stepId, {
           providerName: provider.name,
@@ -245,11 +278,15 @@ export function wrapProviderWithLogging(
         });
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err);
-        logger.error('Provider access failed', {
-          provider: provider.name,
-          trajectoryId,
-          error,
-        }, 'ProviderInterceptor');
+        logger.error(
+          'Provider access failed',
+          {
+            provider: provider.name,
+            trajectoryId,
+            error,
+          },
+          'ProviderInterceptor'
+        );
         // Log provider access before rethrowing
         loggerService.logProviderAccess(stepId, {
           providerName: provider.name,
@@ -285,7 +322,8 @@ export function wrapPluginProviders(
 
   return {
     ...plugin,
-    providers: plugin.providers.map((provider) => wrapProviderWithLogging(provider, trajectoryLogger)),
+    providers: plugin.providers.map((provider) =>
+      wrapProviderWithLogging(provider, trajectoryLogger)
+    ),
   };
 }
-

@@ -1,15 +1,15 @@
 /**
  * Admin AI Models API
- * 
+ *
  * @route GET /api/admin/ai-models - Get AI model configuration
  * @route POST /api/admin/ai-models - Update AI model configuration
  * @access Admin
- * 
+ *
  * @description
  * Manages AI model configuration including wandb model selection and system
  * AI settings. GET returns current configuration and available models.
  * POST updates model selection.
- * 
+ *
  * @openapi
  * /api/admin/ai-models:
  *   get:
@@ -65,7 +65,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const config = await fetch('/api/admin/ai-models', {
@@ -74,10 +74,10 @@
  * ```
  */
 
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
 import OpenAI from 'openai';
 
 /**
@@ -113,8 +113,13 @@ export async function GET(_req: NextRequest) {
     let wandbModels: { id: string; name: string; description?: string }[] = [];
     if (providers.wandb) {
       try {
+        const wandbApiKey = process.env.WANDB_API_KEY;
+        if (!wandbApiKey) {
+          throw new Error('WANDB_API_KEY is not configured');
+        }
+
         const wandbClient = new OpenAI({
-          apiKey: process.env.WANDB_API_KEY!,
+          apiKey: wandbApiKey,
           baseURL: 'https://api.inference.wandb.ai/v1',
         });
 
@@ -177,15 +182,21 @@ export async function GET(_req: NextRequest) {
  */
 export async function PUT(req: NextRequest) {
   try {
-    let body: { wandbModel?: string; wandbEnabled?: boolean }
+    let body: { wandbModel?: string; wandbEnabled?: boolean };
     try {
-      body = await req.json() as { wandbModel?: string; wandbEnabled?: boolean }
+      body = (await req.json()) as {
+        wandbModel?: string;
+        wandbEnabled?: boolean;
+      };
     } catch (error) {
-      logger.error('Failed to parse request body', { error }, 'POST /api/admin/ai-models')
-      return NextResponse.json({
-        success: false,
-        error: 'Invalid request body'
-      }, { status: 400 })
+      logger.error('Failed to parse request body', { error }, 'POST /api/admin/ai-models');
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid request body',
+        },
+        { status: 400 }
+      );
     }
     const { wandbModel, wandbEnabled } = body;
 
@@ -214,10 +225,14 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    logger.info('Updated AI model configuration', { 
-      wandbModel, 
-      wandbEnabled 
-    }, 'AIModelsAPI');
+    logger.info(
+      'Updated AI model configuration',
+      {
+        wandbModel,
+        wandbEnabled,
+      },
+      'AIModelsAPI'
+    );
 
     // Clear the cache so the new config is picked up
     const { clearAIModelConfigCache } = await import('@/lib/ai-model-config');
@@ -247,4 +262,3 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
-

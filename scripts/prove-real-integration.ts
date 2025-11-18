@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Prove Real Integration - End-to-End Test
- * 
+ *
  * Makes real API calls and proves monitoring captures actual data
  */
 
@@ -21,11 +21,11 @@ for (let i = 0; i < 50; i++) {
     const response = await fetch('http://localhost:3000/api/posts');
     const duration = Date.now() - start;
     results.push({ ok: response.ok, time: duration });
-    
+
     if (i % 10 === 0) {
       console.log(`  Request ${i + 1}/50: ${duration}ms`);
     }
-  } catch (error) {
+  } catch (_error) {
     results.push({ ok: false, time: -1 });
   }
 }
@@ -33,13 +33,16 @@ for (let i = 0; i < 50; i++) {
 console.log(`\n✓ Completed 50 requests\n`);
 
 // Analyze results
-const successful = results.filter(r => r.ok).length;
-const times = results.filter(r => r.ok).map(r => r.time).sort((a, b) => a - b);
+const successful = results.filter((r) => r.ok).length;
+const times = results
+  .filter((r) => r.ok)
+  .map((r) => r.time)
+  .sort((a, b) => a - b);
 const avg = times.reduce((a, b) => a + b, 0) / times.length;
 const p95 = times[Math.floor(times.length * 0.95)] || 0;
 
 console.log('Results:');
-console.log(`  Success rate: ${successful}/50 (${(successful / 50 * 100).toFixed(1)}%)`);
+console.log(`  Success rate: ${successful}/50 (${((successful / 50) * 100).toFixed(1)}%)`);
 console.log(`  Average time: ${avg.toFixed(0)}ms`);
 console.log(`  P95 time: ${p95}ms`);
 console.log(`  Min time: ${times[0]}ms`);
@@ -87,4 +90,3 @@ console.log(`   ${successful} successful requests`);
 console.log(`   Average response: ${avg.toFixed(0)}ms`);
 console.log(`   P95 response: ${p95}ms`);
 console.log(`   Load testing system captures REAL performance data`);
-

@@ -1,13 +1,13 @@
 /**
  * Admin Training Status API
- * 
+ *
  * @route GET /api/admin/training/status - Get training system status
  * @access Admin
- * 
+ *
  * @description
  * Returns complete training system status for admin panel including automation
  * status, readiness checks, recent jobs, models, and trajectory statistics.
- * 
+ *
  * @openapi
  * /api/admin/training/status:
  *   get:
@@ -45,7 +45,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const status = await fetch('/api/admin/training/status', {
@@ -54,25 +54,28 @@
  * ```
  */
 
-import { NextResponse } from 'next/server';
 // import { prisma } from '@/lib/prisma';
 import { automationPipeline } from '@/lib/training/AutomationPipeline';
+import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   // Get automation status
   const status = await automationPipeline.getStatus();
-  
+
   // Get readiness check
   const readiness = await automationPipeline.checkTrainingReadiness();
-  
+
   // Note: Trajectory schema models require trajectory schema to be merged into main Prisma schema
   // Returning stub data until then
   const recentJobs: Array<Record<string, unknown>> = [];
   const models: Array<Record<string, unknown>> = [];
-  const trajectoryStats = { _count: 0, _avg: { totalReward: null, episodeLength: null, durationMs: null } };
-  
+  const trajectoryStats = {
+    _count: 0,
+    _avg: { totalReward: null, episodeLength: null, durationMs: null },
+  };
+
   return NextResponse.json({
     status: 'healthy',
     automation: status,
@@ -80,7 +83,6 @@ export async function GET() {
     recentJobs,
     models,
     trajectoryStats,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 }
-

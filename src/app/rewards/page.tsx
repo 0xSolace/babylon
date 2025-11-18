@@ -1,18 +1,18 @@
-'use client'
+'use client';
 
-import { LoginButton } from '@/components/auth/LoginButton'
-import { Avatar } from '@/components/shared/Avatar'
-import { ExternalShareButton } from '@/components/shared/ExternalShareButton'
-import { PageContainer } from '@/components/shared/PageContainer'
-import { Separator } from '@/components/shared/Separator'
-import { ShareButton } from '@/components/shared/ShareButton'
-import { ShareEarnModal } from '@/components/shared/ShareEarnModal'
-import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal'
-import { RewardsSkeleton } from '@/components/rewards/RewardsSkeleton'
-import { useAuth } from '@/hooks/useAuth'
-import { getProfileUrl } from '@/lib/profile-utils'
-import { POINTS } from '@/lib/constants/points'
-import { useAuthStore } from '@/stores/authStore'
+import { LoginButton } from '@/components/auth/LoginButton';
+import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
+import { RewardsSkeleton } from '@/components/rewards/RewardsSkeleton';
+import { Avatar } from '@/components/shared/Avatar';
+import { ExternalShareButton } from '@/components/shared/ExternalShareButton';
+import { PageContainer } from '@/components/shared/PageContainer';
+import { Separator } from '@/components/shared/Separator';
+import { ShareButton } from '@/components/shared/ShareButton';
+import { ShareEarnModal } from '@/components/shared/ShareEarnModal';
+import { POINTS } from '@/lib/constants/points';
+import { getProfileUrl } from '@/lib/profile-utils';
+import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/stores/authStore';
 import {
   Award,
   Check,
@@ -25,210 +25,218 @@ import {
   Twitter,
   UserPlus,
   Users,
-  Wallet
-} from 'lucide-react'
-import { useEffect, useState, useCallback } from 'react'
+  Wallet,
+} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
-interface ReferredUser {
-  id: string
-  username: string | null
-  displayName: string | null
-  profileImageUrl: string | null
-  createdAt: Date
-  reputationPoints: number
-  isFollowing: boolean
-  joinedAt: Date | null
-}
+type ReferredUser = {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  profileImageUrl: string | null;
+  createdAt: Date;
+  reputationPoints: number;
+  isFollowing: boolean;
+  joinedAt: Date | null;
+};
 
-interface ReferralStats {
-  totalReferrals: number
-  totalPointsEarned?: number
-  totalFeesEarned?: number
-  pointsPerReferral?: number
-  feeShareRate?: number
-  followingCount: number
-}
+type ReferralStats = {
+  totalReferrals: number;
+  totalPointsEarned?: number;
+  totalFeesEarned?: number;
+  pointsPerReferral?: number;
+  feeShareRate?: number;
+  followingCount: number;
+};
 
-interface ReferralData {
+type ReferralData = {
   user: {
-    id: string
-    username: string | null
-    displayName: string | null
-    bio: string | null
-    profileImageUrl: string | null
-    referralCode: string | null
-    reputationPoints: number
-    pointsAwardedForProfile: boolean
-    pointsAwardedForFarcaster: boolean
-    pointsAwardedForTwitter: boolean
-    pointsAwardedForWallet: boolean
-    farcasterUsername: string | null
-    twitterUsername: string | null
-    walletAddress: string | null
-  }
-  stats: ReferralStats
-  referredUsers: ReferredUser[]
-  referralUrl: string | null
-}
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    bio: string | null;
+    profileImageUrl: string | null;
+    referralCode: string | null;
+    reputationPoints: number;
+    pointsAwardedForProfile: boolean;
+    pointsAwardedForFarcaster: boolean;
+    pointsAwardedForTwitter: boolean;
+    pointsAwardedForWallet: boolean;
+    farcasterUsername: string | null;
+    twitterUsername: string | null;
+    walletAddress: string | null;
+  };
+  stats: ReferralStats;
+  referredUsers: ReferredUser[];
+  referralUrl: string | null;
+};
 
 export default function RewardsPage() {
-  const { ready, authenticated, getAccessToken, login } = useAuth()
-  const { user } = useAuthStore()
-  const [referralData, setReferralData] = useState<ReferralData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [copiedUrl, setCopiedUrl] = useState(false)
-  const [showLinkSocialModal, setShowLinkSocialModal] = useState(false)
-  const [showShareModal, setShowShareModal] = useState(false)
+  const { ready, authenticated, getAccessToken, login } = useAuth();
+  const { user } = useAuthStore();
+  const [referralData, setReferralData] = useState<ReferralData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [showLinkSocialModal, setShowLinkSocialModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const fetchReferralData = useCallback(async () => {
-    if (!user?.id || !authenticated) return
+    if (!user?.id || !authenticated) return;
 
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
 
-    const token = await getAccessToken()
+    const token = await getAccessToken();
     if (!token) {
-      console.error('Failed to get access token')
-      setError('Authentication required')
-      setLoading(false)
-      return
+      console.error('Failed to get access token');
+      setError('Authentication required');
+      setLoading(false);
+      return;
     }
 
     try {
       const response = await fetch(`/api/users/${encodeURIComponent(user.id)}/referrals`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
-      })
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch referral data')
+        throw new Error('Failed to fetch referral data');
       }
 
-      const data = await response.json()
-      setReferralData(data)
+      const data = await response.json();
+      setReferralData(data);
     } catch (error) {
-      console.error('Failed to fetch referral data:', error)
-      setError(error instanceof Error ? error.message : 'Failed to fetch referral data')
+      console.error('Failed to fetch referral data:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch referral data');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [user?.id, authenticated, getAccessToken])
+  }, [user?.id, authenticated, getAccessToken]);
 
   useEffect(() => {
     if (ready && authenticated && user?.id) {
-      fetchReferralData()
+      fetchReferralData();
     } else if (ready && !authenticated) {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [user?.id, ready, authenticated, fetchReferralData])
+  }, [user?.id, ready, authenticated, fetchReferralData]);
 
   const handleCopyUrl = async () => {
-    if (!referralData?.referralUrl) return
-    await navigator.clipboard.writeText(referralData.referralUrl)
-    setCopiedUrl(true)
-    setTimeout(() => setCopiedUrl(false), 2000)
-  }
+    if (!referralData?.referralUrl) return;
+    await navigator.clipboard.writeText(referralData.referralUrl);
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 2000);
+  };
 
   // Calculate total points earned from all sources
   const calculateTotalEarned = () => {
-    if (!referralData) return 0
-    let total = 0
-    
+    if (!referralData) return 0;
+    let total = 0;
+
     // Add referral fees earned (new system)
     if (referralData.stats.totalFeesEarned) {
-      total += referralData.stats.totalFeesEarned
+      total += referralData.stats.totalFeesEarned;
     }
-    
-    // Add profile completion points
-    if (referralData.user.pointsAwardedForProfile) total += POINTS.PROFILE_COMPLETION
-    if (referralData.user.pointsAwardedForFarcaster) total += POINTS.FARCASTER_LINK
-    if (referralData.user.pointsAwardedForTwitter) total += POINTS.TWITTER_LINK
-    if (referralData.user.pointsAwardedForWallet) total += POINTS.WALLET_CONNECT
-    
-    return total
-  }
 
-  const rewardTasks = referralData ? [
-    {
-      id: 'profile',
-      title: 'Complete Profile',
-      description: (() => {
-        if (referralData.user.pointsAwardedForProfile) {
-          return 'Username, image, and bio complete! ✓'
-        }
-        const missing = []
-        if (!referralData.user.username) missing.push('username')
-        if (!referralData.user.profileImageUrl) missing.push('image')
-        if (!referralData.user.bio || referralData.user.bio.length < 50) missing.push('bio (50+ chars)')
-        return `Set ${missing.join(', ')}`
-      })(),
-      points: POINTS.PROFILE_COMPLETION,
-      completed: referralData.user.pointsAwardedForProfile,
-      action: 'profile-settings',
-      icon: UserPlus,
-      color: 'text-purple-500',
-    },
-    {
-      id: 'twitter',
-      title: 'Link X Account',
-      description: referralData.user.twitterUsername ? `@${referralData.user.twitterUsername}` : 'Connect your X account',
-      points: POINTS.TWITTER_LINK,
-      completed: referralData.user.pointsAwardedForTwitter,
-      action: 'link-social',
-      icon: Twitter,
-      color: 'text-blue-400',
-    },
-    {
-      id: 'farcaster',
-      title: 'Link Farcaster',
-      description: referralData.user.farcasterUsername ? `@${referralData.user.farcasterUsername}` : 'Connect Farcaster account',
-      points: POINTS.FARCASTER_LINK,
-      completed: referralData.user.pointsAwardedForFarcaster,
-      action: 'link-social',
-      icon: LinkIcon,
-      color: 'text-purple-400',
-    },
-    {
-      id: 'wallet',
-      title: 'Connect Wallet',
-      description: referralData.user.walletAddress ? `${referralData.user.walletAddress.slice(0, 6)}...${referralData.user.walletAddress.slice(-4)}` : 'Link your wallet',
-      points: POINTS.WALLET_CONNECT,
-      completed: referralData.user.pointsAwardedForWallet,
-      action: 'wallet-connect',
-      icon: Wallet,
-      color: 'text-orange-500',
-    },
-  ] : []
+    // Add profile completion points
+    if (referralData.user.pointsAwardedForProfile) total += POINTS.PROFILE_COMPLETION;
+    if (referralData.user.pointsAwardedForFarcaster) total += POINTS.FARCASTER_LINK;
+    if (referralData.user.pointsAwardedForTwitter) total += POINTS.TWITTER_LINK;
+    if (referralData.user.pointsAwardedForWallet) total += POINTS.WALLET_CONNECT;
+
+    return total;
+  };
+
+  const rewardTasks = referralData
+    ? [
+        {
+          id: 'profile',
+          title: 'Complete Profile',
+          description: (() => {
+            if (referralData.user.pointsAwardedForProfile) {
+              return 'Username, image, and bio complete! ✓';
+            }
+            const missing = [];
+            if (!referralData.user.username) missing.push('username');
+            if (!referralData.user.profileImageUrl) missing.push('image');
+            if (!referralData.user.bio || referralData.user.bio.length < 50)
+              missing.push('bio (50+ chars)');
+            return `Set ${missing.join(', ')}`;
+          })(),
+          points: POINTS.PROFILE_COMPLETION,
+          completed: referralData.user.pointsAwardedForProfile,
+          action: 'profile-settings',
+          icon: UserPlus,
+          color: 'text-purple-500',
+        },
+        {
+          id: 'twitter',
+          title: 'Link X Account',
+          description: referralData.user.twitterUsername
+            ? `@${referralData.user.twitterUsername}`
+            : 'Connect your X account',
+          points: POINTS.TWITTER_LINK,
+          completed: referralData.user.pointsAwardedForTwitter,
+          action: 'link-social',
+          icon: Twitter,
+          color: 'text-blue-400',
+        },
+        {
+          id: 'farcaster',
+          title: 'Link Farcaster',
+          description: referralData.user.farcasterUsername
+            ? `@${referralData.user.farcasterUsername}`
+            : 'Connect Farcaster account',
+          points: POINTS.FARCASTER_LINK,
+          completed: referralData.user.pointsAwardedForFarcaster,
+          action: 'link-social',
+          icon: LinkIcon,
+          color: 'text-purple-400',
+        },
+        {
+          id: 'wallet',
+          title: 'Connect Wallet',
+          description: referralData.user.walletAddress
+            ? `${referralData.user.walletAddress.slice(0, 6)}...${referralData.user.walletAddress.slice(-4)}`
+            : 'Link your wallet',
+          points: POINTS.WALLET_CONNECT,
+          completed: referralData.user.pointsAwardedForWallet,
+          action: 'wallet-connect',
+          icon: Wallet,
+          color: 'text-orange-500',
+        },
+      ]
+    : [];
 
   const handleTaskClick = (_taskId: string, action: string) => {
     if (action === 'link-social') {
-      setShowLinkSocialModal(true)
+      setShowLinkSocialModal(true);
     } else if (action === 'profile-settings') {
-      window.location.href = '/settings'
+      window.location.href = '/settings';
     } else if (action === 'wallet-connect') {
       // Trigger Privy login modal for wallet connection
       if (authenticated) {
         // If already authenticated, redirect to settings to connect wallet
-        window.location.href = '/settings'
+        window.location.href = '/settings';
       } else {
         // Trigger login modal
-        login()
+        login();
       }
     }
-  }
+  };
 
   return (
     <PageContainer noPadding className="flex flex-col">
-
       {/* Auth Required Banner */}
       {ready && !authenticated && (
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center max-w-md">
-            <Award className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-xl font-bold text-foreground mb-2">log in</h2>
-            <p className="text-muted-foreground mb-6">
+        <div className="flex flex-1 items-center justify-center p-8">
+          <div className="max-w-md text-center">
+            <Award className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+            <h2 className="mb-2 font-bold text-foreground text-xl">log in</h2>
+            <p className="mb-6 text-muted-foreground">
               Sign in to earn rewards and track your progress
             </p>
             <LoginButton />
@@ -241,122 +249,125 @@ export default function RewardsPage() {
 
       {/* Error State */}
       {authenticated && error && !loading && (
-        <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex flex-1 items-center justify-center p-8">
           <div className="text-center text-red-500">
-            <p className="text-lg font-semibold mb-2">Failed to load rewards</p>
-            <p className="text-sm text-muted-foreground">{error}</p>
+            <p className="mb-2 font-semibold text-lg">Failed to load rewards</p>
+            <p className="text-muted-foreground text-sm">{error}</p>
           </div>
         </div>
       )}
 
       {/* Rewards Content - Desktop */}
       {authenticated && !loading && !error && referralData && (
-        <div className="hidden xl:flex flex-1 overflow-hidden">
+        <div className="hidden flex-1 overflow-hidden xl:flex">
           {/* Main Content Column */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-4 sm:p-6 space-y-4">
-            
+          <div className="min-w-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
             {/* Header */}
             <div className="mb-4">
-              <h1 className="text-2xl font-bold text-foreground mb-2">Rewards</h1>
-              <p className="text-muted-foreground">Complete tasks and invite friends to earn points</p>
+              <h1 className="mb-2 font-bold text-2xl text-foreground">Rewards</h1>
+              <p className="text-muted-foreground">
+                Complete tasks and invite friends to earn points
+              </p>
             </div>
 
             {/* Stats Row */}
             <div className="grid grid-cols-3 gap-4">
               {/* Total Earned */}
-              <div className="rounded-lg bg-gradient-to-r from-[#0066FF]/20 to-purple-500/20 p-4 border border-[#0066FF]/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Award className="w-5 h-5 text-yellow-500" />
-                  <h2 className="text-sm font-medium text-muted-foreground">Total Earned</h2>
+              <div className="rounded-lg border border-[#0066FF]/30 bg-gradient-to-r from-[#0066FF]/20 to-purple-500/20 p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <Award className="h-5 w-5 text-yellow-500" />
+                  <h2 className="font-medium text-muted-foreground text-sm">Total Earned</h2>
                 </div>
-                <div className="text-3xl font-bold text-yellow-500">
+                <div className="font-bold text-3xl text-yellow-500">
                   {calculateTotalEarned().toLocaleString()}
                 </div>
               </div>
 
               {/* Current Balance */}
-              <div className="rounded-lg bg-muted/30 border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="w-5 h-5 text-[#0066FF]" />
-                  <h2 className="text-sm font-medium text-muted-foreground">Current Balance</h2>
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-[#0066FF]" />
+                  <h2 className="font-medium text-muted-foreground text-sm">Current Balance</h2>
                 </div>
-                <div className="text-3xl font-bold text-foreground">
+                <div className="font-bold text-3xl text-foreground">
                   {referralData.user.reputationPoints.toLocaleString()}
                 </div>
               </div>
 
               {/* Total Referrals */}
-              <div className="rounded-lg bg-muted/30 border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Users className="w-5 h-5 text-[#0066FF]" />
-                  <h2 className="text-sm font-medium text-muted-foreground">Total Referrals</h2>
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <Users className="h-5 w-5 text-[#0066FF]" />
+                  <h2 className="font-medium text-muted-foreground text-sm">Total Referrals</h2>
                 </div>
-                <div className="text-3xl font-bold text-foreground">
+                <div className="font-bold text-3xl text-foreground">
                   {referralData.stats.totalReferrals}
                 </div>
               </div>
             </div>
 
             {/* Reward Tasks */}
-            <div className="rounded-lg bg-muted/30 border border-border p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="w-5 h-5 text-[#0066FF]" />
-                <h2 className="text-base font-bold text-foreground">Earn Points</h2>
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="mb-4 flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-[#0066FF]" />
+                <h2 className="font-bold text-base text-foreground">Earn Points</h2>
               </div>
 
               <div className="grid gap-3">
                 {rewardTasks.map((task) => {
-                  const Icon = task.icon
+                  const Icon = task.icon;
                   return (
                     <button
+                      type="button"
                       key={task.id}
                       onClick={() => handleTaskClick(task.id, task.action)}
-                      className={`flex items-center gap-4 p-4 rounded-lg border transition-all text-left w-full ${
+                      className={`flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all ${
                         task.completed
-                          ? 'bg-green-500/10 border-green-500/30'
-                          : 'bg-sidebar-accent/50 border-border hover:bg-sidebar-accent cursor-pointer'
+                          ? 'border-green-500/30 bg-green-500/10'
+                          : 'cursor-pointer border-border bg-sidebar-accent/50 hover:bg-sidebar-accent'
                       }`}
                     >
                       <div className={`shrink-0 ${task.color}`}>
-                        <Icon className="w-6 h-6" />
+                        <Icon className="h-6 w-6" />
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold text-foreground">{task.title}</h3>
-                          {task.completed && (
-                            <Check className="w-4 h-4 text-green-500" />
-                          )}
+                          <h3 className="font-semibold text-foreground text-sm">{task.title}</h3>
+                          {task.completed && <Check className="h-4 w-4 text-green-500" />}
                         </div>
-                        <p className="text-xs text-muted-foreground truncate">{task.description}</p>
+                        <p className="truncate text-muted-foreground text-xs">{task.description}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <div className={`text-sm font-bold ${task.completed ? 'text-green-500' : 'text-yellow-500'}`}>
+                        <div
+                          className={`font-bold text-sm ${task.completed ? 'text-green-500' : 'text-yellow-500'}`}
+                        >
                           {task.completed ? '✓ ' : '+'}
                           {task.points}
                         </div>
-                        <div className="text-xs text-muted-foreground">points</div>
+                        <div className="text-muted-foreground text-xs">points</div>
                       </div>
                     </button>
-                  )
+                  );
                 })}
               </div>
             </div>
 
             {/* Share Actions */}
-            <div className="rounded-lg bg-muted/30 border border-border p-4">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Share2 className="w-5 h-5 text-[#0066FF]" />
+                  <Share2 className="h-5 w-5 text-[#0066FF]" />
                   <div>
-                    <h2 className="text-base font-bold text-foreground">Share & Earn</h2>
-                    <p className="text-sm text-muted-foreground">
+                    <h2 className="font-bold text-base text-foreground">Share & Earn</h2>
+                    <p className="text-muted-foreground text-sm">
                       Share content to earn +{POINTS.SHARE_ACTION} points per share
                     </p>
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setShowShareModal(true)}
-                  className="px-4 py-2 bg-[#0066FF] hover:bg-[#0066FF]/80 text-primary-foreground rounded-lg transition-colors font-medium text-sm"
+                  className="rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-[#0066FF]/80"
                 >
                   Share
                 </button>
@@ -366,33 +377,36 @@ export default function RewardsPage() {
             <Separator />
 
             {/* Referral Link */}
-            <div className="rounded-lg bg-muted/30 border border-border p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Gift className="w-5 h-5 text-[#0066FF]" />
-                <h2 className="text-base font-bold text-foreground">Referral Link</h2>
-                <span className="text-xs text-muted-foreground">+{POINTS.REFERRAL_SIGNUP} points per signup</span>
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Gift className="h-5 w-5 text-[#0066FF]" />
+                <h2 className="font-bold text-base text-foreground">Referral Link</h2>
+                <span className="text-muted-foreground text-xs">
+                  +{POINTS.REFERRAL_SIGNUP} points per signup
+                </span>
               </div>
 
               <div className="space-y-3">
                 {/* URL Display */}
                 <div className="flex gap-2">
-                  <div className="flex-1 bg-sidebar-accent/50 rounded-lg px-3 py-2 text-sm text-foreground border border-border truncate">
+                  <div className="flex-1 truncate rounded-lg border border-border bg-sidebar-accent/50 px-3 py-2 text-foreground text-sm">
                     {referralData.referralUrl || 'Set a username to get your referral link'}
                   </div>
                   <button
+                    type="button"
                     onClick={handleCopyUrl}
                     disabled={!referralData.referralUrl}
-                    className="px-3 py-2 bg-sidebar-accent/50 hover:bg-sidebar-accent text-foreground rounded-lg transition-colors flex items-center gap-1.5 border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1.5 rounded-lg border border-border bg-sidebar-accent/50 px-3 py-2 text-foreground transition-colors hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {copiedUrl ? (
                       <>
-                        <Check className="w-4 h-4 text-green-500" />
-                        <span className="hidden sm:inline text-xs">Copied!</span>
+                        <Check className="h-4 w-4 text-green-500" />
+                        <span className="hidden text-xs sm:inline">Copied!</span>
                       </>
                     ) : (
                       <>
-                        <Copy className="w-4 h-4" />
-                        <span className="hidden sm:inline text-xs">Copy</span>
+                        <Copy className="h-4 w-4" />
+                        <span className="hidden text-xs sm:inline">Copy</span>
                       </>
                     )}
                   </button>
@@ -403,33 +417,35 @@ export default function RewardsPage() {
                   <ExternalShareButton
                     contentType="referral"
                     text={`Join me on Babylon! 🎮\n\n${typeof window !== 'undefined' ? `${window.location.origin}/share/referral/${user.id}` : referralData.referralUrl || ''}`}
-                    url={typeof window !== 'undefined' ? `${window.location.origin}/share/referral/${user.id}` : referralData.referralUrl || ''}
+                    url={
+                      typeof window !== 'undefined'
+                        ? `${window.location.origin}/share/referral/${user.id}`
+                        : referralData.referralUrl || ''
+                    }
                     className="w-full"
                   />
                 )}
 
                 {!user?.id && (
-                  <p className="text-xs text-muted-foreground">
-                    Sign in to get your referral link
-                  </p>
+                  <p className="text-muted-foreground text-xs">Sign in to get your referral link</p>
                 )}
               </div>
             </div>
 
             {/* Referred Users List */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-base font-bold text-foreground flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-[#0066FF]" />
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-1.5 font-bold text-base text-foreground">
+                  <Users className="h-4 w-4 text-[#0066FF]" />
                   Your Referrals
                 </h2>
               </div>
 
               {referralData.referredUsers.length === 0 ? (
-                <div className="text-center py-8 bg-muted/30 rounded-lg border border-border">
-                  <Users className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                  <h3 className="text-base font-semibold text-foreground mb-1">No referrals yet</h3>
-                  <p className="text-xs text-muted-foreground">
+                <div className="rounded-lg border border-border bg-muted/30 py-8 text-center">
+                  <Users className="mx-auto mb-3 h-12 w-12 text-muted-foreground opacity-50" />
+                  <h3 className="mb-1 font-semibold text-base text-foreground">No referrals yet</h3>
+                  <p className="text-muted-foreground text-xs">
                     Share your referral link to start earning points
                   </p>
                 </div>
@@ -438,7 +454,7 @@ export default function RewardsPage() {
                   {referralData.referredUsers.map((referredUser) => (
                     <div
                       key={referredUser.id}
-                      className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                      className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3 transition-colors hover:bg-muted/50"
                     >
                       {/* Avatar */}
                       <Avatar
@@ -448,27 +464,29 @@ export default function RewardsPage() {
                       />
 
                       {/* User Info */}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold text-foreground truncate">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate font-semibold text-foreground text-sm">
                           {referredUser.displayName || referredUser.username || 'Anonymous'}
                         </h3>
                         {referredUser.username && (
-                          <p className="text-xs text-muted-foreground truncate">
+                          <p className="truncate text-muted-foreground text-xs">
                             @{referredUser.username}
                           </p>
                         )}
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {new Date(referredUser.joinedAt || referredUser.createdAt).toLocaleDateString()}
+                        <p className="mt-0.5 text-muted-foreground text-xs">
+                          {new Date(
+                            referredUser.joinedAt || referredUser.createdAt
+                          ).toLocaleDateString()}
                         </p>
                       </div>
 
                       {/* View Profile */}
                       <a
                         href={getProfileUrl(referredUser.id, referredUser.username)}
-                        className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                        className="p-1.5 text-muted-foreground transition-colors hover:text-foreground"
                         aria-label="View profile"
                       >
-                        <ExternalLink className="w-3.5 h-3.5" />
+                        <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     </div>
                   ))}
@@ -486,46 +504,47 @@ export default function RewardsPage() {
 
       {/* Mobile/Tablet View */}
       {authenticated && !loading && !error && referralData && (
-        <div className="flex xl:hidden flex-col flex-1 overflow-y-auto w-full">
-          <div className="w-full px-4 py-4 sm:px-6 sm:py-6 space-y-4 sm:space-y-6">
-            
+        <div className="flex w-full flex-1 flex-col overflow-y-auto xl:hidden">
+          <div className="w-full space-y-4 px-4 py-4 sm:space-y-6 sm:px-6 sm:py-6">
             {/* Header */}
             <div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Rewards</h1>
-              <p className="text-muted-foreground">Complete tasks and invite friends to earn points</p>
+              <h1 className="mb-2 font-bold text-2xl text-foreground">Rewards</h1>
+              <p className="text-muted-foreground">
+                Complete tasks and invite friends to earn points
+              </p>
             </div>
 
             {/* Stats Row */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {/* Total Earned */}
-              <div className="rounded-lg bg-gradient-to-r from-[#0066FF]/20 to-purple-500/20 p-3 border border-[#0066FF]/30">
-                <div className="flex items-center gap-1 mb-1">
-                  <Award className="w-4 h-4 text-yellow-500" />
-                  <h2 className="text-xs font-medium text-muted-foreground">Earned</h2>
+              <div className="rounded-lg border border-[#0066FF]/30 bg-gradient-to-r from-[#0066FF]/20 to-purple-500/20 p-3">
+                <div className="mb-1 flex items-center gap-1">
+                  <Award className="h-4 w-4 text-yellow-500" />
+                  <h2 className="font-medium text-muted-foreground text-xs">Earned</h2>
                 </div>
-                <div className="text-2xl font-bold text-yellow-500">
+                <div className="font-bold text-2xl text-yellow-500">
                   {calculateTotalEarned().toLocaleString()}
                 </div>
               </div>
 
               {/* Current Balance */}
-              <div className="rounded-lg bg-muted/30 border border-border p-3">
-                <div className="flex items-center gap-1 mb-1">
-                  <TrendingUp className="w-4 h-4 text-[#0066FF]" />
-                  <h2 className="text-xs font-medium text-muted-foreground">Balance</h2>
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <div className="mb-1 flex items-center gap-1">
+                  <TrendingUp className="h-4 w-4 text-[#0066FF]" />
+                  <h2 className="font-medium text-muted-foreground text-xs">Balance</h2>
                 </div>
-                <div className="text-2xl font-bold text-foreground">
+                <div className="font-bold text-2xl text-foreground">
                   {referralData.user.reputationPoints.toLocaleString()}
                 </div>
               </div>
 
               {/* Total Referrals */}
-              <div className="rounded-lg bg-muted/30 border border-border p-3">
-                <div className="flex items-center gap-1 mb-1">
-                  <Users className="w-4 h-4 text-[#0066FF]" />
-                  <h2 className="text-xs font-medium text-muted-foreground">Referrals</h2>
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <div className="mb-1 flex items-center gap-1">
+                  <Users className="h-4 w-4 text-[#0066FF]" />
+                  <h2 className="font-medium text-muted-foreground text-xs">Referrals</h2>
                 </div>
-                <div className="text-2xl font-bold text-foreground">
+                <div className="font-bold text-2xl text-foreground">
                   {referralData.stats.totalReferrals}
                 </div>
               </div>
@@ -533,60 +552,64 @@ export default function RewardsPage() {
 
             {/* Reward Tasks */}
             <div className="space-y-3">
-              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#0066FF]" />
+              <h2 className="flex items-center gap-2 font-bold text-foreground text-lg">
+                <TrendingUp className="h-5 w-5 text-[#0066FF]" />
                 Earn Points
               </h2>
 
               <div className="space-y-2">
                 {rewardTasks.map((task) => {
-                  const Icon = task.icon
+                  const Icon = task.icon;
                   return (
                     <button
+                      type="button"
                       key={task.id}
                       onClick={() => handleTaskClick(task.id, task.action)}
-                      className={`flex items-center gap-3 p-3 rounded-lg border transition-all text-left w-full ${
+                      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-all ${
                         task.completed
-                          ? 'bg-green-500/10 border-green-500/30'
-                          : 'bg-muted/30 border-border cursor-pointer'
+                          ? 'border-green-500/30 bg-green-500/10'
+                          : 'cursor-pointer border-border bg-muted/30'
                       }`}
                     >
                       <div className={`shrink-0 ${task.color}`}>
-                        <Icon className="w-5 h-5" />
+                        <Icon className="h-5 w-5" />
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold text-foreground">{task.title}</h3>
-                          {task.completed && (
-                            <Check className="w-4 h-4 text-green-500" />
-                          )}
+                          <h3 className="font-semibold text-foreground text-sm">{task.title}</h3>
+                          {task.completed && <Check className="h-4 w-4 text-green-500" />}
                         </div>
-                        <p className="text-xs text-muted-foreground truncate">{task.description}</p>
+                        <p className="truncate text-muted-foreground text-xs">{task.description}</p>
                       </div>
-                      <div className="shrink-0 text-sm font-bold">
+                      <div className="shrink-0 font-bold text-sm">
                         <span className={task.completed ? 'text-green-500' : 'text-yellow-500'}>
-                          {task.completed ? '✓' : '+'}{task.points}
+                          {task.completed ? '✓' : '+'}
+                          {task.points}
                         </span>
                       </div>
                     </button>
-                  )
+                  );
                 })}
               </div>
             </div>
 
             {/* Share Actions */}
             <div className="space-y-3">
-              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <Share2 className="w-5 h-5 text-[#0066FF]" />
+              <h2 className="flex items-center gap-2 font-bold text-foreground text-lg">
+                <Share2 className="h-5 w-5 text-[#0066FF]" />
                 Share & Earn
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 Share content to earn +{POINTS.SHARE_ACTION} points per share
               </p>
               <ShareButton
                 contentType="profile"
                 contentId={user?.id || ''}
-                url={user?.username && typeof window !== 'undefined' ? `${window.location.origin}/profile/${user.username.startsWith('@') ? user.username.slice(1) : user.username}` : undefined}
+                url={
+                  user?.username && typeof window !== 'undefined'
+                    ? `${window.location.origin}/profile/${user.username.startsWith('@') ? user.username.slice(1) : user.username}`
+                    : undefined
+                }
                 text="Check out my Babylon profile! 🎮"
                 className="w-full"
               />
@@ -595,29 +618,32 @@ export default function RewardsPage() {
             <Separator />
 
             {/* Referral Link */}
-            <div className="rounded-lg bg-muted/30 border border-border p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Gift className="w-5 h-5 text-[#0066FF]" />
-                <h2 className="text-base font-bold text-foreground">Referral Link</h2>
-                <span className="text-xs text-muted-foreground">+{POINTS.REFERRAL_SIGNUP} points</span>
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Gift className="h-5 w-5 text-[#0066FF]" />
+                <h2 className="font-bold text-base text-foreground">Referral Link</h2>
+                <span className="text-muted-foreground text-xs">
+                  +{POINTS.REFERRAL_SIGNUP} points
+                </span>
               </div>
 
               <div className="space-y-3">
                 {/* URL Display */}
                 <div className="flex gap-2">
-                  <div className="flex-1 min-w-0 bg-sidebar-accent/50 rounded-lg px-3 py-2 text-sm text-foreground border border-border break-all">
+                  <div className="min-w-0 flex-1 break-all rounded-lg border border-border bg-sidebar-accent/50 px-3 py-2 text-foreground text-sm">
                     {referralData.referralUrl || 'Set a username to get your referral link'}
                   </div>
                   <button
+                    type="button"
                     onClick={handleCopyUrl}
                     disabled={!referralData.referralUrl}
-                    className="px-3 py-2 bg-sidebar-accent/50 hover:bg-sidebar-accent text-foreground rounded-lg transition-colors flex items-center justify-center border border-border disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    className="flex shrink-0 items-center justify-center rounded-lg border border-border bg-sidebar-accent/50 px-3 py-2 text-foreground transition-colors hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Copy referral link"
                   >
                     {copiedUrl ? (
-                      <Check className="w-5 h-5 text-green-500" />
+                      <Check className="h-5 w-5 text-green-500" />
                     ) : (
-                      <Copy className="w-5 h-5" />
+                      <Copy className="h-5 w-5" />
                     )}
                   </button>
                 </div>
@@ -627,33 +653,35 @@ export default function RewardsPage() {
                   <ExternalShareButton
                     contentType="referral"
                     text={`Join me on Babylon! 🎮\n\n${typeof window !== 'undefined' ? `${window.location.origin}/share/referral/${user.id}` : referralData.referralUrl || ''}`}
-                    url={typeof window !== 'undefined' ? `${window.location.origin}/share/referral/${user.id}` : referralData.referralUrl || ''}
+                    url={
+                      typeof window !== 'undefined'
+                        ? `${window.location.origin}/share/referral/${user.id}`
+                        : referralData.referralUrl || ''
+                    }
                     className="w-full"
                   />
                 )}
 
                 {!user?.id && (
-                  <p className="text-xs text-muted-foreground">
-                    Sign in to get your referral link
-                  </p>
+                  <p className="text-muted-foreground text-xs">Sign in to get your referral link</p>
                 )}
               </div>
             </div>
 
             {/* Referred Users List */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <Users className="w-5 h-5 text-[#0066FF]" />
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 font-bold text-base text-foreground">
+                  <Users className="h-5 w-5 text-[#0066FF]" />
                   Your Referrals
                 </h2>
               </div>
 
               {referralData.referredUsers.length === 0 ? (
-                <div className="text-center py-12 bg-muted/30 rounded-lg border border-border">
-                  <Users className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold text-foreground mb-2">No referrals yet</h3>
-                  <p className="text-sm text-muted-foreground px-4">
+                <div className="rounded-lg border border-border bg-muted/30 py-12 text-center">
+                  <Users className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+                  <h3 className="mb-2 font-semibold text-foreground text-lg">No referrals yet</h3>
+                  <p className="px-4 text-muted-foreground text-sm">
                     Share your referral link to start earning points
                   </p>
                 </div>
@@ -662,7 +690,7 @@ export default function RewardsPage() {
                   {referralData.referredUsers.map((referredUser) => (
                     <div
                       key={referredUser.id}
-                      className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                      className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3 transition-colors hover:bg-muted/50"
                     >
                       {/* Avatar */}
                       <Avatar
@@ -673,27 +701,29 @@ export default function RewardsPage() {
                       />
 
                       {/* User Info */}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold text-foreground truncate">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate font-semibold text-foreground text-sm">
                           {referredUser.displayName || referredUser.username || 'Anonymous'}
                         </h3>
                         {referredUser.username && (
-                          <p className="text-xs text-muted-foreground truncate">
+                          <p className="truncate text-muted-foreground text-xs">
                             @{referredUser.username}
                           </p>
                         )}
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {new Date(referredUser.joinedAt || referredUser.createdAt).toLocaleDateString()}
+                        <p className="mt-0.5 text-muted-foreground text-xs">
+                          {new Date(
+                            referredUser.joinedAt || referredUser.createdAt
+                          ).toLocaleDateString()}
                         </p>
                       </div>
 
                       {/* View Profile */}
                       <a
                         href={getProfileUrl(referredUser.id, referredUser.username)}
-                        className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                        className="p-2 text-muted-foreground transition-colors hover:text-foreground"
                         aria-label="View profile"
                       >
-                        <ExternalLink className="w-4 h-4" />
+                        <ExternalLink className="h-4 w-4" />
                       </a>
                     </div>
                   ))}
@@ -708,14 +738,14 @@ export default function RewardsPage() {
       <LinkSocialAccountsModal
         isOpen={showLinkSocialModal}
         onClose={() => {
-          setShowLinkSocialModal(false)
+          setShowLinkSocialModal(false);
           // Refresh data to update the UI
           if (user?.id && authenticated) {
-            fetchReferralData()
+            fetchReferralData();
           }
         }}
       />
-      
+
       {/* Share & Earn Modal */}
       <ShareEarnModal
         isOpen={showShareModal}
@@ -725,7 +755,5 @@ export default function RewardsPage() {
         text="Check out my Babylon profile! 🎮"
       />
     </PageContainer>
-  )
+  );
 }
-
-

@@ -1,13 +1,13 @@
 /**
  * NPC Reputation-Adjusted Allocation API
- * 
+ *
  * @route POST /api/npc/allocation - Calculate reputation-adjusted allocation
  * @access Public
- * 
+ *
  * @description
  * Calculates allocation amount adjusted by NPC's reputation score. Returns
  * adjusted amount, reputation score, multiplier, and whether fallback was used.
- * 
+ *
  * @openapi
  * /api/npc/allocation:
  *   post:
@@ -48,7 +48,7 @@
  *                   type: boolean
  *       400:
  *         description: Invalid input
- * 
+ *
  * @example
  * ```typescript
  * const { adjustedAmount } = await fetch('/api/npc/allocation', {
@@ -61,31 +61,31 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { NPCInvestmentManager } from '@/lib/npc/npc-investment-manager'
-import { getReputationBreakdown } from '@/lib/reputation/reputation-service'
-import { logger } from '@/lib/logger'
+import { logger } from '@/lib/logger';
+import { NPCInvestmentManager } from '@/lib/npc/npc-investment-manager';
+import { getReputationBreakdown } from '@/lib/reputation/reputation-service';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-interface AllocationRequest {
-  npcUserId: string
-  baseAmount: number
-}
+type AllocationRequest = {
+  npcUserId: string;
+  baseAmount: number;
+};
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json()) as AllocationRequest
+  const body = (await request.json()) as AllocationRequest;
 
   const adjustedAmount = await NPCInvestmentManager.calculateReputationAdjustedAllocation(
     body.npcUserId,
     body.baseAmount
-  )
+  );
 
-  const reputation = await getReputationBreakdown(body.npcUserId)
-  const reputationScore = reputation!.reputationScore
-  const multiplier = adjustedAmount / body.baseAmount
-  const usedFallback = false
+  const reputation = await getReputationBreakdown(body.npcUserId);
+  const reputationScore = reputation?.reputationScore;
+  const multiplier = adjustedAmount / body.baseAmount;
+  const usedFallback = false;
 
-  logger.warn(`Could not retrieve reputation for ${body.npcUserId}`)
+  logger.warn(`Could not retrieve reputation for ${body.npcUserId}`);
 
   logger.info('Reputation-adjusted allocation calculated', {
     npcUserId: body.npcUserId,
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     adjustedAmount,
     reputationScore,
     multiplier,
-  })
+  });
 
   return NextResponse.json({
     success: true,
@@ -102,5 +102,5 @@ export async function POST(request: NextRequest) {
     reputationScore,
     multiplier,
     usedFallback,
-  })
+  });
 }

@@ -1,32 +1,32 @@
 /**
  * Autonomous Planning Coordinator
- * 
+ *
  * Orchestrates multi-action planning and execution for autonomous agents.
  * Considers goals, constraints, and opportunities to generate comprehensive action plans.
  */
 
-import { logger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
-import { generateSnowflakeId } from '@/lib/snowflake'
-import type { IAgentRuntime } from '@elizaos/core'
-import type { Prisma } from '@prisma/client'
-import { callGroqDirect } from '../llm/direct-groq'
-import type { AgentConstraints, AgentDirective, AgentGoal } from '../types/goals'
-import { countTokensSync, truncateToTokenLimitSync } from '@/lib/token-counter'
-import { autonomousBatchResponseService } from './AutonomousBatchResponseService'
-import { autonomousPostingService } from './AutonomousPostingService'
-import { autonomousTradingService } from './AutonomousTradingService'
-import { autonomousCommentingService } from './AutonomousCommentingService'
-import { autonomousDMService } from './AutonomousDMService'
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import { countTokensSync, truncateToTokenLimitSync } from '@/lib/token-counter';
+import type { IAgentRuntime } from '@elizaos/core';
+import type { Prisma } from '@prisma/client';
+import { callGroqDirect } from '../llm/direct-groq';
+import type { AgentConstraints, AgentDirective, AgentGoal } from '../types/goals';
+import { autonomousBatchResponseService } from './AutonomousBatchResponseService';
+import { autonomousCommentingService } from './AutonomousCommentingService';
+import { autonomousDMService } from './AutonomousDMService';
+import { autonomousPostingService } from './AutonomousPostingService';
+import { autonomousTradingService } from './AutonomousTradingService';
 
 /**
  * Agent interface for planning
- * 
+ *
  * Represents agent configuration needed for action planning.
  * Uses `unknown` for directives/constraints as they are stored as JSON
  * and parsed dynamically based on agent configuration.
  */
-interface PlanningAgent {
+type PlanningAgent = {
   agentSystem?: string;
   displayName: string;
   /** Agent directives stored as JSON (parsed dynamically) */
@@ -39,129 +39,130 @@ interface PlanningAgent {
   autonomousPosting?: boolean;
   autonomousCommenting?: boolean;
   autonomousDMs?: boolean;
-}
+};
 
 /**
  * Planned action definition
  */
-export interface PlannedAction {
-  type: 'trade' | 'post' | 'comment' | 'message' | 'respond'
-  priority: number  // 1-10
-  reasoning: string
-  goalId?: string  // Which goal does this serve?
-  estimatedImpact: number  // Expected progress toward goal (0-1)
-  params: Record<string, unknown>
-  constraints?: string[]  // Which constraints apply
-}
+export type PlannedAction = {
+  type: 'trade' | 'post' | 'comment' | 'message' | 'respond';
+  priority: number; // 1-10
+  reasoning: string;
+  goalId?: string; // Which goal does this serve?
+  estimatedImpact: number; // Expected progress toward goal (0-1)
+  params: Record<string, unknown>;
+  constraints?: string[]; // Which constraints apply
+};
 
 /**
  * Complete action plan
  */
-export interface ActionPlan {
-  actions: PlannedAction[]
-  totalActions: number
-  reasoning: string
-  goalsAddressed: string[]
-  estimatedCost: number  // Expected points cost
-}
+export type ActionPlan = {
+  actions: PlannedAction[];
+  totalActions: number;
+  reasoning: string;
+  goalsAddressed: string[];
+  estimatedCost: number; // Expected points cost
+};
 
 /**
  * Planning context (all info needed for decision making)
  */
-export interface PlanningContext {
+export type PlanningContext = {
   goals: {
-    active: AgentGoal[]
-    completed: AgentGoal[]
-  }
+    active: AgentGoal[];
+    completed: AgentGoal[];
+  };
   directives: {
-    always: AgentDirective[]
-    never: AgentDirective[]
-    prefer: AgentDirective[]
-    avoid: AgentDirective[]
-  }
-  constraints: AgentConstraints | null
+    always: AgentDirective[];
+    never: AgentDirective[];
+    prefer: AgentDirective[];
+    avoid: AgentDirective[];
+  };
+  constraints: AgentConstraints | null;
   portfolio: {
-    balance: number
-    pnl: number
-    positions: number
-  }
+    balance: number;
+    pnl: number;
+    positions: number;
+  };
   pending: Array<{
-    type: string
-    content: string
-    author: string
-  }>
+    type: string;
+    content: string;
+    author: string;
+  }>;
   opportunities: {
     trading: Array<{
-      market: string
-      description: string
-      confidence: number
-      expectedValue: number
-    }>
+      market: string;
+      description: string;
+      confidence: number;
+      expectedValue: number;
+    }>;
     social: Array<{
-      type: string
-      description: string
-      engagementScore: number
-    }>
-  }
+      type: string;
+      description: string;
+      engagementScore: number;
+    }>;
+  };
   recentActions: Array<{
-    type: string
-    timestamp: Date
-    success: boolean
-  }>
-}
+    type: string;
+    timestamp: Date;
+    success: boolean;
+  }>;
+};
 
 /**
  * Autonomous action execution result
- * 
+ *
  * Contains detailed results from executing an action plan, including
  * success/failure counts and per-action results.
  */
-export interface AutonomousExecutionResult {
+export type AutonomousExecutionResult = {
   /** Number of actions planned */
-  planned: number
+  planned: number;
   /** Number of actions executed */
-  executed: number
+  executed: number;
   /** Number of actions that succeeded */
-  successful: number
+  successful: number;
   /** Number of actions that failed */
-  failed: number
+  failed: number;
   /** Detailed results for each action */
   results: Array<{
-    action: PlannedAction
-    success: boolean
+    action: PlannedAction;
+    success: boolean;
     /** Action-specific result data (type varies by action type) */
-    result?: unknown
+    result?: unknown;
     /** Error message if action failed */
-    error?: string
-  }>
+    error?: string;
+  }>;
   /** IDs of goals that were updated during execution */
-  goalsUpdated: string[]
-}
+  goalsUpdated: string[];
+};
 
 export class AutonomousPlanningCoordinator {
   /**
    * Generate a comprehensive action plan for this tick
-   * 
+   *
    * Analyzes agent goals, constraints, and current state to generate
    * a multi-action plan that maximizes progress toward objectives.
-   * 
+   *
    * @param agentUserId - Unique identifier for the agent
    * @param _runtime - Agent runtime (used for W&B model access)
    * @returns ActionPlan with prioritized actions and reasoning
    * @throws Error if agent not found
-   * 
+   *
    * @remarks
    * - Uses large model (W&B trained if available) for complex planning
    * - Falls back to simple plan if no goals configured
    * - Validates plan against agent constraints
    * - Truncates prompt if exceeds 30K tokens
    */
-  async generateActionPlan(
-    agentUserId: string,
-    _runtime: IAgentRuntime
-  ): Promise<ActionPlan> {
-    logger.info(`Generating action plan for agent ${agentUserId}`, undefined, 'PlanningCoordinator')
-    
+  async generateActionPlan(agentUserId: string, _runtime: IAgentRuntime): Promise<ActionPlan> {
+    logger.info(
+      `Generating action plan for agent ${agentUserId}`,
+      undefined,
+      'PlanningCoordinator'
+    );
+
     const agent = await prisma.user.findUnique({
       where: { id: agentUserId },
       select: {
@@ -176,17 +177,17 @@ export class AutonomousPlanningCoordinator {
         autonomousTrading: true,
         autonomousPosting: true,
         autonomousCommenting: true,
-        autonomousDMs: true
-      }
-    })
-    
+        autonomousDMs: true,
+      },
+    });
+
     if (!agent) {
-      throw new Error('Agent not found')
+      throw new Error('Agent not found');
     }
-    
+
     // Gather full planning context
-    const context = await this.getPlanningContext(agentUserId)
-    
+    const context = await this.getPlanningContext(agentUserId);
+
     // Convert agent to PlanningAgent (null -> undefined for optional fields)
     const planningAgent: PlanningAgent = {
       displayName: agent.displayName ?? 'Agent',
@@ -196,54 +197,69 @@ export class AutonomousPlanningCoordinator {
       autonomousTrading: agent.autonomousTrading ?? undefined,
       autonomousPosting: agent.autonomousPosting ?? undefined,
       autonomousCommenting: agent.autonomousCommenting ?? undefined,
-      autonomousDMs: agent.autonomousDMs ?? undefined
-    }
-    
+      autonomousDMs: agent.autonomousDMs ?? undefined,
+    };
+
     // If no goals configured, use simplified planning
     if (context.goals.active.length === 0) {
-      logger.info('No goals configured, using legacy single-action mode', undefined, 'PlanningCoordinator')
-      return this.generateSimplePlan(planningAgent, context)
+      logger.info(
+        'No goals configured, using legacy single-action mode',
+        undefined,
+        'PlanningCoordinator'
+      );
+      return this.generateSimplePlan(planningAgent, context);
     }
-    
+
     // Build enhanced planning prompt
-    const prompt = this.buildPlanningPrompt(planningAgent, context)
-    
+    const prompt = this.buildPlanningPrompt(planningAgent, context);
+
     // Ensure prompt fits within 32K context limit (W&B trained models)
-    const estimatedTokens = countTokensSync(prompt)
-    let finalPrompt = prompt
-    
-    if (estimatedTokens > 30000) {  // 30K with 2K safety margin
-      logger.warn(`Planning prompt too long: ${estimatedTokens} tokens, truncating`, { agentUserId: agent.id })
-      const truncated = truncateToTokenLimitSync(prompt, 30000, { ellipsis: true })
-      finalPrompt = truncated.text
-      logger.info(`Truncated to ${truncated.tokens} tokens`, { agentUserId: agent.id })
+    const estimatedTokens = countTokensSync(prompt);
+    let finalPrompt = prompt;
+
+    if (estimatedTokens > 30000) {
+      // 30K with 2K safety margin
+      logger.warn(`Planning prompt too long: ${estimatedTokens} tokens, truncating`, {
+        agentUserId: agent.id,
+      });
+      const truncated = truncateToTokenLimitSync(prompt, 30000, {
+        ellipsis: true,
+      });
+      finalPrompt = truncated.text;
+      logger.info(`Truncated to ${truncated.tokens} tokens`, {
+        agentUserId: agent.id,
+      });
     }
-    
+
     // Use LARGE model (trained W&B model if available, else qwen3-32b) for complex planning
     const planResponse = await callGroqDirect({
       prompt: finalPrompt,
       system: agent.agentSystem || undefined,
-      modelSize: 'large',  // Uses trained W&B model if available
-      runtime: _runtime,  // Pass runtime to access W&B trained models
+      modelSize: 'large', // Uses trained W&B model if available
+      runtime: _runtime, // Pass runtime to access W&B trained models
       temperature: 0.7,
-      maxTokens: 1500  // Allow detailed planning
-    })
-    
+      maxTokens: 1500, // Allow detailed planning
+    });
+
     // Parse action plan
-    const plan = this.parseActionPlan(planResponse, context)
-    
+    const plan = this.parseActionPlan(planResponse, context);
+
     // Validate against constraints
-    const validatedPlan = this.validatePlan(plan, planningAgent, context.constraints)
-    
-    logger.info(`Generated plan with ${validatedPlan.totalActions} actions`, {
-      agentId: agentUserId,
-      actions: validatedPlan.actions.map(a => a.type),
-      goalsAddressed: validatedPlan.goalsAddressed
-    }, 'PlanningCoordinator')
-    
-    return validatedPlan
+    const validatedPlan = this.validatePlan(plan, planningAgent, context.constraints);
+
+    logger.info(
+      `Generated plan with ${validatedPlan.totalActions} actions`,
+      {
+        agentId: agentUserId,
+        actions: validatedPlan.actions.map((a) => a.type),
+        goalsAddressed: validatedPlan.goalsAddressed,
+      },
+      'PlanningCoordinator'
+    );
+
+    return validatedPlan;
   }
-  
+
   /**
    * Gather all context needed for planning
    */
@@ -251,19 +267,23 @@ export class AutonomousPlanningCoordinator {
     // Get goals
     const goals = await prisma.agentGoal.findMany({
       where: { agentUserId },
-      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }]
-    })
-    
-    const activeGoals = goals.filter(g => g.status === 'active').map(g => ({
-      ...g,
-      target: g.target ? JSON.parse(JSON.stringify(g.target)) : undefined
-    })) as AgentGoal[]
-    
-    const completedGoals = goals.filter(g => g.status === 'completed').map(g => ({
-      ...g,
-      target: g.target ? JSON.parse(JSON.stringify(g.target)) : undefined
-    })) as AgentGoal[]
-    
+      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    const activeGoals = goals
+      .filter((g) => g.status === 'active')
+      .map((g) => ({
+        ...g,
+        target: g.target ? JSON.parse(JSON.stringify(g.target)) : undefined,
+      })) as AgentGoal[];
+
+    const completedGoals = goals
+      .filter((g) => g.status === 'completed')
+      .map((g) => ({
+        ...g,
+        target: g.target ? JSON.parse(JSON.stringify(g.target)) : undefined,
+      })) as AgentGoal[];
+
     // Get directives
     const agent = await prisma.user.findUnique({
       where: { id: agentUserId },
@@ -273,118 +293,130 @@ export class AutonomousPlanningCoordinator {
         virtualBalance: true,
         lifetimePnL: true,
         agentMaxActionsPerTick: true,
-        agentRiskTolerance: true
-      }
-    })
-    
-    const directives = agent?.agentDirectives 
-      ? JSON.parse(JSON.stringify(agent.agentDirectives)) as AgentDirective[]
-      : []
-    
+        agentRiskTolerance: true,
+      },
+    });
+
+    const directives = agent?.agentDirectives
+      ? (JSON.parse(JSON.stringify(agent.agentDirectives)) as AgentDirective[])
+      : [];
+
     const constraints = agent?.agentConstraints
-      ? JSON.parse(JSON.stringify(agent.agentConstraints)) as AgentConstraints
-      : null
-    
+      ? (JSON.parse(JSON.stringify(agent.agentConstraints)) as AgentConstraints)
+      : null;
+
     // If constraints exist, merge with agent settings
     if (constraints && agent) {
-      constraints.general.maxActionsPerTick = agent.agentMaxActionsPerTick
-      constraints.general.riskTolerance = agent.agentRiskTolerance as 'low' | 'medium' | 'high'
+      constraints.general.maxActionsPerTick = agent.agentMaxActionsPerTick;
+      constraints.general.riskTolerance = agent.agentRiskTolerance as 'low' | 'medium' | 'high';
     }
-    
+
     // Get portfolio info
     const positions = await prisma.position.count({
-      where: { userId: agentUserId, status: 'active' }
-    })
-    
+      where: { userId: agentUserId, status: 'active' },
+    });
+
     const perpPositions = await prisma.perpPosition.count({
-      where: { userId: agentUserId, closedAt: null }
-    })
-    
+      where: { userId: agentUserId, closedAt: null },
+    });
+
     // Get pending interactions
-    const pendingInteractions = await autonomousBatchResponseService.gatherPendingInteractions(agentUserId)
-    
+    const pendingInteractions =
+      await autonomousBatchResponseService.gatherPendingInteractions(agentUserId);
+
     // Get recent actions (last 10)
     const recentLogs = await prisma.agentLog.findMany({
       where: {
         agentUserId,
-        type: { in: ['trade', 'post', 'comment', 'dm'] }
+        type: { in: ['trade', 'post', 'comment', 'dm'] },
       },
       orderBy: { createdAt: 'desc' },
-      take: 10
-    })
-    
+      take: 10,
+    });
+
     // Detect trading opportunities
-    const tradingOpportunities = await detectTradingOpportunities(agentUserId, Number(agent?.virtualBalance || 0))
-    
+    const tradingOpportunities = await detectTradingOpportunities(
+      agentUserId,
+      Number(agent?.virtualBalance || 0)
+    );
+
     // Detect social opportunities
-    const socialOpportunities = await detectSocialOpportunities(agentUserId, pendingInteractions)
-    
+    const socialOpportunities = await detectSocialOpportunities(agentUserId, pendingInteractions);
+
     return {
       goals: {
         active: activeGoals,
-        completed: completedGoals
+        completed: completedGoals,
       },
       directives: {
-        always: directives.filter(d => d.type === 'always'),
-        never: directives.filter(d => d.type === 'never'),
-        prefer: directives.filter(d => d.type === 'prefer'),
-        avoid: directives.filter(d => d.type === 'avoid')
+        always: directives.filter((d) => d.type === 'always'),
+        never: directives.filter((d) => d.type === 'never'),
+        prefer: directives.filter((d) => d.type === 'prefer'),
+        avoid: directives.filter((d) => d.type === 'avoid'),
       },
       constraints,
       portfolio: {
         balance: Number(agent?.virtualBalance || 0),
         pnl: Number(agent?.lifetimePnL || 0),
-        positions: positions + perpPositions
+        positions: positions + perpPositions,
       },
-      pending: pendingInteractions.slice(0, 10).map(p => ({
+      pending: pendingInteractions.slice(0, 10).map((p) => ({
         type: p.type,
         content: p.content,
-        author: p.author
+        author: p.author,
       })),
       opportunities: {
         trading: tradingOpportunities,
-        social: socialOpportunities
+        social: socialOpportunities,
       },
-      recentActions: recentLogs.map(log => ({
+      recentActions: recentLogs.map((log) => ({
         type: log.type,
         timestamp: log.createdAt,
-        success: log.level !== 'error'
-      }))
-    }
+        success: log.level !== 'error',
+      })),
+    };
   }
-  
+
   /**
    * Build comprehensive planning prompt
    */
   private buildPlanningPrompt(agent: PlanningAgent, context: PlanningContext): string {
-    const goalsText = context.goals.active.length > 0
-      ? context.goals.active.map((g, i) => {
-          const targetInfo = g.target
-            ? `Target: ${g.target.metric} = ${g.target.value}${g.target.unit || ''}`
-            : ''
-          return `${i + 1}. ${g.name} (Priority: ${g.priority}/10) - ${(g.progress * 100).toFixed(0)}% complete
+    const goalsText =
+      context.goals.active.length > 0
+        ? context.goals.active
+            .map((g, i) => {
+              const targetInfo = g.target
+                ? `Target: ${g.target.metric} = ${g.target.value}${g.target.unit || ''}`
+                : '';
+              return `${i + 1}. ${g.name} (Priority: ${g.priority}/10) - ${(g.progress * 100).toFixed(0)}% complete
    ${g.description}
-   ${targetInfo}`
-        }).join('\n\n')
-      : 'No goals configured'
-    
-    const directivesText = [
-      ...context.directives.always.map(d => `✓ ALWAYS: ${d.rule}`),
-      ...context.directives.never.map(d => `✗ NEVER: ${d.rule}`),
-      ...context.directives.prefer.map(d => `+ PREFER: ${d.rule}`)
-    ].join('\n') || 'No directives'
-    
+   ${targetInfo}`;
+            })
+            .join('\n\n')
+        : 'No goals configured';
+
+    const directivesText =
+      [
+        ...context.directives.always.map((d) => `✓ ALWAYS: ${d.rule}`),
+        ...context.directives.never.map((d) => `✗ NEVER: ${d.rule}`),
+        ...context.directives.prefer.map((d) => `+ PREFER: ${d.rule}`),
+      ].join('\n') || 'No directives';
+
     const constraintsText = context.constraints
       ? `- Max actions this tick: ${context.constraints.general.maxActionsPerTick}
 - Max position: $${context.constraints.trading.maxPositionSize}
 - Max leverage: ${context.constraints.trading.maxLeverage}x
 - Risk tolerance: ${context.constraints.general.riskTolerance}`
-      : 'No specific constraints'
-    
-    const pendingText = context.pending.length > 0
-      ? context.pending.slice(0, 5).map(p => `- ${p.type}: "${p.content.substring(0, 60)}..." by ${p.author}`).join('\n')
-      : 'None'
-    
+      : 'No specific constraints';
+
+    const pendingText =
+      context.pending.length > 0
+        ? context.pending
+            .slice(0, 5)
+            .map((p) => `- ${p.type}: "${p.content.substring(0, 60)}..." by ${p.author}`)
+            .join('\n')
+        : 'None';
+
     return `${agent.agentSystem}
 
 You are ${agent.displayName}, planning your actions for this autonomous tick.
@@ -414,7 +446,10 @@ Pending interactions (${context.pending.length}):
 ${pendingText}
 
 Recent actions (last 10):
-${context.recentActions.slice(0, 10).map(a => `- ${a.type}: ${a.success ? 'success' : 'failed'}`).join('\n')}
+${context.recentActions
+  .slice(0, 10)
+  .map((a) => `- ${a.type}: ${a.success ? 'success' : 'failed'}`)
+  .join('\n')}
 
 === YOUR TASK ===
 Plan ${context.constraints?.general.maxActionsPerTick || 3} or fewer actions for this tick to make maximum progress toward your goals.
@@ -450,68 +485,72 @@ Respond in JSON format:
   ]
 }
 
-Your action plan (JSON only):`
+Your action plan (JSON only):`;
   }
-  
+
   /**
    * Parse action plan from LLM response
    */
   private parseActionPlan(response: string, _context: PlanningContext): ActionPlan {
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/)
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        logger.warn('No JSON found in planning response, using empty plan', undefined, 'PlanningCoordinator')
+        logger.warn(
+          'No JSON found in planning response, using empty plan',
+          undefined,
+          'PlanningCoordinator'
+        );
         return {
           actions: [],
           totalActions: 0,
           reasoning: 'No valid plan generated',
           goalsAddressed: [],
-          estimatedCost: 0
-        }
+          estimatedCost: 0,
+        };
       }
-      
+
       const parsed = JSON.parse(jsonMatch[0]) as {
-        reasoning: string
+        reasoning: string;
         actions: Array<{
-          type: string
-          priority: number
-          goalId?: string
-          reasoning: string
-          estimatedImpact: number
-          params?: Record<string, unknown>
-        }>
-      }
-      
-      const actions: PlannedAction[] = parsed.actions.map(a => ({
+          type: string;
+          priority: number;
+          goalId?: string;
+          reasoning: string;
+          estimatedImpact: number;
+          params?: Record<string, unknown>;
+        }>;
+      };
+
+      const actions: PlannedAction[] = parsed.actions.map((a) => ({
         type: a.type as PlannedAction['type'],
         priority: a.priority,
         goalId: a.goalId,
         reasoning: a.reasoning,
         estimatedImpact: a.estimatedImpact,
-        params: a.params || {}
-      }))
-      
-      const goalsAddressed = [...new Set(actions.map(a => a.goalId).filter(Boolean))] as string[]
-      
+        params: a.params || {},
+      }));
+
+      const goalsAddressed = [...new Set(actions.map((a) => a.goalId).filter(Boolean))] as string[];
+
       return {
         actions,
         totalActions: actions.length,
         reasoning: parsed.reasoning,
         goalsAddressed,
-        estimatedCost: actions.length  // Simple: 1 point per action
-      }
+        estimatedCost: actions.length, // Simple: 1 point per action
+      };
     } catch (error) {
-      logger.error('Failed to parse action plan', error, 'PlanningCoordinator')
+      logger.error('Failed to parse action plan', error, 'PlanningCoordinator');
       return {
         actions: [],
         totalActions: 0,
         reasoning: 'Parse error',
         goalsAddressed: [],
-        estimatedCost: 0
-      }
+        estimatedCost: 0,
+      };
     }
   }
-  
+
   /**
    * Validate plan against constraints
    */
@@ -520,45 +559,49 @@ Your action plan (JSON only):`
     agent: PlanningAgent,
     constraints: AgentConstraints | null
   ): ActionPlan {
-    let validActions = [...plan.actions]
-    
+    let validActions = [...plan.actions];
+
     // Enforce max actions per tick
-    const maxActions = constraints?.general.maxActionsPerTick || agent.agentMaxActionsPerTick || 3
+    const maxActions = constraints?.general.maxActionsPerTick || agent.agentMaxActionsPerTick || 3;
     if (validActions.length > maxActions) {
-      logger.warn(`Plan has ${validActions.length} actions, limiting to ${maxActions}`, undefined, 'PlanningCoordinator')
-      validActions = validActions.sort((a, b) => b.priority - a.priority).slice(0, maxActions)
+      logger.warn(
+        `Plan has ${validActions.length} actions, limiting to ${maxActions}`,
+        undefined,
+        'PlanningCoordinator'
+      );
+      validActions = validActions.sort((a, b) => b.priority - a.priority).slice(0, maxActions);
     }
-    
+
     // Filter by enabled capabilities
-    validActions = validActions.filter(action => {
+    validActions = validActions.filter((action) => {
       switch (action.type) {
         case 'trade':
-          return agent.autonomousTrading
+          return agent.autonomousTrading;
         case 'post':
-          return agent.autonomousPosting
+          return agent.autonomousPosting;
         case 'comment':
         case 'respond':
-          return agent.autonomousCommenting
+          return agent.autonomousCommenting;
         case 'message':
-          return agent.autonomousDMs
+          return agent.autonomousDMs;
         default:
-          return true
+          return true;
       }
-    })
-    
+    });
+
     return {
       ...plan,
       actions: validActions,
-      totalActions: validActions.length
-    }
+      totalActions: validActions.length,
+    };
   }
-  
+
   /**
    * Generate simple plan for agents without goals (legacy mode)
    */
   private generateSimplePlan(agent: PlanningAgent, context: PlanningContext): ActionPlan {
-    const actions: PlannedAction[] = []
-    
+    const actions: PlannedAction[] = [];
+
     // Respond to pending interactions (priority 1)
     if (context.pending.length > 0 && agent.autonomousCommenting) {
       actions.push({
@@ -566,10 +609,10 @@ Your action plan (JSON only):`
         priority: 9,
         reasoning: 'Respond to pending interactions',
         estimatedImpact: 0.3,
-        params: {}
-      })
+        params: {},
+      });
     }
-    
+
     // Trading (priority 2)
     if (agent.autonomousTrading) {
       actions.push({
@@ -577,10 +620,10 @@ Your action plan (JSON only):`
         priority: 7,
         reasoning: 'Evaluate trading opportunities',
         estimatedImpact: 0.5,
-        params: {}
-      })
+        params: {},
+      });
     }
-    
+
     // Posting (priority 3)
     if (agent.autonomousPosting) {
       actions.push({
@@ -588,33 +631,33 @@ Your action plan (JSON only):`
         priority: 5,
         reasoning: 'Create social content',
         estimatedImpact: 0.2,
-        params: {}
-      })
+        params: {},
+      });
     }
-    
+
     return {
       actions: actions.slice(0, agent.agentMaxActionsPerTick || 3),
       totalActions: actions.length,
       reasoning: 'Legacy mode: executing enabled capabilities',
       goalsAddressed: [],
-      estimatedCost: actions.length
-    }
+      estimatedCost: actions.length,
+    };
   }
-  
+
   /**
    * Execute the planned actions in priority order
    */
-    /**
+  /**
    * Execute an action plan
-   * 
+   *
    * Executes all actions in the plan in priority order, tracking
    * successes and failures. Updates goal progress based on results.
-   * 
+   *
    * @param agentUserId - Unique identifier for the agent
    * @param runtime - Agent runtime (used for W&B model access)
    * @param plan - Action plan to execute
    * @returns Execution result with success counts and goal updates
-   * 
+   *
    * @remarks
    * - Executes actions in priority order (highest first)
    * - Continues processing even if individual actions fail
@@ -626,69 +669,77 @@ Your action plan (JSON only):`
     runtime: IAgentRuntime,
     plan: ActionPlan
   ): Promise<AutonomousExecutionResult> {
-    const results: AutonomousExecutionResult['results'] = []
-    const goalsUpdated: Set<string> = new Set()
-    
-    logger.info(`Executing plan with ${plan.totalActions} actions`, {
-      agentId: agentUserId,
-      actions: plan.actions.map(a => a.type)
-    }, 'PlanningCoordinator')
-    
+    const results: AutonomousExecutionResult['results'] = [];
+    const goalsUpdated: Set<string> = new Set();
+
+    logger.info(
+      `Executing plan with ${plan.totalActions} actions`,
+      {
+        agentId: agentUserId,
+        actions: plan.actions.map((a) => a.type),
+      },
+      'PlanningCoordinator'
+    );
+
     // Sort by priority
-    const sortedActions = [...plan.actions].sort((a, b) => b.priority - a.priority)
-    
+    const sortedActions = [...plan.actions].sort((a, b) => b.priority - a.priority);
+
     for (const action of sortedActions) {
       // Fail fast - don't catch errors, let them propagate
-      const result = await this.executeAction(agentUserId, runtime, action)
+      const result = await this.executeAction(agentUserId, runtime, action);
       results.push({
         action,
         success: result.success,
         result: result.data,
-        error: result.error
-      })
-      
+        error: result.error,
+      });
+
       // Track progress toward goal
       if (action.goalId && result.success) {
-        await this.updateGoalProgress(action.goalId, agentUserId, action)
-        goalsUpdated.add(action.goalId)
+        await this.updateGoalProgress(action.goalId, agentUserId, action);
+        goalsUpdated.add(action.goalId);
       }
-      
+
       // Small delay between actions
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    
-    const successful = results.filter(r => r.success).length
-    const failed = results.filter(r => !r.success).length
-    
-    logger.info(`Plan execution complete`, {
-      agentId: agentUserId,
-      planned: plan.totalActions,
-      executed: results.length,
-      successful,
-      failed
-    }, 'PlanningCoordinator')
-    
+
+    const successful = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+
+    logger.info(
+      `Plan execution complete`,
+      {
+        agentId: agentUserId,
+        planned: plan.totalActions,
+        executed: results.length,
+        successful,
+        failed,
+      },
+      'PlanningCoordinator'
+    );
+
     return {
       planned: plan.totalActions,
       executed: results.length,
       successful,
       failed,
       results,
-      goalsUpdated: Array.from(goalsUpdated)
-    }
+      goalsUpdated: Array.from(goalsUpdated),
+    };
   }
-  
+
   /**
    * Execute a single action
-   * 
+   *
    * Routes action execution to the appropriate service based on action type.
    * Returns a result object indicating success/failure and any result data.
-   * 
+   *
    * @param agentUserId - Unique identifier for the agent
    * @param runtime - Agent runtime (used for W&B model access)
    * @param action - Planned action to execute
    * @returns Result object with success status and optional data/error
-   * 
+   *
    * @remarks
    * Uses `unknown` for result data as different action types return
    * different data structures (trade results, post IDs, etc.)
@@ -698,35 +749,50 @@ Your action plan (JSON only):`
     runtime: IAgentRuntime,
     action: PlannedAction
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
-    logger.info(`Executing ${action.type} action`, { agentId: agentUserId, priority: action.priority }, 'PlanningCoordinator')
-    
+    logger.info(
+      `Executing ${action.type} action`,
+      { agentId: agentUserId, priority: action.priority },
+      'PlanningCoordinator'
+    );
+
     // Fail fast - don't catch errors here, let them propagate
     switch (action.type) {
-      case 'trade':
-        const tradeResult = await autonomousTradingService.executeTrades(agentUserId, runtime)
-        return { success: tradeResult.tradesExecuted > 0, data: { trades: tradeResult.tradesExecuted } }
-      
-      case 'post':
-        const postId = await autonomousPostingService.createAgentPost(agentUserId, runtime)
-        return { success: !!postId, data: { postId } }
-      
-      case 'respond':
-        const responses = await autonomousBatchResponseService.processBatch(agentUserId, runtime)
-        return { success: responses > 0, data: { responses } }
-      
-      case 'comment':
-        const commentId = await autonomousCommentingService.createAgentComment(agentUserId, runtime)
-        return { success: !!commentId, data: { commentId } }
-      
-      case 'message':
-        const dmResponses = await autonomousDMService.respondToDMs(agentUserId, runtime)
-        return { success: dmResponses > 0, data: { responses: dmResponses } }
-      
+      case 'trade': {
+        const tradeResult = await autonomousTradingService.executeTrades(agentUserId, runtime);
+        return {
+          success: tradeResult.tradesExecuted > 0,
+          data: { trades: tradeResult.tradesExecuted },
+        };
+      }
+
+      case 'post': {
+        const postId = await autonomousPostingService.createAgentPost(agentUserId, runtime);
+        return { success: !!postId, data: { postId } };
+      }
+
+      case 'respond': {
+        const responses = await autonomousBatchResponseService.processBatch(agentUserId, runtime);
+        return { success: responses > 0, data: { responses } };
+      }
+
+      case 'comment': {
+        const commentId = await autonomousCommentingService.createAgentComment(
+          agentUserId,
+          runtime
+        );
+        return { success: !!commentId, data: { commentId } };
+      }
+
+      case 'message': {
+        const dmResponses = await autonomousDMService.respondToDMs(agentUserId, runtime);
+        return { success: dmResponses > 0, data: { responses: dmResponses } };
+      }
+
       default:
-        throw new Error(`Unknown action type: ${action.type}`)
+        throw new Error(`Unknown action type: ${action.type}`);
     }
   }
-  
+
   /**
    * Update goal progress based on action execution
    */
@@ -737,26 +803,28 @@ Your action plan (JSON only):`
   ): Promise<void> {
     try {
       const goal = await prisma.agentGoal.findUnique({
-        where: { id: goalId }
-      })
-      
-      if (!goal) return
-      
+        where: { id: goalId },
+      });
+
+      if (!goal) return;
+
       // Update progress (simplified - could be more sophisticated)
-      const newProgress = Math.min(1.0, goal.progress + action.estimatedImpact)
-      
+      const newProgress = Math.min(1.0, goal.progress + action.estimatedImpact);
+
       await prisma.agentGoal.update({
         where: { id: goalId },
         data: {
           progress: newProgress,
           updatedAt: new Date(),
-          ...(newProgress >= 1.0 ? {
-            status: 'completed',
-            completedAt: new Date()
-          } : {})
-        }
-      })
-      
+          ...(newProgress >= 1.0
+            ? {
+                status: 'completed',
+                completedAt: new Date(),
+              }
+            : {}),
+        },
+      });
+
       // Record goal action
       await prisma.agentGoalAction.create({
         data: {
@@ -765,18 +833,22 @@ Your action plan (JSON only):`
           agentUserId,
           actionType: action.type,
           impact: action.estimatedImpact,
-          metadata: action.params as Prisma.InputJsonValue
-        }
-      })
-      
-      logger.info(`Updated goal progress`, {
-        goalId,
-        oldProgress: goal.progress,
-        newProgress,
-        completed: newProgress >= 1.0
-      }, 'PlanningCoordinator')
+          metadata: action.params as Prisma.InputJsonValue,
+        },
+      });
+
+      logger.info(
+        `Updated goal progress`,
+        {
+          goalId,
+          oldProgress: goal.progress,
+          newProgress,
+          completed: newProgress >= 1.0,
+        },
+        'PlanningCoordinator'
+      );
     } catch (error) {
-      logger.error('Failed to update goal progress', error, 'PlanningCoordinator')
+      logger.error('Failed to update goal progress', error, 'PlanningCoordinator');
     }
   }
 }
@@ -787,82 +859,84 @@ Your action plan (JSON only):`
 async function detectTradingOpportunities(
   _agentUserId: string,
   balance: number
-): Promise<Array<{
-  market: string
-  description: string
-  confidence: number
-  expectedValue: number
-}>> {
+): Promise<
+  Array<{
+    market: string;
+    description: string;
+    confidence: number;
+    expectedValue: number;
+  }>
+> {
   const opportunities: Array<{
-    market: string
-    description: string
-    confidence: number
-    expectedValue: number
-  }> = []
+    market: string;
+    description: string;
+    confidence: number;
+    expectedValue: number;
+  }> = [];
 
   // Get active prediction markets with high volume
   const activeMarkets = await prisma.market.findMany({
     where: {
       resolved: false,
-      endDate: { gte: new Date() }
+      endDate: { gte: new Date() },
     },
     orderBy: { createdAt: 'desc' },
-    take: 10
-  })
+    take: 10,
+  });
 
   for (const market of activeMarkets) {
-    const yesShares = Number(market.yesShares || 0)
-    const noShares = Number(market.noShares || 0)
-    const totalShares = yesShares + noShares
+    const yesShares = Number(market.yesShares || 0);
+    const noShares = Number(market.noShares || 0);
+    const totalShares = yesShares + noShares;
 
-    if (totalShares === 0) continue
+    if (totalShares === 0) continue;
 
     // Calculate implied probability
-    const yesPrice = yesShares / totalShares
+    const yesPrice = yesShares / totalShares;
 
     // Look for mispriced markets (one side < 0.3 or > 0.7)
     if (yesPrice < 0.3 || yesPrice > 0.7) {
-      const confidence = Math.abs(yesPrice - 0.5) * 2 // 0 to 1 scale
-      const expectedValue = confidence * balance * 0.1 // 10% of balance
+      const confidence = Math.abs(yesPrice - 0.5) * 2; // 0 to 1 scale
+      const expectedValue = confidence * balance * 0.1; // 10% of balance
 
       opportunities.push({
         market: market.id,
         description: `Mispriced market: ${market.question} (YES: ${(yesPrice * 100).toFixed(1)}%)`,
         confidence,
-        expectedValue
-      })
+        expectedValue,
+      });
     }
   }
 
   // Get perp markets with significant price movement
   const perpMarkets = await prisma.organization.findMany({
     where: { type: 'company' },
-    take: 10
-  })
+    take: 10,
+  });
 
   for (const org of perpMarkets) {
-    const currentPrice = Number(org.currentPrice || org.initialPrice || 100)
-    const initialPrice = Number(org.initialPrice || 100)
-    const priceChange = (currentPrice - initialPrice) / initialPrice
+    const currentPrice = Number(org.currentPrice || org.initialPrice || 100);
+    const initialPrice = Number(org.initialPrice || 100);
+    const priceChange = (currentPrice - initialPrice) / initialPrice;
 
     // Look for significant moves (>5% change)
     if (Math.abs(priceChange) > 0.05) {
-      const confidence = Math.min(Math.abs(priceChange) * 2, 1) // Cap at 1.0
-      const expectedValue = confidence * balance * 0.15 // 15% of balance
+      const confidence = Math.min(Math.abs(priceChange) * 2, 1); // Cap at 1.0
+      const expectedValue = confidence * balance * 0.15; // 15% of balance
 
       opportunities.push({
         market: org.id,
         description: `${org.name} moved ${(priceChange * 100).toFixed(1)}% ($${currentPrice.toFixed(2)})`,
         confidence,
-        expectedValue
-      })
+        expectedValue,
+      });
     }
   }
 
   // Sort by expected value
-  opportunities.sort((a, b) => b.expectedValue - a.expectedValue)
+  opportunities.sort((a, b) => b.expectedValue - a.expectedValue);
 
-  return opportunities.slice(0, 5) // Top 5 opportunities
+  return opportunities.slice(0, 5); // Top 5 opportunities
 }
 
 /**
@@ -871,37 +945,39 @@ async function detectTradingOpportunities(
 async function detectSocialOpportunities(
   agentUserId: string,
   pendingInteractions: Array<{ type: string; content: string; author: string }>
-): Promise<Array<{
-  type: string
-  description: string
-  engagementScore: number
-}>> {
+): Promise<
+  Array<{
+    type: string;
+    description: string;
+    engagementScore: number;
+  }>
+> {
   const opportunities: Array<{
-    type: string
-    description: string
-    engagementScore: number
-  }> = []
+    type: string;
+    description: string;
+    engagementScore: number;
+  }> = [];
 
   // High-value interactions (direct questions, mentions)
   for (const interaction of pendingInteractions) {
-    const content = interaction.content.toLowerCase()
-    const isQuestion = content.includes('?')
-    const isMention = content.includes('@') || content.includes(agentUserId)
-    const isDirect = isQuestion || isMention
+    const content = interaction.content.toLowerCase();
+    const isQuestion = content.includes('?');
+    const isMention = content.includes('@') || content.includes(agentUserId);
+    const isDirect = isQuestion || isMention;
 
     if (isDirect) {
       opportunities.push({
         type: interaction.type,
         description: `${interaction.author}: ${interaction.content.substring(0, 60)}...`,
-        engagementScore: 0.8
-      })
+        engagementScore: 0.8,
+      });
     } else if (interaction.content.length > 50) {
       // Substantive comment
       opportunities.push({
         type: interaction.type,
         description: `${interaction.author}: ${interaction.content.substring(0, 60)}...`,
-        engagementScore: 0.5
-      })
+        engagementScore: 0.5,
+      });
     }
   }
 
@@ -911,26 +987,25 @@ async function detectSocialOpportunities(
     take: 5,
     include: {
       Tag: {
-        select: { name: true, displayName: true }
-      }
-    }
-  })
+        select: { name: true, displayName: true },
+      },
+    },
+  });
 
   for (const trending of trendingTags) {
     if (trending.Tag) {
       opportunities.push({
         type: 'post',
         description: `Trending topic: ${trending.Tag.displayName || trending.Tag.name}`,
-        engagementScore: trending.score / 100 // Normalize score
-      })
+        engagementScore: trending.score / 100, // Normalize score
+      });
     }
   }
 
   // Sort by engagement score
-  opportunities.sort((a, b) => b.engagementScore - a.engagementScore)
+  opportunities.sort((a, b) => b.engagementScore - a.engagementScore);
 
-  return opportunities.slice(0, 5) // Top 5 opportunities
+  return opportunities.slice(0, 5); // Top 5 opportunities
 }
 
-export const autonomousPlanningCoordinator = new AutonomousPlanningCoordinator()
-
+export const autonomousPlanningCoordinator = new AutonomousPlanningCoordinator();

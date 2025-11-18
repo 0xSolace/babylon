@@ -1,12 +1,14 @@
-import { z } from 'zod';
 import { JsonValueSchema } from '@/types/common';
+import { z } from 'zod';
 
 export const DiscoverParamsSchema = z.object({
-  filters: z.object({
-    strategies: z.array(z.string()).optional(),
-    minReputation: z.number().optional(),
-    markets: z.array(z.string()).optional(),
-  }).optional(),
+  filters: z
+    .object({
+      strategies: z.array(z.string()).optional(),
+      minReputation: z.number().optional(),
+      markets: z.array(z.string()).optional(),
+    })
+    .optional(),
   limit: z.number().optional(),
 });
 
@@ -19,7 +21,7 @@ export const GetMarketDataParamsSchema = z.object({
 });
 
 export const GetMarketPricesParamsSchema = z.object({
-    marketId: z.string(),
+  marketId: z.string(),
 });
 
 export const SubscribeMarketParamsSchema = z.object({
@@ -68,8 +70,8 @@ export const PaymentReceiptParamsSchema = z.object({
 });
 
 export const GetAnalysesParamsSchema = z.object({
-    marketId: z.string(),
-    limit: z.number().optional(),
+  marketId: z.string(),
+  limit: z.number().optional(),
 });
 
 // ==================== Market Operations ====================
@@ -324,4 +326,3 @@ export const GetFavoritePostsParamsSchema = z.object({
   limit: z.number().min(1).max(100).optional().default(20),
   offset: z.number().min(0).optional().default(0),
 });
-

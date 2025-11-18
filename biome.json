@@ -1,0 +1,151 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.6/schema.json",
+  "vcs": {
+    "defaultBranch": "staging"
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "src/**/*",
+      "lib/**/*",
+      "scripts/**/*",
+      "tests/**/*",
+      "config/**/*",
+      "contracts/**/*",
+      "prisma/**/*",
+      "types/**/*",
+      "docs/**/*",
+      "public/**/*",
+      "plugin-babylon/**/*",
+      "!node_modules",
+      "!.next",
+      "!dist",
+      "!cache",
+      "!deployments",
+      "!contracts/out",
+      "!contracts/cache",
+      "!contracts/artifacts",
+      "!lib/openzeppelin-contracts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "identifierOrder": "lexicographic",
+            "groups": [
+              { "source": "@/components/**" },
+              { "source": "@/lib/**" },
+              { "source": "@/hooks/**" },
+              { "source": "@/styles/**" },
+              { "source": "@/**" },
+              { "source": ":PACKAGE_WITH_PROTOCOL:" },
+              { "source": ":PACKAGE:" },
+              { "source": ":BUN:" },
+              { "source": ":NODE:" },
+              { "source": ":PATH:" }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "linter": {
+    "domains": {
+      "react": "recommended",
+      "next": "recommended",
+      "tailwind": "recommended"
+    },
+    "rules": {
+      "complexity": {
+        "noStaticOnlyClass": "off"
+      },
+      "correctness": {
+        "useHookAtTopLevel": "error",
+        "useExhaustiveDependencies": "warn",
+        "noUnusedImports": "error",
+        "noUnusedVariables": {
+          "level": "error",
+          "options": {
+            "ignoreRestSiblings": true
+          }
+        }
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noVar": "error"
+      },
+      "style": {
+        "useConst": "error",
+        "useConsistentTypeDefinitions": {
+          "level": "warn",
+          "options": {
+            "style": "type"
+          }
+        }
+      },
+      "nursery": {
+        "useSortedClasses": "warn"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "tests/**/*",
+        "src/**/*.test.ts",
+        "src/**/*.test.tsx",
+        "src/**/*.spec.ts",
+        "src/**/*.spec.tsx",
+        "src/**/__tests__/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
+    }
+  ],
+  "javascript": {
+    "globals": [
+      "React",
+      "JSX",
+      "process",
+      "console",
+      "Buffer",
+      "fetch",
+      "Request",
+      "Response",
+      "FormData",
+      "__dirname",
+      "__filename",
+      "module",
+      "require",
+      "NodeJS"
+    ],
+    "formatter": {
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "quoteProperties": "preserve",
+      "trailingCommas": "es5",
+      "semicolons": "always"
+    }
+  }
+}

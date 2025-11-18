@@ -3,11 +3,11 @@
  * Tests all case variations and ensures no original names leak
  */
 
-import { describe, it, expect, beforeAll } from 'bun:test';
+import { beforeAll, describe, expect, it } from 'bun:test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { NameReplacer } from '../../scripts/name-replacer';
-import type { ActorsDataFile, ActorData, OrganizationData } from '../types/test-types';
-import * as fs from 'fs';
-import * as path from 'path';
+import type { ActorData, ActorsDataFile, OrganizationData } from '../types/test-types';
 
 describe('Name Replacement System', () => {
   let replacer: NameReplacer;
@@ -219,8 +219,8 @@ describe('Name Replacement System', () => {
     });
 
     it('should have originalLastName for all actors (empty string OK for single names)', () => {
-      const missingLast = actorsData.actors.filter((a: ActorData) => 
-        a.originalLastName === undefined || a.originalLastName === null
+      const missingLast = actorsData.actors.filter(
+        (a: ActorData) => a.originalLastName === undefined || a.originalLastName === null
       );
       expect(missingLast).toHaveLength(0);
     });
@@ -236,7 +236,9 @@ describe('Name Replacement System', () => {
     });
 
     it('should have originalHandle for all organizations', () => {
-      const missingHandle = actorsData.organizations.filter((o: OrganizationData) => !o.originalHandle);
+      const missingHandle = actorsData.organizations.filter(
+        (o: OrganizationData) => !o.originalHandle
+      );
       expect(missingHandle).toHaveLength(0);
     });
   });
@@ -317,11 +319,11 @@ describe('Validation: No Original Names Leaked', () => {
           const content = fs.readFileSync(fullPath, 'utf-8');
           // Allow in comments or for comparison
           const contentNoComments = content.replace(/\/\/.*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-          const hasOpenAI = contentNoComments.includes('OpenAI') && !contentNoComments.includes('OpnAI');
+          const hasOpenAI =
+            contentNoComments.includes('OpenAI') && !contentNoComments.includes('OpnAI');
           expect(hasOpenAI).toBe(false);
         }
       });
     }
   });
 });
-

@@ -1,12 +1,12 @@
 /**
  * QuestionManager Test Suite
- * 
+ *
  * @module engine/__tests__/QuestionManager.test
- * 
+ *
  * @description
  * Comprehensive test suite for the QuestionManager prediction market question
  * lifecycle system. Verifies question creation, resolution, and constraint enforcement.
- * 
+ *
  * **Test Coverage:**
  * - Question resolution detection (by date)
  * - Days until resolution calculation
@@ -14,27 +14,27 @@
  * - Question status transitions (active → resolved)
  * - Active vs resolved question filtering
  * - Maximum 20 questions enforcement
- * 
+ *
  * **Key Features Tested:**
  * - Date-based resolution triggering
  * - Day calculation accuracy
  * - Status tracking (active/resolved)
  * - Question filtering utilities
  * - Constraint validation (max questions)
- * 
+ *
  * **Testing Approach:**
  * - Unit tests with mock LLM client
  * - No external dependencies
  * - Pure function testing
  * - Edge case coverage
- * 
+ *
  * @see {@link QuestionManager} - Class under test
  */
 
-import { describe, test, expect } from 'bun:test';
-import type { Question } from '@/shared/types';
-import { QuestionManager } from '../QuestionManager';
 import { BabylonLLMClient } from '@/generator/llm/openai-client';
+import type { Question } from '@/shared/types';
+import { describe, expect, test } from 'bun:test';
+import { QuestionManager } from '../QuestionManager';
 
 // Mock LLM client for testing
 class MockLLMClient extends BabylonLLMClient {
@@ -78,7 +78,7 @@ describe('QuestionManager', () => {
     const toResolve = manager.getQuestionsToResolve(questions, currentDate);
 
     expect(toResolve.length).toBe(1);
-    expect(toResolve[0]!.id).toBe(1);
+    expect(toResolve[0]?.id).toBe(1);
   });
 
   test('calculates days until resolution correctly', () => {
@@ -104,12 +104,12 @@ describe('QuestionManager', () => {
   test('enforces resolution time constraints (1-7 days)', () => {
     // Test that resolution dates are set correctly
     const createdDate = new Date('2025-11-01');
-    
+
     // Test 1 day
     const oneDay = new Date(createdDate);
     oneDay.setDate(oneDay.getDate() + 1);
     expect(oneDay.toISOString().split('T')[0]).toBe('2025-11-02');
-    
+
     // Test 7 days
     const sevenDays = new Date(createdDate);
     sevenDays.setDate(sevenDays.getDate() + 7);
@@ -185,10 +185,8 @@ describe('QuestionManager', () => {
     }));
 
     // Should only keep 20
-    const activeQuestions = questions.filter(q => q.status === 'active').slice(0, 20);
-    
+    const activeQuestions = questions.filter((q) => q.status === 'active').slice(0, 20);
+
     expect(activeQuestions.length).toBe(20);
   });
 });
-
-

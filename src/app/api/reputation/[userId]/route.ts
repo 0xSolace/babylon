@@ -1,14 +1,14 @@
 /**
  * User Reputation API
- * 
+ *
  * @route GET /api/reputation/[userId] - Get user reputation
  * @access Public
- * 
+ *
  * @description
  * Returns comprehensive reputation data for a user including overall reputation score,
  * trust level, feedback statistics, game performance metrics, and trading performance.
  * Includes ranking information and recent trends.
- * 
+ *
  * @openapi
  * /api/reputation/{userId}:
  *   get:
@@ -62,34 +62,34 @@
  *                   type: integer
  *       404:
  *         description: User not found
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/reputation/user_123');
  * const { reputationPoints, rank, performance } = await response.json();
  * console.log(`Rank: #${rank} with ${reputationPoints} points`);
  * ```
- * 
+ *
  * @see {@link /lib/reputation/reputation-service} Reputation service
  */
 
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { requireUserByIdentifier } from '@/lib/users/user-lookup'
-import { getReputationBreakdown } from '@/lib/reputation/reputation-service'
+import { prisma } from '@/lib/prisma';
+import { getReputationBreakdown } from '@/lib/reputation/reputation-service';
+import { requireUserByIdentifier } from '@/lib/users/user-lookup';
+import { NextResponse } from 'next/server';
 
-interface RouteParams {
+type RouteParams = {
   params: Promise<{
-    userId: string
-  }>
-}
+    userId: string;
+  }>;
+};
 
 export async function GET(_request: Request, { params }: RouteParams) {
-  const { userId } = await params
+  const { userId } = await params;
 
-  const user = await requireUserByIdentifier(userId)
+  const user = await requireUserByIdentifier(userId);
 
-  await getReputationBreakdown(user.id)
+  await getReputationBreakdown(user.id);
 
   const metrics = await prisma.agentPerformanceMetrics.findUnique({
     where: { userId: user.id },
@@ -104,38 +104,38 @@ export async function GET(_request: Request, { params }: RouteParams) {
       trustLevel: true,
       lastActivityAt: true,
     },
-  })
+  });
 
   const rank = await prisma.agentPerformanceMetrics.count({
     where: {
       reputationScore: {
-        gt: metrics!.reputationScore,
+        gt: metrics?.reputationScore,
       },
     },
-  })
+  });
 
-  const totalUsers = await prisma.agentPerformanceMetrics.count()
+  const totalUsers = await prisma.agentPerformanceMetrics.count();
 
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const recentTrend = 0
+  const recentTrend = 0;
 
   return NextResponse.json({
     success: true,
     userId: user.id,
-    reputationPoints: Math.round(metrics!.reputationScore),
-    averageFeedbackScore: metrics!.averageFeedbackScore,
-    totalFeedbackReceived: metrics!.totalFeedbackCount,
+    reputationPoints: Math.round(metrics?.reputationScore ?? 0),
+    averageFeedbackScore: metrics?.averageFeedbackScore,
+    totalFeedbackReceived: metrics?.totalFeedbackCount,
     performance: {
-      gamesPlayed: metrics!.gamesPlayed,
-      gamesWon: metrics!.gamesWon,
-      averageGameScore: metrics!.averageGameScore,
-      winRate: metrics!.winRate,
+      gamesPlayed: metrics?.gamesPlayed,
+      gamesWon: metrics?.gamesWon,
+      averageGameScore: metrics?.averageGameScore,
+      winRate: metrics?.winRate,
     },
     recentTrend,
-    trustLevel: metrics!.trustLevel,
+    trustLevel: metrics?.trustLevel,
     rank: rank + 1,
     totalUsers,
-  })
+  });
 }

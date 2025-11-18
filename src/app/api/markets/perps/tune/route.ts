@@ -1,15 +1,15 @@
 /**
  * Perpetual Futures Tuning API
- * 
+ *
  * @route GET /api/markets/perps/tune - Get tuning parameters
  * @route POST /api/markets/perps/tune - Update tuning parameters
  * @access Authenticated
- * 
+ *
  * @description
  * Manages AI agent prompt tuning parameters for perpetual futures trading. Customizes
  * Agent0 trading behavior for specific tickers with risk tolerance, entry/exit thresholds,
  * position sizing multipliers, and sentiment overrides.
- * 
+ *
  * @openapi
  * /api/markets/perps/tune:
  *   get:
@@ -97,14 +97,14 @@
  *         description: Invalid parameters
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * // Get tuning for ticker
  * const params = await fetch('/api/markets/perps/tune?ticker=AAPL', {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * }).then(r => r.json());
- * 
+ *
  * // Update tuning
  * await fetch('/api/markets/perps/tune', {
  *   method: 'POST',
@@ -118,11 +118,11 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { logger } from '@/lib/logger'
-import { z } from 'zod'
-import { withErrorHandling } from '@/lib/errors/error-handler'
+import { withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const TuningQuerySchema = z.object({
   ticker: z.string().optional(),
@@ -139,19 +139,22 @@ const TuningBodySchema = z.object({
 });
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const { searchParams } = new URL(request.url)
+  const { searchParams } = new URL(request.url);
   const queryParse = TuningQuerySchema.safeParse({
     ticker: searchParams.get('ticker') || undefined,
-  })
+  });
 
   if (!queryParse.success) {
     return NextResponse.json(
-      { error: 'Invalid query parameters', details: queryParse.error.flatten() },
+      {
+        error: 'Invalid query parameters',
+        details: queryParse.error.flatten(),
+      },
       { status: 400 }
-    )
+    );
   }
 
-  const { ticker } = queryParse.data
+  const { ticker } = queryParse.data;
 
   // If ticker specified, get specific tuning
   if (ticker) {
@@ -169,7 +172,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         maxLeverageOverride: null,
         updatedAt: new Date().toISOString(),
       },
-    })
+    });
   }
 
   // Return global defaults
@@ -186,21 +189,21 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         updatedAt: new Date().toISOString(),
       },
     },
-  })
-})
+  });
+});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  const json = await request.json()
-  const parsed = TuningBodySchema.safeParse(json)
+  const json = await request.json();
+  const parsed = TuningBodySchema.safeParse(json);
 
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Invalid request payload', details: parsed.error.flatten() },
       { status: 400 }
-    )
+    );
   }
 
-  const body = parsed.data
+  const body = parsed.data;
 
   // In a full implementation, this would save to a database table
   // For now, just return success with the parameters
@@ -208,20 +211,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     `Perp tuning parameters updated${body.ticker ? ` for ${body.ticker}` : ' (global)'}`,
     { ticker: body.ticker, parameters: body },
     'PerpTuning'
-  )
+  );
 
-  return NextResponse.json({
-    success: true,
-    message: `Tuning parameters updated${body.ticker ? ` for ${body.ticker}` : ' (global)'}`,
-    parameters: {
-      ticker: body.ticker || null,
-      riskMultiplier: body.riskMultiplier ?? 1.0,
-      entryThreshold: body.entryThreshold ?? 0.6,
-      exitThreshold: body.exitThreshold ?? 0.4,
-      positionSizeMultiplier: body.positionSizeMultiplier ?? 1.0,
-      sentimentOverride: body.sentimentOverride ?? null,
-      maxLeverageOverride: body.maxLeverageOverride ?? null,
-      updatedAt: new Date().toISOString(),
+  return NextResponse.json(
+    {
+      success: true,
+      message: `Tuning parameters updated${body.ticker ? ` for ${body.ticker}` : ' (global)'}`,
+      parameters: {
+        ticker: body.ticker || null,
+        riskMultiplier: body.riskMultiplier ?? 1.0,
+        entryThreshold: body.entryThreshold ?? 0.6,
+        exitThreshold: body.exitThreshold ?? 0.4,
+        positionSizeMultiplier: body.positionSizeMultiplier ?? 1.0,
+        sentimentOverride: body.sentimentOverride ?? null,
+        maxLeverageOverride: body.maxLeverageOverride ?? null,
+        updatedAt: new Date().toISOString(),
+      },
     },
-  }, { status: 201 })
-})
+    { status: 201 }
+  );
+});

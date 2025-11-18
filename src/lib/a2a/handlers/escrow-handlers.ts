@@ -1,29 +1,36 @@
 /**
  * A2A Escrow Handlers
- * 
+ *
  * Handlers for moderation escrow payment methods via A2A protocol
  */
 
-import type { JsonRpcRequest, JsonRpcResponse, JsonRpcResult } from '@/types/a2a'
-import { ErrorCode } from '@/types/a2a'
-import { prisma } from '@/lib/prisma'
-import { generateSnowflakeId } from '@/lib/snowflake'
-import { logger } from '@/lib/logger'
-import { X402Manager } from '@/lib/a2a/payments/x402-manager'
-import { z } from 'zod'
-import { parseEther } from 'ethers'
+import { X402Manager } from '@/lib/a2a/payments/x402-manager';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import type { JsonRpcRequest, JsonRpcResponse, JsonRpcResult } from '@/types/a2a';
+import { ErrorCode } from '@/types/a2a';
+import { parseEther } from 'ethers';
+import { z } from 'zod';
 
 // Initialize x402 manager
 const x402Manager = new X402Manager({
   rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
   paymentTimeout: 15 * 60 * 1000, // 15 minutes
-})
+});
 
-const PAYMENT_RECEIVER = process.env.MODERATION_ESCROW_RECEIVER || process.env.NEXT_PUBLIC_TREASURY_ADDRESS || '0x0000000000000000000000000000000000000000'
+const PAYMENT_RECEIVER =
+  process.env.MODERATION_ESCROW_RECEIVER ||
+  process.env.NEXT_PUBLIC_TREASURY_ADDRESS ||
+  '0x0000000000000000000000000000000000000000';
 
 // Validate treasury address is configured (warn if zero address)
 if (PAYMENT_RECEIVER === '0x0000000000000000000000000000000000000000') {
-  logger.warn('MODERATION_ESCROW_RECEIVER or NEXT_PUBLIC_TREASURY_ADDRESS not configured - using zero address', {}, 'ModerationEscrow')
+  logger.warn(
+    'MODERATION_ESCROW_RECEIVER or NEXT_PUBLIC_TREASURY_ADDRESS not configured - using zero address',
+    {},
+    'ModerationEscrow'
+  );
 }
 
 // Validation schemas
@@ -32,7 +39,7 @@ const CreateEscrowPaymentParamsSchema = z.object({
   amountUSD: z.number().positive(),
   reason: z.string().optional(),
   recipientWalletAddress: z.string().min(1),
-})
+});
 
 const VerifyEscrowPaymentParamsSchema = z.object({
   escrowId: z.string().min(1),
@@ -40,13 +47,13 @@ const VerifyEscrowPaymentParamsSchema = z.object({
   fromAddress: z.string().min(1),
   toAddress: z.string().min(1),
   amount: z.string().min(1),
-})
+});
 
 const RefundEscrowPaymentParamsSchema = z.object({
   escrowId: z.string().min(1),
   refundTxHash: z.string().min(1),
   reason: z.string().optional(),
-})
+});
 
 const ListEscrowPaymentsParamsSchema = z.object({
   recipientId: z.string().optional(),
@@ -54,7 +61,7 @@ const ListEscrowPaymentsParamsSchema = z.object({
   status: z.enum(['pending', 'paid', 'refunded', 'expired']).optional(),
   limit: z.number().min(1).max(100).optional().default(50),
   offset: z.number().min(0).optional().default(0),
-})
+});
 
 /**
  * Handle create escrow payment request (Admin only)
@@ -68,7 +75,7 @@ export async function handleCreateEscrowPayment(
     const adminCheck = await prisma.user.findUnique({
       where: { id: agentId },
       select: { id: true, isAdmin: true, walletAddress: true },
-    })
+    });
 
     if (!adminCheck || !adminCheck.isAdmin) {
       return {
@@ -78,7 +85,7 @@ export async function handleCreateEscrowPayment(
           message: 'Only admins can create escrow payments',
         },
         id: request.id,
-      }
+      };
     }
 
     if (!adminCheck.walletAddress) {
@@ -89,10 +96,10 @@ export async function handleCreateEscrowPayment(
           message: 'Admin must have a connected wallet address',
         },
         id: request.id,
-      }
+      };
     }
 
-    const params = CreateEscrowPaymentParamsSchema.parse(request.params)
+    const params = CreateEscrowPaymentParamsSchema.parse(request.params);
 
     // Prevent self-payment
     if (params.recipientId === agentId) {
@@ -103,14 +110,20 @@ export async function handleCreateEscrowPayment(
           message: 'Cannot create escrow payment to yourself',
         },
         id: request.id,
-      }
+      };
     }
 
     // Verify recipient exists and is not an actor
     const recipientCheck = await prisma.user.findUnique({
       where: { id: params.recipientId },
-      select: { id: true, username: true, displayName: true, isActor: true, walletAddress: true },
-    })
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        isActor: true,
+        walletAddress: true,
+      },
+    });
 
     if (!recipientCheck) {
       return {
@@ -120,7 +133,7 @@ export async function handleCreateEscrowPayment(
           message: 'Recipient user not found',
         },
         id: request.id,
-      }
+      };
     }
 
     if (recipientCheck.isActor) {
@@ -131,19 +144,22 @@ export async function handleCreateEscrowPayment(
           message: 'Cannot send escrow payment to NPCs/actors',
         },
         id: request.id,
-      }
+      };
     }
 
     // Validate recipient wallet address matches user's actual wallet
-    if (recipientCheck.walletAddress && params.recipientWalletAddress.toLowerCase() !== recipientCheck.walletAddress.toLowerCase()) {
+    if (
+      recipientCheck.walletAddress &&
+      params.recipientWalletAddress.toLowerCase() !== recipientCheck.walletAddress.toLowerCase()
+    ) {
       return {
         jsonrpc: '2.0',
         error: {
           code: ErrorCode.INVALID_PARAMS,
-          message: 'Recipient wallet address does not match user\'s registered wallet address',
+          message: "Recipient wallet address does not match user's registered wallet address",
         },
         id: request.id,
-      }
+      };
     }
 
     // Check for duplicate recent escrows BEFORE creating payment request (prevent spam and orphaned requests)
@@ -159,28 +175,29 @@ export async function handleCreateEscrowPayment(
           in: ['pending', 'paid'],
         },
       },
-    })
+    });
 
     if (recentDuplicate) {
       return {
         jsonrpc: '2.0',
         error: {
           code: ErrorCode.INVALID_PARAMS,
-          message: 'A similar escrow payment was created recently. Please wait before creating another.',
+          message:
+            'A similar escrow payment was created recently. Please wait before creating another.',
         },
         id: request.id,
-      }
+      };
     }
 
     // Convert USD to ETH
-    const ethEquivalent = params.amountUSD * 0.001
-    const amountInWei = parseEther(ethEquivalent.toString()).toString()
+    const ethEquivalent = params.amountUSD * 0.001;
+    const amountInWei = parseEther(ethEquivalent.toString()).toString();
 
     // Create X402 payment request
     // Admin sends payment from their wallet to treasury
     const paymentRequest = await x402Manager.createPaymentRequest(
       adminCheck.walletAddress, // Admin sends
-      PAYMENT_RECEIVER,     // To treasury
+      PAYMENT_RECEIVER, // To treasury
       amountInWei,
       'moderation_escrow',
       {
@@ -190,10 +207,10 @@ export async function handleCreateEscrowPayment(
         amountUSD: params.amountUSD,
         reason: params.reason || null,
       }
-    )
+    );
 
     // Create escrow record
-    const expiresAt = new Date(paymentRequest.expiresAt)
+    const expiresAt = new Date(paymentRequest.expiresAt);
     const escrow = await prisma.moderationEscrow.create({
       data: {
         id: await generateSnowflakeId(),
@@ -210,14 +227,14 @@ export async function handleCreateEscrowPayment(
           adminWalletAddress: adminCheck.walletAddress,
         },
       },
-    })
+    });
 
     logger.info('A2A Escrow payment created', {
       agentId,
       escrowId: escrow.id,
       recipientId: params.recipientId,
       amountUSD: params.amountUSD,
-    })
+    });
 
     return {
       jsonrpc: '2.0',
@@ -241,9 +258,9 @@ export async function handleCreateEscrowPayment(
         },
       },
       id: request.id,
-    }
+    };
   } catch (error) {
-    logger.error('A2A Create escrow payment error', { agentId, error })
+    logger.error('A2A Create escrow payment error', { agentId, error });
     return {
       jsonrpc: '2.0',
       error: {
@@ -251,7 +268,7 @@ export async function handleCreateEscrowPayment(
         message: error instanceof Error ? error.message : 'Failed to create escrow payment',
       },
       id: request.id,
-    }
+    };
   }
 }
 
@@ -267,7 +284,7 @@ export async function handleVerifyEscrowPayment(
     const admin = await prisma.user.findUnique({
       where: { id: agentId },
       select: { id: true, isAdmin: true },
-    })
+    });
 
     if (!admin || !admin.isAdmin) {
       return {
@@ -277,15 +294,15 @@ export async function handleVerifyEscrowPayment(
           message: 'Only admins can verify escrow payments',
         },
         id: request.id,
-      }
+      };
     }
 
-    const params = VerifyEscrowPaymentParamsSchema.parse(request.params)
+    const params = VerifyEscrowPaymentParamsSchema.parse(request.params);
 
     // Get escrow record
     const escrow = await prisma.moderationEscrow.findUnique({
       where: { id: params.escrowId },
-    })
+    });
 
     if (!escrow) {
       return {
@@ -295,7 +312,7 @@ export async function handleVerifyEscrowPayment(
           message: 'Escrow payment not found',
         },
         id: request.id,
-      }
+      };
     }
 
     // Check if expired
@@ -304,7 +321,7 @@ export async function handleVerifyEscrowPayment(
       await prisma.moderationEscrow.update({
         where: { id: params.escrowId },
         data: { status: 'expired' },
-      })
+      });
       return {
         jsonrpc: '2.0',
         error: {
@@ -312,7 +329,7 @@ export async function handleVerifyEscrowPayment(
           message: 'Escrow payment has expired',
         },
         id: request.id,
-      }
+      };
     }
 
     if (escrow.status !== 'pending') {
@@ -323,7 +340,7 @@ export async function handleVerifyEscrowPayment(
           message: `Escrow payment is already ${escrow.status}`,
         },
         id: request.id,
-      }
+      };
     }
 
     if (!escrow.paymentRequestId) {
@@ -334,12 +351,16 @@ export async function handleVerifyEscrowPayment(
           message: 'Escrow payment request ID not found',
         },
         id: request.id,
-      }
+      };
     }
 
     // Verify fromAddress matches admin's wallet
-    const expectedFromAddress = (escrow.metadata as { adminWalletAddress?: string })?.adminWalletAddress
-    if (expectedFromAddress && params.fromAddress.toLowerCase() !== expectedFromAddress.toLowerCase()) {
+    const expectedFromAddress = (escrow.metadata as { adminWalletAddress?: string })
+      ?.adminWalletAddress;
+    if (
+      expectedFromAddress &&
+      params.fromAddress.toLowerCase() !== expectedFromAddress.toLowerCase()
+    ) {
       return {
         jsonrpc: '2.0',
         error: {
@@ -347,7 +368,7 @@ export async function handleVerifyEscrowPayment(
           message: 'Transaction sender does not match admin wallet address',
         },
         id: request.id,
-      }
+      };
     }
 
     // Use transaction to prevent race conditions
@@ -355,14 +376,14 @@ export async function handleVerifyEscrowPayment(
       // Re-fetch escrow within transaction
       const currentEscrow = await tx.moderationEscrow.findUnique({
         where: { id: params.escrowId },
-      })
+      });
 
       if (!currentEscrow || currentEscrow.status !== 'pending') {
-        throw new Error(`Escrow is already ${currentEscrow?.status || 'not found'}`)
+        throw new Error(`Escrow is already ${currentEscrow?.status || 'not found'}`);
       }
 
       if (!currentEscrow.paymentRequestId) {
-        throw new Error('Escrow payment request ID not found')
+        throw new Error('Escrow payment request ID not found');
       }
 
       // Verify payment via X402
@@ -374,10 +395,10 @@ export async function handleVerifyEscrowPayment(
         amount: params.amount,
         timestamp: Date.now(),
         confirmed: true,
-      })
+      });
 
       if (!x402Result.verified) {
-        throw new Error(x402Result.error || 'Payment verification failed')
+        throw new Error(x402Result.error || 'Payment verification failed');
       }
 
       // Update escrow status atomically
@@ -387,14 +408,14 @@ export async function handleVerifyEscrowPayment(
           status: 'paid',
           paymentTxHash: params.txHash,
         },
-      })
-    })
+      });
+    });
 
     logger.info('A2A Escrow payment verified', {
       agentId,
       escrowId: params.escrowId,
       txHash: params.txHash,
-    })
+    });
 
     return {
       jsonrpc: '2.0',
@@ -409,9 +430,9 @@ export async function handleVerifyEscrowPayment(
         },
       },
       id: request.id,
-    }
+    };
   } catch (error) {
-    logger.error('A2A Verify escrow payment error', { agentId, error })
+    logger.error('A2A Verify escrow payment error', { agentId, error });
     return {
       jsonrpc: '2.0',
       error: {
@@ -419,7 +440,7 @@ export async function handleVerifyEscrowPayment(
         message: error instanceof Error ? error.message : 'Failed to verify escrow payment',
       },
       id: request.id,
-    }
+    };
   }
 }
 
@@ -435,7 +456,7 @@ export async function handleRefundEscrowPayment(
     const admin = await prisma.user.findUnique({
       where: { id: agentId },
       select: { id: true, isAdmin: true },
-    })
+    });
 
     if (!admin || !admin.isAdmin) {
       return {
@@ -445,15 +466,15 @@ export async function handleRefundEscrowPayment(
           message: 'Only admins can refund escrow payments',
         },
         id: request.id,
-      }
+      };
     }
 
-    const params = RefundEscrowPaymentParamsSchema.parse(request.params)
+    const params = RefundEscrowPaymentParamsSchema.parse(request.params);
 
     // Get escrow record
     const escrow = await prisma.moderationEscrow.findUnique({
       where: { id: params.escrowId },
-    })
+    });
 
     if (!escrow) {
       return {
@@ -463,7 +484,7 @@ export async function handleRefundEscrowPayment(
           message: 'Escrow payment not found',
         },
         id: request.id,
-      }
+      };
     }
 
     if (escrow.status !== 'paid') {
@@ -474,7 +495,7 @@ export async function handleRefundEscrowPayment(
           message: `Cannot refund escrow payment with status: ${escrow.status}. Only 'paid' escrows can be refunded.`,
         },
         id: request.id,
-      }
+      };
     }
 
     if (escrow.refundTxHash) {
@@ -485,11 +506,11 @@ export async function handleRefundEscrowPayment(
           message: 'Escrow payment has already been refunded',
         },
         id: request.id,
-      }
+      };
     }
 
     // Verify refund transaction hash format
-    const refundTxValid = params.refundTxHash.startsWith('0x') && params.refundTxHash.length === 66
+    const refundTxValid = params.refundTxHash.startsWith('0x') && params.refundTxHash.length === 66;
     if (!refundTxValid) {
       return {
         jsonrpc: '2.0',
@@ -498,7 +519,7 @@ export async function handleRefundEscrowPayment(
           message: 'Invalid refund transaction hash format',
         },
         id: request.id,
-      }
+      };
     }
 
     // Use transaction to prevent race conditions
@@ -506,14 +527,16 @@ export async function handleRefundEscrowPayment(
       // Re-fetch to ensure still refundable
       const currentEscrow = await tx.moderationEscrow.findUnique({
         where: { id: params.escrowId },
-      })
+      });
 
       if (!currentEscrow || currentEscrow.status !== 'paid') {
-        throw new Error(`Cannot refund escrow with status: ${currentEscrow?.status || 'not found'}`)
+        throw new Error(
+          `Cannot refund escrow with status: ${currentEscrow?.status || 'not found'}`
+        );
       }
 
       if (currentEscrow.refundTxHash) {
-        throw new Error('Escrow payment has already been refunded')
+        throw new Error('Escrow payment has already been refunded');
       }
 
       // Update escrow status to refunded
@@ -525,18 +548,18 @@ export async function handleRefundEscrowPayment(
           refundedBy: agentId,
           refundedAt: new Date(),
           metadata: {
-            ...(currentEscrow.metadata as Record<string, unknown> || {}),
+            ...((currentEscrow.metadata as Record<string, unknown>) || {}),
             refundReason: params.reason || null,
           },
         },
-      })
-    })
+      });
+    });
 
     logger.info('A2A Escrow payment refunded', {
       agentId,
       escrowId: params.escrowId,
       refundTxHash: params.refundTxHash,
-    })
+    });
 
     return {
       jsonrpc: '2.0',
@@ -552,9 +575,9 @@ export async function handleRefundEscrowPayment(
         },
       } as JsonRpcResult,
       id: request.id,
-    }
+    };
   } catch (error) {
-    logger.error('A2A Refund escrow payment error', { agentId, error })
+    logger.error('A2A Refund escrow payment error', { agentId, error });
     return {
       jsonrpc: '2.0',
       error: {
@@ -562,7 +585,7 @@ export async function handleRefundEscrowPayment(
         message: error instanceof Error ? error.message : 'Failed to refund escrow payment',
       },
       id: request.id,
-    }
+    };
   }
 }
 
@@ -578,7 +601,7 @@ export async function handleListEscrowPayments(
     const admin = await prisma.user.findUnique({
       where: { id: agentId },
       select: { id: true, isAdmin: true },
-    })
+    });
 
     if (!admin || !admin.isAdmin) {
       return {
@@ -588,13 +611,13 @@ export async function handleListEscrowPayments(
           message: 'Only admins can list escrow payments',
         },
         id: request.id,
-      }
+      };
     }
 
-    const params = ListEscrowPaymentsParamsSchema.parse(request.params)
+    const params = ListEscrowPaymentsParamsSchema.parse(request.params);
 
     // Auto-expire old pending escrows before querying
-    const now = new Date()
+    const now = new Date();
     await prisma.moderationEscrow.updateMany({
       where: {
         status: 'pending',
@@ -605,17 +628,17 @@ export async function handleListEscrowPayments(
       data: {
         status: 'expired',
       },
-    })
+    });
 
     const where: {
-      recipientId?: string
-      adminId?: string
-      status?: string
-    } = {}
+      recipientId?: string;
+      adminId?: string;
+      status?: string;
+    } = {};
 
-    if (params.recipientId) where.recipientId = params.recipientId
-    if (params.adminId) where.adminId = params.adminId
-    if (params.status) where.status = params.status
+    if (params.recipientId) where.recipientId = params.recipientId;
+    if (params.adminId) where.adminId = params.adminId;
+    if (params.status) where.status = params.status;
 
     const [escrows, total] = await Promise.all([
       prisma.moderationEscrow.findMany({
@@ -649,7 +672,7 @@ export async function handleListEscrowPayments(
         },
       }),
       prisma.moderationEscrow.count({ where }),
-    ])
+    ]);
 
     return {
       jsonrpc: '2.0',
@@ -681,9 +704,9 @@ export async function handleListEscrowPayments(
         },
       } as JsonRpcResult,
       id: request.id,
-    }
+    };
   } catch (error) {
-    logger.error('A2A List escrow payments error', { agentId, error })
+    logger.error('A2A List escrow payments error', { agentId, error });
     return {
       jsonrpc: '2.0',
       error: {
@@ -691,7 +714,7 @@ export async function handleListEscrowPayments(
         message: error instanceof Error ? error.message : 'Failed to list escrow payments',
       },
       id: request.id,
-    }
+    };
   }
 }
 
@@ -703,10 +726,12 @@ export async function handleAppealBanWithEscrow(
   request: JsonRpcRequest
 ): Promise<JsonRpcResponse> {
   try {
-    const params = z.object({
-      reason: z.string().min(10).max(2000),
-      escrowPaymentTxHash: z.string().min(1), // Escrow payment transaction hash
-    }).parse(request.params)
+    const params = z
+      .object({
+        reason: z.string().min(10).max(2000),
+        escrowPaymentTxHash: z.string().min(1), // Escrow payment transaction hash
+      })
+      .parse(request.params);
 
     // Get user
     const user = await prisma.user.findUnique({
@@ -721,7 +746,7 @@ export async function handleAppealBanWithEscrow(
         bannedReason: true,
         walletAddress: true,
       },
-    })
+    });
 
     if (!user) {
       return {
@@ -731,7 +756,7 @@ export async function handleAppealBanWithEscrow(
           message: 'User not found',
         },
         id: request.id,
-      }
+      };
     }
 
     if (!user.isBanned) {
@@ -742,7 +767,7 @@ export async function handleAppealBanWithEscrow(
           message: 'User is not banned',
         },
         id: request.id,
-      }
+      };
     }
 
     // Find escrow payment by transaction hash
@@ -756,7 +781,7 @@ export async function handleAppealBanWithEscrow(
           },
         },
       },
-    })
+    });
 
     if (!escrow) {
       return {
@@ -766,7 +791,7 @@ export async function handleAppealBanWithEscrow(
           message: 'Escrow payment not found for this transaction hash',
         },
         id: request.id,
-      }
+      };
     }
 
     if (escrow.recipientId !== agentId) {
@@ -777,7 +802,7 @@ export async function handleAppealBanWithEscrow(
           message: 'Escrow payment does not belong to this user',
         },
         id: request.id,
-      }
+      };
     }
 
     if (escrow.status !== 'paid') {
@@ -788,7 +813,7 @@ export async function handleAppealBanWithEscrow(
           message: `Escrow payment is not paid (status: ${escrow.status})`,
         },
         id: request.id,
-      }
+      };
     }
 
     if (escrow.refundTxHash) {
@@ -799,7 +824,7 @@ export async function handleAppealBanWithEscrow(
           message: 'Escrow payment has been refunded and cannot be used for appeal',
         },
         id: request.id,
-      }
+      };
     }
 
     // Check if escrow was already used for an appeal
@@ -807,7 +832,7 @@ export async function handleAppealBanWithEscrow(
       where: {
         appealStakeTxHash: params.escrowPaymentTxHash,
       },
-    })
+    });
 
     if (existingAppealWithEscrow) {
       if (existingAppealWithEscrow.id === agentId) {
@@ -818,7 +843,7 @@ export async function handleAppealBanWithEscrow(
             message: 'You have already used this escrow payment for an appeal',
           },
           id: request.id,
-        }
+        };
       }
       return {
         jsonrpc: '2.0',
@@ -827,7 +852,7 @@ export async function handleAppealBanWithEscrow(
           message: 'This escrow payment has already been used for an appeal by another user',
         },
         id: request.id,
-      }
+      };
     }
 
     // Check if already appealed
@@ -836,10 +861,11 @@ export async function handleAppealBanWithEscrow(
         jsonrpc: '2.0',
         error: {
           code: ErrorCode.INVALID_PARAMS,
-          message: 'You have already used your free appeal. You must stake $10 for a second review.',
+          message:
+            'You have already used your free appeal. You must stake $10 for a second review.',
         },
         id: request.id,
-      }
+      };
     }
 
     if (user.appealStaked && user.appealStatus === 'human_review') {
@@ -850,7 +876,7 @@ export async function handleAppealBanWithEscrow(
           message: 'Your appeal is already in human review. Please wait for a decision.',
         },
         id: request.id,
-      }
+      };
     }
 
     // Update user appeal status (using escrow as stake)
@@ -859,18 +885,18 @@ export async function handleAppealBanWithEscrow(
       data: {
         appealCount: user.appealCount + 1,
         appealStaked: true,
-          appealStakeAmount: parseFloat(escrow.amountUSD.toString() || '0'),
+        appealStakeAmount: parseFloat(escrow.amountUSD.toString() || '0'),
         appealStakeTxHash: params.escrowPaymentTxHash,
         appealStatus: 'lenient_review',
         appealSubmittedAt: new Date(),
       },
-    })
+    });
 
     logger.info('A2A Ban appeal with escrow', {
       agentId,
       escrowId: escrow.id,
       amountUSD: escrow.amountUSD,
-    })
+    });
 
     return {
       jsonrpc: '2.0',
@@ -884,9 +910,9 @@ export async function handleAppealBanWithEscrow(
         },
       },
       id: request.id,
-    }
+    };
   } catch (error) {
-    logger.error('A2A Appeal ban with escrow error', { agentId, error })
+    logger.error('A2A Appeal ban with escrow error', { agentId, error });
     return {
       jsonrpc: '2.0',
       error: {
@@ -894,7 +920,6 @@ export async function handleAppealBanWithEscrow(
         message: error instanceof Error ? error.message : 'Failed to submit appeal',
       },
       id: request.id,
-    }
+    };
   }
 }
-

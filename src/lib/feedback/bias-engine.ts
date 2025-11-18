@@ -9,24 +9,23 @@
 
 import { logger } from '@/lib/logger';
 
-export interface BiasConfig {
-  entityId: string;         // Organization ID or keyword
-  entityName: string;       // Human-readable name
+export type BiasConfig = {
+  entityId: string; // Organization ID or keyword
+  entityName: string; // Human-readable name
   direction: 'up' | 'down'; // Bias direction
-  strength: number;         // 0.0 to 1.0 (multiplier for price impact)
+  strength: number; // 0.0 to 1.0 (multiplier for price impact)
   createdAt: Date;
-  expiresAt: Date | null;   // null = permanent, Date = temporary
-  decayRate: number;        // How fast bias decays (0 = no decay, 1 = fast decay)
-}
+  expiresAt: Date | null; // null = permanent, Date = temporary
+  decayRate: number; // How fast bias decays (0 = no decay, 1 = fast decay)
+};
 
-export interface BiasAdjustment {
-  priceImpact: number;      // Percentage adjustment (-0.5 to 0.5)
-  sentimentShift: number;   // Sentiment modifier (-1.0 to 1.0)
-  confidence: number;       // How confident the bias is (0-1)
-}
+export type BiasAdjustment = {
+  priceImpact: number; // Percentage adjustment (-0.5 to 0.5)
+  sentimentShift: number; // Sentiment modifier (-1.0 to 1.0)
+  confidence: number; // How confident the bias is (0-1)
+};
 
 export class BiasEngine {
-  private static instance: BiasEngine | null = null;
   private biases: Map<string, BiasConfig> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
 
@@ -57,8 +56,8 @@ export class BiasEngine {
     direction: 'up' | 'down',
     strength: number = 0.5,
     options?: {
-      durationHours?: number;  // null = permanent
-      decayRate?: number;      // 0-1, default 0.1
+      durationHours?: number; // null = permanent
+      decayRate?: number; // 0-1, default 0.1
     }
   ): void {
     // Normalize strength to 0-1
@@ -282,45 +281,10 @@ export class BiasEngine {
     }>
   ): void {
     for (const bias of biases) {
-      this.setBias(
-        bias.entityId,
-        bias.entityName,
-        bias.direction,
-        bias.strength,
-        {
-          durationHours: bias.durationHours,
-          decayRate: bias.decayRate,
-        }
-      );
-    }
-  }
-
-  /**
-   * Start periodic cleanup of expired biases
-   */
-  private startCleanupInterval(): void {
-    // Clean up every 10 minutes
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupExpiredBiases();
-    }, 10 * 60 * 1000);
-  }
-
-  /**
-   * Clean up expired biases
-   */
-  private cleanupExpiredBiases(): void {
-    const now = new Date();
-    let removedCount = 0;
-
-    for (const [entityId, bias] of this.biases) {
-      if (bias.expiresAt && now > bias.expiresAt) {
-        this.biases.delete(entityId);
-        removedCount++;
-      }
-    }
-
-    if (removedCount > 0) {
-      logger.debug(`Cleaned up ${removedCount} expired biases`, undefined, 'BiasEngine');
+      this.setBias(bias.entityId, bias.entityName, bias.direction, bias.strength, {
+        durationHours: bias.durationHours,
+        decayRate: bias.decayRate,
+      });
     }
   }
 

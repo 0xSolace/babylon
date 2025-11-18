@@ -1,15 +1,15 @@
 /**
  * User Groups API
- * 
+ *
  * @route GET /api/user-groups - Get user groups
  * @route POST /api/user-groups - Create user group
  * @access Authenticated
- * 
+ *
  * @description
  * Manages user-created groups. GET returns all groups the user is a member or admin of.
  * POST creates a new group with optional initial members. Users can only add other users
  * (not NPCs) to groups.
- * 
+ *
  * @openapi
  * /api/user-groups:
  *   get:
@@ -85,14 +85,14 @@
  *         description: Invalid input
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * // Get groups
  * const { groups } = await fetch('/api/user-groups', {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * }).then(r => r.json());
- * 
+ *
  * // Create group
  * await fetch('/api/user-groups', {
  *   method: 'POST',
@@ -106,12 +106,12 @@
  * ```
  */
 
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { authenticate } from '@/lib/api/auth-middleware';
-import { generateSnowflakeId } from '@/lib/snowflake';
 import { withErrorHandling } from '@/lib/errors/error-handler';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 const createGroupSchema = z.object({
@@ -158,19 +158,19 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Format response
-  const groups = memberGroups.map(group => ({
+  const groups = memberGroups.map((group) => ({
     id: group.id,
     name: group.name,
     description: group.description,
     createdById: group.createdById,
     createdAt: group.createdAt,
     memberCount: group.UserGroupMember.length,
-    isAdmin: group.UserGroupAdmin.some(admin => admin.userId === user.userId),
+    isAdmin: group.UserGroupAdmin.some((admin) => admin.userId === user.userId),
   }));
 
-  return NextResponse.json({ 
+  return NextResponse.json({
     success: true,
-    data: groups 
+    data: groups,
   });
 });
 
@@ -213,7 +213,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const groupId = await generateSnowflakeId();
   const memberIdVal = await generateSnowflakeId();
   const adminIdVal = await generateSnowflakeId();
-  
+
   const group = await prisma.userGroup.create({
     data: {
       id: groupId,
@@ -245,7 +245,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Add initial members if provided
   if (validatedData.memberIds.length > 0) {
-    const filteredIds = validatedData.memberIds.filter(id => id !== user.userId);
+    const filteredIds = validatedData.memberIds.filter((id) => id !== user.userId);
     const memberData = await Promise.all(
       filteredIds.map(async (memberId) => ({
         id: await generateSnowflakeId(),
@@ -263,12 +263,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Create a Chat for this group
   const chatId = await generateSnowflakeId();
   const creatorChatParticipantId = await generateSnowflakeId();
-  const otherChatParticipantIds = await Promise.all(
+  const otherChatParticipants = await Promise.all(
     validatedData.memberIds
-      .filter(id => id !== user.userId)
-      .map(async () => await generateSnowflakeId())
+      .filter((id) => id !== user.userId)
+      .map(async (memberId) => ({
+        id: await generateSnowflakeId(),
+        userId: memberId,
+      }))
   );
-  
+
   await prisma.chat.create({
     data: {
       id: chatId,
@@ -281,26 +284,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
             id: creatorChatParticipantId,
             userId: user.userId,
           },
-          ...validatedData.memberIds
-            .filter(id => id !== user.userId)
-            .map((memberId, idx) => ({
-              id: otherChatParticipantIds[idx]!,
-              userId: memberId,
-            })),
+          ...otherChatParticipants,
         ],
       },
     },
   });
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      id: group.id,
-      name: group.name,
-      description: group.description,
-      chatId,
-      createdAt: group.createdAt,
+  return NextResponse.json(
+    {
+      success: true,
+      data: {
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        chatId,
+        createdAt: group.createdAt,
+      },
     },
-  }, { status: 201 });
+    { status: 201 }
+  );
 });
-

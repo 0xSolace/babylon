@@ -1,24 +1,27 @@
 /**
  * Generate Standard Benchmark Suite
- * 
+ *
  * Creates a suite of standardized benchmarks for model evaluation.
  * These benchmarks are used as the baseline for all model comparisons.
- * 
+ *
  * Usage:
  *   npx ts-node scripts/generate-standard-benchmarks.ts
  *   npx ts-node scripts/generate-standard-benchmarks.ts --force
  */
 
-import { BenchmarkDataGenerator, type BenchmarkConfig } from '@/lib/benchmark/BenchmarkDataGenerator';
-import { promises as fs } from 'fs';
-import * as path from 'path';
+import {
+  type BenchmarkConfig,
+  BenchmarkDataGenerator,
+} from '@/lib/benchmark/BenchmarkDataGenerator';
 import { logger } from '@/lib/logger';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 
-interface StandardBenchmark {
+type StandardBenchmark = {
   name: string;
   description: string;
   config: BenchmarkConfig;
-}
+};
 
 const STANDARD_BENCHMARKS: StandardBenchmark[] = [
   {
@@ -68,8 +71,16 @@ async function generateStandardBenchmark(
   const filepath = path.join(outputDir, filename);
 
   // Check if already exists
-  if (!force && await fs.access(filepath).then(() => true).catch(() => false)) {
-    logger.info(`Benchmark ${benchmark.name} already exists, skipping`, { filepath });
+  if (
+    !force &&
+    (await fs
+      .access(filepath)
+      .then(() => true)
+      .catch(() => false))
+  ) {
+    logger.info(`Benchmark ${benchmark.name} already exists, skipping`, {
+      filepath,
+    });
     console.log(`  ⏭️  ${benchmark.name}: Already exists`);
     return filepath;
   }
@@ -85,7 +96,9 @@ async function generateStandardBenchmark(
   console.log(`   ✅ Generated: ${filepath}`);
   console.log(`      Duration: ${benchmark.config.durationMinutes} minutes`);
   console.log(`      Ticks: ${snapshot.ticks.length}`);
-  console.log(`      Markets: ${snapshot.initialState.predictionMarkets.length} prediction + ${snapshot.initialState.perpetualMarkets.length} perpetual`);
+  console.log(
+    `      Markets: ${snapshot.initialState.predictionMarkets.length} prediction + ${snapshot.initialState.perpetualMarkets.length} perpetual`
+  );
 
   return filepath;
 }
@@ -115,18 +128,19 @@ async function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   console.log('Generated benchmarks:');
-  generatedPaths.forEach(p => console.log(`  - ${path.basename(p)}`));
+  for (const filePath of generatedPaths) {
+    console.log(`  - ${path.basename(filePath)}`);
+  }
 
   console.log('\nUse these benchmarks with:');
   console.log('  bun run hf:benchmark --model=MODEL_ID');
-  console.log('  npx ts-node scripts/run-baseline-benchmarks.ts --benchmark=benchmarks/standard/standard-quick-eval.json');
+  console.log(
+    '  npx ts-node scripts/run-baseline-benchmarks.ts --benchmark=benchmarks/standard/standard-quick-eval.json'
+  );
   console.log('\n');
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error('Error:', error);
   process.exit(1);
 });
-
-
-

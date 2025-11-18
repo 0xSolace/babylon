@@ -13,40 +13,14 @@
   "plugin": ["typedoc-plugin-markdown"],
   "readme": "none",
   "skipErrorChecking": true,
-  "exclude": [
-    "**/node_modules/**",
-    "**/*.test.ts",
-    "**/*.spec.ts",
-    "**/dist/**",
-    "**/build/**"
-  ],
+  "exclude": ["**/node_modules/**", "**/*.test.ts", "**/*.spec.ts", "**/dist/**", "**/build/**"],
   "excludePrivate": true,
   "excludeProtected": false,
   "excludeInternal": true,
   "includeVersion": true,
   "categorizeByGroup": true,
-  "categoryOrder": [
-    "A2A Protocol",
-    "Agents",
-    "Game Engine",
-    "API",
-    "Utilities",
-    "*"
-  ],
-  "groupOrder": [
-    "Classes",
-    "Functions",
-    "Interfaces",
-    "Type Aliases",
-    "*"
-  ],
+  "categoryOrder": ["A2A Protocol", "Agents", "Game Engine", "API", "Utilities", "*"],
+  "groupOrder": ["Classes", "Functions", "Interfaces", "Type Aliases", "*"],
   "sort": ["source-order"],
-  "kindSortOrder": [
-    "Class",
-    "Interface",
-    "TypeAlias",
-    "Function",
-    "Variable"
-  ]
+  "kindSortOrder": ["Class", "Interface", "TypeAlias", "Function", "Variable"]
 }
-

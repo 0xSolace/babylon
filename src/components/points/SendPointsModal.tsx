@@ -1,18 +1,18 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { X, Send, Loader2, Check } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useAuth } from '@/hooks/useAuth'
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
+import { Check, Loader2, Send, X } from 'lucide-react';
+import { useState } from 'react';
 
-interface SendPointsModalProps {
-  isOpen: boolean
-  onClose: () => void
-  recipientId: string
-  recipientName: string
-  recipientUsername?: string | null
-  onSuccess?: () => void
-}
+type SendPointsModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  recipientId: string;
+  recipientName: string;
+  recipientUsername?: string | null;
+  onSuccess?: () => void;
+};
 
 export function SendPointsModal({
   isOpen,
@@ -20,29 +20,29 @@ export function SendPointsModal({
   recipientId,
   recipientName,
   recipientUsername,
-  onSuccess
+  onSuccess,
 }: SendPointsModalProps) {
-  const { getAccessToken } = useAuth()
-  const [amount, setAmount] = useState('')
-  const [message, setMessage] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const { getAccessToken } = useAuth();
+  const [amount, setAmount] = useState('');
+  const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    
-    const numAmount = parseInt(amount)
-    if (isNaN(numAmount) || numAmount <= 0) {
-      setError('Please enter a valid amount')
-      return
+    e.preventDefault();
+    setError(null);
+
+    const numAmount = parseInt(amount, 10);
+    if (Number.isNaN(numAmount) || numAmount <= 0) {
+      setError('Please enter a valid amount');
+      return;
     }
 
-    setIsSubmitting(true)
-    
+    setIsSubmitting(true);
+
     try {
-      const token = await getAccessToken()
+      const token = await getAccessToken();
       const response = await fetch('/api/points/transfer', {
         method: 'POST',
         headers: {
@@ -54,63 +54,66 @@ export function SendPointsModal({
           amount: numAmount,
           message: message.trim() || undefined,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send points')
+        throw new Error(data.error || 'Failed to send points');
       }
 
-      setSuccess(true)
-      
+      setSuccess(true);
+
       // Wait a moment to show success state
       setTimeout(() => {
-        onSuccess?.()
-        handleClose()
-      }, 1500)
+        onSuccess?.();
+        handleClose();
+      }, 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send points')
+      setError(err instanceof Error ? err.message : 'Failed to send points');
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const handleClose = () => {
-    if (isSubmitting) return
-    setAmount('')
-    setMessage('')
-    setError(null)
-    setSuccess(false)
-    onClose()
-  }
+    if (isSubmitting) return;
+    setAmount('');
+    setMessage('');
+    setError(null);
+    setSuccess(false);
+    onClose();
+  };
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+      <button
+        type="button"
         onClick={handleClose}
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm focus:outline-none"
+        aria-label="Close send points modal"
       />
 
       {/* Modal */}
-      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-md border border-border">
+      <div className="relative w-full max-w-md rounded-2xl border border-border bg-background shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border">
+        <div className="flex items-center justify-between border-border border-b p-6">
           <div>
-            <h2 className="text-xl font-bold text-foreground">Send Points</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h2 className="font-bold text-foreground text-xl">Send Points</h2>
+            <p className="mt-1 text-muted-foreground text-sm">
               to {recipientUsername ? `@${recipientUsername}` : recipientName}
             </p>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             disabled={isSubmitting}
-            className="rounded-full p-2 hover:bg-muted/50 transition-colors disabled:opacity-50"
+            className="rounded-full p-2 transition-colors hover:bg-muted/50 disabled:opacity-50"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
@@ -118,11 +121,11 @@ export function SendPointsModal({
         <form onSubmit={handleSubmit} className="p-6">
           {success ? (
             <div className="flex flex-col items-center justify-center py-8">
-              <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center mb-4">
-                <Check className="w-8 h-8 text-green-600" />
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/20">
+                <Check className="h-8 w-8 text-green-600" />
               </div>
-              <p className="text-lg font-semibold text-foreground">Points Sent!</p>
-              <p className="text-sm text-muted-foreground mt-2">
+              <p className="font-semibold text-foreground text-lg">Points Sent!</p>
+              <p className="mt-2 text-muted-foreground text-sm">
                 {amount} points sent to {recipientName}
               </p>
             </div>
@@ -130,10 +133,14 @@ export function SendPointsModal({
             <>
               {/* Amount Input */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label
+                  htmlFor="send-points-amount"
+                  className="mb-2 block font-medium text-foreground text-sm"
+                >
                   Amount (points)
                 </label>
                 <input
+                  id="send-points-amount"
                   type="number"
                   min="1"
                   step="1"
@@ -141,24 +148,23 @@ export function SendPointsModal({
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="Enter amount..."
                   disabled={isSubmitting}
-                  className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                  className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                   required
-                  autoFocus
                 />
               </div>
 
               {/* Quick Amount Buttons */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
+              <div className="mb-4 grid grid-cols-3 gap-2">
                 {[10, 100, 1000].map((amt) => (
                   <button
                     key={amt}
                     type="button"
                     onClick={() => setAmount(amt.toString())}
                     className={cn(
-                      'px-4 py-2 rounded-lg border transition-colors',
+                      'rounded-lg border px-4 py-2 transition-colors',
                       amount === amt.toString()
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background border-border hover:border-primary hover:bg-muted/50'
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-background hover:border-primary hover:bg-muted/50'
                     )}
                     disabled={isSubmitting}
                   >
@@ -169,27 +175,31 @@ export function SendPointsModal({
 
               {/* Optional Message */}
               <div className="mb-6">
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label
+                  htmlFor="send-points-message"
+                  className="mb-2 block font-medium text-foreground text-sm"
+                >
                   Message (optional)
                 </label>
                 <textarea
+                  id="send-points-message"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Add a message..."
                   disabled={isSubmitting}
                   rows={3}
                   maxLength={200}
-                  className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 resize-none"
+                  className="w-full resize-none rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                 />
-                <div className="text-xs text-muted-foreground mt-1 text-right">
+                <div className="mt-1 text-right text-muted-foreground text-xs">
                   {message.length}/200
                 </div>
               </div>
 
               {/* Error Message */}
               {error && (
-                <div className="mb-4 p-3 rounded-lg bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-800">
-                  <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
+                <div className="mb-4 rounded-lg border border-red-300 bg-red-100 p-3 dark:border-red-800 dark:bg-red-900/20">
+                  <p className="text-red-800 text-sm dark:text-red-400">{error}</p>
                 </div>
               )}
 
@@ -199,27 +209,27 @@ export function SendPointsModal({
                   type="button"
                   onClick={handleClose}
                   disabled={isSubmitting}
-                  className="flex-1 px-4 py-3 rounded-lg font-semibold border border-border hover:bg-muted/50 transition-colors disabled:opacity-50"
+                  className="flex-1 rounded-lg border border-border px-4 py-3 font-semibold transition-colors hover:bg-muted/50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || !amount || parseInt(amount) <= 0}
+                  disabled={isSubmitting || !amount || parseInt(amount, 10) <= 0}
                   className={cn(
-                    "flex-1 px-4 py-3 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-                    "bg-primary text-primary-foreground hover:bg-primary/90",
-                    "flex items-center justify-center gap-2"
+                    'flex-1 rounded-lg px-4 py-3 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50',
+                    'bg-primary text-primary-foreground hover:bg-primary/90',
+                    'flex items-center justify-center gap-2'
                   )}
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       Sending...
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4" />
+                      <Send className="h-4 w-4" />
                       Send Points
                     </>
                   )}
@@ -230,7 +240,5 @@ export function SendPointsModal({
         </form>
       </div>
     </div>
-  )
+  );
 }
-
-

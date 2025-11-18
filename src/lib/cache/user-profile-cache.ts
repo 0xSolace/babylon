@@ -1,15 +1,15 @@
 /**
  * User Profile Caching
- * 
+ *
  * Implements aggressive caching for user profiles to reduce database load
  * during high concurrent user scenarios.
  */
 
-import { getCache, setCache, invalidateCache, CACHE_KEYS, DEFAULT_TTLS } from '../cache-service';
-import { prisma } from '../prisma';
+import { CACHE_KEYS, DEFAULT_TTLS, getCache, invalidateCache, setCache } from '../cache-service';
 import { logger } from '../logger';
+import { prisma } from '../prisma';
 
-interface CachedUserProfile {
+type CachedUserProfile = {
   id: string;
   username: string | null;
   displayName: string | null;
@@ -26,7 +26,7 @@ interface CachedUserProfile {
   followersCount?: number;
   followingCount?: number;
   postsCount?: number;
-}
+};
 
 /**
  * Get user profile with caching
@@ -111,7 +111,9 @@ export async function getCachedUserProfile(userId: string): Promise<CachedUserPr
 /**
  * Get multiple user profiles with caching
  */
-export async function getCachedUserProfiles(userIds: string[]): Promise<Map<string, CachedUserProfile>> {
+export async function getCachedUserProfiles(
+  userIds: string[]
+): Promise<Map<string, CachedUserProfile>> {
   const profiles = new Map<string, CachedUserProfile>();
   const uncachedIds: string[] = [];
 
@@ -156,7 +158,7 @@ export async function getCachedUserProfiles(userIds: string[]): Promise<Map<stri
 
     // Get post counts in batch
     const postCounts = await Promise.all(
-      users.map(user =>
+      users.map((user) =>
         prisma.post.count({
           where: { authorId: user.id, deletedAt: null },
         })
@@ -195,11 +197,15 @@ export async function getCachedUserProfiles(userIds: string[]): Promise<Map<stri
     );
   }
 
-  logger.info('User profiles fetched', {
-    requested: userIds.length,
-    cached: userIds.length - uncachedIds.length,
-    fetched: uncachedIds.length,
-  }, 'UserProfileCache');
+  logger.info(
+    'User profiles fetched',
+    {
+      requested: userIds.length,
+      cached: userIds.length - uncachedIds.length,
+      fetched: uncachedIds.length,
+    },
+    'UserProfileCache'
+  );
 
   return profiles;
 }
@@ -220,4 +226,3 @@ export async function warmUserProfileCache(userIds: string[]): Promise<void> {
   logger.info('Warming user profile cache', { count: userIds.length }, 'UserProfileCache');
   await getCachedUserProfiles(userIds);
 }
-

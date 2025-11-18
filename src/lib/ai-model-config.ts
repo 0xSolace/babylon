@@ -3,13 +3,13 @@
  * Loads system-wide AI model settings from database
  */
 
-import { prisma } from './prisma';
 import { logger } from './logger';
+import { prisma } from './prisma';
 
-interface AIModelConfig {
+type AIModelConfig = {
   wandbModel: string | null;
   wandbEnabled: boolean;
-}
+};
 
 let cachedConfig: AIModelConfig | null = null;
 let lastFetch: number = 0;
@@ -21,9 +21,9 @@ const CACHE_TTL_MS = 60000; // 1 minute cache
  */
 export async function getAIModelConfig(): Promise<AIModelConfig> {
   const now = Date.now();
-  
+
   // Return cached config if still valid
-  if (cachedConfig && (now - lastFetch) < CACHE_TTL_MS) {
+  if (cachedConfig && now - lastFetch < CACHE_TTL_MS) {
     return cachedConfig;
   }
 
@@ -48,7 +48,7 @@ export async function getAIModelConfig(): Promise<AIModelConfig> {
     return cachedConfig;
   } catch (error) {
     logger.error('Failed to load AI model config', { error }, 'AIModelConfig');
-    
+
     // Return safe defaults on error
     return {
       wandbModel: null,
@@ -71,12 +71,11 @@ export function clearAIModelConfigCache(): void {
  */
 export async function getWandbModel(): Promise<string | undefined> {
   const config = await getAIModelConfig();
-  
+
   if (config.wandbEnabled && config.wandbModel) {
     return config.wandbModel;
   }
-  
+
   // Fallback to environment variable
   return process.env.WANDB_MODEL || undefined;
 }
-

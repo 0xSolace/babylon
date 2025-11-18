@@ -259,7 +259,7 @@ npx tsc --noEmit
 
 ### Lint
 ```bash
-npx eslint src/ tests/
+bunx biome check src tests
 ```
 
 ## Example Decision Flow
@@ -408,4 +408,3 @@ See root LICENSE file.
 **Tests:** 117/117 passing  
 **LARP Level:** 0%  
 **Status:** ✅ Production Ready
-

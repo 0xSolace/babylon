@@ -1,13 +1,19 @@
 /**
  * Example: How to use world context with feed prompts
- * 
+ *
  * This shows how to integrate the auto-populated actor names
  * and world context into your feed generation.
  */
 
-import { generateWorldContext, getParodyActorNames, getForbiddenRealNames } from '@/prompts';
+import {
+  ambientPosts,
+  generateWorldContext,
+  getForbiddenRealNames,
+  getParodyActorNames,
+  newsPosts,
+  reactions,
+} from '@/prompts';
 import { renderPrompt } from '@/prompts/loader';
-import { ambientPosts, reactions, newsPosts } from '@/prompts';
 
 /**
  * Example 1: Generate ambient posts with world context
@@ -119,4 +125,3 @@ export async function generateNewsPostsWithContext() {
 
   return prompt;
 }
-

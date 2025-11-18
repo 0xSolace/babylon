@@ -1,39 +1,44 @@
 /**
  * Benchmark Data Viewer
- * 
+ *
  * Provides utilities to view and inspect benchmark data.
  * Useful for debugging, validation, and understanding benchmark structure.
  */
 
-import { promises as fs } from 'fs';
-import type { BenchmarkGameSnapshot, GameState, GroundTruth, Tick } from './BenchmarkDataGenerator';
+import { promises as fs } from 'node:fs';
+import type {
+  BenchmarkGameSnapshot,
+  GameState,
+  GroundTruth,
+  Tick,
+} from './BenchmarkDataGenerator';
 import { BenchmarkValidator } from './BenchmarkValidator';
 
-export interface BenchmarkViewOptions {
+export type BenchmarkViewOptions = {
   /** Show detailed information */
   verbose?: boolean;
-  
+
   /** Show only summary */
   summary?: boolean;
-  
+
   /** Show ground truth data */
   showGroundTruth?: boolean;
-  
+
   /** Show hidden facts/events */
   showHidden?: boolean;
-  
+
   /** Filter by tick range */
   tickRange?: { start: number; end: number };
-}
+};
 
-export interface BenchmarkView {
+export type BenchmarkView = {
   /** Basic info */
   id: string;
   version: string;
   createdAt: number;
   duration: number;
   tickInterval: number;
-  
+
   /** State summary */
   initialState: {
     predictionMarkets: number;
@@ -42,14 +47,14 @@ export interface BenchmarkView {
     posts: number;
     groupChats: number;
   };
-  
+
   /** Ticks summary */
   ticks: {
     total: number;
     withEvents: number;
     eventTypes: Record<string, number>;
   };
-  
+
   /** Ground truth summary */
   groundTruth?: {
     marketOutcomes: number;
@@ -60,29 +65,26 @@ export interface BenchmarkView {
     hiddenEvents: number;
     trueFacts: string[];
   };
-  
+
   /** Validation results */
   validation: {
     valid: boolean;
     errors: string[];
     warnings: string[];
   };
-}
+};
 
 export class BenchmarkDataViewer {
   /**
    * Load and view a benchmark file
    */
-  static async view(
-    filePath: string,
-    options: BenchmarkViewOptions = {}
-  ): Promise<BenchmarkView> {
+  static async view(filePath: string, options: BenchmarkViewOptions = {}): Promise<BenchmarkView> {
     const data = await fs.readFile(filePath, 'utf-8');
     const snapshot = JSON.parse(data) as BenchmarkGameSnapshot;
-    
+
     // Validate
     const validation = BenchmarkValidator.validate(snapshot);
-    
+
     // Build view
     const view: BenchmarkView = {
       id: snapshot.id,
@@ -90,7 +92,7 @@ export class BenchmarkDataViewer {
       createdAt: snapshot.createdAt,
       duration: snapshot.duration,
       tickInterval: snapshot.tickInterval,
-      
+
       initialState: {
         predictionMarkets: snapshot.initialState.predictionMarkets.length,
         perpetualMarkets: snapshot.initialState.perpetualMarkets.length,
@@ -98,43 +100,42 @@ export class BenchmarkDataViewer {
         posts: snapshot.initialState.posts?.length || 0,
         groupChats: snapshot.initialState.groupChats?.length || 0,
       },
-      
-      ticks: this.analyzeTicks(snapshot.ticks),
-      
+
+      ticks: BenchmarkDataViewer.analyzeTicks(snapshot.ticks),
+
       validation,
     };
-    
+
     if (options.showGroundTruth || options.verbose) {
-      view.groundTruth = this.analyzeGroundTruth(snapshot.groundTruth);
+      view.groundTruth = BenchmarkDataViewer.analyzeGroundTruth(snapshot.groundTruth);
     }
-    
+
     return view;
   }
-  
+
   /**
    * Analyze ticks
    */
   private static analyzeTicks(ticks: Tick[]): BenchmarkView['ticks'] {
     const eventTypes: Record<string, number> = {};
     let withEvents = 0;
-    
+
     for (const tick of ticks) {
       if (tick.events.length > 0) {
         withEvents++;
       }
-      
       for (const event of tick.events) {
         eventTypes[event.type] = (eventTypes[event.type] || 0) + 1;
       }
     }
-    
+
     return {
       total: ticks.length,
       withEvents,
       eventTypes,
     };
   }
-  
+
   /**
    * Analyze ground truth
    */
@@ -154,7 +155,7 @@ export class BenchmarkDataViewer {
       trueFacts: Object.keys(groundTruth.trueFacts || {}),
     };
   }
-  
+
   /**
    * Print view to console
    */
@@ -165,14 +166,14 @@ export class BenchmarkDataViewer {
     console.log(`Created: ${new Date(view.createdAt).toISOString()}`);
     console.log(`Duration: ${(view.duration / 60).toFixed(1)} minutes`);
     console.log(`Tick Interval: ${view.tickInterval}s`);
-    
+
     console.log('\n📈 Initial State:');
     console.log(`  Prediction Markets: ${view.initialState.predictionMarkets}`);
     console.log(`  Perpetual Markets: ${view.initialState.perpetualMarkets}`);
     console.log(`  Agents: ${view.initialState.agents}`);
     console.log(`  Posts: ${view.initialState.posts}`);
     console.log(`  Group Chats: ${view.initialState.groupChats}`);
-    
+
     console.log('\n⏱️  Ticks:');
     console.log(`  Total: ${view.ticks.total}`);
     console.log(`  With Events: ${view.ticks.withEvents}`);
@@ -182,7 +183,7 @@ export class BenchmarkDataViewer {
         console.log(`    ${type}: ${count}`);
       }
     }
-    
+
     if (view.groundTruth) {
       console.log('\n🎯 Ground Truth:');
       console.log(`  Market Outcomes: ${view.groundTruth.marketOutcomes}`);
@@ -198,7 +199,7 @@ export class BenchmarkDataViewer {
         console.log(`  True Facts: ${view.groundTruth.trueFacts.join(', ')}`);
       }
     }
-    
+
     console.log('\n✅ Validation:');
     console.log(`  Valid: ${view.validation.valid ? '✅' : '❌'}`);
     if (view.validation.errors.length > 0) {
@@ -217,34 +218,37 @@ export class BenchmarkDataViewer {
         }
       }
     }
-    
+
     console.log('');
   }
-  
+
   /**
    * Get tick details
    */
-  static getTickDetails(snapshot: BenchmarkGameSnapshot, tickNumber: number): {
+  static getTickDetails(
+    snapshot: BenchmarkGameSnapshot,
+    tickNumber: number
+  ): {
     tick: Tick | null;
     state: GameState | null;
     events: Array<{ type: string; data: Record<string, unknown> }>;
   } {
     const tick = snapshot.ticks[tickNumber] || null;
-    
+
     if (!tick) {
       return { tick: null, state: null, events: [] };
     }
-    
+
     return {
       tick,
       state: tick.state,
-      events: tick.events.map(e => ({
+      events: tick.events.map((e) => ({
         type: e.type,
         data: e.data,
       })),
     };
   }
-  
+
   /**
    * Get ground truth for a specific tick
    */
@@ -257,18 +261,18 @@ export class BenchmarkDataViewer {
     marketOutcomes: Record<string, boolean>;
   } {
     const gt = snapshot.groundTruth;
-    
+
     return {
       hiddenFacts: (gt.hiddenFacts || [])
-        .filter(f => f.tick === tickNumber)
-        .map(f => ({ fact: f.fact, category: f.category })),
+        .filter((f) => f.tick === tickNumber)
+        .map((f) => ({ fact: f.fact, category: f.category })),
       hiddenEvents: (gt.hiddenEvents || [])
-        .filter(e => e.tick === tickNumber)
-        .map(e => ({ type: e.type, description: e.description })),
+        .filter((e) => e.tick === tickNumber)
+        .map((e) => ({ type: e.type, description: e.description })),
       marketOutcomes: gt.marketOutcomes,
     };
   }
-  
+
   /**
    * Check if agent can access hidden facts (should always be false)
    */
@@ -279,30 +283,31 @@ export class BenchmarkDataViewer {
     // Agents can only access game state via SimulationA2AInterface
     // Ground truth is stored separately and not exposed
     // This is a verification check
-    
+
     const state = snapshot.initialState;
     const hasGroundTruth = !!snapshot.groundTruth;
-    const hasHiddenFacts = !!(snapshot.groundTruth?.hiddenFacts?.length);
-    
+    const hasHiddenFacts = !!snapshot.groundTruth?.hiddenFacts?.length;
+
     // Check if ground truth is accidentally in state
     const stateKeys = Object.keys(state);
-    const hasGroundTruthInState = stateKeys.includes('groundTruth') || 
-                                  stateKeys.includes('hiddenFacts') ||
-                                  stateKeys.includes('hiddenEvents');
-    
+    const hasGroundTruthInState =
+      stateKeys.includes('groundTruth') ||
+      stateKeys.includes('hiddenFacts') ||
+      stateKeys.includes('hiddenEvents');
+
     if (hasGroundTruthInState) {
       return {
         canAccess: true,
         reason: 'Ground truth found in game state (security issue!)',
       };
     }
-    
+
     return {
       canAccess: false,
-      reason: hasGroundTruth && hasHiddenFacts
-        ? 'Ground truth exists but is properly isolated from game state'
-        : 'No ground truth data found',
+      reason:
+        hasGroundTruth && hasHiddenFacts
+          ? 'Ground truth exists but is properly isolated from game state'
+          : 'No ground truth data found',
     };
   }
 }
-

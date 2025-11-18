@@ -1,24 +1,24 @@
-import { Prisma } from '@prisma/client'
-import { createWalletClient, createPublicClient, http, decodeEventLog, type Address } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
-import { baseSepolia } from 'viem/chains'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { generateSnowflakeId } from '@/lib/snowflake'
-import { BusinessLogicError, ValidationError, InternalServerError } from '@/lib/errors'
-import { PointsService } from '@/lib/services/points-service'
-import { notifyNewAccount } from '@/lib/services/notification-service'
-import { getAgent0Client } from '@/agents/agent0/Agent0Client'
-import type { AgentCapabilities } from '@/types/a2a'
-import type { AuthenticatedUser } from '@/lib/api/auth-middleware'
-import { extractErrorMessage } from '@/lib/api/auth-middleware'
-import { syncAfterAgent0Registration } from '@/lib/reputation/agent0-reputation-sync'
-import type { JsonValue } from '@/types/common'
+import type { AuthenticatedUser } from '@/lib/api/auth-middleware';
+import { extractErrorMessage } from '@/lib/api/auth-middleware';
+import { BusinessLogicError, InternalServerError, ValidationError } from '@/lib/errors';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { syncAfterAgent0Registration } from '@/lib/reputation/agent0-reputation-sync';
+import { notifyNewAccount } from '@/lib/services/notification-service';
+import { PointsService } from '@/lib/services/points-service';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import { getAgent0Client } from '@/agents/agent0/Agent0Client';
+import type { AgentCapabilities } from '@/types/a2a';
+import type { JsonValue } from '@/types/common';
+import { Prisma } from '@prisma/client';
+import { type Address, createPublicClient, createWalletClient, decodeEventLog, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
 
 // Use Base Sepolia for contract deployments (chain ID: 84532)
-export const IDENTITY_REGISTRY = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY_BASE_SEPOLIA as Address
-export const REPUTATION_SYSTEM = process.env.NEXT_PUBLIC_REPUTATION_SYSTEM_BASE_SEPOLIA as Address
-export const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`
+export const IDENTITY_REGISTRY = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY_BASE_SEPOLIA as Address;
+export const REPUTATION_SYSTEM = process.env.NEXT_PUBLIC_REPUTATION_SYSTEM_BASE_SEPOLIA as Address;
+export const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`;
 
 const IDENTITY_REGISTRY_ABI = [
   {
@@ -87,31 +87,31 @@ const IDENTITY_REGISTRY_ABI = [
     ],
     stateMutability: 'view',
   },
-] as const
+] as const;
 
-import { REPUTATION_SYSTEM_ABI } from '../web3/abis'
+import { REPUTATION_SYSTEM_ABI } from '../web3/abis';
 
-export interface OnchainRegistrationInput {
-  user: AuthenticatedUser
-  walletAddress?: string | null
-  username?: string | null
-  displayName?: string | null
-  bio?: string | null
-  profileImageUrl?: string | null
-  coverImageUrl?: string | null
-  endpoint?: string | null
-  referralCode?: string | null
-  txHash?: string | null
-}
+export type OnchainRegistrationInput = {
+  user: AuthenticatedUser;
+  walletAddress?: string | null;
+  username?: string | null;
+  displayName?: string | null;
+  bio?: string | null;
+  profileImageUrl?: string | null;
+  coverImageUrl?: string | null;
+  endpoint?: string | null;
+  referralCode?: string | null;
+  txHash?: string | null;
+};
 
-export interface OnchainRegistrationResult {
-  message: string
-  tokenId?: number
-  txHash?: string
-  pointsAwarded?: number
-  alreadyRegistered: boolean
-  userId: string
-}
+export type OnchainRegistrationResult = {
+  message: string;
+  tokenId?: number;
+  txHash?: string;
+  pointsAwarded?: number;
+  alreadyRegistered: boolean;
+  userId: string;
+};
 
 export async function processOnchainRegistration({
   user,
@@ -126,56 +126,85 @@ export async function processOnchainRegistration({
   txHash,
 }: OnchainRegistrationInput): Promise<OnchainRegistrationResult> {
   if (!user.isAgent && !walletAddress) {
-    throw new BusinessLogicError('Wallet address is required for non-agent users', 'WALLET_REQUIRED')
+    throw new BusinessLogicError(
+      'Wallet address is required for non-agent users',
+      'WALLET_REQUIRED'
+    );
   }
 
-  const finalUsername = username || `user_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36).substring(2, 6)}`
+  const finalUsername =
+    username ||
+    `user_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36).substring(2, 6)}`;
 
   if (walletAddress && !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-    throw new ValidationError('Invalid wallet address format', ['walletAddress'], [{ field: 'walletAddress', message: 'Must be a valid Ethereum address (0x...)' }])
+    throw new ValidationError(
+      'Invalid wallet address format',
+      ['walletAddress'],
+      [
+        {
+          field: 'walletAddress',
+          message: 'Must be a valid Ethereum address (0x...)',
+        },
+      ]
+    );
   }
 
-  let submittedTxHash: `0x${string}` | undefined
+  let submittedTxHash: `0x${string}` | undefined;
   if (txHash) {
     if (typeof txHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
-      throw new ValidationError('Invalid transaction hash format', ['txHash'], [
-        { field: 'txHash', message: 'Must be a 0x-prefixed 64 character hash' },
-      ])
+      throw new ValidationError(
+        'Invalid transaction hash format',
+        ['txHash'],
+        [
+          {
+            field: 'txHash',
+            message: 'Must be a 0x-prefixed 64 character hash',
+          },
+        ]
+      );
     }
-    submittedTxHash = txHash as `0x${string}`
+    submittedTxHash = txHash as `0x${string}`;
   }
 
-  let referrerId: string | null = null
+  let referrerId: string | null = null;
   if (referralCode) {
     const referrer = await prisma.user.findUnique({
       where: { username: referralCode },
       select: { id: true },
-    })
+    });
 
     if (referrer) {
-      referrerId = referrer.id
-      logger.info('Valid referral code (username) found', { referralCode, referrerId }, 'OnboardingOnchain')
+      referrerId = referrer.id;
+      logger.info(
+        'Valid referral code (username) found',
+        { referralCode, referrerId },
+        'OnboardingOnchain'
+      );
     } else {
       const referral = await prisma.referral.findUnique({
         where: { referralCode },
         include: { User_Referral_referrerIdToUser: true },
-      })
+      });
 
       if (referral && referral.status === 'pending') {
-        referrerId = referral.referrerId
-        logger.info('Valid referral code (legacy) found', { referralCode, referrerId }, 'OnboardingOnchain')
+        referrerId = referral.referrerId;
+        logger.info(
+          'Valid referral code (legacy) found',
+          { referralCode, referrerId },
+          'OnboardingOnchain'
+        );
       }
     }
   }
 
   let dbUser: {
-    id: string
-    username: string | null
-    walletAddress: string | null
-    onChainRegistered: boolean
-    nftTokenId: number | null
-    referredBy: string | null
-  } | null = null
+    id: string;
+    username: string | null;
+    walletAddress: string | null;
+    onChainRegistered: boolean;
+    nftTokenId: number | null;
+    referredBy: string | null;
+  } | null = null;
 
   if (user.isAgent) {
     dbUser = await prisma.user.findUnique({
@@ -188,7 +217,7 @@ export async function processOnchainRegistration({
         nftTokenId: true,
         referredBy: true,
       },
-    })
+    });
 
     if (!dbUser) {
       dbUser = await prisma.user.create({
@@ -213,7 +242,7 @@ export async function processOnchainRegistration({
           nftTokenId: true,
           referredBy: true,
         },
-      })
+      });
     }
   } else {
     dbUser = await prisma.user.findUnique({
@@ -226,7 +255,7 @@ export async function processOnchainRegistration({
         nftTokenId: true,
         referredBy: true,
       },
-    })
+    });
 
     if (!dbUser) {
       dbUser = await prisma.user.create({
@@ -253,9 +282,11 @@ export async function processOnchainRegistration({
           nftTokenId: true,
           referredBy: true,
         },
-      })
+      });
     } else {
-      const fullUser = await prisma.user.findUnique({ where: { id: dbUser.id } })
+      const fullUser = await prisma.user.findUnique({
+        where: { id: dbUser.id },
+      });
       dbUser = await prisma.user.update({
         where: { id: dbUser.id },
         data: {
@@ -275,30 +306,33 @@ export async function processOnchainRegistration({
           nftTokenId: true,
           referredBy: true,
         },
-      })
+      });
     }
   }
 
   if (!dbUser) {
-    throw new InternalServerError('Failed to create or retrieve user record')
+    throw new InternalServerError('Failed to create or retrieve user record');
   }
 
   if (!referrerId && dbUser.referredBy) {
-    referrerId = dbUser.referredBy
+    referrerId = dbUser.referredBy;
   }
 
   const publicClient = createPublicClient({
     chain: baseSepolia,
     transport: http(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'),
-  })
+  });
 
-  let isRegistered = false
-  let tokenId: number | null = dbUser.nftTokenId
+  let isRegistered = false;
+  let tokenId: number | null = dbUser.nftTokenId;
 
   if (user.isAgent) {
-    isRegistered = dbUser.onChainRegistered && dbUser.nftTokenId !== null
+    isRegistered = dbUser.onChainRegistered && dbUser.nftTokenId !== null;
   } else {
-    const address = walletAddress! as Address
+    if (!walletAddress) {
+      throw new InternalServerError('Wallet address required for registration lookup');
+    }
+    const address = walletAddress as Address;
 
     // Try to check onchain status, but gracefully handle contract unavailability
     isRegistered = await publicClient.readContract({
@@ -306,15 +340,17 @@ export async function processOnchainRegistration({
       abi: IDENTITY_REGISTRY_ABI,
       functionName: 'isRegistered',
       args: [address],
-    })
+    });
 
     if (isRegistered && !tokenId) {
-      tokenId = Number(await publicClient.readContract({
-        address: IDENTITY_REGISTRY,
-        abi: IDENTITY_REGISTRY_ABI,
-        functionName: 'getTokenId',
-        args: [address],
-      }))
+      tokenId = Number(
+        await publicClient.readContract({
+          address: IDENTITY_REGISTRY,
+          abi: IDENTITY_REGISTRY_ABI,
+          functionName: 'getTokenId',
+          args: [address],
+        })
+      );
     }
   }
 
@@ -327,12 +363,12 @@ export async function processOnchainRegistration({
           onChainRegistered: true,
           nftTokenId: tokenId,
         },
-      })
+      });
       logger.info(
         'Synced on-chain registration status to database',
         { userId: dbUser.id, tokenId, wasRegistered: dbUser.onChainRegistered },
         'processOnchainRegistration'
-      )
+      );
     }
 
     const hasWelcomeBonus = await prisma.balanceTransaction.findFirst({
@@ -340,13 +376,13 @@ export async function processOnchainRegistration({
         userId: dbUser.id,
         description: 'Welcome bonus - initial signup',
       },
-    })
+    });
 
     logger.info(
       'User already registered on-chain, returning existing registration',
       { userId: dbUser.id, tokenId, alreadyRegistered: true },
       'processOnchainRegistration'
-    )
+    );
 
     return {
       message: 'Already registered on-chain',
@@ -354,81 +390,95 @@ export async function processOnchainRegistration({
       alreadyRegistered: true,
       userId: dbUser.id,
       pointsAwarded: hasWelcomeBonus ? 1000 : 0,
-    }
+    };
   }
 
   // Validate deployer private key format
-  const deployerConfigured = Boolean(DEPLOYER_PRIVATE_KEY) &&
+  const deployerConfigured =
+    Boolean(DEPLOYER_PRIVATE_KEY) &&
     typeof DEPLOYER_PRIVATE_KEY === 'string' &&
-    /^0x[0-9a-fA-F]{64}$/.test(DEPLOYER_PRIVATE_KEY)
+    /^0x[0-9a-fA-F]{64}$/.test(DEPLOYER_PRIVATE_KEY);
 
-  let deployerAccount = null
-  let walletClient = null
+  let deployerAccount = null;
+  let walletClient = null;
 
-  if (deployerConfigured) {
-    deployerAccount = privateKeyToAccount(DEPLOYER_PRIVATE_KEY!)
+  if (deployerConfigured && DEPLOYER_PRIVATE_KEY) {
+    deployerAccount = privateKeyToAccount(DEPLOYER_PRIVATE_KEY);
     walletClient = createWalletClient({
       account: deployerAccount,
       chain: baseSepolia,
       transport: http(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'),
-    })
+    });
   }
 
   if (!submittedTxHash && !deployerConfigured) {
-    throw new InternalServerError('Server wallet not configured for gas payments', { missing: 'DEPLOYER_PRIVATE_KEY' })
+    throw new InternalServerError('Server wallet not configured for gas payments', {
+      missing: 'DEPLOYER_PRIVATE_KEY',
+    });
   }
 
-  const name = username || (user.isAgent ? user.userId : finalUsername)
-  let registrationAddress: Address
-  let agentEndpoint: string
+  const name = username || (user.isAgent ? user.userId : finalUsername);
+  let registrationAddress: Address;
+  let agentEndpoint: string;
 
   if (user.isAgent) {
     if (!deployerAccount) {
-      throw new InternalServerError('Server wallet required for agent registration', { missing: 'DEPLOYER_PRIVATE_KEY' })
+      throw new InternalServerError('Server wallet required for agent registration', {
+        missing: 'DEPLOYER_PRIVATE_KEY',
+      });
     }
-    registrationAddress = deployerAccount.address
-    const baseEndpoint = endpoint || `https://babylon.market/agent/${user.userId}`
-    agentEndpoint = `${baseEndpoint}?agentId=${user.userId}`
+    registrationAddress = deployerAccount.address;
+    const baseEndpoint = endpoint || `https://babylon.market/agent/${user.userId}`;
+    agentEndpoint = `${baseEndpoint}?agentId=${user.userId}`;
   } else {
-    registrationAddress = walletAddress! as Address
-    agentEndpoint = endpoint || `https://babylon.market/agent/${walletAddress!.toLowerCase()}`
+    if (!walletAddress) {
+      throw new InternalServerError('Wallet address required for registration');
+    }
+    registrationAddress = walletAddress as Address;
+    agentEndpoint = endpoint || `https://babylon.market/agent/${walletAddress.toLowerCase()}`;
   }
 
-  const capabilitiesHash = '0x0000000000000000000000000000000000000000000000000000000000000001' as `0x${string}`
+  const capabilitiesHash =
+    '0x0000000000000000000000000000000000000000000000000000000000000001' as `0x${string}`;
   const metadataURI = JSON.stringify({
     name,
     bio: bio || '',
     type: user.isAgent ? 'elizaos-agent' : 'user',
     registered: new Date().toISOString(),
-  })
+  });
 
   logger.info(
     'Registering on-chain',
-    { isAgent: user.isAgent, address: registrationAddress, name, endpoint: agentEndpoint },
+    {
+      isAgent: user.isAgent,
+      address: registrationAddress,
+      name,
+      endpoint: agentEndpoint,
+    },
     'OnboardingOnchain'
-  )
+  );
 
-  let registrationTxHash: `0x${string}` | undefined = submittedTxHash
-  let receipt: Awaited<ReturnType<typeof publicClient.waitForTransactionReceipt>> | null = null
+  let registrationTxHash: `0x${string}` | undefined = submittedTxHash;
+  let receipt: Awaited<ReturnType<typeof publicClient.waitForTransactionReceipt>> | null = null;
 
   if (submittedTxHash) {
     logger.info(
       'Validating submitted registration transaction',
       { txHash: submittedTxHash },
       'OnboardingOnchain'
-    )
+    );
 
     receipt = await publicClient.waitForTransactionReceipt({
       hash: submittedTxHash,
       confirmations: 1,
-    })
+    });
 
     if (receipt.status !== 'success') {
       throw new BusinessLogicError(
         'Submitted blockchain registration transaction failed',
         'REGISTRATION_TX_FAILED',
         { txHash: submittedTxHash, receipt: receipt.status }
-      )
+      );
     }
   } else if (walletClient) {
     try {
@@ -437,16 +487,16 @@ export async function processOnchainRegistration({
         abi: IDENTITY_REGISTRY_ABI,
         functionName: 'registerAgent',
         args: [name, agentEndpoint, capabilitiesHash, metadataURI],
-      })
+      });
     } catch (registrationError) {
-      const message = extractErrorMessage(registrationError).toLowerCase()
+      const message = extractErrorMessage(registrationError).toLowerCase();
       if (message.includes('already registered')) {
         const onChainStatus = await publicClient.readContract({
           address: IDENTITY_REGISTRY,
           abi: IDENTITY_REGISTRY_ABI,
           functionName: 'isRegistered',
           args: [registrationAddress],
-        })
+        });
 
         if (onChainStatus) {
           const tokenOnChain = Number(
@@ -456,7 +506,7 @@ export async function processOnchainRegistration({
               functionName: 'getTokenId',
               args: [registrationAddress],
             })
-          )
+          );
 
           await prisma.user.update({
             where: { id: dbUser.id },
@@ -464,20 +514,20 @@ export async function processOnchainRegistration({
               onChainRegistered: true,
               nftTokenId: tokenOnChain,
             },
-          })
+          });
 
           const hasWelcomeBonus = await prisma.balanceTransaction.findFirst({
             where: {
               userId: dbUser.id,
               description: 'Welcome bonus - initial signup',
             },
-          })
+          });
 
           logger.info(
             'Detected prior registration for wallet during server signer attempt',
             { address: registrationAddress, tokenId: tokenOnChain },
             'OnboardingOnchain'
-          )
+          );
 
           return {
             message: 'Already registered on-chain',
@@ -485,89 +535,108 @@ export async function processOnchainRegistration({
             alreadyRegistered: true,
             userId: dbUser.id,
             pointsAwarded: hasWelcomeBonus ? 1000 : 0,
-          }
+          };
         }
 
         logger.warn(
           'Server signer rejected registration due to existing owner',
           { signer: deployerAccount?.address, registrationAddress },
           'OnboardingOnchain'
-        )
-        throw new BusinessLogicError('SERVER_SIGNER_UNSUPPORTED', 'SERVER_SIGNER_UNSUPPORTED')
+        );
+        throw new BusinessLogicError('SERVER_SIGNER_UNSUPPORTED', 'SERVER_SIGNER_UNSUPPORTED');
       }
 
-      throw registrationError
+      throw registrationError;
     }
 
-    logger.info('Registration transaction sent', { txHash: registrationTxHash }, 'OnboardingOnchain')
+    logger.info(
+      'Registration transaction sent',
+      { txHash: registrationTxHash },
+      'OnboardingOnchain'
+    );
 
     receipt = await publicClient.waitForTransactionReceipt({
       hash: registrationTxHash,
       confirmations: 2,
-    })
+    });
 
     if (receipt.status !== 'success') {
-      throw new BusinessLogicError('Blockchain registration transaction failed', 'REGISTRATION_TX_FAILED', {
-        txHash: registrationTxHash,
-        receipt: receipt.status,
-      })
+      throw new BusinessLogicError(
+        'Blockchain registration transaction failed',
+        'REGISTRATION_TX_FAILED',
+        {
+          txHash: registrationTxHash,
+          receipt: receipt.status,
+        }
+      );
     }
   } else {
     throw new InternalServerError('Unable to determine registration transaction result', {
       hasSubmittedTx: Boolean(submittedTxHash),
       deployerConfigured,
-    })
+    });
   }
 
-  const finalizedReceipt = receipt
+  const finalizedReceipt = receipt;
   if (!finalizedReceipt) {
-    throw new InternalServerError('Registration transaction receipt missing after processing')
+    throw new InternalServerError('Registration transaction receipt missing after processing');
   }
 
   // Filter logs by contract address first to avoid decoding errors on Transfer events
-  const contractLogs = finalizedReceipt.logs.filter(log =>
-    log.address.toLowerCase() === IDENTITY_REGISTRY.toLowerCase()
-  )
+  const contractLogs = finalizedReceipt.logs.filter(
+    (log) => log.address.toLowerCase() === IDENTITY_REGISTRY.toLowerCase()
+  );
 
   const agentRegisteredLog = contractLogs.find((log) => {
     try {
-      const decodedLog = decodeEventLog({ abi: IDENTITY_REGISTRY_ABI, data: log.data, topics: log.topics })
-      return decodedLog.eventName === 'AgentRegistered'
+      const decodedLog = decodeEventLog({
+        abi: IDENTITY_REGISTRY_ABI,
+        data: log.data,
+        topics: log.topics,
+      });
+      return decodedLog.eventName === 'AgentRegistered';
     } catch {
-      return false
+      return false;
     }
-  })
+  });
 
   if (!agentRegisteredLog) {
     throw new InternalServerError('AgentRegistered event not found in receipt', {
       txHash: registrationTxHash ?? submittedTxHash,
-    })
+    });
   }
 
   const decodedLog = decodeEventLog({
     abi: IDENTITY_REGISTRY_ABI,
     data: agentRegisteredLog.data,
     topics: agentRegisteredLog.topics,
-  })
+  });
 
-  tokenId = Number(decodedLog.args.tokenId)
-  logger.info('Registered with token ID', { tokenId }, 'OnboardingOnchain')
+  tokenId = Number(decodedLog.args.tokenId);
+  logger.info('Registered with token ID', { tokenId }, 'OnboardingOnchain');
   if (walletClient) {
-    logger.info('Bootstrapping on-chain reputation via feedback...', undefined, 'OnboardingOnchain')
+    logger.info(
+      'Bootstrapping on-chain reputation via feedback...',
+      undefined,
+      'OnboardingOnchain'
+    );
     const bootstrapTx = await walletClient.writeContract({
       address: REPUTATION_SYSTEM,
       abi: REPUTATION_SYSTEM_ABI,
       functionName: 'submitFeedback',
       args: [BigInt(tokenId), 1, 'Bootstrap reputation'],
-    })
-    await publicClient.waitForTransactionReceipt({ hash: bootstrapTx, confirmations: 1 })
-    logger.info('Initial on-chain feedback submitted (rating=+1)', undefined, 'OnboardingOnchain')
+    });
+    await publicClient.waitForTransactionReceipt({
+      hash: bootstrapTx,
+      confirmations: 1,
+    });
+    logger.info('Initial on-chain feedback submitted (rating=+1)', undefined, 'OnboardingOnchain');
   } else {
     logger.warn(
       'Skipping reputation bootstrap because deployer wallet is not configured',
       { userId: dbUser.id },
       'OnboardingOnchain'
-    )
+    );
   }
 
   await prisma.user.update({
@@ -580,20 +649,24 @@ export async function processOnchainRegistration({
       registrationBlockNumber: finalizedReceipt.blockNumber,
       registrationGasUsed: finalizedReceipt.gasUsed,
       registrationTimestamp: new Date(),
-      username: user.isAgent ? user.userId : (username || dbUser.username),
+      username: user.isAgent ? user.userId : username || dbUser.username,
       displayName: displayName || username || dbUser.username || user.userId,
-      bio: bio || (user.isAgent ? `Autonomous AI agent: ${user.userId}` : undefined) || dbUser.username || null,
+      bio:
+        bio ||
+        (user.isAgent ? `Autonomous AI agent: ${user.userId}` : undefined) ||
+        dbUser.username ||
+        null,
       profileImageUrl: profileImageUrl ?? undefined,
       coverImageUrl: coverImageUrl ?? undefined,
     },
-  })
+  });
 
   if (user.isAgent) {
-    const agent0Client = getAgent0Client()
+    const agent0Client = getAgent0Client();
 
     // Use individual agent's A2A endpoint if provided, otherwise construct it
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const individualAgentA2AEndpoint = endpoint || `${baseUrl}/api/agents/${dbUser.id}/a2a`
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const individualAgentA2AEndpoint = endpoint || `${baseUrl}/api/agents/${dbUser.id}/a2a`;
 
     const agent0Result = await agent0Client.registerAgent({
       name: username || dbUser.username || user.userId,
@@ -607,7 +680,7 @@ export async function processOnchainRegistration({
         actions: ['analyze'],
         version: '1.0.0',
       } as AgentCapabilities,
-    })
+    });
 
     // Store Agent0 registration metadata
     await prisma.user.update({
@@ -617,30 +690,38 @@ export async function processOnchainRegistration({
         agent0MetadataCID: agent0Result.metadataCID ?? null,
         agent0RegisteredAt: new Date(),
       },
-    })
+    });
 
-    logger.info('Agent registered with Agent0', {
-      agentId: user.userId,
-      agent0TokenId: agent0Result.tokenId,
-      metadataCID: agent0Result.metadataCID
-    }, 'OnboardingOnchain')
+    logger.info(
+      'Agent registered with Agent0',
+      {
+        agentId: user.userId,
+        agent0TokenId: agent0Result.tokenId,
+        metadataCID: agent0Result.metadataCID,
+      },
+      'OnboardingOnchain'
+    );
 
     // Sync on-chain reputation to local database
-    await syncAfterAgent0Registration(dbUser.id, agent0Result.tokenId)
-    logger.info('Agent0 reputation synced successfully', {
-      userId: dbUser.id,
-      agent0TokenId: agent0Result.tokenId
-    }, 'OnboardingOnchain')
+    await syncAfterAgent0Registration(dbUser.id, agent0Result.tokenId);
+    logger.info(
+      'Agent0 reputation synced successfully',
+      {
+        userId: dbUser.id,
+        agent0TokenId: agent0Result.tokenId,
+      },
+      'OnboardingOnchain'
+    );
   }
 
   const userWithBalance = await prisma.user.findUnique({
     where: { id: dbUser.id },
     select: { virtualBalance: true },
-  })
+  });
 
-  const balanceBefore = userWithBalance?.virtualBalance ?? new Prisma.Decimal(0)
-  const amountDecimal = new Prisma.Decimal(1000)
-  const balanceAfter = balanceBefore.plus(amountDecimal)
+  const balanceBefore = userWithBalance?.virtualBalance ?? new Prisma.Decimal(0);
+  const amountDecimal = new Prisma.Decimal(1000);
+  const balanceAfter = balanceBefore.plus(amountDecimal);
 
   await prisma.balanceTransaction.create({
     data: {
@@ -652,7 +733,7 @@ export async function processOnchainRegistration({
       balanceAfter,
       description: 'Welcome bonus - initial signup',
     },
-  })
+  });
 
   await prisma.user.update({
     where: { id: dbUser.id },
@@ -660,15 +741,15 @@ export async function processOnchainRegistration({
       virtualBalance: { increment: 1000 },
       totalDeposited: { increment: 1000 },
     },
-  })
+  });
 
-  logger.info('Successfully awarded 1,000 points to user', undefined, 'OnboardingOnchain')
+  logger.info('Successfully awarded 1,000 points to user', undefined, 'OnboardingOnchain');
 
-  await notifyNewAccount(dbUser.id)
-  logger.info('Welcome notification sent to new user', { userId: dbUser.id }, 'OnboardingOnchain')
+  await notifyNewAccount(dbUser.id);
+  logger.info('Welcome notification sent to new user', { userId: dbUser.id }, 'OnboardingOnchain');
 
   if (referrerId) {
-    const referralResult = await PointsService.awardReferralSignup(referrerId, dbUser.id)
+    const referralResult = await PointsService.awardReferralSignup(referrerId, dbUser.id);
 
     if (referralCode) {
       await prisma.referral.upsert({
@@ -686,7 +767,7 @@ export async function processOnchainRegistration({
           status: 'completed',
           completedAt: new Date(),
         },
-      })
+      });
     }
 
     await prisma.follow.upsert({
@@ -702,10 +783,22 @@ export async function processOnchainRegistration({
         followerId: referrerId,
         followingId: dbUser.id,
       },
-    })
+    });
 
-    logger.info('Referrer auto-followed new user', { referrerId, referredUserId: dbUser.id }, 'OnboardingOnchain')
-    logger.info('Awarded referral points', { referrerId, referredUserId: dbUser.id, points: referralResult.pointsAwarded }, 'OnboardingOnchain')
+    logger.info(
+      'Referrer auto-followed new user',
+      { referrerId, referredUserId: dbUser.id },
+      'OnboardingOnchain'
+    );
+    logger.info(
+      'Awarded referral points',
+      {
+        referrerId,
+        referredUserId: dbUser.id,
+        points: referralResult.pointsAwarded,
+      },
+      'OnboardingOnchain'
+    );
   }
 
   return {
@@ -715,29 +808,29 @@ export async function processOnchainRegistration({
     alreadyRegistered: false,
     pointsAwarded: 1000,
     userId: dbUser.id,
-  }
+  };
 }
 
-export interface OnchainRegistrationStatus {
-  isRegistered: boolean
-  tokenId: number | null
-  walletAddress: string | null
-  txHash: string | null
-  dbRegistered: boolean
-}
+export type OnchainRegistrationStatus = {
+  isRegistered: boolean;
+  tokenId: number | null;
+  walletAddress: string | null;
+  txHash: string | null;
+  dbRegistered: boolean;
+};
 
-export interface ConfirmOnchainProfileUpdateInput {
-  userId: string
-  walletAddress: string
-  txHash: `0x${string}`
-}
+export type ConfirmOnchainProfileUpdateInput = {
+  userId: string;
+  walletAddress: string;
+  txHash: `0x${string}`;
+};
 
-export interface ConfirmOnchainProfileUpdateResult {
-  tokenId: number
-  endpoint: string
-  capabilitiesHash: `0x${string}`
-  metadata: Record<string, JsonValue> | null
-}
+export type ConfirmOnchainProfileUpdateResult = {
+  tokenId: number;
+  endpoint: string;
+  capabilitiesHash: `0x${string}`;
+  metadata: Record<string, JsonValue> | null;
+};
 
 export async function confirmOnchainProfileUpdate({
   userId,
@@ -745,26 +838,29 @@ export async function confirmOnchainProfileUpdate({
   txHash,
 }: ConfirmOnchainProfileUpdateInput): Promise<ConfirmOnchainProfileUpdateResult> {
   if (!walletAddress) {
-    throw new BusinessLogicError('Wallet address required for profile update confirmation', 'WALLET_REQUIRED')
+    throw new BusinessLogicError(
+      'Wallet address required for profile update confirmation',
+      'WALLET_REQUIRED'
+    );
   }
 
-  const lowerWallet = walletAddress.toLowerCase()
+  const lowerWallet = walletAddress.toLowerCase();
   const publicClient = createPublicClient({
     chain: baseSepolia,
     transport: http(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'),
-  })
+  });
 
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: txHash,
     confirmations: 1,
-  })
+  });
 
   if (receipt.status !== 'success') {
     throw new BusinessLogicError(
       'Blockchain profile update transaction failed',
       'PROFILE_UPDATE_TX_FAILED',
       { txHash, userId, receipt: receipt.status }
-    )
+    );
   }
 
   // Get the expected token ID for this user's wallet address
@@ -775,20 +871,21 @@ export async function confirmOnchainProfileUpdate({
       functionName: 'getTokenId',
       args: [walletAddress as Address],
     })
-  )
+  );
 
   if (!expectedTokenId || Number.isNaN(expectedTokenId)) {
     throw new BusinessLogicError(
       'User wallet is not registered on-chain',
       'WALLET_NOT_REGISTERED',
       { walletAddress: lowerWallet }
-    )
+    );
   }
 
   // Parse the transaction to find the AgentUpdated event and verify it updates the correct token
-  let tokenId: number | null = null
-  let endpoint = ''
-  let capabilitiesHash = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`
+  let tokenId: number | null = null;
+  let endpoint = '';
+  let capabilitiesHash =
+    '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
 
   for (const log of receipt.logs) {
     try {
@@ -796,18 +893,15 @@ export async function confirmOnchainProfileUpdate({
         abi: IDENTITY_REGISTRY_ABI,
         data: log.data,
         topics: log.topics,
-      })
+      });
 
       if (decoded.eventName === 'AgentUpdated') {
-        tokenId = Number(decoded.args.tokenId)
-        endpoint = decoded.args.endpoint
-        capabilitiesHash = decoded.args.capabilitiesHash as `0x${string}`
-        break
+        tokenId = Number(decoded.args.tokenId);
+        endpoint = decoded.args.endpoint;
+        capabilitiesHash = decoded.args.capabilitiesHash as `0x${string}`;
+        break;
       }
-    } catch {
-      // Ignore logs that do not match the identity registry ABI
-      continue
-    }
+    } catch {}
   }
 
   // Verify that the transaction updated the correct token ID
@@ -816,15 +910,20 @@ export async function confirmOnchainProfileUpdate({
       'Transaction did not emit AgentUpdated event',
       'PROFILE_UPDATE_EVENT_NOT_FOUND',
       { txHash }
-    )
+    );
   }
 
   if (tokenId !== expectedTokenId) {
     throw new BusinessLogicError(
       'Transaction updated a different token ID than expected',
       'PROFILE_UPDATE_TOKEN_MISMATCH',
-      { txHash, expectedTokenId, actualTokenId: tokenId, walletAddress: lowerWallet }
-    )
+      {
+        txHash,
+        expectedTokenId,
+        actualTokenId: tokenId,
+        walletAddress: lowerWallet,
+      }
+    );
   }
 
   const profile = await publicClient.readContract({
@@ -832,23 +931,23 @@ export async function confirmOnchainProfileUpdate({
     abi: IDENTITY_REGISTRY_ABI,
     functionName: 'getAgentProfile',
     args: [BigInt(tokenId)],
-  })
+  });
 
-  endpoint = endpoint || (profile[1] as string)
-  capabilitiesHash = profile[2] as `0x${string}`
-  const rawMetadata = profile[5] as string
+  endpoint = endpoint || (profile[1] as string);
+  capabilitiesHash = profile[2] as `0x${string}`;
+  const rawMetadata = profile[5] as string;
 
-  let metadata: Record<string, JsonValue> | null = null
+  let metadata: Record<string, JsonValue> | null = null;
   if (typeof rawMetadata === 'string' && rawMetadata.trim().length > 0) {
     try {
-      metadata = JSON.parse(rawMetadata) as Record<string, JsonValue>
+      metadata = JSON.parse(rawMetadata) as Record<string, JsonValue>;
     } catch (error) {
       logger.warn(
         'Failed to parse on-chain metadata JSON during profile update confirmation',
         { error, userId, txHash },
         'OnboardingOnchain'
-      )
-      metadata = null
+      );
+      metadata = null;
     }
   }
 
@@ -857,10 +956,12 @@ export async function confirmOnchainProfileUpdate({
     endpoint,
     capabilitiesHash,
     metadata,
-  }
+  };
 }
 
-export async function getOnchainRegistrationStatus(user: AuthenticatedUser): Promise<OnchainRegistrationStatus> {
+export async function getOnchainRegistrationStatus(
+  user: AuthenticatedUser
+): Promise<OnchainRegistrationStatus> {
   const userRecord = user.isAgent
     ? await prisma.user.findUnique({
         where: { username: user.userId },
@@ -879,34 +980,38 @@ export async function getOnchainRegistrationStatus(user: AuthenticatedUser): Pro
           nftTokenId: true,
           registrationTxHash: true,
         },
-      })
+      });
 
   if (!userRecord) {
-    logger.info('Registration status checked (no user record)', { userId: user.userId }, 'OnboardingOnchain')
+    logger.info(
+      'Registration status checked (no user record)',
+      { userId: user.userId },
+      'OnboardingOnchain'
+    );
     return {
       isRegistered: false,
       tokenId: null,
       walletAddress: null,
       txHash: null,
       dbRegistered: false,
-    }
+    };
   }
 
-  let tokenId = userRecord.nftTokenId
-  let isRegistered = Boolean(userRecord.onChainRegistered && tokenId !== null)
+  let tokenId = userRecord.nftTokenId;
+  let isRegistered = Boolean(userRecord.onChainRegistered && tokenId !== null);
 
   if (!user.isAgent && userRecord.walletAddress) {
     const publicClient = createPublicClient({
       chain: baseSepolia,
       transport: http(process.env.NEXT_PUBLIC_RPC_URL),
-    })
+    });
 
     const onchainRegistered = await publicClient.readContract({
       address: IDENTITY_REGISTRY,
       abi: IDENTITY_REGISTRY_ABI,
       functionName: 'isRegistered',
       args: [userRecord.walletAddress as Address],
-    })
+    });
 
     if (onchainRegistered && !tokenId) {
       const queriedTokenId = await publicClient.readContract({
@@ -914,18 +1019,23 @@ export async function getOnchainRegistrationStatus(user: AuthenticatedUser): Pro
         abi: IDENTITY_REGISTRY_ABI,
         functionName: 'getTokenId',
         args: [userRecord.walletAddress as Address],
-      })
-      tokenId = Number(queriedTokenId)
+      });
+      tokenId = Number(queriedTokenId);
     }
 
-    isRegistered = onchainRegistered
+    isRegistered = onchainRegistered;
   }
 
   logger.info(
     'Registration status checked',
-    { userId: user.userId, isRegistered, tokenId, dbRegistered: userRecord.onChainRegistered },
+    {
+      userId: user.userId,
+      isRegistered,
+      tokenId,
+      dbRegistered: userRecord.onChainRegistered,
+    },
     'OnboardingOnchain'
-  )
+  );
 
   return {
     isRegistered,
@@ -933,5 +1043,5 @@ export async function getOnchainRegistrationStatus(user: AuthenticatedUser): Pro
     walletAddress: userRecord.walletAddress ?? null,
     txHash: userRecord.registrationTxHash ?? null,
     dbRegistered: userRecord.onChainRegistered,
-  }
+  };
 }

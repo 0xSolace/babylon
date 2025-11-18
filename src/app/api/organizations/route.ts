@@ -1,14 +1,14 @@
 /**
  * Organizations API
- * 
+ *
  * @route GET /api/organizations - Get organizations
  * @access Public
- * 
+ *
  * @description
  * Returns list of organizations in the game world. Supports filtering by IDs
  * for batch lookups. Organizations represent groups, factions, and institutions
  * in the Babylon game world.
- * 
+ *
  * @openapi
  * /api/organizations:
  *   get:
@@ -46,42 +46,42 @@
  *                         type: string
  *                       description:
  *                         type: string
- * 
+ *
  * @example
  * ```typescript
  * // Get all organizations
  * const response = await fetch('/api/organizations');
  * const { organizations } = await response.json();
- * 
+ *
  * // Get specific organizations
  * const batch = await fetch('/api/organizations?ids=org1,org2');
  * ```
- * 
+ *
  * @see {@link /lib/db/context} RLS context
  */
 
+import { optionalAuth } from '@/lib/api/auth-middleware';
+import { asPublic, asUser } from '@/lib/db/context';
 import type { NextRequest } from 'next/server';
-import { optionalAuth } from '@/lib/api/auth-middleware'
-import { asUser, asPublic } from '@/lib/db/context'
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
 /**
  * GET /api/organizations
- * 
+ *
  * @description Get organizations, optionally filtered by IDs
- * 
+ *
  * @param {Request} request - Request object
- * 
+ *
  * @returns {Promise<NextResponse>} Organizations data
  */
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const idsParam = searchParams.get('ids')
-  
+  const { searchParams } = new URL(request.url);
+  const idsParam = searchParams.get('ids');
+
   // Optional auth - organizations are public but RLS still applies
-  const authUser = await optionalAuth(request as NextRequest).catch(() => null)
-  
-  const organizations = (authUser && authUser.userId)
+  const authUser = await optionalAuth(request as NextRequest).catch(() => null);
+
+  const organizations = authUser?.userId
     ? await asUser(authUser, async (db) => {
         if (!idsParam) {
           return await db.organization.findMany({
@@ -92,11 +92,11 @@ export async function GET(request: Request) {
               description: true,
             },
             take: 100,
-          })
+          });
         }
-        
-        const ids = idsParam.split(',').filter(Boolean)
-        
+
+        const ids = idsParam.split(',').filter(Boolean);
+
         return await db.organization.findMany({
           where: {
             id: { in: ids },
@@ -107,7 +107,7 @@ export async function GET(request: Request) {
             type: true,
             description: true,
           },
-        })
+        });
       })
     : await asPublic(async (db) => {
         if (!idsParam) {
@@ -119,11 +119,11 @@ export async function GET(request: Request) {
               description: true,
             },
             take: 100,
-          })
+          });
         }
-        
-        const ids = idsParam.split(',').filter(Boolean)
-        
+
+        const ids = idsParam.split(',').filter(Boolean);
+
         return await db.organization.findMany({
           where: {
             id: { in: ids },
@@ -134,12 +134,11 @@ export async function GET(request: Request) {
             type: true,
             description: true,
           },
-        })
-      })
-  
+        });
+      });
+
   return NextResponse.json({
     success: true,
     organizations,
-  })
+  });
 }
-

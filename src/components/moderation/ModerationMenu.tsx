@@ -1,18 +1,18 @@
 /**
  * Moderation Menu Component
- * 
+ *
  * Dropdown menu for blocking, muting, and reporting users
  */
 
 'use client';
 
+import { Ban, Flag, MoreHorizontal, VolumeX } from 'lucide-react';
 import { useState } from 'react';
-import { MoreHorizontal, Ban, VolumeX, Flag } from 'lucide-react';
 import { BlockUserModal } from './BlockUserModal';
 import { MuteUserModal } from './MuteUserModal';
 import { ReportModal } from './ReportModal';
 
-interface ModerationMenuProps {
+type ModerationMenuProps = {
   targetUserId: string;
   targetUsername?: string;
   targetDisplayName?: string;
@@ -20,7 +20,7 @@ interface ModerationMenuProps {
   postId?: string; // Optional: if reporting a specific post
   isNPC?: boolean; // True if target is an NPC/actor (can block/mute but not report)
   onActionComplete?: () => void;
-}
+};
 
 export function ModerationMenu({
   targetUserId,
@@ -47,60 +47,66 @@ export function ModerationMenu({
     <div className="relative">
       {/* Menu Button */}
       <button
+        type="button"
         onClick={() => setShowMenu(!showMenu)}
-        className="p-2 hover:bg-muted rounded-lg transition-colors"
+        className="rounded-lg p-2 transition-colors hover:bg-muted"
         aria-label="More options"
       >
-        <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
+        <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
       </button>
 
       {/* Dropdown Menu */}
       {showMenu && (
         <>
           {/* Overlay to close menu */}
-          <div
+          <button
+            type="button"
+            aria-label="Close moderation menu"
             className="fixed inset-0 z-40"
             onClick={() => setShowMenu(false)}
           />
 
           {/* Menu */}
-          <div className="absolute right-0 mt-2 w-56 bg-card border border-border rounded-lg shadow-lg z-50">
+          <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-border bg-card shadow-lg">
             <div className="py-1">
               <button
+                type="button"
                 onClick={() => {
                   setShowMenu(false);
                   setShowMuteModal(true);
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-3"
+                className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors hover:bg-muted"
               >
-                <VolumeX className="w-4 h-4 text-muted-foreground" />
+                <VolumeX className="h-4 w-4 text-muted-foreground" />
                 <span>Mute {displayName}</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   setShowMenu(false);
                   setShowBlockModal(true);
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-3 text-orange-600"
+                className="flex w-full items-center gap-3 px-4 py-2 text-left text-orange-600 text-sm transition-colors hover:bg-muted"
               >
-                <Ban className="w-4 h-4" />
+                <Ban className="h-4 w-4" />
                 <span>Block {displayName}</span>
               </button>
 
               {/* Only show report option for real users, not NPCs */}
               {!isNPC && (
                 <>
-                  <div className="border-t border-border my-1" />
+                  <div className="my-1 border-border border-t" />
 
                   <button
+                    type="button"
                     onClick={() => {
                       setShowMenu(false);
                       setShowReportModal(true);
                     }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-3 text-red-600"
+                    className="flex w-full items-center gap-3 px-4 py-2 text-left text-red-600 text-sm transition-colors hover:bg-muted"
                   >
-                    <Flag className="w-4 h-4" />
+                    <Flag className="h-4 w-4" />
                     <span>Report {postId ? 'post' : 'user'}</span>
                   </button>
                 </>
@@ -145,5 +151,3 @@ export function ModerationMenu({
     </div>
   );
 }
-
-

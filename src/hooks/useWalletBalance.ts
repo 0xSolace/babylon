@@ -5,20 +5,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 /**
  * Represents wallet balance state.
  */
-interface WalletBalanceState {
+type WalletBalanceState = {
   /** Current available balance */
   balance: number;
   /** Lifetime profit and loss */
   lifetimePnL: number;
-}
+};
 
 /**
  * Options for configuring wallet balance loading.
  */
-interface UseWalletBalanceOptions {
+type UseWalletBalanceOptions = {
   /** Whether to enable balance fetching (default: true) */
   enabled?: boolean;
-}
+};
 
 const defaultState: WalletBalanceState = {
   balance: 0,
@@ -27,27 +27,27 @@ const defaultState: WalletBalanceState = {
 
 /**
  * Hook for fetching and managing user wallet balance.
- * 
+ *
  * Loads the current balance and lifetime PnL for a user's wallet. Automatically
  * refreshes when the userId changes and polls every 30 seconds to keep balance
  * up-to-date. Supports cancellation of in-flight requests and error handling.
- * 
+ *
  * @param userId - The user ID to fetch balance for, or null/undefined to clear balance
  * @param options - Configuration options including enabled flag
- * 
+ *
  * @returns An object containing:
  * - `balance`: Current available balance
  * - `lifetimePnL`: Lifetime profit and loss
  * - `loading`: Whether balance is currently loading
  * - `error`: Any error that occurred while fetching
  * - `refresh`: Function to manually refresh balance
- * 
+ *
  * @example
  * ```tsx
  * const { balance, lifetimePnL, loading } = useWalletBalance(userId);
- * 
+ *
  * if (loading) return <div>Loading balance...</div>;
- * 
+ *
  * return (
  *   <div>
  *     <p>Balance: ${balance.toFixed(2)}</p>
@@ -56,10 +56,7 @@ const defaultState: WalletBalanceState = {
  * );
  * ```
  */
-export function useWalletBalance(
-  userId?: string | null,
-  options: UseWalletBalanceOptions = {}
-) {
+export function useWalletBalance(userId?: string | null, options: UseWalletBalanceOptions = {}) {
   const { enabled = true } = options;
   const [state, setState] = useState<WalletBalanceState>(defaultState);
   const [loading, setLoading] = useState(false);
@@ -82,10 +79,9 @@ export function useWalletBalance(
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/balance`,
-        { signal: controller.signal }
-      );
+      const response = await fetch(`/api/users/${encodeURIComponent(userId)}/balance`, {
+        signal: controller.signal,
+      });
 
       if (controller.signal.aborted) return;
 
@@ -93,18 +89,25 @@ export function useWalletBalance(
         throw new Error('Failed to fetch wallet balance');
       }
 
-      let data;
+      type WalletBalanceResponse = {
+        balance?: number | string;
+        lifetimePnL?: number | string;
+      };
+      let data: WalletBalanceResponse | null = null;
       try {
         data = await response.json();
       } catch (error) {
-        throw new Error(`Failed to parse response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        throw new Error(
+          `Failed to parse response: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
       }
 
       if (controller.signal.aborted) return;
 
+      const parsedData = data ?? {};
       setState({
-        balance: Number(data.balance) || 0,
-        lifetimePnL: Number(data.lifetimePnL) || 0,
+        balance: Number(parsedData.balance) || 0,
+        lifetimePnL: Number(parsedData.lifetimePnL) || 0,
       });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {

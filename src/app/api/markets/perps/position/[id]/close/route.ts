@@ -1,13 +1,13 @@
 /**
  * Perpetual Futures Close Position API
- * 
+ *
  * @route POST /api/markets/perps/position/[id]/close - Close perpetual position
  * @access Authenticated
- * 
+ *
  * @description
  * Closes an existing perpetual futures position. Calculates final P&L, fees,
  * and updates user balance. Supports partial closes. Tracks trade events.
- * 
+ *
  * @openapi
  * /api/markets/perps/position/{id}/close:
  *   post:
@@ -55,7 +55,7 @@
  *         description: Unauthorized
  *       404:
  *         description: Position not found
- * 
+ *
  * @example
  * ```typescript
  * // Close full position
@@ -63,7 +63,7 @@
  *   method: 'POST',
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
- * 
+ *
  * // Partial close
  * await fetch(`/api/markets/perps/position/${positionId}/close`, {
  *   method: 'POST',
@@ -71,19 +71,16 @@
  *   body: JSON.stringify({ size: 50 })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/services/perp-trade-service} Perp trade service
  */
-
-import type { NextRequest } from 'next/server';
 
 import { authenticate } from '@/lib/api/auth-middleware';
 import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { trackServerEvent } from '@/lib/posthog/server';
 import { PerpTradeService } from '@/lib/services/perp-trade-service';
-import {
-  ClosePerpPositionSchema,
-} from '@/lib/validation/schemas';
+import { ClosePerpPositionSchema } from '@/lib/validation/schemas';
+import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
 const IdParamSchema = z.object({
@@ -95,10 +92,7 @@ const IdParamSchema = z.object({
  * Close an existing perpetual futures position
  */
 export const POST = withErrorHandling(
-  async (
-    request: NextRequest,
-    context: { params: Promise<{ id: string }> }
-  ) => {
+  async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const user = await authenticate(request);
     const { id: positionId } = IdParamSchema.parse(await context.params);
 
@@ -115,8 +109,7 @@ export const POST = withErrorHandling(
 
     const result = await PerpTradeService.closePosition(user, positionId);
 
-    const holdTimeMs =
-      new Date().getTime() - new Date(result.position.openedAt).getTime();
+    const holdTimeMs = Date.now() - new Date(result.position.openedAt).getTime();
     const holdTimeMinutes = Math.round(holdTimeMs / 60000);
 
     trackServerEvent(user.userId, 'trade_closed', {
@@ -129,9 +122,7 @@ export const POST = withErrorHandling(
       exitPrice: result.position.currentPrice,
       realizedPnL: result.realizedPnL,
       pnlPercent:
-        result.marginReturned > 0
-          ? (result.realizedPnL / result.marginReturned) * 100
-          : 0,
+        result.marginReturned > 0 ? (result.realizedPnL / result.marginReturned) * 100 : 0,
       holdTimeMinutes,
       feeCharged: result.fee.feeCharged,
       wasLiquidated: result.wasLiquidated,

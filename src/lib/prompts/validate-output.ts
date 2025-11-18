@@ -1,6 +1,6 @@
 /**
  * Output Validation Utilities
- * 
+ *
  * Validates generated feed content to ensure it follows all rules:
  * - No real names (only parody names)
  * - No hashtags
@@ -10,11 +10,11 @@
 
 import { getForbiddenRealNames } from '@/prompts';
 
-export interface ValidationResult {
+export type ValidationResult = {
   isValid: boolean;
   violations: string[];
   warnings: string[];
-}
+};
 
 /**
  * Validates that text doesn't contain real names
@@ -41,7 +41,7 @@ export function validateNoHashtags(text: string): string[] {
   const violations: string[] = [];
   const hashtagRegex = /#\w+/g;
   const hashtags = text.match(hashtagRegex);
-  
+
   if (hashtags && hashtags.length > 0) {
     violations.push(`FORBIDDEN: Contains hashtags: ${hashtags.join(', ')}`);
   }
@@ -55,9 +55,10 @@ export function validateNoHashtags(text: string): string[] {
 export function validateNoEmojis(text: string): string[] {
   const violations: string[] = [];
   // Regex to match most common emoji ranges
-  const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu;
+  const emojiRegex =
+    /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu;
   const emojis = text.match(emojiRegex);
-  
+
   if (emojis && emojis.length > 0) {
     violations.push(`FORBIDDEN: Contains emojis: ${emojis.join(' ')}`);
   }
@@ -74,11 +75,9 @@ export function validateCharacterLimit(
   postType: string
 ): string[] {
   const violations: string[] = [];
-  
+
   if (text.length > maxLength) {
-    violations.push(
-      `EXCEEDED: ${postType} is ${text.length} chars (max: ${maxLength})`
-    );
+    violations.push(`EXCEEDED: ${postType} is ${text.length} chars (max: ${maxLength})`);
   }
 
   return violations;
@@ -157,26 +156,25 @@ export function validatePostBatch(
   }));
 
   return {
-    allValid: results.every(r => r.isValid),
+    allValid: results.every((r) => r.isValid),
     results,
   };
 }
 
 /**
  * Example usage:
- * 
+ *
  * const result = validateFeedPost(generatedPost, {
  *   maxLength: CHARACTER_LIMITS.AMBIENT,
  *   postType: 'AMBIENT'
  * });
- * 
+ *
  * if (!result.isValid) {
  *   console.error('Validation failed:', result.violations);
  *   // Regenerate or reject the post
  * }
- * 
+ *
  * if (result.warnings.length > 0) {
  *   console.warn('Warnings:', result.warnings);
  * }
  */
-

@@ -7,79 +7,74 @@
  * Pattern based on: ProfileWidget.tsx
  */
 
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { DollarSign, MessageSquare, Activity } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils';
+import { Activity, DollarSign, MessageSquare } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-interface BreakdownData {
-  userId: string
-  reputationScore: number
-  trustLevel: string
-  confidenceScore: number
+type BreakdownData = {
+  userId: string;
+  reputationScore: number;
+  trustLevel: string;
+  confidenceScore: number;
   breakdown: {
-    pnlComponent: number
-    feedbackComponent: number
-    activityComponent: number
-  }
+    pnlComponent: number;
+    feedbackComponent: number;
+    activityComponent: number;
+  };
   metrics: {
-    normalizedPnL: number
-    averageFeedbackScore: number
-    gamesPlayed: number
-    totalFeedbackCount: number
-    winRate: number
-  }
+    normalizedPnL: number;
+    averageFeedbackScore: number;
+    gamesPlayed: number;
+    totalFeedbackCount: number;
+    winRate: number;
+  };
   weights: {
-    pnl: number
-    feedback: number
-    activity: number
-  }
-}
+    pnl: number;
+    feedback: number;
+    activity: number;
+  };
+};
 
-interface ReputationBreakdownProps {
-  userId: string
-  className?: string
-}
+type ReputationBreakdownProps = {
+  userId: string;
+  className?: string;
+};
 
-export function ReputationBreakdown({
-  userId,
-  className = '',
-}: ReputationBreakdownProps) {
-  const [breakdown, setBreakdown] = useState<BreakdownData | null>(null)
-  const [loading, setLoading] = useState(true)
+export function ReputationBreakdown({ userId, className = '' }: ReputationBreakdownProps) {
+  const [breakdown, setBreakdown] = useState<BreakdownData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchBreakdown = async () => {
-      setLoading(true)
-      const response = await fetch(
-        `/api/reputation/breakdown/${encodeURIComponent(userId)}`
-      )
-      const data = await response.json()
+      setLoading(true);
+      const response = await fetch(`/api/reputation/breakdown/${encodeURIComponent(userId)}`);
+      const data = await response.json();
 
       if (data.success) {
-        setBreakdown(data)
+        setBreakdown(data);
       }
-      setLoading(false)
-    }
+      setLoading(false);
+    };
 
-    fetchBreakdown()
-  }, [userId])
+    fetchBreakdown();
+  }, [userId]);
 
   if (loading) {
     return (
-      <div className={cn('bg-sidebar rounded-lg p-4', className)}>
-        <div className="text-sm text-muted-foreground">Loading breakdown...</div>
+      <div className={cn('rounded-lg bg-sidebar p-4', className)}>
+        <div className="text-muted-foreground text-sm">Loading breakdown...</div>
       </div>
-    )
+    );
   }
 
   if (!breakdown) {
     return (
-      <div className={cn('bg-sidebar rounded-lg p-4', className)}>
-        <div className="text-sm text-muted-foreground">Breakdown data unavailable</div>
+      <div className={cn('rounded-lg bg-sidebar p-4', className)}>
+        <div className="text-muted-foreground text-sm">Breakdown data unavailable</div>
       </div>
-    )
+    );
   }
 
   const components = [
@@ -110,73 +105,67 @@ export function ReputationBreakdown({
       bgColor: 'bg-purple-500/10',
       metric: `${breakdown.metrics.gamesPlayed} games played`,
     },
-  ]
+  ];
 
   return (
-    <div className={cn('bg-sidebar rounded-lg p-4 space-y-4', className)}>
+    <div className={cn('space-y-4 rounded-lg bg-sidebar p-4', className)}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-foreground">Reputation Breakdown</h3>
-        <div className="text-sm text-muted-foreground">
+        <h3 className="font-bold text-foreground text-lg">Reputation Breakdown</h3>
+        <div className="text-muted-foreground text-sm">
           Confidence: {(breakdown.confidenceScore * 100).toFixed(0)}%
         </div>
       </div>
 
       {/* Total Score */}
-      <div className="bg-muted/30 rounded-lg p-4 text-center">
-        <div className="text-xs text-muted-foreground mb-1">Total Reputation</div>
-        <div className="text-3xl font-bold text-foreground">
+      <div className="rounded-lg bg-muted/30 p-4 text-center">
+        <div className="mb-1 text-muted-foreground text-xs">Total Reputation</div>
+        <div className="font-bold text-3xl text-foreground">
           {Math.round(breakdown.reputationScore)}
         </div>
-        <div className="text-xs text-muted-foreground mt-1 capitalize">
-          {breakdown.trustLevel}
-        </div>
+        <div className="mt-1 text-muted-foreground text-xs capitalize">{breakdown.trustLevel}</div>
       </div>
 
       {/* Components Breakdown */}
       <div className="space-y-3">
         {components.map((component) => {
-          const Icon = component.icon
+          const Icon = component.icon;
           return (
             <div key={component.name} className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={cn('p-1.5 rounded', component.bgColor)}>
-                    <Icon className={cn('w-4 h-4', component.color)} />
+                  <div className={cn('rounded p-1.5', component.bgColor)}>
+                    <Icon className={cn('h-4 w-4', component.color)} />
                   </div>
                   <div>
-                    <div className="text-sm font-medium text-foreground">
-                      {component.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{component.metric}</div>
+                    <div className="font-medium text-foreground text-sm">{component.name}</div>
+                    <div className="text-muted-foreground text-xs">{component.metric}</div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-bold text-foreground">
+                  <div className="font-bold text-foreground text-sm">
                     {component.value.toFixed(1)}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {component.weight}% weight
-                  </div>
+                  <div className="text-muted-foreground text-xs">{component.weight}% weight</div>
                 </div>
               </div>
 
               {/* Progress Bar */}
-              <div className="w-full bg-muted/30 rounded-full h-2">
+              <div className="h-2 w-full rounded-full bg-muted/30">
                 <div
                   className={cn('h-2 rounded-full', component.bgColor)}
                   style={{ width: `${Math.min(100, component.value)}%` }}
                 />
               </div>
             </div>
-          )
+          );
         })}
       </div>
 
       {/* Calculation Note */}
-      <div className="text-xs text-muted-foreground italic border-t border-border pt-3">
+      <div className="border-border border-t pt-3 text-muted-foreground text-xs italic">
         Reputation = (PNL × 40%) + (Feedback × 40%) + (Activity × 20%)
       </div>
     </div>
-  )
+  );
 }

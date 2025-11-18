@@ -1,13 +1,13 @@
 /**
  * Group Invite Accept API
- * 
+ *
  * @route POST /api/groups/invites/[inviteId]/accept - Accept group invite
  * @access Authenticated
- * 
+ *
  * @description
  * Accepts a group invitation. Adds the authenticated user to the group
  * and removes the invite. User must be the invitee.
- * 
+ *
  * @openapi
  * /api/groups/invites/{inviteId}/accept:
  *   post:
@@ -33,7 +33,7 @@
  *         description: Not the invitee
  *       404:
  *         description: Invite not found
- * 
+ *
  * @example
  * ```typescript
  * await fetch(`/api/groups/invites/${inviteId}/accept`, {
@@ -43,13 +43,13 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { ApiError } from '@/lib/errors/api-errors'
-import { logger } from '@/lib/logger'
-import { asUser } from '@/lib/db/context'
-import { nanoid } from 'nanoid'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { asUser } from '@/lib/db/context';
+import { ApiError } from '@/lib/errors/api-errors';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { nanoid } from 'nanoid';
+import type { NextRequest } from 'next/server';
 
 /**
  * POST /api/groups/invites/[inviteId]/accept
@@ -57,25 +57,25 @@ import { nanoid } from 'nanoid'
  */
 export const POST = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ inviteId: string }> }) => {
-    const user = await authenticate(request)
-    const { inviteId } = await params
+    const user = await authenticate(request);
+    const { inviteId } = await params;
 
     const result = await asUser(user, async (db) => {
       // Get the invite
       const invite = await db.userGroupInvite.findUnique({
         where: { id: inviteId },
-      })
+      });
 
       if (!invite) {
-        throw new ApiError('Invite not found', 404)
+        throw new ApiError('Invite not found', 404);
       }
 
       if (invite.invitedUserId !== user.userId) {
-        throw new ApiError('This invite is not for you', 403)
+        throw new ApiError('This invite is not for you', 403);
       }
 
       if (invite.status !== 'pending') {
-        throw new ApiError('This invite has already been processed', 400)
+        throw new ApiError('This invite has already been processed', 400);
       }
 
       // Check if user is already a member
@@ -84,7 +84,7 @@ export const POST = withErrorHandling(
           groupId: invite.groupId,
           userId: user.userId,
         },
-      })
+      });
 
       if (existingMember) {
         // Update invite status and return
@@ -94,8 +94,8 @@ export const POST = withErrorHandling(
             status: 'accepted',
             respondedAt: new Date(),
           },
-        })
-        throw new ApiError('You are already a member of this group', 400)
+        });
+        throw new ApiError('You are already a member of this group', 400);
       }
 
       // Add user as member
@@ -107,7 +107,7 @@ export const POST = withErrorHandling(
           addedBy: invite.invitedBy,
           joinedAt: new Date(),
         },
-      })
+      });
 
       // Add to associated chat
       const chat = await db.chat.findFirst({
@@ -115,7 +115,7 @@ export const POST = withErrorHandling(
           groupId: invite.groupId,
           isGroup: true,
         },
-      })
+      });
 
       if (chat) {
         await db.chatParticipant.create({
@@ -125,7 +125,7 @@ export const POST = withErrorHandling(
             userId: user.userId,
             joinedAt: new Date(),
           },
-        })
+        });
       }
 
       // Update invite status
@@ -135,7 +135,7 @@ export const POST = withErrorHandling(
           status: 'accepted',
           respondedAt: new Date(),
         },
-      })
+      });
 
       // Mark notification as read
       await db.notification.updateMany({
@@ -146,17 +146,20 @@ export const POST = withErrorHandling(
         data: {
           read: true,
         },
-      })
+      });
 
       return {
         groupId: invite.groupId,
         chatId: chat?.id,
-      }
-    })
+      };
+    });
 
-    logger.info('Group invite accepted', { userId: user.userId, inviteId }, 'POST /api/groups/invites/:inviteId/accept')
+    logger.info(
+      'Group invite accepted',
+      { userId: user.userId, inviteId },
+      'POST /api/groups/invites/:inviteId/accept'
+    );
 
-    return successResponse(result)
+    return successResponse(result);
   }
-)
-
+);

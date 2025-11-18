@@ -1,10 +1,10 @@
 import {
   type Action,
   type IAgentRuntime,
-  logger,
   type Memory,
   type State,
   createUniqueUuid,
+  logger,
 } from '@elizaos/core';
 
 export const recordExperienceAction: Action = {
@@ -15,7 +15,9 @@ export const recordExperienceAction: Action = {
     [
       {
         name: 'User',
-        content: { text: 'Remember that installing dependencies is required for Python scripts' },
+        content: {
+          text: 'Remember that installing dependencies is required for Python scripts',
+        },
       },
       {
         name: 'Agent',

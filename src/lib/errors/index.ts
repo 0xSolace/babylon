@@ -2,63 +2,61 @@
  * Central export point for all error-related utilities
  */
 
+export {
+  Agent0DuplicateFeedbackError,
+  Agent0Error,
+  Agent0FeedbackError,
+  Agent0RateLimitError,
+  Agent0RegistrationError,
+  Agent0ReputationError,
+  Agent0SearchError,
+} from './agent0.errors';
 // Base error classes
 export {
-  BabylonError,
-  ValidationError,
   AuthenticationError,
   AuthorizationError,
-  NotFoundError,
+  BabylonError,
+  BadRequestError,
+  BusinessLogicError,
   ConflictError,
   DatabaseError,
   ExternalServiceError,
-  RateLimitError,
-  BusinessLogicError,
-  BadRequestError,
   InternalServerError,
-  ServiceUnavailableError
+  NotFoundError,
+  RateLimitError,
+  ServiceUnavailableError,
+  ValidationError,
 } from './base.errors';
 
-export {
-  Agent0Error,
-  Agent0RegistrationError,
-  Agent0FeedbackError,
-  Agent0ReputationError,
-  Agent0SearchError,
-  Agent0DuplicateFeedbackError,
-  Agent0RateLimitError
-} from './agent0.errors';
-
+import type { JsonValue } from '@/types/common';
 // Re-import for runtime usage
 import { BabylonError, ValidationError } from './base.errors';
-import type { JsonValue } from '@/types/common';
 
 // Domain-specific errors
 export {
-  InsufficientFundsError,
-  TradingError,
-  PositionError,
-  AgentError,
   AgentAuthenticationError,
-  CoalitionError,
+  AgentError,
   BlockchainError,
-  SmartContractError,
-  WalletError,
+  CoalitionError,
   DepositError,
-  WithdrawalError,
-  GameError,
   FeedError,
+  GameError,
+  InsufficientFundsError,
   LLMError,
-  PaymentError
+  PaymentError,
+  PositionError,
+  SmartContractError,
+  TradingError,
+  WalletError,
+  WithdrawalError,
 } from './domain.errors';
-
 // Error handler and utilities
 export {
-  errorHandler,
-  withErrorHandling,
   asyncHandler,
+  errorHandler,
   errorResponse,
-  successResponse
+  successResponse,
+  withErrorHandling,
 } from './error-handler';
 
 /**
@@ -104,7 +102,7 @@ export const ErrorCodes = {
   EXTERNAL_SERVICE_ERROR: 'EXTERNAL_SERVICE_ERROR',
   BLOCKCHAIN_ERROR: 'BLOCKCHAIN_ERROR',
   SMART_CONTRACT_ERROR: 'SMART_CONTRACT_ERROR',
-  LLM_ERROR: 'LLM_ERROR'
+  LLM_ERROR: 'LLM_ERROR',
 } as const;
 
 /**
@@ -127,14 +125,14 @@ export function isOperationalError(error: unknown): boolean {
 /**
  * Helper to create a standard error response object
  */
-export interface ErrorResponse {
+export type ErrorResponse = {
   error: {
     message: string;
     code: string;
     violations?: Array<{ field: string; message: string }>;
     context?: Record<string, JsonValue>;
   };
-}
+};
 
 /**
  * Create a standardized error response object
@@ -144,12 +142,14 @@ export function createErrorResponse(error: BabylonError): ErrorResponse {
     error: {
       message: error.message,
       code: error.code,
-      ...(error instanceof ValidationError && error.violations && {
-        violations: error.violations
-      }),
-      ...(process.env.NODE_ENV === 'development' && error.context && {
-        context: error.context as Record<string, JsonValue>
-      })
-    }
+      ...(error instanceof ValidationError &&
+        error.violations && {
+          violations: error.violations,
+        }),
+      ...(process.env.NODE_ENV === 'development' &&
+        error.context && {
+          context: error.context as Record<string, JsonValue>,
+        }),
+    },
   };
 }

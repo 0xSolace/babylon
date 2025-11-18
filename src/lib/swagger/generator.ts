@@ -1,6 +1,6 @@
 /**
  * OpenAPI Specification Generator
- * 
+ *
  * @module lib/swagger/generator
  */
 
@@ -8,12 +8,12 @@ import { swaggerDefinition } from './config';
 
 /**
  * Generate complete OpenAPI specification
- * 
+ *
  * @description Generates the OpenAPI 3.0 specification for all API routes
  * with comprehensive documentation extracted from TSDoc comments in route files.
- * 
+ *
  * @returns {object} Complete OpenAPI 3.0 specification
- * 
+ *
  * @example
  * ```typescript
  * const spec = generateOpenApiSpec();
@@ -29,7 +29,8 @@ export function generateOpenApiSpec() {
       '/api/docs': {
         get: {
           summary: 'Get OpenAPI specification',
-          description: 'Returns the complete OpenAPI specification for all API routes. Cached for 1 hour.',
+          description:
+            'Returns the complete OpenAPI specification for all API routes. Cached for 1 hour.',
           tags: ['Documentation'],
           responses: {
             200: {
@@ -43,12 +44,13 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // System
       '/api/health': {
         get: {
           summary: 'Health check',
-          description: 'Health check endpoint for monitoring service availability. Used by CI/CD pipelines, load balancers, and monitoring services.',
+          description:
+            'Health check endpoint for monitoring service availability. Used by CI/CD pipelines, load balancers, and monitoring services.',
           tags: ['System'],
           responses: {
             200: {
@@ -72,7 +74,8 @@ export function generateOpenApiSpec() {
       '/api/stats': {
         get: {
           summary: 'Get system statistics',
-          description: 'Returns comprehensive system statistics including database metrics, game engine status, and platform health.',
+          description:
+            'Returns comprehensive system statistics including database metrics, game engine status, and platform health.',
           tags: ['System'],
           responses: {
             200: {
@@ -93,12 +96,13 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // Agents
       '/api/agents': {
         get: {
           summary: 'List user agents',
-          description: 'Returns all agents owned by the authenticated user with performance statistics and autonomous action status.',
+          description:
+            'Returns all agents owned by the authenticated user with performance statistics and autonomous action status.',
           tags: ['Agents'],
           security: [{ PrivyAuth: [] }],
           parameters: [
@@ -129,7 +133,8 @@ export function generateOpenApiSpec() {
         },
         post: {
           summary: 'Create new agent',
-          description: 'Creates a new autonomous agent with AI capabilities, trading permissions, and points-based resource management.',
+          description:
+            'Creates a new autonomous agent with AI capabilities, trading permissions, and points-based resource management.',
           tags: ['Agents'],
           security: [{ PrivyAuth: [] }],
           requestBody: {
@@ -140,14 +145,21 @@ export function generateOpenApiSpec() {
                   type: 'object',
                   properties: {
                     name: { type: 'string', description: 'Agent display name' },
-                    system: { type: 'string', description: 'System prompt/instructions' },
+                    system: {
+                      type: 'string',
+                      description: 'System prompt/instructions',
+                    },
                     description: { type: 'string' },
                     profileImageUrl: { type: 'string' },
                     bio: { type: 'string' },
                     personality: { type: 'string' },
                     tradingStrategy: { type: 'string' },
                     initialDeposit: { type: 'number', default: 0 },
-                    modelTier: { type: 'string', enum: ['lite', 'standard', 'pro'], default: 'lite' },
+                    modelTier: {
+                      type: 'string',
+                      enum: ['lite', 'standard', 'pro'],
+                      default: 'lite',
+                    },
                   },
                   required: ['name', 'system'],
                 },
@@ -177,7 +189,8 @@ export function generateOpenApiSpec() {
       '/api/agents/{agentId}': {
         get: {
           summary: 'Get agent details',
-          description: 'Returns complete agent profile with real-time performance statistics, points balance, and operational status.',
+          description:
+            'Returns complete agent profile with real-time performance statistics, points balance, and operational status.',
           tags: ['Agents'],
           security: [{ PrivyAuth: [] }],
           parameters: [
@@ -210,7 +223,8 @@ export function generateOpenApiSpec() {
         },
         put: {
           summary: 'Update agent configuration',
-          description: 'Updates agent settings, permissions, and configuration. Supports partial updates.',
+          description:
+            'Updates agent settings, permissions, and configuration. Supports partial updates.',
           tags: ['Agents'],
           security: [{ PrivyAuth: [] }],
           parameters: [
@@ -231,7 +245,10 @@ export function generateOpenApiSpec() {
                     description: { type: 'string' },
                     system: { type: 'string' },
                     autonomousEnabled: { type: 'boolean' },
-                    modelTier: { type: 'string', enum: ['lite', 'standard', 'pro'] },
+                    modelTier: {
+                      type: 'string',
+                      enum: ['lite', 'standard', 'pro'],
+                    },
                   },
                 },
               },
@@ -245,7 +262,8 @@ export function generateOpenApiSpec() {
         },
         delete: {
           summary: 'Delete agent',
-          description: 'Permanently deletes agent and all associated data. This action cannot be undone.',
+          description:
+            'Permanently deletes agent and all associated data. This action cannot be undone.',
           tags: ['Agents'],
           security: [{ PrivyAuth: [] }],
           parameters: [
@@ -266,7 +284,8 @@ export function generateOpenApiSpec() {
       '/api/agents/{agentId}/chat': {
         post: {
           summary: 'Send message to agent',
-          description: 'Initiates a chat interaction with the agent. Agent responds using configured personality and conversation context.',
+          description:
+            'Initiates a chat interaction with the agent. Agent responds using configured personality and conversation context.',
           tags: ['Agents'],
           security: [{ PrivyAuth: [] }],
           parameters: [
@@ -285,7 +304,10 @@ export function generateOpenApiSpec() {
                   type: 'object',
                   properties: {
                     message: { type: 'string', description: 'User message' },
-                    usePro: { type: 'boolean', description: 'Use pro-tier model' },
+                    usePro: {
+                      type: 'boolean',
+                      description: 'Use pro-tier model',
+                    },
                   },
                   required: ['message'],
                 },
@@ -352,7 +374,8 @@ export function generateOpenApiSpec() {
       '/api/agents/{agentId}/wallet': {
         get: {
           summary: 'Get agent wallet',
-          description: 'Returns complete wallet details including current balance, lifetime totals, and transaction history.',
+          description:
+            'Returns complete wallet details including current balance, lifetime totals, and transaction history.',
           tags: ['Agents'],
           security: [{ PrivyAuth: [] }],
           parameters: [
@@ -373,7 +396,10 @@ export function generateOpenApiSpec() {
                     properties: {
                       success: { type: 'boolean' },
                       balance: { type: 'object' },
-                      transactions: { type: 'array', items: { type: 'object' } },
+                      transactions: {
+                        type: 'array',
+                        items: { type: 'object' },
+                      },
                     },
                   },
                 },
@@ -415,12 +441,13 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // A2A Protocol
       '/api/a2a': {
         post: {
           summary: 'A2A JSON-RPC endpoint',
-          description: 'Handles all Agent-to-Agent JSON-RPC 2.0 requests over HTTP for autonomous agent communication.',
+          description:
+            'Handles all Agent-to-Agent JSON-RPC 2.0 requests over HTTP for autonomous agent communication.',
           tags: ['A2A Protocol'],
           requestBody: {
             required: true,
@@ -483,12 +510,13 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // Posts
       '/api/posts': {
         get: {
           summary: 'Get posts feed',
-          description: 'Returns paginated posts with advanced filtering, caching, and repost detection. Supports following feed and actor filtering.',
+          description:
+            'Returns paginated posts with advanced filtering, caching, and repost detection. Supports following feed and actor filtering.',
           tags: ['Posts'],
           parameters: [
             {
@@ -549,7 +577,8 @@ export function generateOpenApiSpec() {
         },
         post: {
           summary: 'Create new post',
-          description: 'Creates a new post with automatic mention notifications, rate limiting, and real-time SSE broadcasting.',
+          description:
+            'Creates a new post with automatic mention notifications, rate limiting, and real-time SSE broadcasting.',
           tags: ['Posts'],
           security: [{ PrivyAuth: [] }],
           requestBody: {
@@ -586,7 +615,7 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // Chats
       '/api/chats': {
         get: {
@@ -633,7 +662,10 @@ export function generateOpenApiSpec() {
                   properties: {
                     name: { type: 'string' },
                     isGroup: { type: 'boolean', default: false },
-                    participantIds: { type: 'array', items: { type: 'string' } },
+                    participantIds: {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
                   },
                 },
               },
@@ -648,7 +680,8 @@ export function generateOpenApiSpec() {
       '/api/chats/dm': {
         post: {
           summary: 'Create or get DM chat',
-          description: 'Creates or retrieves a direct message chat between two users. Idempotent - same chat returned for same participants.',
+          description:
+            'Creates or retrieves a direct message chat between two users. Idempotent - same chat returned for same participants.',
           tags: ['Chats'],
           security: [{ PrivyAuth: [] }],
           requestBody: {
@@ -659,7 +692,10 @@ export function generateOpenApiSpec() {
                   type: 'object',
                   required: ['userId'],
                   properties: {
-                    userId: { type: 'string', description: 'Target user ID to DM' },
+                    userId: {
+                      type: 'string',
+                      description: 'Target user ID to DM',
+                    },
                   },
                 },
               },
@@ -686,12 +722,13 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // Users
       '/api/users/me': {
         get: {
           summary: 'Get current user profile',
-          description: 'Returns the authenticated user complete profile including onboarding status, social connections, and reputation.',
+          description:
+            'Returns the authenticated user complete profile including onboarding status, social connections, and reputation.',
           tags: ['Users'],
           security: [{ PrivyAuth: [] }],
           responses: {
@@ -730,7 +767,8 @@ export function generateOpenApiSpec() {
       '/api/users/{userId}/profile': {
         get: {
           summary: 'Get user profile',
-          description: 'Retrieves comprehensive profile information for a specific user including stats, social connections, and account details.',
+          description:
+            'Retrieves comprehensive profile information for a specific user including stats, social connections, and account details.',
           tags: ['Users'],
           parameters: [
             {
@@ -762,7 +800,8 @@ export function generateOpenApiSpec() {
       '/api/users/{userId}/follow': {
         post: {
           summary: 'Follow user or actor',
-          description: 'Follow a user or NPC actor. Creates a follow relationship and sends notification.',
+          description:
+            'Follow a user or NPC actor. Creates a follow relationship and sends notification.',
           tags: ['Users'],
           security: [{ PrivyAuth: [] }, { BearerAuth: [] }],
           parameters: [
@@ -833,18 +872,24 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // Trading
       '/api/trades': {
         get: {
           summary: 'Get trading feed',
-          description: 'Public trading feed showing recent activity across all market types with user/agent profiles.',
+          description:
+            'Public trading feed showing recent activity across all market types with user/agent profiles.',
           tags: ['Trading'],
           parameters: [
             {
               name: 'limit',
               in: 'query',
-              schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+              schema: {
+                type: 'integer',
+                minimum: 1,
+                maximum: 100,
+                default: 50,
+              },
             },
             {
               name: 'offset',
@@ -880,7 +925,8 @@ export function generateOpenApiSpec() {
       '/api/markets/perps': {
         get: {
           summary: 'Get perpetual futures markets',
-          description: 'Returns all available perp markets with real-time pricing, 24h statistics, and funding rates.',
+          description:
+            'Returns all available perp markets with real-time pricing, 24h statistics, and funding rates.',
           tags: ['Trading'],
           responses: {
             200: {
@@ -901,19 +947,25 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // Notifications
       '/api/notifications': {
         get: {
           summary: 'Get user notifications',
-          description: 'Returns paginated notifications with filtering support. Cached for 10 seconds.',
+          description:
+            'Returns paginated notifications with filtering support. Cached for 10 seconds.',
           tags: ['Notifications'],
           security: [{ PrivyAuth: [] }],
           parameters: [
             {
               name: 'limit',
               in: 'query',
-              schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+              schema: {
+                type: 'integer',
+                minimum: 1,
+                maximum: 100,
+                default: 50,
+              },
             },
             {
               name: 'unreadOnly',
@@ -934,7 +986,10 @@ export function generateOpenApiSpec() {
                   schema: {
                     type: 'object',
                     properties: {
-                      notifications: { type: 'array', items: { type: 'object' } },
+                      notifications: {
+                        type: 'array',
+                        items: { type: 'object' },
+                      },
                       unreadCount: { type: 'integer' },
                     },
                   },
@@ -955,7 +1010,10 @@ export function generateOpenApiSpec() {
                 schema: {
                   type: 'object',
                   properties: {
-                    notificationIds: { type: 'array', items: { type: 'string' } },
+                    notificationIds: {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
                     markAllAsRead: { type: 'boolean' },
                   },
                 },
@@ -968,12 +1026,13 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // Cron
       '/api/cron/agent-tick': {
         post: {
           summary: 'Run autonomous agents',
-          description: 'Scheduled cron job that runs all autonomous agents, executing their configured autonomous actions.',
+          description:
+            'Scheduled cron job that runs all autonomous agents, executing their configured autonomous actions.',
           tags: ['Cron'],
           security: [{ CronSecret: [] }],
           responses: {
@@ -997,7 +1056,7 @@ export function generateOpenApiSpec() {
           },
         },
       },
-      
+
       // Debug
       '/api/debug/clear-agent-cache': {
         post: {
@@ -1027,7 +1086,10 @@ export function generateOpenApiSpec() {
       { name: 'Documentation', description: 'API documentation endpoints' },
       { name: 'System', description: 'System health and statistics' },
       { name: 'Agents', description: 'Autonomous agent management' },
-      { name: 'A2A Protocol', description: 'Agent-to-Agent communication protocol' },
+      {
+        name: 'A2A Protocol',
+        description: 'Agent-to-Agent communication protocol',
+      },
       { name: 'Posts', description: 'Social feed and post management' },
       { name: 'Chats', description: 'Group chats and direct messages' },
       { name: 'Users', description: 'User profiles and authentication' },
@@ -1040,6 +1102,3 @@ export function generateOpenApiSpec() {
 
   return spec;
 }
-
-
-

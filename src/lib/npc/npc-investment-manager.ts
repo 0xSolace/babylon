@@ -8,14 +8,14 @@
  * - Performance tracking
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { getReputationBreakdown } from '@/lib/reputation/reputation-service';
-import { generateSnowflakeId } from '@/lib/snowflake';
-import type { TradingDecision, TradingExecutionResult } from '@/types/market-decisions';
 import { TradeExecutionService } from '@/lib/services/trade-execution-service';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import type { TradingExecutionResult } from '@/types/market-decisions';
 
-export interface PortfolioPosition {
+export type PortfolioPosition = {
   id: string;
   poolId: string;
   marketType: 'perp' | 'prediction';
@@ -27,19 +27,19 @@ export interface PortfolioPosition {
   currentPrice: number;
   unrealizedPnL: number;
   leverage?: number;
-}
+};
 
-export interface PortfolioMetrics {
+export type PortfolioMetrics = {
   totalValue: number;
   availableBalance: number;
   unrealizedPnL: number;
   realizedPnL: number;
   positionCount: number;
   utilization: number; // Percentage of capital deployed
-  riskScore: number;   // 0-1, higher = riskier
-}
+  riskScore: number; // 0-1, higher = riskier
+};
 
-export interface RebalanceAction {
+export type RebalanceAction = {
   type: 'open' | 'close' | 'resize';
   positionId?: string;
   marketType: 'perp' | 'prediction';
@@ -48,7 +48,7 @@ export interface RebalanceAction {
   side: string;
   targetSize: number;
   reason: string;
-}
+};
 
 export class NPCInvestmentManager {
   /**
@@ -88,7 +88,7 @@ export class NPCInvestmentManager {
     const utilization = totalValue > 0 ? (totalInvested / totalValue) * 100 : 0;
 
     // Calculate risk score based on leverage and concentration
-    const riskScore = this.calculateRiskScore(positions, totalValue);
+    const riskScore = NPCInvestmentManager.calculateRiskScore(positions, totalValue);
 
     return {
       totalValue,
@@ -102,43 +102,6 @@ export class NPCInvestmentManager {
   }
 
   /**
-   * Calculate portfolio risk score (0-1)
-   */
-  private static calculateRiskScore(
-    positions: PortfolioPosition[],
-    totalValue: number
-  ): number {
-    if (positions.length === 0 || totalValue === 0) return 0;
-
-    let riskScore = 0;
-
-    // Factor 1: Leverage risk (40% weight)
-    const avgLeverage = positions.reduce((sum, pos) => {
-      return sum + (pos.leverage || 1);
-    }, 0) / positions.length;
-    const leverageRisk = Math.min(1, avgLeverage / 10); // Normalize to 0-1 (10x leverage = max risk)
-    riskScore += leverageRisk * 0.4;
-
-    // Factor 2: Concentration risk (30% weight)
-    const largestPosition = Math.max(
-      ...positions.map(pos => Math.abs(parseFloat(pos.unrealizedPnL?.toString() || '0')))
-    );
-    const concentrationRisk = Math.min(1, largestPosition / totalValue);
-    riskScore += concentrationRisk * 0.3;
-
-    // Factor 3: Drawdown risk (30% weight)
-    const totalUnrealizedPnL = positions.reduce((sum, pos) => {
-      return sum + parseFloat(pos.unrealizedPnL?.toString() || '0');
-    }, 0);
-    const drawdownRisk = totalUnrealizedPnL < 0
-      ? Math.min(1, Math.abs(totalUnrealizedPnL) / totalValue)
-      : 0;
-    riskScore += drawdownRisk * 0.3;
-
-    return Math.min(1, riskScore);
-  }
-
-  /**
    * Monitor portfolio and generate rebalance actions if needed
    */
   static async monitorPortfolio(
@@ -146,7 +109,7 @@ export class NPCInvestmentManager {
     npcUserId: string,
     strategy: 'aggressive' | 'conservative' | 'balanced'
   ): Promise<RebalanceAction[]> {
-    const metrics = await this.getPortfolioMetrics(poolId);
+    const metrics = await NPCInvestmentManager.getPortfolioMetrics(poolId);
     const actions: RebalanceAction[] = [];
 
     // Risk thresholds by strategy
@@ -167,7 +130,7 @@ export class NPCInvestmentManager {
       );
 
       // Generate de-risking actions
-      const deRiskActions = await this.generateDeRiskingActions(poolId, metrics);
+      const deRiskActions = await NPCInvestmentManager.generateDeRiskingActions(poolId, metrics);
       actions.push(...deRiskActions);
     }
 
@@ -188,7 +151,7 @@ export class NPCInvestmentManager {
     }
 
     // Check for positions with large unrealized losses
-    const lossyPositions = await this.findPositionsWithLargeDrawdowns(poolId, 0.2); // >20% loss
+    const lossyPositions = await NPCInvestmentManager.findPositionsWithLargeDrawdowns(poolId, 0.2); // >20% loss
     if (lossyPositions.length > 0) {
       logger.warn(
         `Found ${lossyPositions.length} positions with large drawdowns`,
@@ -217,8 +180,10 @@ export class NPCInvestmentManager {
    * Ensure each NPC pool has an initial baseline allocation
    * Invests ~80% of available balance across aligned companies
    */
-  static async executeBaselineInvestments(timestamp: Date = new Date()): Promise<TradingExecutionResult | null> {
-    const baselineDecisions = await this.buildBaselineDecisions();
+  static async executeBaselineInvestments(
+    timestamp: Date = new Date()
+  ): Promise<TradingExecutionResult | null> {
+    const baselineDecisions = await NPCInvestmentManager.buildBaselineDecisions();
 
     if (baselineDecisions.length === 0) {
       return null;
@@ -243,256 +208,6 @@ export class NPCInvestmentManager {
     );
 
     return result;
-  }
-
-  /**
-   * Build baseline allocation decisions for NPC pools lacking exposure
-   */
-  private static async buildBaselineDecisions(): Promise<TradingDecision[]> {
-    const activePools = await prisma.pool.findMany({
-      where: { isActive: true },
-      include: {
-        PoolPosition: {
-          where: { closedAt: null },
-          select: { id: true },
-        },
-      },
-    });
-
-    if (activePools.length === 0) {
-      return [];
-    }
-
-    const actorIds = Array.from(new Set(activePools.map((pool) => pool.npcActorId)));
-
-    const organizationsPromise = prisma.organization.findMany({
-      where: { type: 'company' },
-      select: {
-        id: true,
-        name: true,
-        currentPrice: true,
-        initialPrice: true,
-      },
-    });
-
-    const relationships = await prisma.actorRelationship.findMany({
-      where: {
-        OR: [
-          { actor1Id: { in: actorIds } },
-          { actor2Id: { in: actorIds } },
-        ],
-      },
-      select: {
-        actor1Id: true,
-        actor2Id: true,
-        sentiment: true,
-        strength: true,
-      },
-    });
-
-    const actorIdSet = new Set(actorIds);
-    relationships.forEach((rel) => {
-      actorIdSet.add(rel.actor1Id);
-      actorIdSet.add(rel.actor2Id);
-    });
-
-    const actors = await prisma.actor.findMany({
-      where: { id: { in: Array.from(actorIdSet) } },
-      select: {
-        id: true,
-        name: true,
-        affiliations: true,
-      },
-    });
-
-    const organizations = await organizationsPromise;
-
-    const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
-    const organizationMap = new Map(organizations.map((org) => [org.id, org]));
-    // Use organization ID directly as ticker for reliable lookups
-    const organizationTickerMap = new Map(
-      organizations.map((org) => [org.id, org.id])
-    );
-
-    const relationshipsByActor = new Map<string, Array<{ otherId: string; sentiment: number; strength: number }>>();
-    relationships.forEach((rel) => {
-      relationshipsByActor.set(rel.actor1Id, [
-        ...(relationshipsByActor.get(rel.actor1Id) || []),
-        { otherId: rel.actor2Id, sentiment: rel.sentiment, strength: rel.strength },
-      ]);
-      relationshipsByActor.set(rel.actor2Id, [
-        ...(relationshipsByActor.get(rel.actor2Id) || []),
-        { otherId: rel.actor1Id, sentiment: rel.sentiment, strength: rel.strength },
-      ]);
-    });
-
-    // Sort fallback organizations by current price (descending) to pick meaningful assets
-    const fallbackOrganizations = [...organizations].sort(
-      (a, b) => (b.currentPrice ?? b.initialPrice ?? 100) - (a.currentPrice ?? a.initialPrice ?? 100)
-    );
-
-    const baselineDecisions: TradingDecision[] = [];
-
-    for (const pool of activePools) {
-      // Skip pools that already hold positions
-      if (pool.PoolPosition.length > 0) {
-        continue;
-      }
-
-      const actor = actorMap.get(pool.npcActorId);
-      if (!actor) {
-        continue;
-      }
-
-      const availableBalance = parseFloat(pool.availableBalance.toString());
-      if (availableBalance <= 0) {
-        continue;
-      }
-
-      const investBudget = availableBalance * 0.8;
-      if (investBudget < 1) {
-        continue;
-      }
-
-      const targetOrgIds = new Set<string>();
-
-      (actor.affiliations || []).forEach((orgId) => {
-        if (organizationMap.has(orgId)) {
-          targetOrgIds.add(orgId);
-        }
-      });
-
-      const relatedActors = relationshipsByActor.get(actor.id) || [];
-      relatedActors
-        .filter((rel) => rel.sentiment >= 0.25 && rel.strength >= 0.4)
-        .forEach((rel) => {
-          const counterpart = actorMap.get(rel.otherId);
-          counterpart?.affiliations?.forEach((orgId) => {
-            if (organizationMap.has(orgId)) {
-              targetOrgIds.add(orgId);
-            }
-          });
-        });
-
-      if (targetOrgIds.size === 0) {
-        fallbackOrganizations.slice(0, 3).forEach((org) => targetOrgIds.add(org.id));
-      }
-
-      const targetTickers = Array.from(targetOrgIds)
-        .map((orgId) => organizationTickerMap.get(orgId))
-        .filter((ticker): ticker is string => Boolean(ticker))
-        .slice(0, 5);
-
-      if (targetTickers.length === 0) {
-        continue;
-      }
-
-      let remainingBudget = investBudget;
-
-      targetTickers.forEach((ticker, index) => {
-        const allocationsRemaining = targetTickers.length - index;
-        let allocation = remainingBudget / allocationsRemaining;
-        allocation = Number(allocation.toFixed(2));
-
-        if (allocation <= 0) {
-          return;
-        }
-
-        remainingBudget = Math.max(remainingBudget - allocation, 0);
-
-        baselineDecisions.push({
-          npcId: actor.id,
-          npcName: actor.name,
-          action: 'open_long',
-          marketType: 'perp',
-          ticker,
-          amount: allocation,
-          confidence: 0.9,
-          reasoning: 'Baseline allocation to aligned organizations',
-        });
-      });
-    }
-
-    return baselineDecisions;
-  }
-
-  /**
-   * Generate de-risking actions to reduce portfolio risk
-   */
-  private static async generateDeRiskingActions(
-    poolId: string,
-    metrics: PortfolioMetrics
-  ): Promise<RebalanceAction[]> {
-    const actions: RebalanceAction[] = [];
-
-    // Calculate de-risking urgency based on metrics
-    const riskScore = metrics.riskScore || 0;
-    const unrealizedPnL = metrics.unrealizedPnL || 0;
-    const isHighRisk = riskScore > 0.7;
-    const hasLosses = unrealizedPnL < 0;
-
-    // Determine how many positions to close based on risk level
-    const positionsToClose = isHighRisk ? (hasLosses ? 5 : 3) : 2;
-
-    // Get all leveraged positions
-    const positions = await prisma.poolPosition.findMany({
-      where: {
-        poolId,
-        closedAt: null, // Open positions only
-        leverage: { gt: 1 },
-      },
-      orderBy: {
-        leverage: 'desc', // Highest leverage first
-      },
-      take: positionsToClose,
-    });
-
-    for (const position of positions) {
-      actions.push({
-        type: 'close',
-        positionId: position.id,
-        marketType: position.marketType as 'perp' | 'prediction',
-        ticker: position.ticker || undefined,
-        marketId: position.marketId || undefined,
-        side: position.side,
-        targetSize: 0,
-        reason: `De-risking: high leverage (${position.leverage}x)`,
-      });
-    }
-
-    return actions;
-  }
-
-  /**
-   * Find positions with large unrealized drawdowns
-   */
-  private static async findPositionsWithLargeDrawdowns(
-    poolId: string,
-    threshold: number // e.g., 0.2 = 20% loss
-  ): Promise<PortfolioPosition[]> {
-    const positions = await prisma.poolPosition.findMany({
-      where: {
-        poolId,
-        closedAt: null, // Open positions only
-      },
-    });
-
-    const lossyPositions: PortfolioPosition[] = [];
-
-    for (const position of positions) {
-      const unrealizedPnL = parseFloat(position.unrealizedPnL?.toString() || '0');
-      const size = parseFloat(position.size?.toString() || '0');
-
-      if (size > 0) {
-        const lossPercentage = unrealizedPnL / size;
-
-        if (lossPercentage < -threshold) {
-          lossyPositions.push(position as unknown as PortfolioPosition);
-        }
-      }
-    }
-
-    return lossyPositions;
   }
 
   /**
@@ -559,45 +274,27 @@ export class NPCInvestmentManager {
       },
     });
 
-    logger.info(`Monitoring ${activePools.length} active NPC portfolios`, undefined, 'NPCInvestmentManager');
+    logger.info(
+      `Monitoring ${activePools.length} active NPC portfolios`,
+      undefined,
+      'NPCInvestmentManager'
+    );
 
     for (const pool of activePools) {
       if (!pool.Actor) continue;
 
       // Determine strategy from actor personality
-      const strategy = this.determineStrategyFromPersonality(pool.Actor.personality);
+      const strategy = NPCInvestmentManager.determineStrategyFromPersonality(
+        pool.Actor.personality
+      );
 
-      const actions = await this.monitorPortfolio(pool.id, pool.Actor.id, strategy);
+      const actions = await NPCInvestmentManager.monitorPortfolio(pool.id, pool.Actor.id, strategy);
 
       // Execute rebalance actions
       for (const action of actions) {
-        await this.executeRebalanceAction(pool.Actor.id, pool.id, action);
+        await NPCInvestmentManager.executeRebalanceAction(pool.Actor.id, pool.id, action);
       }
     }
-  }
-
-  /**
-   * Determine investment strategy from actor personality
-   */
-  private static determineStrategyFromPersonality(
-    personality: string | null
-  ): 'aggressive' | 'conservative' | 'balanced' {
-    if (!personality) return 'balanced';
-
-    const personalityLower = personality.toLowerCase();
-
-    const aggressiveKeywords = ['erratic', 'disaster', 'memecoin', 'degen'];
-    const conservativeKeywords = ['vampire', 'yacht', 'philosopher'];
-
-    if (aggressiveKeywords.some(kw => personalityLower.includes(kw))) {
-      return 'aggressive';
-    }
-
-    if (conservativeKeywords.some(kw => personalityLower.includes(kw))) {
-      return 'conservative';
-    }
-
-    return 'balanced';
   }
 
   /**
@@ -679,7 +376,7 @@ export class NPCInvestmentManager {
     strategy: 'aggressive' | 'conservative' | 'balanced'
   ): Promise<number> {
     // Get current portfolio metrics
-    const metrics = await this.getPortfolioMetrics(poolId);
+    const metrics = await NPCInvestmentManager.getPortfolioMetrics(poolId);
 
     // Get reputation breakdown
     const reputation = await getReputationBreakdown(npcUserId);
@@ -688,7 +385,7 @@ export class NPCInvestmentManager {
     const basePositionSizes = {
       aggressive: 0.15, // 15% of available balance
       conservative: 0.05, // 5% of available balance
-      balanced: 0.10, // 10% of available balance
+      balanced: 0.1, // 10% of available balance
     };
 
     let positionSize = basePositionSizes[strategy];

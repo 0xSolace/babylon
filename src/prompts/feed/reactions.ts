@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating actor reactions to world events.
- * 
+ *
  * Creates reaction posts from actors responding to events, announcements,
  * or other content. Captures character-driven responses that reflect
  * personality and relationships.
- * 
+ *
  * Returns XML with reaction posts and sentiment analysis.
  */
 export const reactions = definePrompt({
@@ -80,5 +80,5 @@ Respond with ONLY this XML format (example for 2 reactions):
 </response>
 
 CRITICAL: Return EXACTLY {{actorCount}} reactions. Each must have post, sentiment, clueStrength, pointsToward elements.
-`.trim()
+`.trim(),
 });

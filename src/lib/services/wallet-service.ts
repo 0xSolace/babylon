@@ -7,22 +7,22 @@
  * - Validates sufficient funds
  * - Calculates PnL
  */
-import type { PrismaClient, Prisma } from '@prisma/client';
 
 import { cachedDb } from '@/lib/cached-database-service';
 // import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import { EarnedPointsService } from '@/lib/services/earned-points-service';
 import { generateSnowflakeId } from '@/lib/snowflake';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
-export interface BalanceInfo {
+export type BalanceInfo = {
   balance: number;
   totalDeposited: number;
   totalWithdrawn: number;
   lifetimePnL: number;
-}
+};
 
-export interface TransactionHistoryItem {
+export type TransactionHistoryItem = {
   id: string;
   type: string;
   amount: number;
@@ -31,52 +31,9 @@ export interface TransactionHistoryItem {
   description: string | null;
   relatedId: string | null;
   createdAt: Date;
-}
+};
 
 export class WalletService {
-  private static readonly STARTING_BALANCE = 1000; // $1,000 USD
-
-  private static async applyBalanceChange(
-    tx: Prisma.TransactionClient,
-    userId: string,
-    delta: number,
-    type: string,
-    description: string,
-    relatedId?: string
-  ): Promise<void> {
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: { virtualBalance: true },
-    });
-
-    if (!user) {
-      throw new Error(`User not found: ${userId}`);
-    }
-
-    const currentBalance = Number(user.virtualBalance);
-    const newBalance = currentBalance + delta;
-
-    await tx.user.update({
-      where: { id: userId },
-      data: {
-        virtualBalance: newBalance,
-      },
-    });
-
-    await tx.balanceTransaction.create({
-      data: {
-        id: await generateSnowflakeId(),
-        userId,
-        type,
-        amount: delta,
-        balanceBefore: currentBalance,
-        balanceAfter: newBalance,
-        relatedId: relatedId || null,
-        description,
-      },
-    });
-  }
-
   /**
    * Get user's current balance
    */
@@ -106,10 +63,7 @@ export class WalletService {
   /**
    * Check if user has sufficient balance
    */
-  static async hasSufficientBalance(
-    userId: string,
-    requiredAmount: number
-  ): Promise<boolean> {
+  static async hasSufficientBalance(userId: string, requiredAmount: number): Promise<boolean> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { virtualBalance: true },
@@ -136,10 +90,17 @@ export class WalletService {
     const delta = -amount;
 
     if (tx) {
-      await this.applyBalanceChange(tx, userId, delta, type, description, relatedId);
+      await WalletService.applyBalanceChange(tx, userId, delta, type, description, relatedId);
     } else {
       await prisma.$transaction(async (transaction) => {
-        await this.applyBalanceChange(transaction, userId, delta, type, description, relatedId);
+        await WalletService.applyBalanceChange(
+          transaction,
+          userId,
+          delta,
+          type,
+          description,
+          relatedId
+        );
       });
     }
 
@@ -158,10 +119,17 @@ export class WalletService {
     tx?: Prisma.TransactionClient
   ): Promise<void> {
     if (tx) {
-      await this.applyBalanceChange(tx, userId, amount, type, description, relatedId);
+      await WalletService.applyBalanceChange(tx, userId, amount, type, description, relatedId);
     } else {
       await prisma.$transaction(async (transaction) => {
-        await this.applyBalanceChange(transaction, userId, amount, type, description, relatedId);
+        await WalletService.applyBalanceChange(
+          transaction,
+          userId,
+          amount,
+          type,
+          description,
+          relatedId
+        );
       });
     }
 
@@ -227,7 +195,7 @@ export class WalletService {
       take: limit,
     });
 
-    type TransactionType = typeof transactions[0];
+    type TransactionType = (typeof transactions)[0];
     return transactions.map((tx: TransactionType) => ({
       id: tx.id,
       type: tx.type,
@@ -253,27 +221,34 @@ export class WalletService {
     }
 
     if (Number(user.virtualBalance) === 0) {
-      await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => {
-        await tx.user.update({
-          where: { id: userId },
-          data: {
-            virtualBalance: this.STARTING_BALANCE,
-            totalDeposited: this.STARTING_BALANCE,
-          },
-        });
+      await prisma.$transaction(
+        async (
+          tx: Omit<
+            PrismaClient,
+            '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+          >
+        ) => {
+          await tx.user.update({
+            where: { id: userId },
+            data: {
+              virtualBalance: WalletService.STARTING_BALANCE,
+              totalDeposited: WalletService.STARTING_BALANCE,
+            },
+          });
 
-        await tx.balanceTransaction.create({
-          data: {
-            id: await generateSnowflakeId(),
-            userId,
-            type: 'deposit',
-            amount: this.STARTING_BALANCE,
-            balanceBefore: 0,
-            balanceAfter: this.STARTING_BALANCE,
-            description: 'Initial deposit - Welcome to Babylon!',
-          },
-        });
-      });
+          await tx.balanceTransaction.create({
+            data: {
+              id: await generateSnowflakeId(),
+              userId,
+              type: 'deposit',
+              amount: WalletService.STARTING_BALANCE,
+              balanceBefore: 0,
+              balanceAfter: WalletService.STARTING_BALANCE,
+              description: 'Initial deposit - Welcome to Babylon!',
+            },
+          });
+        }
+      );
     }
   }
 }

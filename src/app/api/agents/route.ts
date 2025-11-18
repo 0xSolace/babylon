@@ -1,15 +1,15 @@
 /**
  * Agents Management API
- * 
+ *
  * @route POST /api/agents - Create new agent
  * @route GET /api/agents - List user's agents
  * @access Authenticated
- * 
+ *
  * @description
  * Core API for creating and managing autonomous agents. Agents are special User
  * entities with AI capabilities, autonomous action permissions, and points-based
  * resource management.
- * 
+ *
  * @openapi
  * /api/agents:
  *   get:
@@ -96,16 +96,16 @@
  *         description: Invalid input
  *       401:
  *         description: Unauthorized
- * 
+ *
  * **Agent Capabilities:**
  * - Autonomous trading on prediction markets
  * - Social interactions (posts, comments, DMs)
  * - Group chat participation
  * - Portfolio management
  * - Multi-tier AI models (free/pro)
- * 
+ *
  * **POST /api/agents - Create Agent**
- * 
+ *
  * @param {string} name - Agent display name (required)
  * @param {string} system - System prompt/instructions (required)
  * @param {string} description - Agent description (optional)
@@ -115,23 +115,23 @@
  * @param {string} tradingStrategy - Trading strategy description (optional)
  * @param {number} initialDeposit - Initial points deposit (default: 0)
  * @param {string} modelTier - AI model tier: 'lite' | 'standard' | 'pro' (default: 'lite')
- * 
+ *
  * @returns {object} Created agent with ID and configuration
  * @property {boolean} success - Operation success status
  * @property {object} agent - Agent details with performance metrics
- * 
+ *
  * **GET /api/agents - List Agents**
- * 
+ *
  * @query {boolean} autonomousTrading - Filter by autonomous trading status
- * 
+ *
  * @returns {object} List of user's agents with performance data
  * @property {boolean} success - Operation success status
  * @property {array} agents - Array of agent objects with stats
- * 
+ *
  * @throws {400} Invalid input parameters
  * @throws {401} Unauthorized - authentication required
  * @throws {500} Internal server error
- * 
+ *
  * @example
  * ```typescript
  * // Create agent
@@ -145,27 +145,37 @@
  *     initialDeposit: 1000
  *   })
  * });
- * 
+ *
  * // List agents
  * const agents = await fetch('/api/agents?autonomousTrading=true');
  * const { agents } = await agents.json();
  * ```
- * 
+ *
  * @see {@link /lib/agents/services/AgentService} Agent service implementation
  * @see {@link /src/app/agents/page.tsx} Agents management UI
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { agentService } from '@/lib/agents/services/AgentService'
-import { logger } from '@/lib/logger'
-import { authenticateUser } from '@/lib/server-auth'
+import { agentService } from '@/lib/agents/services/AgentService';
+import { logger } from '@/lib/logger';
+import { authenticateUser } from '@/lib/server-auth';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const user = await authenticateUser(req)
-  
-  const body = await req.json()
-  const { name, description, profileImageUrl, coverImageUrl, system, bio, personality, tradingStrategy, initialDeposit } = body
+  const user = await authenticateUser(req);
+
+  const body = await req.json();
+  const {
+    name,
+    description,
+    profileImageUrl,
+    coverImageUrl,
+    system,
+    bio,
+    personality,
+    tradingStrategy,
+    initialDeposit,
+  } = body;
 
   const agentUser = await agentService.createAgent({
     userId: user.id,
@@ -178,9 +188,9 @@ export async function POST(req: NextRequest) {
     personality,
     tradingStrategy,
     initialDeposit: initialDeposit || 0,
-  })
+  });
 
-  logger.info(`Agent user created via API: ${agentUser.id}`, undefined, 'AgentsAPI')
+  logger.info(`Agent user created via API: ${agentUser.id}`, undefined, 'AgentsAPI');
 
   return NextResponse.json({
     success: true,
@@ -200,38 +210,38 @@ export async function POST(req: NextRequest) {
       lifetimePnL: agentUser.lifetimePnL.toString(),
       walletAddress: agentUser.walletAddress,
       onChainRegistered: agentUser.onChainRegistered,
-      createdAt: agentUser.createdAt.toISOString()
-    }
-  })
+      createdAt: agentUser.createdAt.toISOString(),
+    },
+  });
 }
 
 export async function GET(req: NextRequest) {
-  const user = await authenticateUser(req)
-  
-  const { searchParams } = new URL(req.url)
-  const autonomousTrading = searchParams.get('autonomousTrading')
+  const user = await authenticateUser(req);
 
-  const filters: { autonomousTrading?: boolean } = {}
+  const { searchParams } = new URL(req.url);
+  const autonomousTrading = searchParams.get('autonomousTrading');
+
+  const filters: { autonomousTrading?: boolean } = {};
   if (autonomousTrading !== null) {
-    filters.autonomousTrading = autonomousTrading === 'true'
+    filters.autonomousTrading = autonomousTrading === 'true';
   }
 
-  const agents = await agentService.listUserAgents(user.id, filters)
+  const agents = await agentService.listUserAgents(user.id, filters);
 
   const agentsWithStats = await Promise.all(
     agents.map(async (agent) => {
-      const performance = await agentService.getPerformance(agent.id)
+      const performance = await agentService.getPerformance(agent.id);
       return {
         id: agent.id,
         username: agent.username,
         name: agent.displayName,
         description: agent.bio,
         profileImageUrl: agent.profileImageUrl,
-        pointsBalance: agent.agentPointsBalance,
-        totalDeposited: agent.agentTotalDeposited!,
-        totalWithdrawn: agent.agentTotalWithdrawn!,
-        totalPointsSpent: agent.agentTotalPointsSpent!,
-        autonomousEnabled: agent.autonomousTrading!,
+        pointsBalance: agent.agentPointsBalance ?? 0,
+        totalDeposited: agent.agentTotalDeposited ?? 0,
+        totalWithdrawn: agent.agentTotalWithdrawn ?? 0,
+        totalPointsSpent: agent.agentTotalPointsSpent ?? 0,
+        autonomousEnabled: Boolean(agent.autonomousTrading),
         autonomousTrading: agent.autonomousTrading,
         autonomousPosting: agent.autonomousPosting,
         autonomousCommenting: agent.autonomousCommenting,
@@ -247,17 +257,16 @@ export async function GET(req: NextRequest) {
         lastTickAt: agent.agentLastTickAt?.toISOString(),
         lastChatAt: agent.agentLastChatAt?.toISOString(),
         walletAddress: agent.walletAddress,
-        onChainRegistered: agent.onChainRegistered!,
+        onChainRegistered: Boolean(agent.onChainRegistered),
         agent0TokenId: agent.agent0TokenId,
         createdAt: agent.createdAt.toISOString(),
-        updatedAt: agent.updatedAt.toISOString()
-      }
+        updatedAt: agent.updatedAt.toISOString(),
+      };
     })
-  )
+  );
 
   return NextResponse.json({
     success: true,
-    agents: agentsWithStats
-  })
+    agents: agentsWithStats,
+  });
 }
-

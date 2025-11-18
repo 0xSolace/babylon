@@ -1,14 +1,14 @@
 /**
  * Perpetual Futures Open Position API
- * 
+ *
  * @route POST /api/markets/perps/open - Open perpetual futures position
  * @access Authenticated
- * 
+ *
  * @description
  * Opens a new perpetual futures position with specified ticker, side (long/short),
  * size, and leverage. Calculates margin requirements, fees, and entry price.
  * Tracks trade events for analytics.
- * 
+ *
  * @openapi
  * /api/markets/perps/open:
  *   post:
@@ -62,7 +62,7 @@
  *         description: Invalid input or insufficient balance
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/markets/perps/open', {
@@ -76,17 +76,16 @@
  *   })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/services/perp-trade-service} Perp trade service
  */
-
-import type { NextRequest } from 'next/server';
 
 import { authenticate } from '@/lib/api/auth-middleware';
 import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { trackServerEvent } from '@/lib/posthog/server';
 import { PerpTradeService } from '@/lib/services/perp-trade-service';
 import { PerpOpenPositionSchema } from '@/lib/validation/schemas/trade';
+import type { NextRequest } from 'next/server';
 
 /**
  * POST /api/markets/perps/open

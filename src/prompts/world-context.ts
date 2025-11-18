@@ -1,13 +1,13 @@
 /**
  * World Context Generator
- * 
+ *
  * Generates comprehensive context strings for prompts including:
  * - Actor names (parody only, never real names)
  * - Current markets and prices
  * - Active predictions
  * - Recent trades
  * - Reality grounding (current date, prices, politics, tech, culture)
- * 
+ *
  * This is the single source of truth for world context in prompts.
  * All generated content should use this context to ensure consistency
  * and prevent outdated or incorrect references.
@@ -17,18 +17,18 @@ import { loadActorsData } from '@/lib/data/actors-loader';
 import { prisma } from '@/lib/prisma';
 import { shuffleArray } from '@/lib/utils/randomization';
 import type { ActorData } from '@/shared/types';
-import { 
-  getCurrentDateContext, 
-  getRealityGrounding, 
-  getMinimalRealityGrounding,
+import {
+  REALITY_GROUNDING,
   checkRealityGrounding as checkReality,
-  REALITY_GROUNDING 
+  getCurrentDateContext,
+  getMinimalRealityGrounding,
+  getRealityGrounding,
 } from './reality-grounding';
 
 /**
  * Options for configuring world context generation.
  */
-export interface WorldContextOptions {
+export type WorldContextOptions = {
   /** Whether to include actor names (default: true) */
   includeActors?: boolean;
   /** Whether to include current markets (default: true) */
@@ -43,21 +43,21 @@ export interface WorldContextOptions {
   maxActors?: number;
   /** Level of reality grounding detail: 'full', 'concise', 'minimal', or 'none' (default: 'concise') */
   realityGroundingLevel?: 'full' | 'concise' | 'minimal' | 'none';
-}
+};
 
 /**
  * Complete world context object containing all contextual information
  * for prompt generation.
  */
-export interface WorldContext {
+export type WorldContext = {
   // Actor context
   worldActors: string;
-  
+
   // Market context
   currentMarkets: string;
   activePredictions: string;
   recentTrades: string;
-  
+
   // Date/time context
   currentDateTime: string;
   currentDate: string;
@@ -65,47 +65,45 @@ export interface WorldContext {
   currentYear: string;
   currentMonth: string;
   currentDay: string;
-  
+
   // Reality grounding
   realityGrounding: string;
-}
+};
 
 /**
  * Generates the world actors list for prompt context.
- * 
+ *
  * ONLY includes parody names - real names are NEVER mentioned.
  * Shuffles actors to add variety to prompts. Optimized to only
  * load actors data (not organizations or relationships).
- * 
+ *
  * @param maxActors - Maximum number of actors to include (default: all)
  * @returns Formatted string listing actors in "Name (@username)" format
  */
 export function generateWorldActors(maxActors?: number): string {
   // OPTIMIZATION: Only load actors, not organizations or relationships
-  const actorsData = loadActorsData({ 
-    includeActors: true, 
-    includeOrganizations: false, 
-    includeRelationships: false 
+  const actorsData = loadActorsData({
+    includeActors: true,
+    includeOrganizations: false,
+    includeRelationships: false,
   });
   const actors = actorsData.actors as ActorData[];
-  
+
   // Shuffle actors to add randomness/entropy to prompts
   const shuffledActors = shuffleArray(actors);
   const actorsToShow = maxActors ? shuffledActors.slice(0, maxActors) : shuffledActors;
-  
-  const actorsList = actorsToShow
-    .map(actor => `${actor.name} (@${actor.username})`)
-    .join(', ');
-  
+
+  const actorsList = actorsToShow.map((actor) => `${actor.name} (@${actor.username})`).join(', ');
+
   return `World Actors (USE THESE NAMES ONLY): ${actorsList}`;
 }
 
 /**
  * Generates current markets context from database.
- * 
+ *
  * Includes both prediction markets and perpetual futures markets.
  * Returns top 5 most active markets of each type, shuffled for variety.
- * 
+ *
  * @returns Formatted string describing active markets and their prices/probabilities
  */
 export async function generateCurrentMarkets(): Promise<string> {
@@ -136,12 +134,12 @@ export async function generateCurrentMarkets(): Promise<string> {
   // Add prediction markets (shuffled for variety)
   if (predictionMarkets.length > 0) {
     const shuffledPredictions = shuffleArray(predictionMarkets);
-    const predList = shuffledPredictions.map(market => {
+    const predList = shuffledPredictions.map((market) => {
       const yesShares = parseFloat(market.yesShares.toString());
       const noShares = parseFloat(market.noShares.toString());
       const totalShares = yesShares + noShares;
       const yesPrice = totalShares > 0 ? Math.round((yesShares / totalShares) * 100) : 50;
-      
+
       return `${market.question} (${yesPrice}% Yes)`;
     });
     parts.push(`Predictions: ${predList.join(' | ')}`);
@@ -150,7 +148,7 @@ export async function generateCurrentMarkets(): Promise<string> {
   // Add perp markets (shuffled for variety)
   if (companies.length > 0) {
     const shuffledCompanies = shuffleArray(companies);
-    const perpList = shuffledCompanies.map(company => {
+    const perpList = shuffledCompanies.map((company) => {
       const price = company.currentPrice || company.initialPrice || 100;
       return `${company.name} $${price.toFixed(2)}`;
     });
@@ -166,10 +164,10 @@ export async function generateCurrentMarkets(): Promise<string> {
 
 /**
  * Generates active predictions context from database.
- * 
+ *
  * Fetches active questions/predictions that haven't resolved yet.
  * Returns top 10 most recent questions with days until resolution.
- * 
+ *
  * @returns Formatted string listing active predictions and their resolution dates
  */
 export async function generateActivePredictions(): Promise<string> {
@@ -189,10 +187,8 @@ export async function generateActivePredictions(): Promise<string> {
 
   // Shuffle questions to add variety
   const shuffledQuestions = shuffleArray(questions);
-  const questionsList = shuffledQuestions.map(q => {
-    const daysUntil = Math.ceil(
-      (q.resolutionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    );
+  const questionsList = shuffledQuestions.map((q) => {
+    const daysUntil = Math.ceil((q.resolutionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     return `${q.text} (resolves in ${daysUntil}d)`;
   });
 
@@ -201,10 +197,10 @@ export async function generateActivePredictions(): Promise<string> {
 
 /**
  * Generates recent trades context from database.
- * 
+ *
  * Fetches recent trades from both NPCs and agents, combines them,
  * and returns the top 20 most recent trades with actor names and details.
- * 
+ *
  * @returns Formatted string listing recent trading activity
  */
 export async function generateRecentTrades(): Promise<string> {
@@ -237,7 +233,7 @@ export async function generateRecentTrades(): Promise<string> {
 
   // Combine and sort by time
   const allTrades = [
-    ...npcTrades.map(t => ({
+    ...npcTrades.map((t) => ({
       name: t.Actor.name,
       action: t.action,
       side: t.side,
@@ -247,7 +243,7 @@ export async function generateRecentTrades(): Promise<string> {
       ticker: t.ticker,
       time: t.executedAt,
     })),
-    ...agentTrades.map(t => ({
+    ...agentTrades.map((t) => ({
       name: t.User.displayName || t.User.username || 'Agent',
       action: t.action,
       side: t.side,
@@ -265,10 +261,8 @@ export async function generateRecentTrades(): Promise<string> {
     return 'Recent Trades: No recent activity';
   }
 
-  const tradesList = allTrades.map(t => {
-    const actionStr = t.side 
-      ? `${t.action} ${t.side}` 
-      : t.action;
+  const tradesList = allTrades.map((t) => {
+    const actionStr = t.side ? `${t.action} ${t.side}` : t.action;
     const marketStr = t.ticker || t.marketType;
     return `${t.name} ${actionStr} ${marketStr}`;
   });
@@ -278,21 +272,21 @@ export async function generateRecentTrades(): Promise<string> {
 
 /**
  * Generates complete world context for prompts.
- * 
+ *
  * This is the main function to use when generating any content.
  * It provides current date, market data, actor information, and
  * reality grounding. Fetches data in parallel for performance.
- * 
+ *
  * @param options - Configuration for what context to include and detail level
  * @returns Complete world context object with all requested context strings
- * 
+ *
  * @example
  * ```ts
  * const context = await generateWorldContext({
  *   maxActors: 30,
  *   realityGroundingLevel: 'concise'
  * });
- * 
+ *
  * const prompt = renderPrompt(ambientPost, {
  *   ...context,
  *   actorName: 'Alice'
@@ -343,12 +337,12 @@ export async function generateWorldContext(
   return {
     // Actor context
     worldActors: includeActors ? generateWorldActors(maxActors) : '',
-    
+
     // Market context
     currentMarkets: markets,
     activePredictions: predictions,
     recentTrades: trades,
-    
+
     // Date/time context
     currentDateTime: dateContext.dateISO,
     currentDate: dateContext.dateFull,
@@ -356,7 +350,7 @@ export async function generateWorldContext(
     currentYear: dateContext.year,
     currentMonth: dateContext.month,
     currentDay: dateContext.day,
-    
+
     // Reality grounding
     realityGrounding,
   };
@@ -364,10 +358,10 @@ export async function generateWorldContext(
 
 /**
  * Get a list of parody actor names (for validation purposes only).
- * 
+ *
  * Returns all actor names that should be used in generated content.
  * Used for validation to ensure only parody names are used.
- * 
+ *
  * @returns Array of parody actor names
  */
 export function getParodyActorNames(): string[] {
@@ -377,16 +371,16 @@ export function getParodyActorNames(): string[] {
     includeRelationships: false,
   });
   const actors = actorsData.actors as ActorData[];
-  return actors.map(actor => actor.name);
+  return actors.map((actor) => actor.name);
 }
 
 /**
  * Get a list of forbidden real names (for validation).
- * 
+ *
  * These names should NEVER appear in generated output. Used for
  * validation to catch any accidental use of real names instead
  * of parody names.
- * 
+ *
  * @returns Array of forbidden real names that must not appear in content
  */
 export function getForbiddenRealNames(): string[] {
@@ -396,15 +390,15 @@ export function getForbiddenRealNames(): string[] {
     includeRelationships: false,
   });
   const actors = actorsData.actors as ActorData[];
-  return actors.map(actor => actor.realName);
+  return actors.map((actor) => actor.realName);
 }
 
 /**
  * Validate that generated content doesn't use real names.
- * 
+ *
  * Checks if the text contains any forbidden real names. Returns
  * an array of validation errors if any are found.
- * 
+ *
  * @param text - The generated content to check
  * @returns Array of validation error messages (empty if valid)
  */
@@ -413,7 +407,7 @@ export function validateNoRealNames(text: string): string[] {
   const violations: string[] = [];
 
   // Check if text contains any forbidden real names
-  forbiddenNames.forEach(realName => {
+  forbiddenNames.forEach((realName) => {
     if (text.includes(realName)) {
       violations.push(`FORBIDDEN: Found real name "${realName}" - must use parody names only`);
     }
@@ -424,11 +418,11 @@ export function validateNoRealNames(text: string): string[] {
 
 /**
  * Check if generated content is grounded in current reality.
- * 
+ *
  * Validates that content references current dates, prices, and events.
  * Returns warnings if outdated references are detected (e.g., old prices,
  * wrong president, outdated AI models).
- * 
+ *
  * @param text - The generated content to check
  * @returns Array of warning messages about outdated references
  */
@@ -438,16 +432,16 @@ export function checkRealityGrounding(text: string): string[] {
 
 /**
  * Complete validation of generated content.
- * 
+ *
  * Checks both parody names (errors) and reality grounding (warnings).
  * Returns a comprehensive validation result with all issues found.
- * 
+ *
  * @param text - The generated content to validate
  * @returns Validation result object:
  *   - `errors`: Array of critical errors (real names found)
  *   - `warnings`: Array of warnings (outdated references)
  *   - `isValid`: Whether content passed validation (no errors)
- * 
+ *
  * @example
  * ```ts
  * const validation = validateGeneratedContent(generatedText);
@@ -466,7 +460,7 @@ export function validateGeneratedContent(text: string): {
 } {
   const errors = validateNoRealNames(text);
   const warnings = checkRealityGrounding(text);
-  
+
   return {
     errors,
     warnings,
@@ -478,25 +472,25 @@ export function validateGeneratedContent(text: string): {
  * Re-export reality grounding utilities
  */
 export {
-  getCurrentDateContext,
-  getRealityGrounding,
-  getMinimalRealityGrounding,
   REALITY_GROUNDING,
+  getCurrentDateContext,
+  getMinimalRealityGrounding,
+  getRealityGrounding,
 } from './reality-grounding';
 
 /**
  * Example usage:
- * 
+ *
  * ```typescript
  * import { generateWorldContext, renderPrompt } from '@/prompts';
  * import { ambientPosts } from '@/prompts';
- * 
+ *
  * // Generate world context with reality grounding
  * const worldContext = await generateWorldContext({
  *   maxActors: 30,
  *   realityGroundingLevel: 'concise', // 'full' | 'concise' | 'minimal' | 'none'
  * });
- * 
+ *
  * // Use in prompt
  * const prompt = renderPrompt(ambientPosts, {
  *   day: 5,
@@ -508,7 +502,7 @@ export {
  *   trendContext: "",
  *   ...worldContext, // Spreads all context including reality grounding
  * });
- * 
+ *
  * // Validate output
  * const validation = validateGeneratedContent(generatedText);
  * if (!validation.isValid) {
@@ -519,4 +513,3 @@ export {
  * }
  * ```
  */
-

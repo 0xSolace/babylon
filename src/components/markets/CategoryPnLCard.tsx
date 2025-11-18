@@ -1,54 +1,54 @@
-import { cn } from '@/lib/utils'
-import { ArrowDownRight, ArrowUpRight, RefreshCcw, Share2 } from 'lucide-react'
+import { cn } from '@/lib/utils';
+import { ArrowDownRight, ArrowUpRight, RefreshCcw, Share2 } from 'lucide-react';
 
-type MarketCategory = 'perps' | 'predictions'
+type MarketCategory = 'perps' | 'predictions';
 
-interface CategoryPnLData {
-  unrealizedPnL: number
-  positionCount: number
-  totalValue?: number
+type CategoryPnLData = {
+  unrealizedPnL: number;
+  positionCount: number;
+  totalValue?: number;
   categorySpecific?: {
     // For perps
-    openInterest?: number
+    openInterest?: number;
     // For predictions
-    totalShares?: number
+    totalShares?: number;
     // For pools
-    totalInvested?: number
-  }
-}
+    totalInvested?: number;
+  };
+};
 
-interface CategoryPnLCardProps {
-  category: MarketCategory
-  data: CategoryPnLData | null
-  loading: boolean
-  error: string | null
-  onShare: () => void
-  onRefresh: () => void
-  lastUpdated: number | null
-}
+type CategoryPnLCardProps = {
+  category: MarketCategory;
+  data: CategoryPnLData | null;
+  loading: boolean;
+  error: string | null;
+  onShare: () => void;
+  onRefresh: () => void;
+  lastUpdated: number | null;
+};
 
 const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   maximumFractionDigits: 2,
-})
+});
 
 function formatCurrency(value: number | null | undefined) {
-  const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : 0
-  return formatter.format(safeValue)
+  const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return formatter.format(safeValue);
 }
 
 function formatRelativeTime(timestamp: number | null) {
-  if (!timestamp) return ''
-  const diffMs = Date.now() - timestamp
-  if (diffMs < 0) return ''
-  const diffMinutes = Math.round(diffMs / (1000 * 60))
-  if (diffMinutes <= 1) return 'Updated just now'
-  if (diffMinutes < 60) return `Updated ${diffMinutes}m ago`
-  const diffHours = Math.round(diffMinutes / 60)
-  if (diffHours < 24) return `Updated ${diffHours}h ago`
-  const diffDays = Math.round(diffHours / 24)
-  return `Updated ${diffDays}d ago`
+  if (!timestamp) return '';
+  const diffMs = Date.now() - timestamp;
+  if (diffMs < 0) return '';
+  const diffMinutes = Math.round(diffMs / (1000 * 60));
+  if (diffMinutes <= 1) return 'Updated just now';
+  if (diffMinutes < 60) return `Updated ${diffMinutes}m ago`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `Updated ${diffHours}h ago`;
+  const diffDays = Math.round(diffHours / 24);
+  return `Updated ${diffDays}d ago`;
 }
 
 const categoryConfig = {
@@ -67,7 +67,7 @@ const categoryConfig = {
     color: 'from-orange-500/10 via-amber-500/10 to-orange-500/5',
     border: 'border-orange-500/20',
   },
-}
+};
 
 export function CategoryPnLCard({
   category,
@@ -78,24 +78,24 @@ export function CategoryPnLCard({
   onRefresh,
   lastUpdated,
 }: CategoryPnLCardProps) {
-  const config = categoryConfig[category]
-  const pnl = data?.unrealizedPnL ?? 0
-  const pnlIsPositive = pnl >= 0
+  const config = categoryConfig[category];
+  const pnl = data?.unrealizedPnL ?? 0;
+  const pnlIsPositive = pnl >= 0;
 
   return (
     <section
       className={cn(
-        'rounded-2xl border bg-gradient-to-br px-4 py-3 sm:px-5 sm:py-4 shadow-sm',
+        'rounded-2xl border bg-gradient-to-br px-4 py-3 shadow-sm sm:px-5 sm:py-4',
         config.border,
-        config.color,
+        config.color
       )}
     >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="font-semibold text-muted-foreground text-sm uppercase tracking-wide">
             {config.title}
           </h2>
-          <p className="text-xs text-muted-foreground">{formatRelativeTime(lastUpdated)}</p>
+          <p className="text-muted-foreground text-xs">{formatRelativeTime(lastUpdated)}</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -112,7 +112,7 @@ export function CategoryPnLCard({
             type="button"
             onClick={onShare}
             disabled={loading || !data}
-            className="inline-flex items-center gap-3 rounded-lg bg-white/90 px-3 py-3 text-sm font-semibold text-[#0B1C3D] shadow transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-3 rounded-lg bg-white/90 px-3 py-3 font-semibold text-[#0B1C3D] text-sm shadow transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Share2 className="h-4 w-4" />
             Share
@@ -130,7 +130,7 @@ export function CategoryPnLCard({
           </div>
         </div>
       ) : error ? (
-        <div className="mt-6 rounded-lg bg-white/10 px-4 py-3 text-sm text-foreground/80">
+        <div className="mt-6 rounded-lg bg-white/10 px-4 py-3 text-foreground/80 text-sm">
           <p className="font-medium text-foreground">Unable to load P&amp;L</p>
           <p className="mt-1 text-foreground/80">{error}</p>
         </div>
@@ -140,8 +140,10 @@ export function CategoryPnLCard({
             <div className="mt-6 flex items-center gap-3">
               <div
                 className={cn(
-                  'inline-flex items-center gap-3 rounded-full px-3 py-2 text-sm font-semibold',
-                  pnlIsPositive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400',
+                  'inline-flex items-center gap-3 rounded-full px-3 py-2 font-semibold text-sm',
+                  pnlIsPositive
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : 'bg-red-500/20 text-red-400'
                 )}
               >
                 {pnlIsPositive ? (
@@ -151,7 +153,7 @@ export function CategoryPnLCard({
                 )}
                 {pnlIsPositive ? 'Profit' : 'Loss'}
               </div>
-              <p className="text-4xl font-bold text-foreground sm:text-5xl">
+              <p className="font-bold text-4xl text-foreground sm:text-5xl">
                 {pnlIsPositive ? '+' : ''}
                 {formatCurrency(pnl)}
               </p>
@@ -159,37 +161,37 @@ export function CategoryPnLCard({
 
             <dl className="mt-6 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                <dt className="text-xs uppercase text-foreground/70">Open Positions</dt>
-                <dd className="text-base font-semibold text-foreground">{data.positionCount}</dd>
+                <dt className="text-foreground/70 text-xs uppercase">Open Positions</dt>
+                <dd className="font-semibold text-base text-foreground">{data.positionCount}</dd>
               </div>
               {data.totalValue !== undefined && (
                 <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                  <dt className="text-xs uppercase text-foreground/70">Total Value</dt>
-                  <dd className="text-base font-semibold text-foreground">
+                  <dt className="text-foreground/70 text-xs uppercase">Total Value</dt>
+                  <dd className="font-semibold text-base text-foreground">
                     {formatCurrency(data.totalValue)}
                   </dd>
                 </div>
               )}
               {data.categorySpecific?.openInterest !== undefined && (
                 <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                  <dt className="text-xs uppercase text-foreground/70">Open Interest</dt>
-                  <dd className="text-base font-semibold text-foreground">
+                  <dt className="text-foreground/70 text-xs uppercase">Open Interest</dt>
+                  <dd className="font-semibold text-base text-foreground">
                     {formatCurrency(data.categorySpecific.openInterest)}
                   </dd>
                 </div>
               )}
               {data.categorySpecific?.totalShares !== undefined && (
                 <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                  <dt className="text-xs uppercase text-foreground/70">Total Shares</dt>
-                  <dd className="text-base font-semibold text-foreground">
+                  <dt className="text-foreground/70 text-xs uppercase">Total Shares</dt>
+                  <dd className="font-semibold text-base text-foreground">
                     {data.categorySpecific.totalShares.toFixed(2)}
                   </dd>
                 </div>
               )}
               {data.categorySpecific?.totalInvested !== undefined && (
                 <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                  <dt className="text-xs uppercase text-foreground/70">Total Invested</dt>
-                  <dd className="text-base font-semibold text-foreground">
+                  <dt className="text-foreground/70 text-xs uppercase">Total Invested</dt>
+                  <dd className="font-semibold text-base text-foreground">
                     {formatCurrency(data.categorySpecific.totalInvested)}
                   </dd>
                 </div>
@@ -199,7 +201,5 @@ export function CategoryPnLCard({
         )
       )}
     </section>
-  )
+  );
 }
-
-

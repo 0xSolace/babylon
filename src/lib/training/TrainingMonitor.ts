@@ -1,16 +1,23 @@
 /**
  * Training Monitor Service
- * 
+ *
  * Tracks training job progress and updates database with status.
  * Monitors Python training process and W&B runs.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 
-export type TrainingStatus = 'pending' | 'preparing' | 'scoring' | 'training' | 'uploading' | 'completed' | 'failed';
+export type TrainingStatus =
+  | 'pending'
+  | 'preparing'
+  | 'scoring'
+  | 'training'
+  | 'uploading'
+  | 'completed'
+  | 'failed';
 
-export interface TrainingProgress {
+export type TrainingProgress = {
   batchId: string;
   status: TrainingStatus;
   progress: number; // 0-1
@@ -21,14 +28,14 @@ export interface TrainingProgress {
   loss?: number;
   eta?: number; // milliseconds
   error?: string;
-}
+};
 
-export interface WandBRunStatus {
+export type WandBRunStatus = {
   status: string;
   currentEpoch: number;
   loss: number;
   eta: number;
-}
+};
 
 export class TrainingMonitor {
   /**
@@ -39,8 +46,8 @@ export class TrainingMonitor {
       where: { batchId },
       data: {
         status: 'training',
-        startedAt: new Date()
-      }
+        startedAt: new Date(),
+      },
     });
 
     logger.info('Started monitoring training job', { batchId }, 'TrainingMonitor');
@@ -50,12 +57,12 @@ export class TrainingMonitor {
    * Update training progress
    */
   async updateProgress(batchId: string, progress: Partial<TrainingProgress>): Promise<void> {
-    interface UpdateData {
+    type UpdateData = {
       status?: string;
       completedAt?: Date;
       trainingLoss?: number;
       error?: string;
-    }
+    };
 
     const updates: UpdateData = {};
 
@@ -74,14 +81,18 @@ export class TrainingMonitor {
 
     await prisma.trainingBatch.update({
       where: { batchId },
-      data: updates
+      data: updates,
     });
 
-    logger.info('Updated training progress', {
-      batchId,
-      status: progress.status,
-      progress: progress.progress
-    }, 'TrainingMonitor');
+    logger.info(
+      'Updated training progress',
+      {
+        batchId,
+        status: progress.status,
+        progress: progress.progress,
+      },
+      'TrainingMonitor'
+    );
   }
 
   /**
@@ -89,7 +100,7 @@ export class TrainingMonitor {
    */
   async getProgress(batchId: string): Promise<TrainingProgress | null> {
     const batch = await prisma.trainingBatch.findUnique({
-      where: { batchId }
+      where: { batchId },
     });
 
     if (!batch) {
@@ -99,13 +110,27 @@ export class TrainingMonitor {
     // Calculate progress based on status
     let progress = 0;
     switch (batch.status) {
-      case 'pending': progress = 0; break;
-      case 'preparing': progress = 0.1; break;
-      case 'scoring': progress = 0.3; break;
-      case 'training': progress = 0.6; break;
-      case 'uploading': progress = 0.9; break;
-      case 'completed': progress = 1.0; break;
-      case 'failed': progress = 0; break;
+      case 'pending':
+        progress = 0;
+        break;
+      case 'preparing':
+        progress = 0.1;
+        break;
+      case 'scoring':
+        progress = 0.3;
+        break;
+      case 'training':
+        progress = 0.6;
+        break;
+      case 'uploading':
+        progress = 0.9;
+        break;
+      case 'completed':
+        progress = 1.0;
+        break;
+      case 'failed':
+        progress = 0;
+        break;
     }
 
     // Estimate ETA based on average training time
@@ -122,7 +147,7 @@ export class TrainingMonitor {
       progress,
       loss: batch.trainingLoss ?? undefined,
       eta,
-      error: batch.error ?? undefined
+      error: batch.error ?? undefined,
     };
   }
 
@@ -132,9 +157,13 @@ export class TrainingMonitor {
    */
   async monitorWandBRun(wandbRunId: string): Promise<WandBRunStatus | null> {
     const wandbApiKey = process.env.WANDB_API_KEY;
-    
+
     if (!wandbApiKey) {
-      logger.warn('WANDB_API_KEY not configured - cannot monitor W&B runs', undefined, 'TrainingMonitor');
+      logger.warn(
+        'WANDB_API_KEY not configured - cannot monitor W&B runs',
+        undefined,
+        'TrainingMonitor'
+      );
       return null;
     }
 
@@ -143,19 +172,23 @@ export class TrainingMonitor {
     // Call W&B API to get run status
     const wandbResponse = await fetch(`https://api.wandb.ai/runs/${wandbRunId}`, {
       headers: {
-        'Authorization': `Bearer ${wandbApiKey}`
-      }
+        Authorization: `Bearer ${wandbApiKey}`,
+      },
     }).catch((error) => {
       logger.error('Failed to fetch W&B run status', { error, wandbRunId }, 'TrainingMonitor');
       return null;
     });
 
     if (!wandbResponse || !wandbResponse.ok) {
-      logger.warn('W&B API returned error', { wandbRunId, status: wandbResponse?.status }, 'TrainingMonitor');
+      logger.warn(
+        'W&B API returned error',
+        { wandbRunId, status: wandbResponse?.status },
+        'TrainingMonitor'
+      );
       return null;
     }
 
-    const runData = await wandbResponse.json() as {
+    const runData = (await wandbResponse.json()) as {
       state?: string;
       summary?: {
         epoch?: number;
@@ -168,7 +201,7 @@ export class TrainingMonitor {
       status: runData.state || 'unknown',
       currentEpoch: runData.summary?.epoch || 0,
       loss: runData.summary?.loss || 0,
-      eta: runData.runtime || 0
+      eta: runData.runtime || 0,
     };
   }
 
@@ -180,22 +213,26 @@ export class TrainingMonitor {
       where: {
         status: 'training',
         startedAt: {
-          lt: new Date(Date.now() - 4 * 60 * 60 * 1000) // 4 hours ago
-        }
+          lt: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
+        },
       },
       select: {
-        batchId: true
-      }
+        batchId: true,
+      },
     });
 
     if (stuckJobs.length > 0) {
-      logger.warn('Found stuck training jobs', {
-        count: stuckJobs.length,
-        jobs: stuckJobs.map(j => j.batchId)
-      }, 'TrainingMonitor');
+      logger.warn(
+        'Found stuck training jobs',
+        {
+          count: stuckJobs.length,
+          jobs: stuckJobs.map((j) => j.batchId),
+        },
+        'TrainingMonitor'
+      );
     }
 
-    return stuckJobs.map(j => j.batchId);
+    return stuckJobs.map((j) => j.batchId);
   }
 
   /**
@@ -207,8 +244,8 @@ export class TrainingMonitor {
       data: {
         status: 'failed',
         error: `Cancelled: ${reason}`,
-        completedAt: new Date()
-      }
+        completedAt: new Date(),
+      },
     });
 
     logger.warn('Training job cancelled', { batchId, reason }, 'TrainingMonitor');
@@ -217,4 +254,3 @@ export class TrainingMonitor {
 
 // Singleton
 export const trainingMonitor = new TrainingMonitor();
-

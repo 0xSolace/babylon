@@ -2,18 +2,19 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating new prediction market questions for daily gameplay.
- * 
+ *
  * Creates prediction market questions based on in-world events only,
  * ensuring questions are grounded in the game's narrative. Questions
  * must be provable, resolvable, and entertaining.
- * 
+ *
  * Returns XML with generated questions.
  */
 export const questionGeneration = definePrompt({
   id: 'question-generation',
   version: '3.0.0',
   category: 'game',
-  description: 'Generates new prediction market questions for daily gameplay with in-world events only',
+  description:
+    'Generates new prediction market questions for daily gameplay with in-world events only',
   temperature: 0.9,
   maxTokens: 8000,
   template: `
@@ -177,5 +178,5 @@ FINAL REMINDERS:
 
 Generate {{numToGenerate}} questions now.
 No other text.
-`.trim()
+`.trim(),
 });

@@ -2,62 +2,65 @@
  * Trading-related validation schemas
  */
 
+import { JsonValueSchema } from '@/types/common';
 import { z } from 'zod';
 import {
-  SnowflakeIdSchema,
-  UserIdSchema,
-  OrderSideSchema,
-  OrderTypeSchema,
   DateTimeSchema,
   DecimalPercentageSchema,
-  TimeFrameSchema
+  OrderSideSchema,
+  OrderTypeSchema,
+  SnowflakeIdSchema,
+  TimeFrameSchema,
+  UserIdSchema,
 } from './common';
-import { JsonValueSchema } from '@/types/common';
 
 /**
  * Create trade order schema
  */
-export const CreateTradeOrderSchema = z.object({
-  poolId: SnowflakeIdSchema.optional(), // Optional if personal trade
-  marketType: z.enum(['perp', 'prediction', 'spot']),
-  ticker: z.string().optional(), // For perps/spot
-  marketId: z.string().optional(), // For prediction markets
-  side: OrderSideSchema,
-  orderType: OrderTypeSchema,
-  size: z.number().positive(),
-  price: z.number().positive().optional(), // Required for limit orders
-  stopPrice: z.number().positive().optional(), // For stop orders
-  leverage: z.number().min(1).max(100).default(1), // For perps
-  timeInForce: z.enum(['GTC', 'IOC', 'FOK', 'GTT']).default('GTC'),
-  expiresAt: DateTimeSchema.optional() // For GTT orders
-}).refine(
-  data => {
-    // Validate price for limit orders
-    if (data.orderType === 'LIMIT' || data.orderType === 'STOP_LIMIT') {
-      if (!data.price) return false;
+export const CreateTradeOrderSchema = z
+  .object({
+    poolId: SnowflakeIdSchema.optional(), // Optional if personal trade
+    marketType: z.enum(['perp', 'prediction', 'spot']),
+    ticker: z.string().optional(), // For perps/spot
+    marketId: z.string().optional(), // For prediction markets
+    side: OrderSideSchema,
+    orderType: OrderTypeSchema,
+    size: z.number().positive(),
+    price: z.number().positive().optional(), // Required for limit orders
+    stopPrice: z.number().positive().optional(), // For stop orders
+    leverage: z.number().min(1).max(100).default(1), // For perps
+    timeInForce: z.enum(['GTC', 'IOC', 'FOK', 'GTT']).default('GTC'),
+    expiresAt: DateTimeSchema.optional(), // For GTT orders
+  })
+  .refine(
+    (data) => {
+      // Validate price for limit orders
+      if (data.orderType === 'LIMIT' || data.orderType === 'STOP_LIMIT') {
+        if (!data.price) return false;
+      }
+      // Validate stop price for stop orders
+      if (data.orderType === 'STOP' || data.orderType === 'STOP_LIMIT') {
+        if (!data.stopPrice) return false;
+      }
+      return true;
+    },
+    {
+      message: 'Price required for limit orders, stop price required for stop orders',
     }
-    // Validate stop price for stop orders
-    if (data.orderType === 'STOP' || data.orderType === 'STOP_LIMIT') {
-      if (!data.stopPrice) return false;
+  )
+  .refine(
+    (data) => {
+      // Validate market identifiers
+      if (data.marketType === 'prediction') {
+        return !!data.marketId;
+      } else {
+        return !!data.ticker;
+      }
+    },
+    {
+      message: 'Ticker required for perp/spot, marketId required for predictions',
     }
-    return true;
-  },
-  {
-    message: 'Price required for limit orders, stop price required for stop orders'
-  }
-).refine(
-  data => {
-    // Validate market identifiers
-    if (data.marketType === 'prediction') {
-      return !!data.marketId;
-    } else {
-      return !!data.ticker;
-    }
-  },
-  {
-    message: 'Ticker required for perp/spot, marketId required for predictions'
-  }
-);
+  );
 
 /**
  * Update trade order schema (for modifying open orders)
@@ -66,29 +69,28 @@ export const UpdateTradeOrderSchema = z.object({
   orderId: SnowflakeIdSchema,
   price: z.number().positive().optional(),
   size: z.number().positive().optional(),
-  stopPrice: z.number().positive().optional()
+  stopPrice: z.number().positive().optional(),
 });
 
 /**
  * Cancel trade order schema
  */
 export const CancelTradeOrderSchema = z.object({
-  orderId: SnowflakeIdSchema
+  orderId: SnowflakeIdSchema,
 });
 
 /**
  * Close position schema
  */
-export const ClosePositionSchema = z.object({
-  positionId: SnowflakeIdSchema,
-  percentage: DecimalPercentageSchema.optional(), // Close partial percentage
-  size: z.number().positive().optional() // Or close specific size
-}).refine(
-  data => !data.percentage || !data.size,
-  {
-    message: 'Specify either percentage or size, not both'
-  }
-);
+export const ClosePositionSchema = z
+  .object({
+    positionId: SnowflakeIdSchema,
+    percentage: DecimalPercentageSchema.optional(), // Close partial percentage
+    size: z.number().positive().optional(), // Or close specific size
+  })
+  .refine((data) => !data.percentage || !data.size, {
+    message: 'Specify either percentage or size, not both',
+  });
 
 /**
  * Trade signal schema (for AI/algorithmic trading)
@@ -105,7 +107,7 @@ export const TradeSignalSchema = z.object({
   takeProfit: z.number().positive().optional(),
   timeframe: TimeFrameSchema.optional(),
   reasoning: z.string().max(1000).optional(),
-  metadata: z.record(z.string(), JsonValueSchema).optional()
+  metadata: z.record(z.string(), JsonValueSchema).optional(),
 });
 
 /**
@@ -118,7 +120,7 @@ export const MarketDataQuerySchema = z.object({
   timeframe: TimeFrameSchema,
   startTime: DateTimeSchema.optional(),
   endTime: DateTimeSchema.optional(),
-  limit: z.number().positive().max(1000).default(100)
+  limit: z.number().positive().max(1000).default(100),
 });
 
 /**
@@ -131,7 +133,7 @@ export const PositionQuerySchema = z.object({
   ticker: z.string().optional(),
   marketId: z.string().optional(),
   status: z.enum(['OPEN', 'CLOSED', 'LIQUIDATED']).optional(),
-  includeHistory: z.boolean().default(false)
+  includeHistory: z.boolean().default(false),
 });
 
 /**
@@ -145,7 +147,7 @@ export const TradeHistoryQuerySchema = z.object({
   startDate: DateTimeSchema.optional(),
   endDate: DateTimeSchema.optional(),
   side: OrderSideSchema.optional(),
-  includeMetadata: z.boolean().default(false)
+  includeMetadata: z.boolean().default(false),
 });
 
 /**
@@ -160,7 +162,7 @@ export const RiskParametersSchema = z.object({
   maxOpenPositions: z.number().positive().max(100),
   dailyLossLimit: z.number().positive().optional(),
   marginCallLevel: DecimalPercentageSchema.default(0.5), // 50%
-  liquidationLevel: DecimalPercentageSchema.default(0.25) // 25%
+  liquidationLevel: DecimalPercentageSchema.default(0.25), // 25%
 });
 
 /**
@@ -174,7 +176,7 @@ export const TradeExecutionResponseSchema = z.object({
   fees: z.number(),
   timestamp: DateTimeSchema,
   transactionHash: z.string().optional(),
-  errorMessage: z.string().optional()
+  errorMessage: z.string().optional(),
 });
 
 /**
@@ -199,7 +201,7 @@ export const PositionResponseSchema = z.object({
   maintenanceMargin: z.number().optional(),
   openedAt: DateTimeSchema,
   closedAt: DateTimeSchema.nullable(),
-  updatedAt: DateTimeSchema
+  updatedAt: DateTimeSchema,
 });
 
 /**
@@ -209,17 +211,21 @@ export const OrderBookSchema = z.object({
   marketType: z.string(),
   ticker: z.string().nullable(),
   marketId: z.string().nullable(),
-  bids: z.array(z.object({
-    price: z.number(),
-    size: z.number(),
-    orders: z.number().optional()
-  })),
-  asks: z.array(z.object({
-    price: z.number(),
-    size: z.number(),
-    orders: z.number().optional()
-  })),
-  timestamp: DateTimeSchema
+  bids: z.array(
+    z.object({
+      price: z.number(),
+      size: z.number(),
+      orders: z.number().optional(),
+    })
+  ),
+  asks: z.array(
+    z.object({
+      price: z.number(),
+      size: z.number(),
+      orders: z.number().optional(),
+    })
+  ),
+  timestamp: DateTimeSchema,
 });
 
 /**
@@ -240,7 +246,7 @@ export const MarketStatsSchema = z.object({
   nextFundingTime: DateTimeSchema.optional(),
   markPrice: z.number().optional(),
   indexPrice: z.number().optional(),
-  timestamp: DateTimeSchema
+  timestamp: DateTimeSchema,
 });
 
 /**
@@ -248,18 +254,20 @@ export const MarketStatsSchema = z.object({
  */
 export const PredictionMarketTradeSchema = z.object({
   side: z.enum(['yes', 'no'], {
-    message: 'Side must be either "yes" or "no"'
+    message: 'Side must be either "yes" or "no"',
   }),
-  amount: z.number()
+  amount: z
+    .number()
     .positive({ message: 'Amount must be positive' })
-    .min(1, { message: 'Minimum order size is $1' })
+    .min(1, { message: 'Minimum order size is $1' }),
 });
 
 /**
  * Prediction market sell schema (shares-based)
  */
 export const PredictionMarketSellSchema = z.object({
-  shares: z.number()
+  shares: z
+    .number()
     .positive({ message: 'Shares must be positive' })
     .min(0.01, { message: 'Minimum shares to sell is 0.01' }),
   positionId: SnowflakeIdSchema.optional(),
@@ -271,12 +279,12 @@ export const PredictionMarketSellSchema = z.object({
 export const PerpOpenPositionSchema = z.object({
   ticker: z.string().min(1, { message: 'Ticker is required' }),
   side: z.enum(['long', 'short'], {
-    message: 'Side must be either "long" or "short"'
+    message: 'Side must be either "long" or "short"',
   }),
-  size: z.number()
-    .positive({ message: 'Size must be positive' }),
-  leverage: z.number()
+  size: z.number().positive({ message: 'Size must be positive' }),
+  leverage: z
+    .number()
     .int({ message: 'Leverage must be an integer' })
     .min(1, { message: 'Minimum leverage is 1x' })
-    .max(100, { message: 'Maximum leverage is 100x' })
+    .max(100, { message: 'Maximum leverage is 100x' }),
 });

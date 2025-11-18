@@ -1,11 +1,8 @@
+import { useSmartWallet } from '@/hooks/useSmartWallet';
+import { CHAIN, RPC_URL } from '@/constants/chains';
 import { useCallback, useEffect, useState } from 'react';
-
 import type { Address } from 'viem';
 import { createPublicClient, http } from 'viem';
-
-import { useSmartWallet } from '@/hooks/useSmartWallet';
-
-import { CHAIN, RPC_URL } from '@/constants/chains';
 
 const publicClient = createPublicClient({
   chain: CHAIN,
@@ -14,20 +11,20 @@ const publicClient = createPublicClient({
 
 /**
  * Hook for fetching and managing smart wallet balance.
- * 
+ *
  * Automatically fetches the native token balance (ETH) for the connected
  * smart wallet. Updates when the smart wallet address changes. Provides
  * manual refresh capability.
- * 
+ *
  * @returns An object containing:
  * - `balance`: Current balance in wei (bigint), or null if not available
  * - `loading`: Whether balance is currently being fetched
  * - `refreshBalance`: Function to manually refresh the balance
- * 
+ *
  * @example
  * ```tsx
  * const { balance, loading, refreshBalance } = useSmartWalletBalance();
- * 
+ *
  * if (loading) return <div>Loading balance...</div>;
  * if (balance) {
  *   return <div>Balance: {formatEther(balance)} ETH</div>;

@@ -1,68 +1,41 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-
-import { useIdentityToken, usePrivy } from '@privy-io/react-auth';
-
-import {
-  type ImportedProfileData,
-  OnboardingModal,
-} from '@/components/onboarding/OnboardingModal';
-
+import { type ImportedProfileData, OnboardingModal } from '@/components/onboarding/OnboardingModal';
 import { apiFetch } from '@/lib/api/fetch';
 import { logger } from '@/lib/logger';
 import type { OnboardingProfilePayload } from '@/lib/onboarding/types';
-import {
-  WALLET_ERROR_MESSAGES,
-  getWalletErrorMessage,
-} from '@/lib/wallet-utils';
-
+import { WALLET_ERROR_MESSAGES, getWalletErrorMessage } from '@/lib/wallet-utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useRegisterAgentTx } from '@/hooks/useRegisterAgentTx';
-
 import { type User as StoreUser, useAuthStore } from '@/stores/authStore';
 import type { JsonValue } from '@/types/common';
-
+import { useIdentityToken, usePrivy } from '@privy-io/react-auth';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { clearReferralCode, getReferralCode } from './ReferralCaptureProvider';
 
 type OnboardingStage = 'PROFILE' | 'ONCHAIN' | 'COMPLETED';
 
-export function OnboardingProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const {
-    authenticated,
-    user,
-    needsOnboarding,
-    needsOnchain,
-    loadingProfile,
-    refresh,
-    logout,
-  } = useAuth();
+export function OnboardingProvider({ children }: { children: React.ReactNode }) {
+  const { authenticated, user, needsOnboarding, needsOnchain, loadingProfile, refresh, logout } =
+    useAuth();
 
   const { user: privyUser } = usePrivy();
 
   const { setUser, setNeedsOnboarding, setNeedsOnchain } = useAuthStore();
   const { identityToken } = useIdentityToken();
-  const { registerAgent, smartWalletAddress, smartWalletReady } =
-    useRegisterAgentTx();
+  const { registerAgent, smartWalletAddress, smartWalletReady } = useRegisterAgentTx();
 
   const [stage, setStage] = useState<OnboardingStage>('PROFILE');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submittedProfile, setSubmittedProfile] =
-    useState<OnboardingProfilePayload | null>(null);
+  const [submittedProfile, setSubmittedProfile] = useState<OnboardingProfilePayload | null>(null);
   const [userDismissed, setUserDismissed] = useState(false);
-  const [importedProfileData, setImportedProfileData] =
-    useState<ImportedProfileData | null>(null);
-  const [hasProgressedPastSocialImport, setHasProgressedPastSocialImport] =
-    useState(false);
+  const [importedProfileData, setImportedProfileData] = useState<ImportedProfileData | null>(null);
+  const [_hasProgressedPastSocialImport, setHasProgressedPastSocialImport] = useState(false);
   const [pendingOnchainSubmission, setPendingOnchainSubmission] =
     useState<OnboardingProfilePayload | null>(null);
   const [onchainReferralCode, setOnchainReferralCode] = useState<string | null>(null);
-  
+
   // Delay modal display to prevent flickering
   const [isReadyToShow, setIsReadyToShow] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -129,12 +102,7 @@ export function OnboardingProvider({
       return true; // Show briefly to show success message, but allow closing
     }
 
-    return Boolean(
-      needsOnboarding ||
-        needsOnchain ||
-        stage === 'ONCHAIN' ||
-        stage === 'PROFILE'
-    );
+    return Boolean(needsOnboarding || needsOnchain || stage === 'ONCHAIN' || stage === 'PROFILE');
   }, [
     isReadyToShow,
     authenticated,
@@ -190,16 +158,7 @@ export function OnboardingProvider({
       setImportedProfileData(null);
       setHasProgressedPastSocialImport(false);
     }
-  }, [
-    authenticated,
-    loadingProfile,
-    needsOnboarding,
-    needsOnchain,
-    user,
-    submittedProfile,
-    stage,
-    hasProgressedPastSocialImport,
-  ]);
+  }, [authenticated, loadingProfile, needsOnboarding, needsOnchain, user, submittedProfile, stage]);
 
   // Automatically extract social profile data from Privy user when authenticating
   useEffect(() => {
@@ -208,8 +167,8 @@ export function OnboardingProvider({
     if (loadingProfile) return; // Wait for profile to load
 
     const userWithFarcaster = privyUser as typeof privyUser & {
-      farcaster?: { 
-        username?: string; 
+      farcaster?: {
+        username?: string;
         displayName?: string;
         bio?: string;
         pfp?: string;
@@ -221,7 +180,7 @@ export function OnboardingProvider({
       };
     };
     const userWithTwitter = privyUser as typeof privyUser & {
-      twitter?: { 
+      twitter?: {
         username?: string;
         name?: string;
         profilePictureUrl?: string;
@@ -232,13 +191,14 @@ export function OnboardingProvider({
     // Check if user authenticated with Farcaster
     if (userWithFarcaster.farcaster) {
       const fc = userWithFarcaster.farcaster;
-      
+
       // Use pfpUrl or pfp, whichever is available
       const profileImage = fc.pfpUrl || fc.pfp || null;
-      
+
       const profileData: ImportedProfileData = {
         platform: 'farcaster',
-        username: fc.username || fc.displayName?.toLowerCase().replace(/\s+/g, '_') || 'farcaster_user',
+        username:
+          fc.username || fc.displayName?.toLowerCase().replace(/\s+/g, '_') || 'farcaster_user',
         displayName: fc.displayName || fc.username || 'Farcaster User',
         bio: fc.bio || undefined,
         profileImageUrl: profileImage,
@@ -247,14 +207,14 @@ export function OnboardingProvider({
 
       logger.info(
         'Auto-imported Farcaster profile from Privy - will award points on signup',
-        { 
+        {
           username: profileData.username,
           displayName: profileData.displayName,
           fid: fc.fid,
           hasBio: !!profileData.bio,
           hasProfileImage: !!profileImage,
           rewardEligible: true,
-          expectedPoints: 1000 // FARCASTER_LINK points
+          expectedPoints: 1000, // FARCASTER_LINK points
         },
         'OnboardingProvider'
       );
@@ -267,13 +227,13 @@ export function OnboardingProvider({
     // Check if user authenticated with Twitter
     if (userWithTwitter.twitter) {
       const tw = userWithTwitter.twitter;
-      
+
       // Upgrade Twitter profile image to higher resolution if available
       let profileImageUrl = tw.profilePictureUrl;
-      if (profileImageUrl && profileImageUrl.includes('_normal')) {
+      if (profileImageUrl?.includes('_normal')) {
         profileImageUrl = profileImageUrl.replace('_normal', '_400x400');
       }
-      
+
       const profileData: ImportedProfileData = {
         platform: 'twitter',
         username: tw.username || 'twitter_user',
@@ -285,13 +245,13 @@ export function OnboardingProvider({
 
       logger.info(
         'Auto-imported Twitter profile from Privy - will award points on signup',
-        { 
+        {
           username: profileData.username,
           displayName: profileData.displayName,
           twitterId: profileData.twitterId,
           hasProfileImage: !!profileImageUrl,
           rewardEligible: true,
-          expectedPoints: 1000 // TWITTER_LINK points
+          expectedPoints: 1000, // TWITTER_LINK points
         },
         'OnboardingProvider'
       );
@@ -300,7 +260,7 @@ export function OnboardingProvider({
       setHasProgressedPastSocialImport(true);
       return;
     }
-    
+
     // For wallet-only logins, don't set imported data - let the generated profile flow handle it
     logger.info(
       'User authenticated with wallet only - will use generated profile',
@@ -311,11 +271,7 @@ export function OnboardingProvider({
 
   // Listen for social import callbacks from URL parameters (for manual social linking)
   useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !authenticated
-    )
-      return;
+    if (typeof window === 'undefined' || !authenticated) return;
 
     const params = new URLSearchParams(window.location.search);
     const socialImport = params.get('social_import');
@@ -323,9 +279,7 @@ export function OnboardingProvider({
 
     if (socialImport && dataParam) {
       try {
-        const profileData = JSON.parse(
-          decodeURIComponent(dataParam)
-        ) as ImportedProfileData;
+        const profileData = JSON.parse(decodeURIComponent(dataParam)) as ImportedProfileData;
         logger.info(
           'Social profile data received from URL',
           { platform: socialImport },
@@ -342,23 +296,15 @@ export function OnboardingProvider({
         newUrl.searchParams.delete('data');
         window.history.replaceState({}, '', newUrl.toString());
       } catch (err) {
-        logger.error(
-          'Failed to parse social import data',
-          { error: err },
-          'OnboardingProvider'
-        );
+        logger.error('Failed to parse social import data', { error: err }, 'OnboardingProvider');
       }
     }
-  }, [authenticated, stage]);
+  }, [authenticated]);
 
   const submitOnchain = useCallback(
     async (profile: OnboardingProfilePayload, referralCode: string | null) => {
       // Defensive check: skip if user is already fully registered
-      if (
-        user?.onChainRegistered &&
-        user?.nftTokenId &&
-        user?.profileComplete
-      ) {
+      if (user?.onChainRegistered && user?.nftTokenId && user?.profileComplete) {
         logger.info(
           'User already fully registered, skipping onchain submission',
           { userId: user.id, nftTokenId: user.nftTokenId },
@@ -390,11 +336,13 @@ export function OnboardingProvider({
               ? rawError
               : typeof rawError?.message === 'string'
                 ? rawError.message
-                : null) ??
-            `Failed to complete on-chain onboarding (status ${response.status})`;
+                : null) ?? `Failed to complete on-chain onboarding (status ${response.status})`;
           throw new Error(message);
         }
-        return data as { onchain: Record<string, JsonValue>; user: StoreUser | null };
+        return data as {
+          onchain: Record<string, JsonValue>;
+          user: StoreUser | null;
+        };
       };
 
       const applyResponse = (data: {
@@ -412,17 +360,14 @@ export function OnboardingProvider({
             profileImageUrl: data.user.profileImageUrl ?? undefined,
             coverImageUrl: data.user.coverImageUrl ?? undefined,
             profileComplete: data.user.profileComplete ?? true,
-            reputationPoints:
-              data.user.reputationPoints ?? user?.reputationPoints,
+            reputationPoints: data.user.reputationPoints ?? user?.reputationPoints,
             hasFarcaster: data.user.hasFarcaster ?? user?.hasFarcaster,
             hasTwitter: data.user.hasTwitter ?? user?.hasTwitter,
-            farcasterUsername:
-              data.user.farcasterUsername ?? user?.farcasterUsername,
+            farcasterUsername: data.user.farcasterUsername ?? user?.farcasterUsername,
             twitterUsername: data.user.twitterUsername ?? user?.twitterUsername,
             nftTokenId: data.user.nftTokenId ?? undefined,
             createdAt: data.user.createdAt ?? user?.createdAt,
-            onChainRegistered:
-              data.user.onChainRegistered ?? user?.onChainRegistered,
+            onChainRegistered: data.user.onChainRegistered ?? user?.onChainRegistered,
           });
         }
         setNeedsOnboarding(false);
@@ -458,28 +403,28 @@ export function OnboardingProvider({
           // For other errors, re-throw
           throw txError;
         });
-        
+
         if (registrationResult === 'already-registered') {
           // Call the endpoint without a txHash - server will detect existing registration
           const data = await callEndpoint(body);
           applyResponse(data);
           return;
         }
-        
+
         const txHash = registrationResult as string;
         logger.info(
           'Client-submitted on-chain registration transaction',
           { txHash },
           'OnboardingProvider'
         );
-        
+
         const data = await callEndpoint({
           ...body,
           txHash,
         });
         applyResponse(data);
       };
-      
+
       const response = await completeWithClient().catch((rawError: Error) => {
         // Use wallet-aware error message
         const userFriendlyMessage = getWalletErrorMessage(rawError);
@@ -491,7 +436,7 @@ export function OnboardingProvider({
         );
         return null;
       });
-      
+
       if (!response) return;
     },
     [
@@ -544,9 +489,7 @@ export function OnboardingProvider({
         'Identity token state during signup',
         {
           present: Boolean(identityToken),
-          tokenPreview: identityToken
-            ? `${identityToken.slice(0, 12)}...`
-            : null,
+          tokenPreview: identityToken ? `${identityToken.slice(0, 12)}...` : null,
         },
         'OnboardingProvider'
       );
@@ -563,9 +506,7 @@ export function OnboardingProvider({
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const message =
-          data?.error ||
-          `Failed to complete signup (status ${response.status})`;
+        const message = data?.error || `Failed to complete signup (status ${response.status})`;
         setIsSubmitting(false);
         throw new Error(message);
       }
@@ -573,28 +514,22 @@ export function OnboardingProvider({
       if (data.user) {
         setUser({
           id: data.user.id,
-          walletAddress:
-            data.user.walletAddress ?? smartWalletAddress ?? undefined,
+          walletAddress: data.user.walletAddress ?? smartWalletAddress ?? undefined,
           displayName: data.user.displayName ?? payload.displayName,
           email: user?.email,
           username: data.user.username ?? payload.username,
           bio: data.user.bio ?? payload.bio,
-          profileImageUrl:
-            data.user.profileImageUrl ?? payload.profileImageUrl ?? undefined,
-          coverImageUrl:
-            data.user.coverImageUrl ?? payload.coverImageUrl ?? undefined,
+          profileImageUrl: data.user.profileImageUrl ?? payload.profileImageUrl ?? undefined,
+          coverImageUrl: data.user.coverImageUrl ?? payload.coverImageUrl ?? undefined,
           profileComplete: data.user.profileComplete ?? true,
-          reputationPoints:
-            data.user.reputationPoints ?? user?.reputationPoints,
+          reputationPoints: data.user.reputationPoints ?? user?.reputationPoints,
           hasFarcaster: data.user.hasFarcaster ?? user?.hasFarcaster,
           hasTwitter: data.user.hasTwitter ?? user?.hasTwitter,
-          farcasterUsername:
-            data.user.farcasterUsername ?? user?.farcasterUsername,
+          farcasterUsername: data.user.farcasterUsername ?? user?.farcasterUsername,
           twitterUsername: data.user.twitterUsername ?? user?.twitterUsername,
           nftTokenId: data.user.nftTokenId ?? undefined,
           createdAt: data.user.createdAt ?? user?.createdAt,
-          onChainRegistered:
-            data.user.onChainRegistered ?? user?.onChainRegistered,
+          onChainRegistered: data.user.onChainRegistered ?? user?.onChainRegistered,
         });
       }
       setNeedsOnboarding(false);
@@ -607,14 +542,7 @@ export function OnboardingProvider({
       setStage('ONCHAIN');
       setIsSubmitting(false);
     },
-    [
-      user,
-      setUser,
-      setNeedsOnboarding,
-      setNeedsOnchain,
-      identityToken,
-      smartWalletAddress,
-    ]
+    [user, setUser, setNeedsOnboarding, setNeedsOnchain, identityToken, smartWalletAddress]
   );
 
   const handleRetryOnchain = useCallback(async () => {
@@ -626,11 +554,7 @@ export function OnboardingProvider({
   }, [submittedProfile]);
 
   const handleSkipOnchain = useCallback(() => {
-    logger.info(
-      'User skipped onchain registration',
-      { userId: user?.id },
-      'OnboardingProvider'
-    );
+    logger.info('User skipped onchain registration', { userId: user?.id }, 'OnboardingProvider');
     setNeedsOnchain(false);
     setUserDismissed(true);
     setStage('PROFILE');
@@ -665,14 +589,7 @@ export function OnboardingProvider({
     // Clear onboarding flags so modal doesn't keep reappearing
     setNeedsOnboarding(false);
     setNeedsOnchain(false);
-  }, [
-    stage,
-    needsOnboarding,
-    needsOnchain,
-    user,
-    setNeedsOnboarding,
-    setNeedsOnchain,
-  ]);
+  }, [stage, needsOnboarding, needsOnchain, user, setNeedsOnboarding, setNeedsOnchain]);
 
   return (
     <>

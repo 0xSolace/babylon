@@ -1,13 +1,13 @@
 /**
  * Admin Training Model Selection API
- * 
+ *
  * @route GET /api/admin/training/model-selection - Get model selection info
  * @access Admin
- * 
+ *
  * @description
  * Returns information about model selection for training including summary
  * and recommended base model selection.
- * 
+ *
  * @openapi
  * /api/admin/training/model-selection:
  *   get:
@@ -34,7 +34,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const info = await fetch('/api/admin/training/model-selection', {
@@ -43,9 +43,9 @@
  * ```
  */
 
-import { NextResponse } from 'next/server';
-import { modelSelectionService } from '@/lib/training/ModelSelectionService';
 import { logger } from '@/lib/logger';
+import { modelSelectionService } from '@/lib/training/ModelSelectionService';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
@@ -55,7 +55,7 @@ export async function GET() {
     // Try to select base model
     let selection = null;
     let selectionError = null;
-    
+
     try {
       selection = await modelSelectionService.selectBaseModel();
     } catch (error) {
@@ -66,20 +66,17 @@ export async function GET() {
       success: true,
       summary,
       selection,
-      selectionError
+      selectionError,
     });
-
   } catch (error) {
     logger.error('Model selection API failed', error, 'ModelSelectionAPI');
-    
+
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to get selection info'
+        error: error instanceof Error ? error.message : 'Failed to get selection info',
       },
       { status: 500 }
     );
   }
 }
-
-

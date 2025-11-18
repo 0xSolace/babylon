@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating news reports from journalists covering game events.
- * 
+ *
  * Creates journalistic news reports covering game events with breaking
  * news urgency and objective reporting style. References specific events,
  * actors, and market impacts.
- * 
+ *
  * Returns XML with news report.
  */
 export const newsReport = definePrompt({
@@ -45,5 +45,5 @@ Respond with XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

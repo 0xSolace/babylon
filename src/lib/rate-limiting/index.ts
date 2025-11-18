@@ -1,33 +1,30 @@
 /**
  * Rate Limiting and Duplicate Detection
- * 
+ *
  * Centralized exports for rate limiting functionality
  */
 
 export {
-  checkRateLimit,
-  RATE_LIMIT_CONFIGS,
-  resetRateLimit,
-  clearAllRateLimits,
-  getRateLimitStatus,
-  cleanupRateLimits,
-} from './user-rate-limiter';
-
-export {
-  checkDuplicate,
   DUPLICATE_DETECTION_CONFIGS,
-  clearDuplicates,
-  clearAllDuplicates,
+  checkDuplicate,
   cleanupDuplicates,
+  clearAllDuplicates,
+  clearDuplicates,
   getDuplicateStats,
 } from './duplicate-detector';
-
 export {
-  applyRateLimit,
-  applyDuplicateDetection,
-  checkRateLimitAndDuplicates,
-  rateLimitError,
-  duplicateContentError,
   addRateLimitHeaders,
+  applyDuplicateDetection,
+  applyRateLimit,
+  checkRateLimitAndDuplicates,
+  duplicateContentError,
+  rateLimitError,
 } from './middleware';
-
+export {
+  RATE_LIMIT_CONFIGS,
+  checkRateLimit,
+  cleanupRateLimits,
+  clearAllRateLimits,
+  getRateLimitStatus,
+  resetRateLimit,
+} from './user-rate-limiter';

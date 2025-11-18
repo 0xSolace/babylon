@@ -1,6 +1,6 @@
 /**
  * AI Judge Rewards
- * 
+ *
  * Use AI judge to score trajectories when game knowledge isn't available
  */
 
@@ -34,9 +34,7 @@ export function createRewardService(): RewardService {
 /**
  * Score trajectory
  */
-export async function scoreTrajectory(
-  trajectory: Trajectory
-): Promise<number> {
+export async function scoreTrajectory(trajectory: Trajectory): Promise<number> {
   const service = new RewardService();
   return service.scoreTrajectory(trajectory);
 }
@@ -44,10 +42,7 @@ export async function scoreTrajectory(
 /**
  * Score trajectory group
  */
-export async function scoreTrajectoryGroup(
-  trajectories: Trajectory[]
-): Promise<number[]> {
+export async function scoreTrajectoryGroup(trajectories: Trajectory[]): Promise<number[]> {
   const service = new RewardService();
   return service.scoreTrajectoryGroup(trajectories);
 }
-

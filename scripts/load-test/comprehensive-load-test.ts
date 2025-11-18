@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
+
 /**
  * Comprehensive Load Testing Suite
- * 
+ *
  * Runs multiple test scenarios:
  * 1. Single-route DDOS tests (one route at a time)
  * 2. All-routes DDOS test
@@ -9,17 +10,21 @@
  * 4. Cache effectiveness tests
  * 5. Database performance tests
  * 6. Storage performance tests
- * 
+ *
  * Usage:
  *   bun run scripts/load-test/comprehensive-load-test.ts [environment]
- *   
+ *
  * Environments: local, staging, production
  */
 
-import { EnhancedLoadTestSimulator, generateAllRoutesScenario, ENHANCED_TEST_SCENARIOS } from '@/lib/testing/enhanced-load-test-simulator';
-import { performanceMonitor } from '@/lib/monitoring/performance-monitor';
 import { logger } from '@/lib/logger';
+import { performanceMonitor } from '@/lib/monitoring/performance-monitor';
 import type { EnhancedLoadTestResult } from '@/lib/testing/enhanced-load-test-simulator';
+import {
+  ENHANCED_TEST_SCENARIOS,
+  EnhancedLoadTestSimulator,
+  generateAllRoutesScenario,
+} from '@/lib/testing/enhanced-load-test-simulator';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -53,7 +58,7 @@ const CRITICAL_ROUTES = [
   '/api/a2a',
 ];
 
-interface TestSuiteResults {
+type TestSuiteResults = {
   environment: string;
   timestamp: Date;
   singleRouteTests: Array<{
@@ -69,7 +74,7 @@ interface TestSuiteResults {
     criticalBottlenecks: number;
     totalRecommendations: number;
   };
-}
+};
 
 async function main() {
   console.log('╔═══════════════════════════════════════════════════════════╗');
@@ -88,7 +93,7 @@ async function main() {
       process.exit(1);
     }
     console.log('✅ Server is responding\n');
-  } catch (error) {
+  } catch (_error) {
     console.error('❌ Could not connect to server');
     console.error(`   Make sure the server is running at ${baseUrl}`);
     process.exit(1);
@@ -121,9 +126,9 @@ async function main() {
   for (const route of CRITICAL_ROUTES) {
     console.log(`\n📍 Testing route: ${route}`);
     console.log('─'.repeat(60));
-    
+
     const config = ENHANCED_TEST_SCENARIOS.SINGLE_ROUTE_DDOS(route);
-    
+
     // Adjust for environment
     if (environment === 'production') {
       config.concurrentUsers = 500;
@@ -132,11 +137,11 @@ async function main() {
       config.concurrentUsers = 750;
       config.maxRps = 5000;
     }
-    
+
     try {
       const result = await simulator.runTest(config);
       suiteResults.singleRouteTests.push({ route, result });
-      
+
       console.log(`\n✓ Test completed:`);
       console.log(`  Requests: ${result.totalRequests.toLocaleString()}`);
       console.log(`  Success Rate: ${(result.throughput.successRate * 100).toFixed(2)}%`);
@@ -144,25 +149,32 @@ async function main() {
       console.log(`  P95 Response: ${result.responseTime.p95.toFixed(2)}ms`);
       console.log(`  P99 Response: ${result.responseTime.p99.toFixed(2)}ms`);
       console.log(`  Throughput: ${result.throughput.requestsPerSecond.toFixed(2)} req/s`);
-      
+
       if (result.performanceMetrics) {
-        console.log(`\n  Cache Hit Rate: ${(result.performanceMetrics.cache.hitRate * 100).toFixed(2)}%`);
-        console.log(`  DB Slow Query Rate: ${(result.performanceMetrics.database.slowQueryRate * 100).toFixed(2)}%`);
-        console.log(`  Peak Memory: ${result.performanceMetrics.system.peakMemoryMB.toFixed(2)} MB`);
+        console.log(
+          `\n  Cache Hit Rate: ${(result.performanceMetrics.cache.hitRate * 100).toFixed(2)}%`
+        );
+        console.log(
+          `  DB Slow Query Rate: ${(result.performanceMetrics.database.slowQueryRate * 100).toFixed(2)}%`
+        );
+        console.log(
+          `  Peak Memory: ${result.performanceMetrics.system.peakMemoryMB.toFixed(2)} MB`
+        );
       }
-      
+
       if (result.bottlenecks && result.bottlenecks.length > 0) {
-        const critical = result.bottlenecks.filter(b => b.severity === 'critical');
+        const critical = result.bottlenecks.filter((b) => b.severity === 'critical');
         if (critical.length > 0) {
           console.log(`\n  ⚠️  Critical bottlenecks found: ${critical.length}`);
-          critical.forEach(b => console.log(`     - ${b.description}`));
+          for (const bottleneck of critical) {
+            console.log(`     - ${bottleneck.description}`);
+          }
         }
       }
-      
+
       // Wait between tests
       console.log(`\n  💤 Cooling down for 10 seconds...`);
-      await new Promise(resolve => setTimeout(resolve, 10000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 10000));
     } catch (error) {
       console.error(`\n❌ Test failed for ${route}:`, error);
       logger.error(`Single-route test failed for ${route}`, error, 'ComprehensiveLoadTest');
@@ -180,7 +192,7 @@ async function main() {
   try {
     const allEndpoints = await generateAllRoutesScenario(baseUrl);
     const config = ENHANCED_TEST_SCENARIOS.ALL_ROUTES_DDOS(allEndpoints);
-    
+
     // Adjust for environment
     if (environment === 'production') {
       config.concurrentUsers = 1000;
@@ -189,15 +201,15 @@ async function main() {
       config.concurrentUsers = 1500;
       config.maxRps = 4000;
     }
-    
+
     console.log(`Testing ${allEndpoints.length} routes...`);
     console.log(`Concurrent Users: ${config.concurrentUsers}`);
     console.log(`Duration: ${config.durationSeconds}s`);
     console.log(`Max RPS: ${config.maxRps}\n`);
-    
+
     const result = await simulator.runTest(config);
     suiteResults.allRoutesTest = result;
-    
+
     console.log(`\n✓ All-routes test completed:`);
     console.log(`  Requests: ${result.totalRequests.toLocaleString()}`);
     console.log(`  Success Rate: ${(result.throughput.successRate * 100).toFixed(2)}%`);
@@ -205,20 +217,29 @@ async function main() {
     console.log(`  P95 Response: ${result.responseTime.p95.toFixed(2)}ms`);
     console.log(`  P99 Response: ${result.responseTime.p99.toFixed(2)}ms`);
     console.log(`  Throughput: ${result.throughput.requestsPerSecond.toFixed(2)} req/s`);
-    
+
     if (result.performanceMetrics) {
       console.log(`\n  Performance Metrics:`);
-      console.log(`    Cache Hit Rate: ${(result.performanceMetrics.cache.hitRate * 100).toFixed(2)}%`);
-      console.log(`    DB Slow Query Rate: ${(result.performanceMetrics.database.slowQueryRate * 100).toFixed(2)}%`);
-      console.log(`    Peak Memory: ${result.performanceMetrics.system.peakMemoryMB.toFixed(2)} MB`);
-      console.log(`    Peak Active Requests: ${result.performanceMetrics.system.peakActiveRequests}`);
-      console.log(`    Avg RPS: ${result.performanceMetrics.system.avgRequestsPerSecond.toFixed(2)}`);
+      console.log(
+        `    Cache Hit Rate: ${(result.performanceMetrics.cache.hitRate * 100).toFixed(2)}%`
+      );
+      console.log(
+        `    DB Slow Query Rate: ${(result.performanceMetrics.database.slowQueryRate * 100).toFixed(2)}%`
+      );
+      console.log(
+        `    Peak Memory: ${result.performanceMetrics.system.peakMemoryMB.toFixed(2)} MB`
+      );
+      console.log(
+        `    Peak Active Requests: ${result.performanceMetrics.system.peakActiveRequests}`
+      );
+      console.log(
+        `    Avg RPS: ${result.performanceMetrics.system.avgRequestsPerSecond.toFixed(2)}`
+      );
     }
-    
+
     // Wait before next test
     console.log(`\n  💤 Cooling down for 30 seconds...`);
-    await new Promise(resolve => setTimeout(resolve, 30000));
-    
+    await new Promise((resolve) => setTimeout(resolve, 30000));
   } catch (error) {
     console.error('\n❌ All-routes test failed:', error);
     logger.error('All-routes test failed', error, 'ComprehensiveLoadTest');
@@ -235,28 +256,27 @@ async function main() {
   try {
     const endpoints = await generateAllRoutesScenario(baseUrl);
     const config = ENHANCED_TEST_SCENARIOS.REALISTIC_LOAD(endpoints);
-    
+
     // Adjust for environment
     if (environment === 'production') {
       config.concurrentUsers = 300;
       config.maxRps = 1000;
       config.durationSeconds = 180;
     }
-    
+
     console.log(`Concurrent Users: ${config.concurrentUsers}`);
     console.log(`Duration: ${config.durationSeconds}s`);
     console.log(`Think Time: ${config.thinkTimeMs}ms\n`);
-    
+
     const result = await simulator.runTest(config);
     suiteResults.mixedTrafficTest = result;
-    
+
     console.log(`\n✓ Mixed traffic test completed:`);
     console.log(`  Requests: ${result.totalRequests.toLocaleString()}`);
     console.log(`  Success Rate: ${(result.throughput.successRate * 100).toFixed(2)}%`);
     console.log(`  Avg Response: ${result.responseTime.mean.toFixed(2)}ms`);
     console.log(`  P95 Response: ${result.responseTime.p95.toFixed(2)}ms`);
     console.log(`  Throughput: ${result.throughput.requestsPerSecond.toFixed(2)} req/s`);
-    
   } catch (error) {
     console.error('\n❌ Mixed traffic test failed:', error);
     logger.error('Mixed traffic test failed', error, 'ComprehensiveLoadTest');
@@ -271,25 +291,30 @@ async function main() {
 
   // Aggregate results
   const allResults = [
-    ...suiteResults.singleRouteTests.map(t => t.result),
+    ...suiteResults.singleRouteTests.map((t) => t.result),
     suiteResults.allRoutesTest,
     suiteResults.mixedTrafficTest,
   ];
 
   let totalRequests = 0;
   let totalErrors = 0;
-  const allBottlenecks: Array<{ type: string; severity: string; description: string; route?: string }> = [];
+  const allBottlenecks: Array<{
+    type: string;
+    severity: string;
+    description: string;
+    route?: string;
+  }> = [];
   const allRecommendations: string[] = [];
 
   for (const result of allResults) {
-    if (result && result.totalRequests) {
+    if (result?.totalRequests) {
       totalRequests += result.totalRequests;
       totalErrors += result.failedRequests;
-      
+
       if (result.bottlenecks) {
         allBottlenecks.push(...result.bottlenecks);
       }
-      
+
       if (result.recommendations) {
         allRecommendations.push(...result.recommendations);
       }
@@ -297,7 +322,7 @@ async function main() {
   }
 
   const overallSuccessRate = totalRequests > 0 ? (totalRequests - totalErrors) / totalRequests : 0;
-  const criticalBottlenecks = allBottlenecks.filter(b => b.severity === 'critical').length;
+  const criticalBottlenecks = allBottlenecks.filter((b) => b.severity === 'critical').length;
 
   suiteResults.summary = {
     totalRequests,
@@ -319,7 +344,7 @@ async function main() {
   console.log('\n\nSlowest Routes (by P95 response time):');
   console.log('─'.repeat(60));
   const routePerformance = suiteResults.singleRouteTests
-    .map(t => ({
+    .map((t) => ({
       route: t.route,
       p95: t.result.responseTime.p95,
       successRate: t.result.throughput.successRate,
@@ -337,7 +362,7 @@ async function main() {
   if (criticalBottlenecks > 0) {
     console.log('\n\n⚠️  CRITICAL BOTTLENECKS:');
     console.log('─'.repeat(60));
-    const criticalIssues = allBottlenecks.filter(b => b.severity === 'critical');
+    const criticalIssues = allBottlenecks.filter((b) => b.severity === 'critical');
     for (const issue of criticalIssues) {
       console.log(`  [${issue.type.toUpperCase()}] ${issue.description}`);
     }
@@ -363,7 +388,7 @@ async function main() {
   } else if (overallSuccessRate >= 0.95 && criticalBottlenecks < 3) {
     console.log('  ⚠️  GOOD - System is generally stable');
     console.log('     Some optimizations recommended before high traffic');
-  } else if (overallSuccessRate >= 0.90) {
+  } else if (overallSuccessRate >= 0.9) {
     console.log('  ⚠️  FAIR - System needs optimization');
     console.log('     Address bottlenecks before production deployment');
   } else {
@@ -397,6 +422,3 @@ main().catch((error) => {
   logger.error('Comprehensive load test suite failed', error, 'ComprehensiveLoadTest');
   process.exit(1);
 });
-
-
-

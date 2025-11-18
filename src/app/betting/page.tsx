@@ -2,24 +2,24 @@
 
 /**
  * On-Chain Betting Page
- * 
+ *
  * Real betting with Base Sepolia ETH
  * Transactions execute on blockchain via smart wallet
  */
 
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { getContractAddresses } from '@/lib/deployment/addresses';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useOnChainBetting } from '@/hooks/useOnChainBetting';
 import { useSmartWallet } from '@/hooks/useSmartWallet';
-import { getContractAddresses } from '@/lib/deployment/addresses';
-import { cn } from '@/lib/utils';
 import { Clock, ExternalLink, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-interface Question {
+type Question = {
   id: number | string;
   text: string;
   status: 'active' | 'resolved' | 'cancelled';
@@ -28,15 +28,15 @@ interface Question {
   resolutionDate?: string;
   oracleCommitTxHash?: string | null;
   oracleRevealTxHash?: string | null;
-}
+};
 
-interface PerpMarket {
+type PerpMarket = {
   ticker: string;
   name: string;
   currentPrice: number;
   change24h: number;
   changePercent24h: number;
-}
+};
 
 export default function OnChainBettingPage() {
   const router = useRouter();
@@ -50,11 +50,11 @@ export default function OnChainBettingPage() {
   const [selectedMarket, setSelectedMarket] = useState<Question | null>(null);
   const [betAmount, setBetAmount] = useState('');
   const [betSide, setBetSide] = useState<'YES' | 'NO'>('YES');
-  
+
   // Get network info
   const { network, diamond, chainId } = getContractAddresses();
   const isLocal = chainId === 31337;
-  const explorerUrl = isLocal 
+  const explorerUrl = isLocal
     ? null // No explorer for localnet
     : chainId === 84532
       ? 'https://sepolia.basescan.org'
@@ -91,24 +91,22 @@ export default function OnChainBettingPage() {
     if (!selectedMarket || !betAmount) return;
 
     const shares = parseFloat(betAmount);
-    if (isNaN(shares) || shares <= 0) {
+    if (Number.isNaN(shares) || shares <= 0) {
       toast.error('Invalid bet amount');
       return;
     }
 
     try {
-      const result = await buyShares(
-        selectedMarket.id.toString(),
-        betSide,
-        shares
-      );
+      const result = await buyShares(selectedMarket.id.toString(), betSide, shares);
 
       toast.success('Bet placed on-chain!', {
         description: isLocal ? `TX: ${result.txHash.slice(0, 10)}...` : 'View on explorer',
-        action: explorerUrl ? {
-          label: 'View TX',
-          onClick: () => window.open(`${explorerUrl}/tx/${result.txHash}`, '_blank')
-        } : undefined
+        action: explorerUrl
+          ? {
+              label: 'View TX',
+              onClick: () => window.open(`${explorerUrl}/tx/${result.txHash}`, '_blank'),
+            }
+          : undefined,
       });
 
       // Verify with backend
@@ -119,8 +117,8 @@ export default function OnChainBettingPage() {
           side: betSide.toLowerCase(),
           numShares: shares,
           txHash: result.txHash,
-          walletAddress: smartWalletAddress
-        })
+          walletAddress: smartWalletAddress,
+        }),
       });
 
       setSelectedMarket(null);
@@ -131,7 +129,7 @@ export default function OnChainBettingPage() {
   };
 
   const formatPrice = (price: number) => `$${price.toFixed(2)}`;
-  
+
   const getDaysLeft = (date?: string) => {
     if (!date) return null;
     const diff = Math.ceil((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -141,17 +139,18 @@ export default function OnChainBettingPage() {
   if (!authenticated) {
     return (
       <PageContainer>
-        <div className="p-4 md:p-6 flex flex-col items-center justify-center min-h-[60vh] space-y-6">
-          <div className="text-center space-y-3">
-            <Wallet className="w-16 h-16 mx-auto text-[#0066FF]" />
-            <h1 className="text-3xl font-bold">On-Chain Betting</h1>
-            <p className="text-muted-foreground max-w-md">
+        <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-6 p-4 md:p-6">
+          <div className="space-y-3 text-center">
+            <Wallet className="mx-auto h-16 w-16 text-[#0066FF]" />
+            <h1 className="font-bold text-3xl">On-Chain Betting</h1>
+            <p className="max-w-md text-muted-foreground">
               Bet with real Base Sepolia ETH. All transactions are on-chain and verifiable.
             </p>
           </div>
           <button
+            type="button"
             onClick={login}
-            className="px-8 py-3 bg-[#0066FF] text-primary-foreground rounded-lg font-medium hover:bg-[#2952d9] transition-colors"
+            className="rounded-lg bg-[#0066FF] px-8 py-3 font-medium text-primary-foreground transition-colors hover:bg-[#2952d9]"
           >
             Connect Wallet to Start Betting
           </button>
@@ -163,7 +162,7 @@ export default function OnChainBettingPage() {
   if (!smartWalletReady) {
     return (
       <PageContainer>
-        <div className="p-4 md:p-6 flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-4 p-4 md:p-6">
           <Skeleton className="h-16 w-16 rounded-full" />
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-4 w-48" />
@@ -175,10 +174,10 @@ export default function OnChainBettingPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="p-4 space-y-6">
+        <div className="space-y-6 p-4">
           <Skeleton className="h-8 w-48" />
           <div className="space-y-3">
-            {[1, 2, 3].map(i => (
+            {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-24 w-full" />
             ))}
           </div>
@@ -189,35 +188,40 @@ export default function OnChainBettingPage() {
 
   return (
     <PageContainer>
-      <div className="p-4 md:p-6 space-y-8">
+      <div className="space-y-8 p-4 md:p-6">
         {/* Header */}
         <div>
           <button
+            type="button"
             onClick={() => router.push('/markets')}
-            className="text-sm text-muted-foreground hover:text-foreground mb-4"
+            className="mb-4 text-muted-foreground text-sm hover:text-foreground"
           >
             ← Back to Markets
           </button>
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">On-Chain Betting</h1>
+          <h1 className="mb-2 font-bold text-2xl md:text-3xl">On-Chain Betting</h1>
           <p className="text-muted-foreground">
-            {isLocal 
+            {isLocal
               ? `Local Anvil (Chain ID: ${chainId}) • Testing mode`
               : `Base Sepolia ETH • All transactions on blockchain`}
           </p>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Network: {network} • Diamond: {diamond.slice(0, 10)}...{diamond.slice(-6)}
+          <div className="mt-1 text-muted-foreground text-xs">
+            Network: {network} • Diamond: {diamond.slice(0, 10)}...
+            {diamond.slice(-6)}
           </div>
           <div className="mt-2 flex items-center gap-2 text-sm">
-            <Wallet className="w-4 h-4 text-green-600" />
-            <span className="text-green-600 font-medium">Connected: {smartWalletAddress?.slice(0, 6)}...{smartWalletAddress?.slice(-4)}</span>
+            <Wallet className="h-4 w-4 text-green-600" />
+            <span className="font-medium text-green-600">
+              Connected: {smartWalletAddress?.slice(0, 6)}...
+              {smartWalletAddress?.slice(-4)}
+            </span>
             {explorerUrl && (
               <a
                 href={`${explorerUrl}/address/${smartWalletAddress}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[#0066FF] hover:underline flex items-center gap-1"
+                className="flex items-center gap-1 text-[#0066FF] hover:underline"
               >
-                View Wallet <ExternalLink className="w-3 h-3" />
+                View Wallet <ExternalLink className="h-3 w-3" />
               </a>
             )}
           </div>
@@ -225,79 +229,81 @@ export default function OnChainBettingPage() {
 
         {/* Prediction Markets Section */}
         <section>
-          <h2 className="text-xl font-bold mb-4">Prediction Markets - On-Chain</h2>
+          <h2 className="mb-4 font-bold text-xl">Prediction Markets - On-Chain</h2>
           <div className="space-y-3">
-            {questions.filter(q => q.status === 'active').map((question) => {
-              const totalShares = question.yesShares + question.noShares;
-              const yesPercent = totalShares > 0 
-                ? ((question.yesShares / totalShares) * 100).toFixed(1)
-                : '50.0';
-              const noPercent = totalShares > 0 
-                ? ((question.noShares / totalShares) * 100).toFixed(1)
-                : '50.0';
-              const daysLeft = getDaysLeft(question.resolutionDate);
+            {questions
+              .filter((q) => q.status === 'active')
+              .map((question) => {
+                const totalShares = question.yesShares + question.noShares;
+                const yesPercent =
+                  totalShares > 0 ? ((question.yesShares / totalShares) * 100).toFixed(1) : '50.0';
+                const noPercent =
+                  totalShares > 0 ? ((question.noShares / totalShares) * 100).toFixed(1) : '50.0';
+                const daysLeft = getDaysLeft(question.resolutionDate);
 
-              return (
-                <div
-                  key={question.id}
-                  className="bg-card border border-border rounded-lg p-4 hover:border-[#0066FF]/50 transition-colors"
-                >
-                  <div className="mb-3">
-                    <h3 className="font-medium text-base mb-1">{question.text}</h3>
-                    <div className="flex items-center gap-2 text-xs">
-                      {question.oracleCommitTxHash && (
-                        <span className="text-green-600 flex items-center gap-1">
-                          ✓ Committed On-Chain
-                        </span>
-                      )}
-                      {daysLeft !== null && (
-                        <span className="text-muted-foreground flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {daysLeft}d left
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex gap-4">
-                      <div className="text-sm">
-                        <span className="text-green-600 font-bold">{yesPercent}%</span>
-                        <span className="text-muted-foreground ml-1">YES</span>
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-red-600 font-bold">{noPercent}%</span>
-                        <span className="text-muted-foreground ml-1">NO</span>
+                return (
+                  <div
+                    key={question.id}
+                    className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-[#0066FF]/50"
+                  >
+                    <div className="mb-3">
+                      <h3 className="mb-1 font-medium text-base">{question.text}</h3>
+                      <div className="flex items-center gap-2 text-xs">
+                        {question.oracleCommitTxHash && (
+                          <span className="flex items-center gap-1 text-green-600">
+                            ✓ Committed On-Chain
+                          </span>
+                        )}
+                        {daysLeft !== null && (
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            {daysLeft}d left
+                          </span>
+                        )}
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedMarket(question);
-                        setBetSide('YES');
-                      }}
-                      className="flex-1 px-4 py-2 bg-green-600/20 text-green-600 rounded-lg font-medium hover:bg-green-600/30 transition-colors"
-                    >
-                      Bet YES On-Chain
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedMarket(question);
-                        setBetSide('NO');
-                      }}
-                      className="flex-1 px-4 py-2 bg-red-600/20 text-red-600 rounded-lg font-medium hover:bg-red-600/30 transition-colors"
-                    >
-                      Bet NO On-Chain
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex gap-4">
+                        <div className="text-sm">
+                          <span className="font-bold text-green-600">{yesPercent}%</span>
+                          <span className="ml-1 text-muted-foreground">YES</span>
+                        </div>
+                        <div className="text-sm">
+                          <span className="font-bold text-red-600">{noPercent}%</span>
+                          <span className="ml-1 text-muted-foreground">NO</span>
+                        </div>
+                      </div>
+                    </div>
 
-            {questions.filter(q => q.status === 'active').length === 0 && (
-              <div className="bg-muted/30 rounded-lg p-6 text-center">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMarket(question);
+                          setBetSide('YES');
+                        }}
+                        className="flex-1 rounded-lg bg-green-600/20 px-4 py-2 font-medium text-green-600 transition-colors hover:bg-green-600/30"
+                      >
+                        Bet YES On-Chain
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMarket(question);
+                          setBetSide('NO');
+                        }}
+                        className="flex-1 rounded-lg bg-red-600/20 px-4 py-2 font-medium text-red-600 transition-colors hover:bg-red-600/30"
+                      >
+                        Bet NO On-Chain
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+            {questions.filter((q) => q.status === 'active').length === 0 && (
+              <div className="rounded-lg bg-muted/30 p-6 text-center">
                 <p className="text-muted-foreground">No active prediction markets</p>
               </div>
             )}
@@ -306,103 +312,110 @@ export default function OnChainBettingPage() {
 
         {/* Perpetual Markets Info */}
         <section>
-          <h2 className="text-xl font-bold mb-4">Perpetual Futures - Price Data On-Chain</h2>
+          <h2 className="mb-4 font-bold text-xl">Perpetual Futures - Price Data On-Chain</h2>
           <div className="space-y-3">
             {perpMarkets.slice(0, 5).map((market) => (
-              <div
-                key={market.ticker}
-                className="bg-card border border-border rounded-lg p-4"
-              >
+              <div key={market.ticker} className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-lg">${market.ticker}</h3>
-                    <p className="text-sm text-muted-foreground">{market.name}</p>
+                    <p className="text-muted-foreground text-sm">{market.name}</p>
                   </div>
-                  
+
                   <div className="text-right">
                     <div className="font-bold text-lg">{formatPrice(market.currentPrice)}</div>
-                    <div className={cn(
-                      "text-sm font-bold flex items-center gap-1 justify-end",
-                      market.change24h >= 0 ? "text-green-600" : "text-red-600"
-                    )}>
-                      {market.change24h >= 0 ? (
-                        <TrendingUp className="w-4 h-4" />
-                      ) : (
-                        <TrendingDown className="w-4 h-4" />
+                    <div
+                      className={cn(
+                        'flex items-center justify-end gap-1 font-bold text-sm',
+                        market.change24h >= 0 ? 'text-green-600' : 'text-red-600'
                       )}
-                      {market.change24h >= 0 ? '+' : ''}{market.changePercent24h.toFixed(2)}%
+                    >
+                      {market.change24h >= 0 ? (
+                        <TrendingUp className="h-4 w-4" />
+                      ) : (
+                        <TrendingDown className="h-4 w-4" />
+                      )}
+                      {market.change24h >= 0 ? '+' : ''}
+                      {market.changePercent24h.toFixed(2)}%
                     </div>
                   </div>
                 </div>
-                <div className="mt-2 text-xs text-green-600">
+                <div className="mt-2 text-green-600 text-xs">
                   ✓ Prices published on-chain every tick
                 </div>
               </div>
             ))}
           </div>
-          <p className="text-sm text-muted-foreground mt-4">
-            Note: Perp trading is currently instant/off-chain. Prices are published on-chain for verification.
+          <p className="mt-4 text-muted-foreground text-sm">
+            Note: Perp trading is currently instant/off-chain. Prices are published on-chain for
+            verification.
           </p>
         </section>
 
         {/* Bet Modal */}
         {selectedMarket && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-background border border-border rounded-lg p-6 max-w-md w-full space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md space-y-4 rounded-lg border border-border bg-background p-6">
               <div>
-                <h3 className="text-lg font-bold mb-2">Place On-Chain Bet</h3>
-                <p className="text-sm text-muted-foreground">
-                  {selectedMarket.text}
-                </p>
+                <h3 className="mb-2 font-bold text-lg">Place On-Chain Bet</h3>
+                <p className="text-muted-foreground text-sm">{selectedMarket.text}</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Betting: <span className={betSide === 'YES' ? 'text-green-600' : 'text-red-600'}>{betSide}</span>
+                <label htmlFor="bet-amount" className="mb-2 block font-medium text-sm">
+                  Betting:{' '}
+                  <span className={betSide === 'YES' ? 'text-green-600' : 'text-red-600'}>
+                    {betSide}
+                  </span>
                 </label>
                 <input
+                  id="bet-amount"
                   type="number"
                   value={betAmount}
                   onChange={(e) => setBetAmount(e.target.value)}
                   placeholder="Number of shares"
-                  className="w-full px-4 py-2 rounded-lg bg-muted border border-border focus:outline-none focus:border-[#0066FF]"
+                  className="w-full rounded-lg border border-border bg-muted px-4 py-2 focus:border-[#0066FF] focus:outline-none"
                   step="0.1"
                   min="0.1"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="mt-1 text-muted-foreground text-xs">
                   This will execute a real blockchain transaction on Base Sepolia
                 </p>
               </div>
 
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
+              <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
                 <p className="text-xs text-yellow-600">
-                  ⚠️ This is a real on-chain transaction. Gas fees apply. Transaction will be visible on Base Sepolia block explorer.
+                  ⚠️ This is a real on-chain transaction. Gas fees apply. Transaction will be visible
+                  on Base Sepolia block explorer.
                 </p>
               </div>
 
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setSelectedMarket(null);
                     setBetAmount('');
                   }}
                   disabled={txLoading}
-                  className="flex-1 px-4 py-2 bg-muted text-foreground rounded-lg font-medium hover:bg-muted/80 transition-colors disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-muted px-4 py-2 font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleBet}
                   disabled={txLoading || !betAmount}
-                  className="flex-1 px-4 py-2 bg-[#0066FF] text-primary-foreground rounded-lg font-medium hover:bg-[#2952d9] transition-colors disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-[#2952d9] disabled:opacity-50"
                 >
                   {txLoading ? 'Sending TX...' : 'Place Bet On-Chain'}
                 </button>
               </div>
 
               {smartWalletAddress && (
-                <div className="text-xs text-muted-foreground text-center">
-                  Using wallet: {smartWalletAddress.slice(0, 6)}...{smartWalletAddress.slice(-4)}
+                <div className="text-center text-muted-foreground text-xs">
+                  Using wallet: {smartWalletAddress.slice(0, 6)}...
+                  {smartWalletAddress.slice(-4)}
                 </div>
               )}
             </div>
@@ -412,4 +425,3 @@ export default function OnChainBettingPage() {
     </PageContainer>
   );
 }
-

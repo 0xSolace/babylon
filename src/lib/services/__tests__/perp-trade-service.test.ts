@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-
 import { resolveExitPrice } from '../perp-trade-service';
 
 describe('resolveExitPrice', () => {

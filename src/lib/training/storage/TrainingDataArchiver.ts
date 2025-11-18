@@ -1,16 +1,16 @@
 /**
  * Training Data Archiver (Vercel Blob)
- * 
+ *
  * Archives training data (exported trajectories, RULER scores) to Vercel Blob
  * for long-term storage and reproducibility.
  */
 
-import { put, list, del } from '@vercel/blob';
 import { logger } from '@/lib/logger';
-import fs from 'fs/promises';
-import path from 'path';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { del, list, put } from '@vercel/blob';
 
-export interface ArchivedWindow {
+export type ArchivedWindow = {
   windowId: string;
   trajectoryCount: number;
   blobUrls: {
@@ -21,7 +21,7 @@ export interface ArchivedWindow {
   };
   archivedAt: Date;
   size: number;
-}
+};
 
 export class TrainingDataArchiver {
   private readonly blobPrefix = 'training-data/';
@@ -40,15 +40,15 @@ export class TrainingDataArchiver {
       logger.info('Archiving training data', { windowId: options.windowId });
 
       const prefix = `${this.blobPrefix}${options.windowId}/`;
-      interface BlobUrls {
+      type BlobUrls = {
         trajectories: string;
         groups?: string;
         rulerScores?: string;
         metadata: string;
-      }
+      };
       const urls: BlobUrls = {
         trajectories: '',
-        metadata: ''
+        metadata: '',
       };
       let totalSize = 0;
 
@@ -56,7 +56,7 @@ export class TrainingDataArchiver {
       const trajData = await fs.readFile(options.trajectoriesPath);
       const trajBlob = await put(`${prefix}trajectories.jsonl`, trajData, {
         access: 'public',
-        addRandomSuffix: false
+        addRandomSuffix: false,
       });
       urls.trajectories = trajBlob.url;
       totalSize += trajData.length;
@@ -66,7 +66,7 @@ export class TrainingDataArchiver {
         const groupsData = await fs.readFile(options.groupsPath);
         const groupsBlob = await put(`${prefix}groups.jsonl`, groupsData, {
           access: 'public',
-          addRandomSuffix: false
+          addRandomSuffix: false,
         });
         urls.groups = groupsBlob.url;
         totalSize += groupsData.length;
@@ -77,7 +77,7 @@ export class TrainingDataArchiver {
         const scoresData = await fs.readFile(options.rulerScoresPath);
         const scoresBlob = await put(`${prefix}ruler_scores.json`, scoresData, {
           access: 'public',
-          addRandomSuffix: false
+          addRandomSuffix: false,
         });
         urls.rulerScores = scoresBlob.url;
         totalSize += scoresData.length;
@@ -85,17 +85,16 @@ export class TrainingDataArchiver {
 
       // Upload metadata
       const metadataJson = JSON.stringify(options.metadata || {}, null, 2);
-      const metadataBlob = await put(
-        `${prefix}metadata.json`,
-        metadataJson,
-        { access: 'public', addRandomSuffix: false }
-      );
+      const metadataBlob = await put(`${prefix}metadata.json`, metadataJson, {
+        access: 'public',
+        addRandomSuffix: false,
+      });
       urls.metadata = metadataBlob.url;
       totalSize += Buffer.byteLength(metadataJson, 'utf8');
 
       logger.info('Training data archived', {
         windowId: options.windowId,
-        size: totalSize
+        size: totalSize,
       });
 
       return {
@@ -103,9 +102,8 @@ export class TrainingDataArchiver {
         trajectoryCount: (options.metadata?.trajectoryCount as number) || 0,
         blobUrls: urls,
         archivedAt: new Date(),
-        size: totalSize
+        size: totalSize,
       };
-
     } catch (error) {
       logger.error('Failed to archive training data', error);
       throw error;
@@ -129,12 +127,12 @@ export class TrainingDataArchiver {
         return null;
       }
 
-      interface WindowDataResult {
+      type WindowDataResult = {
         trajectories?: string;
         groups?: string;
         rulerScores?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
-      }
+      };
       const result: WindowDataResult = {};
 
       for (const blob of blobs) {
@@ -161,9 +159,8 @@ export class TrainingDataArchiver {
         trajectories: result.trajectories,
         groups: result.groups,
         rulerScores: result.rulerScores,
-        metadata: result.metadata
+        metadata: result.metadata,
       };
-
     } catch (error) {
       logger.error('Failed to retrieve archived data', error);
       return null;
@@ -186,7 +183,6 @@ export class TrainingDataArchiver {
       }
 
       return Array.from(windows).sort().reverse();
-
     } catch (error) {
       logger.error('Failed to list windows', error);
       return [];
@@ -206,7 +202,6 @@ export class TrainingDataArchiver {
       }
 
       logger.info('Deleted archived window', { windowId });
-
     } catch (error) {
       logger.error('Failed to delete window', error);
       throw error;
@@ -216,4 +211,3 @@ export class TrainingDataArchiver {
 
 // Singleton
 export const trainingDataArchiver = new TrainingDataArchiver();
-

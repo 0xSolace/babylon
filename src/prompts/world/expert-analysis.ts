@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating expert analysis from NPCs with domain expertise.
- * 
+ *
  * Creates analytical commentary from expert NPCs providing informed
  * perspectives on game events, market movements, or technical matters.
  * Reflects the expert's domain knowledge and analytical style.
- * 
+ *
  * Returns XML with expert analysis.
  */
 export const expertAnalysis = definePrompt({
@@ -44,5 +44,5 @@ Respond with XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

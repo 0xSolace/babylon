@@ -1,31 +1,43 @@
 /**
  * Agent P&L Service
- * 
+ *
  * Handles P&L tracking, trade recording, and rollup to user accounts
  */
 
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { v4 as uuidv4 } from 'uuid'
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { v4 as uuidv4 } from 'uuid';
 
 export class AgentPnLService {
   /**
    * Record a trade for an agent
    */
   async recordTrade(params: {
-    agentId: string
-    userId: string
-    marketType: 'prediction' | 'perp'
-    marketId?: string
-    ticker?: string
-    action: 'open' | 'close'
-    side?: 'long' | 'short' | 'yes' | 'no'
-    amount: number
-    price: number
-    pnl?: number
-    reasoning?: string
+    agentId: string;
+    userId: string;
+    marketType: 'prediction' | 'perp';
+    marketId?: string;
+    ticker?: string;
+    action: 'open' | 'close';
+    side?: 'long' | 'short' | 'yes' | 'no';
+    amount: number;
+    price: number;
+    pnl?: number;
+    reasoning?: string;
   }): Promise<void> {
-    const { agentId, userId, marketType, marketId, ticker, action, side, amount, price, pnl, reasoning } = params
+    const {
+      agentId,
+      userId,
+      marketType,
+      marketId,
+      ticker,
+      action,
+      side,
+      amount,
+      price,
+      pnl,
+      reasoning,
+    } = params;
 
     await prisma.$transaction(async (tx) => {
       // Create trade record
@@ -41,9 +53,9 @@ export class AgentPnLService {
           amount,
           price,
           pnl,
-          reasoning
-        }
-      })
+          reasoning,
+        },
+      });
 
       // Update agent P&L if provided
       if (pnl !== undefined && pnl !== null) {
@@ -51,20 +63,20 @@ export class AgentPnLService {
           where: { id: agentId },
           data: {
             lifetimePnL: {
-              increment: pnl
-            }
-          }
-        })
+              increment: pnl,
+            },
+          },
+        });
 
         // Roll up to manager's totalAgentPnL
         await tx.user.update({
           where: { id: userId },
           data: {
             totalAgentPnL: {
-              increment: pnl
-            }
-          }
-        })
+              increment: pnl,
+            },
+          },
+        });
       }
 
       // Log the trade
@@ -80,13 +92,13 @@ export class AgentPnLService {
             marketId,
             ticker,
             pnl,
-            reasoning
-          }
-        }
-      })
-    })
+            reasoning,
+          },
+        },
+      });
+    });
 
-    logger.info(`Trade recorded for agent ${agentId}`, undefined, 'AgentPnLService')
+    logger.info(`Trade recorded for agent ${agentId}`, undefined, 'AgentPnLService');
   }
 
   /**
@@ -96,35 +108,34 @@ export class AgentPnLService {
     return prisma.agentTrade.findMany({
       where: { agentUserId },
       orderBy: { executedAt: 'desc' },
-      take: limit
-    })
+      take: limit,
+    });
   }
 
   async getUserAgentPnL(userId: string): Promise<number> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { totalAgentPnL: true }
-    })
+      select: { totalAgentPnL: true },
+    });
 
-    return user ? Number(user.totalAgentPnL) : 0
+    return user ? Number(user.totalAgentPnL) : 0;
   }
 
   async syncUserAgentPnL(userId: string): Promise<void> {
     const agents = await prisma.user.findMany({
       where: { isAgent: true, managedBy: userId },
-      select: { lifetimePnL: true }
-    })
+      select: { lifetimePnL: true },
+    });
 
-    const totalPnL = agents.reduce((sum, agent) => sum + Number(agent.lifetimePnL), 0)
+    const totalPnL = agents.reduce((sum, agent) => sum + Number(agent.lifetimePnL), 0);
 
     await prisma.user.update({
       where: { id: userId },
-      data: { totalAgentPnL: { set: totalPnL } }
-    })
+      data: { totalAgentPnL: { set: totalPnL } },
+    });
 
-    logger.info(`Synced agent P&L for user ${userId}: ${totalPnL}`, undefined, 'AgentPnLService')
+    logger.info(`Synced agent P&L for user ${userId}: ${totalPnL}`, undefined, 'AgentPnLService');
   }
 }
 
-export const agentPnLService = new AgentPnLService()
-
+export const agentPnLService = new AgentPnLService();

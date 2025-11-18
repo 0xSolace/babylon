@@ -1,12 +1,12 @@
 /**
  * Reward Backpropagation Service
- * 
+ *
  * Updates trajectory rewards when market outcomes become known.
  * This allows the RL model to learn from actual results, not just immediate actions.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { MarketOutcomesTracker } from './MarketOutcomesTracker';
 import type { TrajectoryStep } from './types';
 
@@ -34,14 +34,14 @@ export class RewardBackpropagationService {
     const trajectories = await prisma.trajectory.findMany({
       where: {
         windowId,
-        isTrainingData: true
+        isTrainingData: true,
       },
       select: {
         id: true,
         trajectoryId: true,
         stepsJson: true,
-        totalReward: true
-      }
+        totalReward: true,
+      },
     });
 
     let updated = 0;
@@ -58,36 +58,36 @@ export class RewardBackpropagationService {
           let updatedReward = originalReward;
 
           // Check if this step involved trading
-          if (step.action.actionType.includes('TRADING') || 
-              step.action.actionType.includes('BUY') || 
-              step.action.actionType.includes('SELL')) {
-            
+          if (
+            step.action.actionType.includes('TRADING') ||
+            step.action.actionType.includes('BUY') ||
+            step.action.actionType.includes('SELL')
+          ) {
             // Extract market ID from action parameters
             const marketId = step.action.parameters?.marketId as string | undefined;
             const ticker = step.action.parameters?.ticker as string | undefined;
 
             if (marketId) {
               // Check prediction market outcome
-              const prediction = outcomes.predictions.find(p => p.marketId === marketId);
+              const prediction = outcomes.predictions.find((p) => p.marketId === marketId);
               if (prediction) {
                 // Calculate reward based on whether trade was correct
                 const side = step.action.parameters?.side as string | undefined;
-                const isCorrect = (
+                const isCorrect =
                   (side === 'YES' && prediction.outcome === 'YES') ||
-                  (side === 'NO' && prediction.outcome === 'NO')
-                );
-                
+                  (side === 'NO' && prediction.outcome === 'NO');
+
                 // Reward: +1 for correct, -1 for incorrect (normalized)
                 updatedReward = isCorrect ? 1.0 : -1.0;
               }
             } else if (ticker) {
               // Check perpetual outcome
-              const stock = outcomes.stocks.find(s => s.ticker === ticker);
+              const stock = outcomes.stocks.find((s) => s.ticker === ticker);
               if (stock) {
                 // Calculate reward based on price movement
                 const side = step.action.parameters?.side as string | undefined;
                 const priceChange = stock.changePercent;
-                
+
                 // Reward based on whether position direction matched price movement
                 // Long position: positive reward if price went up
                 // Short position: positive reward if price went down
@@ -113,15 +113,15 @@ export class RewardBackpropagationService {
             where: { id: traj.id },
             data: {
               stepsJson: JSON.stringify(steps),
-              totalReward
-            }
+              totalReward,
+            },
           });
           updated++;
         }
       } catch (error) {
         logger.error('Failed to update rewards for trajectory', {
           trajectoryId: traj.trajectoryId,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -129,7 +129,7 @@ export class RewardBackpropagationService {
     logger.info('Updated rewards for trajectories', {
       windowId,
       updated,
-      total: trajectories.length
+      total: trajectories.length,
     });
 
     return updated;
@@ -142,9 +142,9 @@ export class RewardBackpropagationService {
     // Get all windows with outcomes
     const windowsWithOutcomes = await prisma.market_outcomes.findMany({
       select: {
-        windowId: true
+        windowId: true,
       },
-      distinct: ['windowId']
+      distinct: ['windowId'],
     });
 
     let processed = 0;
@@ -158,7 +158,7 @@ export class RewardBackpropagationService {
       } catch (error) {
         logger.error('Failed to process window', {
           windowId,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -168,5 +168,3 @@ export class RewardBackpropagationService {
 }
 
 export const rewardBackpropagationService = new RewardBackpropagationService();
-
-

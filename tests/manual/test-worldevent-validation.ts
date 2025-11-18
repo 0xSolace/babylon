@@ -1,15 +1,15 @@
 /**
  * Manual Test: WorldEvent INT4 Validation
- * 
+ *
  * This test verifies that WorldEvent creation properly validates
  * INT4 fields to prevent Snowflake ID overflow errors.
- * 
+ *
  * Run with: bun run tests/manual/test-worldevent-validation.ts
  */
 
-import { PrismaClient } from '@prisma/client';
-import { generateSnowflakeId } from '@/lib/snowflake';
 import db from '@/lib/database-service';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -35,7 +35,7 @@ async function testWorldEventValidation() {
     console.log('\nTest 2: Attempting to create event with Snowflake ID as relatedQuestion...');
     const snowflakeId = generateSnowflakeId();
     const bigNumber = Number(snowflakeId); // This would overflow INT4
-    
+
     console.log('  Snowflake ID:', snowflakeId);
     console.log('  As number:', bigNumber);
     console.log('  INT4 max:', 2147483647);
@@ -47,7 +47,7 @@ async function testWorldEventValidation() {
         eventType: 'announcement',
         description: 'Test event with invalid relatedQuestion',
         actors: [],
-        relatedQuestion: bigNumber as any, // This should be filtered out
+        relatedQuestion: bigNumber, // This should be filtered out
         dayNumber: 42,
         visibility: 'public',
         gameId: 'test',
@@ -59,8 +59,11 @@ async function testWorldEventValidation() {
       } else {
         console.log('   ⚠️  Expected NULL but got:', invalidEvent.relatedQuestion);
       }
-    } catch (error: any) {
-      console.log('❌ Event creation failed (unexpected):', error.message);
+    } catch (error: unknown) {
+      console.log(
+        '❌ Event creation failed (unexpected):',
+        error instanceof Error ? error.message : String(error)
+      );
     }
 
     // Test 3: Large dayNumber should be filtered out
@@ -72,7 +75,7 @@ async function testWorldEventValidation() {
         description: 'Test event with invalid dayNumber',
         actors: [],
         relatedQuestion: 123,
-        dayNumber: 9999999999 as any, // This should be filtered out
+        dayNumber: 9999999999, // This should be filtered out
         visibility: 'public',
         gameId: 'test',
       });
@@ -83,8 +86,11 @@ async function testWorldEventValidation() {
       } else {
         console.log('   ⚠️  Expected NULL but got:', invalidDayEvent.dayNumber);
       }
-    } catch (error: any) {
-      console.log('❌ Event creation failed (unexpected):', error.message);
+    } catch (error: unknown) {
+      console.log(
+        '❌ Event creation failed (unexpected):',
+        error instanceof Error ? error.message : String(error)
+      );
     }
 
     // Test 4: Edge case - exactly INT4 max
@@ -126,4 +132,3 @@ testWorldEventValidation().catch((error) => {
   console.error('Test suite failed:', error);
   process.exit(1);
 });
-

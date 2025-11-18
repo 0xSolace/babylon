@@ -6,12 +6,11 @@
 
 import { verifyAgentSession } from '@/lib/auth/agent-auth';
 import { prisma } from '@/lib/prisma';
+import type { ErrorLike, JsonValue } from '@/types/common';
 // import { logger } from '@/lib/logger';
 import { PrivyClient } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-
-import type { ErrorLike, JsonValue } from '@/types/common';
 
 // Define error types locally since they were not in a shared file
 export type AuthenticationError = Error & {
@@ -35,7 +34,7 @@ export function extractErrorMessage(error: Error | ErrorLike | string | unknown)
     return error;
   }
   if (error && typeof error === 'object' && 'message' in error) {
-    const errorLike = error as ErrorLike
+    const errorLike = error as ErrorLike;
     if (typeof errorLike.message === 'string') {
       return errorLike.message;
     }
@@ -50,24 +49,24 @@ export function getPrivyClient(): PrivyClient {
   if (!privyClient) {
     const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
     const privyAppSecret = process.env.PRIVY_APP_SECRET;
-    
+
     if (!privyAppId || !privyAppSecret) {
       throw new Error('Privy credentials not configured');
     }
-    
+
     privyClient = new PrivyClient(privyAppId, privyAppSecret);
   }
   return privyClient;
 }
 
-export interface AuthenticatedUser {
+export type AuthenticatedUser = {
   userId: string;
   dbUserId?: string;
   privyId?: string;
   walletAddress?: string;
   email?: string;
   isAgent?: boolean;
-}
+};
 
 /**
  * Authenticate request and return user info
@@ -85,7 +84,9 @@ export async function authenticate(request: NextRequest): Promise<AuthenticatedU
   }
 
   if (!token) {
-    const error = new Error('Missing or invalid authorization header or cookie') as AuthenticationError;
+    const error = new Error(
+      'Missing or invalid authorization header or cookie'
+    ) as AuthenticationError;
     error.code = 'AUTH_FAILED';
     throw error;
   }
@@ -130,15 +131,19 @@ export async function authenticate(request: NextRequest): Promise<AuthenticatedU
  * Authenticate and require that the user has a database record
  * Throws an error if the user hasn't completed onboarding
  */
-export async function authenticateWithDbUser(request: NextRequest): Promise<AuthenticatedUser & { dbUserId: string }> {
+export async function authenticateWithDbUser(
+  request: NextRequest
+): Promise<AuthenticatedUser & { dbUserId: string }> {
   const authUser = await authenticate(request);
-  
+
   if (!authUser.dbUserId) {
-    const error = new Error('User profile not found. Please complete onboarding first.') as AuthenticationError;
+    const error = new Error(
+      'User profile not found. Please complete onboarding first.'
+    ) as AuthenticationError;
     error.code = 'AUTH_FAILED';
     throw error;
   }
-  
+
   return authUser as AuthenticatedUser & { dbUserId: string };
 }
 
@@ -198,7 +203,7 @@ export async function optionalAuth(request: NextRequest): Promise<AuthenticatedU
  */
 export async function optionalAuthFromHeaders(headers: Headers): Promise<AuthenticatedUser | null> {
   const authHeader = headers.get('authorization');
-  
+
   if (!authHeader?.startsWith('Bearer ')) {
     return null;
   }

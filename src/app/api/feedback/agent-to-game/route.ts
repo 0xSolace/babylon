@@ -52,14 +52,14 @@
  *         description: Duplicate feedback for the same game
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
-import { requireUserByIdentifier } from '@/lib/users/user-lookup'
-import { generateSnowflakeId } from '@/lib/snowflake'
-import { logger } from '@/lib/logger'
-import { z } from 'zod'
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import { requireUserByIdentifier } from '@/lib/users/user-lookup';
+import type { Prisma } from '@prisma/client';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const AgentToGameFeedbackSchema = z.object({
   agentId: z.string().min(1, 'agentId is required'),
@@ -68,21 +68,18 @@ const AgentToGameFeedbackSchema = z.object({
   comment: z.string().max(5000).optional(),
   tags: z.array(z.string().min(1)).max(10).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-})
+});
 
 export async function POST(request: NextRequest) {
-  const payload = AgentToGameFeedbackSchema.parse(await request.json())
+  const payload = AgentToGameFeedbackSchema.parse(await request.json());
 
   const agent = await requireUserByIdentifier(payload.agentId, {
     id: true,
     isAgent: true,
-  })
+  });
 
   if (!agent.isAgent) {
-    return NextResponse.json(
-      { success: false, error: 'ONLY_AGENTS_CAN_SUBMIT' },
-      { status: 403 }
-    )
+    return NextResponse.json({ success: false, error: 'ONLY_AGENTS_CAN_SUBMIT' }, { status: 403 });
   }
 
   const existingFeedback = await prisma.feedback.findFirst({
@@ -92,7 +89,7 @@ export async function POST(request: NextRequest) {
       interactionType: 'agent_to_game',
     },
     select: { id: true },
-  })
+  });
 
   if (existingFeedback) {
     return NextResponse.json(
@@ -102,18 +99,18 @@ export async function POST(request: NextRequest) {
         feedbackId: existingFeedback.id,
       },
       { status: 409 }
-    )
+    );
   }
 
   const metadataBase: Prisma.JsonObject =
     payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata)
       ? (payload.metadata as Prisma.JsonObject)
-      : {}
+      : {};
 
   const metadata: Prisma.JsonObject = {
     ...metadataBase,
     ...(payload.tags ? { tags: payload.tags } : {}),
-  }
+  };
 
   const feedback = await prisma.feedback.create({
     data: {
@@ -128,14 +125,14 @@ export async function POST(request: NextRequest) {
       metadata,
       updatedAt: new Date(),
     },
-  })
+  });
 
   logger.info('Agent-to-game feedback created', {
     feedbackId: feedback.id,
     agentId: agent.id,
     gameId: payload.gameId,
     score: payload.score,
-  })
+  });
 
   return NextResponse.json(
     {
@@ -143,5 +140,5 @@ export async function POST(request: NextRequest) {
       feedbackId: feedback.id,
     },
     { status: 201 }
-  )
+  );
 }

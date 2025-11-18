@@ -1,23 +1,23 @@
 /**
  * Trajectory Logger Service
- * 
+ *
  * Core service for collecting agent interaction trajectories for RL training
  */
 
-import type { UUID } from '@elizaos/core';
-import type { 
-  Trajectory, 
-  TrajectoryStep, 
-  LLMCall, 
-  ProviderAccess, 
-  ActionAttempt, 
-  EnvironmentState,
-  RewardComponents 
-} from './types';
-import { v4 as uuidv4 } from 'uuid';
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
+import type { UUID } from '@elizaos/core';
+import { v4 as uuidv4 } from 'uuid';
+import type {
+  ActionAttempt,
+  EnvironmentState,
+  LLMCall,
+  ProviderAccess,
+  RewardComponents,
+  Trajectory,
+  TrajectoryStep,
+} from './types';
 
 export class TrajectoryLoggerService {
   private activeTrajectories: Map<string, Trajectory> = new Map();
@@ -71,7 +71,7 @@ export class TrajectoryLoggerService {
   startStep(trajectoryId: string, envState: EnvironmentState): string {
     const stepId = uuidv4();
     const trajectory = this.activeTrajectories.get(trajectoryId);
-    
+
     if (!trajectory) {
       throw new Error(`Trajectory ${trajectoryId} not found`);
     }
@@ -111,7 +111,7 @@ export class TrajectoryLoggerService {
       return;
     }
 
-    const step = trajectory.steps.find(s => s.stepId === stepId);
+    const step = trajectory.steps.find((s) => s.stepId === stepId);
     if (!step) {
       logger.warn('Step not found for LLM call', { stepId });
       return;
@@ -161,9 +161,10 @@ export class TrajectoryLoggerService {
           topP: llmCall.topP || null,
           promptTokens: llmCall.promptTokens || null,
           completionTokens: llmCall.completionTokens || null,
-          totalTokens: llmCall.promptTokens && llmCall.completionTokens
-            ? llmCall.promptTokens + llmCall.completionTokens
-            : null,
+          totalTokens:
+            llmCall.promptTokens && llmCall.completionTokens
+              ? llmCall.promptTokens + llmCall.completionTokens
+              : null,
           metadata: JSON.stringify({
             purpose: llmCall.purpose,
             actionType: llmCall.actionType,
@@ -173,26 +174,33 @@ export class TrajectoryLoggerService {
       });
     } catch (error) {
       // Log but don't throw - trajectory logging should not break agent execution
-      logger.error('Failed to save LLM call to database', {
-        trajectoryId,
-        stepId,
-        callId: llmCall.callId,
-        error: error instanceof Error ? error.message : String(error),
-      }, 'TrajectoryLoggerService');
+      logger.error(
+        'Failed to save LLM call to database',
+        {
+          trajectoryId,
+          stepId,
+          callId: llmCall.callId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'TrajectoryLoggerService'
+      );
     }
   }
 
   /**
    * Log provider access
    */
-  logProviderAccess(stepId: string, access: Omit<ProviderAccess, 'providerId' | 'timestamp'>): void {
+  logProviderAccess(
+    stepId: string,
+    access: Omit<ProviderAccess, 'providerId' | 'timestamp'>
+  ): void {
     const trajectory = this.findTrajectoryByStepId(stepId);
     if (!trajectory) {
       logger.warn('Trajectory not found for provider access', { stepId });
       return;
     }
 
-    const step = trajectory.steps.find(s => s.stepId === stepId);
+    const step = trajectory.steps.find((s) => s.stepId === stepId);
     if (!step) {
       logger.warn('Step not found for provider access', { stepId });
       return;
@@ -259,7 +267,7 @@ export class TrajectoryLoggerService {
       return;
     }
 
-    const step = trajectory.steps.find(s => s.stepId === stepId);
+    const step = trajectory.steps.find((s) => s.stepId === stepId);
     if (!step) {
       logger.warn('Step not found for completeStep', { trajectoryId, stepId });
       return;
@@ -349,28 +357,36 @@ export class TrajectoryLoggerService {
           totalReward: trajectory.totalReward,
           episodeLength: trajectory.metrics.episodeLength,
           finalStatus: trajectory.metrics.finalStatus,
-          finalBalance: trajectory.metrics.finalBalance as number | undefined || null,
-          finalPnL: trajectory.metrics.finalPnL as number | undefined || null,
-          tradesExecuted: trajectory.metrics.tradesExecuted as number | undefined || null,
-          postsCreated: trajectory.metrics.postsCreated as number | undefined || null,
+          finalBalance: (trajectory.metrics.finalBalance as number | undefined) || null,
+          finalPnL: (trajectory.metrics.finalPnL as number | undefined) || null,
+          tradesExecuted: (trajectory.metrics.tradesExecuted as number | undefined) || null,
+          postsCreated: (trajectory.metrics.postsCreated as number | undefined) || null,
           isTrainingData: (trajectory.metadata.isTrainingData as boolean | undefined) ?? true,
           isEvaluation: (trajectory.metadata.isEvaluation as boolean | undefined) ?? false,
           usedInTraining: false,
         },
       });
 
-      logger.info('Trajectory saved to database', {
-        trajectoryId,
-        agentId: trajectory.agentId,
-        steps: trajectory.steps.length,
-        totalReward: trajectory.totalReward,
-      }, 'TrajectoryLoggerService');
+      logger.info(
+        'Trajectory saved to database',
+        {
+          trajectoryId,
+          agentId: trajectory.agentId,
+          steps: trajectory.steps.length,
+          totalReward: trajectory.totalReward,
+        },
+        'TrajectoryLoggerService'
+      );
     } catch (error) {
-      logger.error('Failed to save trajectory to database', {
-        trajectoryId,
-        agentId: trajectory.agentId,
-        error: error instanceof Error ? error.message : String(error),
-      }, 'TrajectoryLoggerService');
+      logger.error(
+        'Failed to save trajectory to database',
+        {
+          trajectoryId,
+          agentId: trajectory.agentId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'TrajectoryLoggerService'
+      );
       // Don't throw - keep trajectory in memory for retrieval
     }
 
@@ -391,11 +407,10 @@ export class TrajectoryLoggerService {
    */
   private findTrajectoryByStepId(stepId: string): Trajectory | null {
     for (const trajectory of this.activeTrajectories.values()) {
-      if (trajectory.steps.some(s => s.stepId === stepId)) {
+      if (trajectory.steps.some((s) => s.stepId === stepId)) {
         return trajectory;
       }
     }
     return null;
   }
 }
-

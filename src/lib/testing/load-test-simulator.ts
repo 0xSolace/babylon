@@ -1,19 +1,19 @@
 /**
  * Local Load Test Simulator
- * 
+ *
  * Simulates thousands of concurrent users making requests to test database
  * performance and identify bottlenecks before production deployment.
  */
 
 import { logger } from '@/lib/logger';
 
-export interface LoadTestConfig {
+export type LoadTestConfig = {
   /** Number of concurrent users to simulate */
   concurrentUsers: number;
-  
+
   /** Duration of test in seconds */
   durationSeconds: number;
-  
+
   /** Endpoints to test with their weights (probability of being called) */
   endpoints: Array<{
     path: string;
@@ -22,27 +22,27 @@ export interface LoadTestConfig {
     headers?: Record<string, string>;
     body?: Record<string, unknown>;
   }>;
-  
+
   /** Ramp-up time in seconds (gradually increase load) */
   rampUpSeconds?: number;
-  
+
   /** Think time between requests (ms) */
   thinkTimeMs?: number;
-  
+
   /** Maximum requests per second (rate limiting) */
   maxRps?: number;
-}
+};
 
-export interface LoadTestResult {
+export type LoadTestResult = {
   config: LoadTestConfig;
   startTime: Date;
   endTime: Date;
   durationMs: number;
-  
+
   totalRequests: number;
   successfulRequests: number;
   failedRequests: number;
-  
+
   responseTime: {
     min: number;
     max: number;
@@ -51,33 +51,36 @@ export interface LoadTestResult {
     p95: number;
     p99: number;
   };
-  
+
   throughput: {
     requestsPerSecond: number;
     successRate: number;
   };
-  
+
   errors: Array<{
     endpoint: string;
     error: string;
     count: number;
   }>;
-  
-  endpointStats: Record<string, {
-    count: number;
-    successCount: number;
-    avgResponseTime: number;
-    errorCount: number;
-  }>;
-}
 
-interface RequestResult {
+  endpointStats: Record<
+    string,
+    {
+      count: number;
+      successCount: number;
+      avgResponseTime: number;
+      errorCount: number;
+    }
+  >;
+};
+
+type RequestResult = {
   endpoint: string;
   success: boolean;
   responseTime: number;
   error?: string;
   timestamp: Date;
-}
+};
 
 export class LoadTestSimulator {
   private baseUrl: string;
@@ -99,13 +102,17 @@ export class LoadTestSimulator {
     this.isRunning = true;
     this.startTime = new Date();
 
-    logger.info('Starting load test', {
-      concurrentUsers: config.concurrentUsers,
-      duration: `${config.durationSeconds}s`,
-      endpoints: config.endpoints.length,
-    }, 'LoadTestSimulator');
+    logger.info(
+      'Starting load test',
+      {
+        concurrentUsers: config.concurrentUsers,
+        duration: `${config.durationSeconds}s`,
+        endpoints: config.endpoints.length,
+      },
+      'LoadTestSimulator'
+    );
 
-    const endTime = Date.now() + (config.durationSeconds * 1000);
+    const endTime = Date.now() + config.durationSeconds * 1000;
     const workers: Promise<void>[] = [];
 
     // Create worker promises for each concurrent user
@@ -129,13 +136,17 @@ export class LoadTestSimulator {
     // Analyze results
     const result = this.analyzeResults(config, testEndTime);
 
-    logger.info('Load test completed', {
-      totalRequests: result.totalRequests,
-      successRate: `${(result.throughput.successRate * 100).toFixed(2)}%`,
-      avgResponseTime: `${result.responseTime.mean.toFixed(2)}ms`,
-      p95ResponseTime: `${result.responseTime.p95.toFixed(2)}ms`,
-      rps: result.throughput.requestsPerSecond.toFixed(2),
-    }, 'LoadTestSimulator');
+    logger.info(
+      'Load test completed',
+      {
+        totalRequests: result.totalRequests,
+        successRate: `${(result.throughput.successRate * 100).toFixed(2)}%`,
+        avgResponseTime: `${result.responseTime.mean.toFixed(2)}ms`,
+        p95ResponseTime: `${result.responseTime.p95.toFixed(2)}ms`,
+        rps: result.throughput.requestsPerSecond.toFixed(2),
+      },
+      'LoadTestSimulator'
+    );
 
     return result;
   }
@@ -195,15 +206,13 @@ export class LoadTestSimulator {
     }
 
     // Fallback to last endpoint if weights don't sum to 1
-    return endpoints[endpoints.length - 1]!;
+    return endpoints[endpoints.length - 1];
   }
 
   /**
    * Make a request to an endpoint
    */
-  private async makeRequest(
-    endpoint: LoadTestConfig['endpoints'][0]
-  ): Promise<void> {
+  private async makeRequest(endpoint: LoadTestConfig['endpoints'][0]): Promise<void> {
     const startTime = Date.now();
     const url = `${this.baseUrl}${endpoint.path}`;
 
@@ -238,8 +247,8 @@ export class LoadTestSimulator {
    * NOTE: Response time calculations ONLY use successful requests
    */
   private analyzeResults(config: LoadTestConfig, endTime: Date): LoadTestResult {
-    const successfulResults = this.results.filter(r => r.success);
-    const responseTimes = successfulResults.map(r => r.responseTime).sort((a, b) => a - b);
+    const successfulResults = this.results.filter((r) => r.success);
+    const responseTimes = successfulResults.map((r) => r.responseTime).sort((a, b) => a - b);
 
     const durationMs = endTime.getTime() - this.startTime.getTime();
 
@@ -249,8 +258,16 @@ export class LoadTestSimulator {
     const medianIndex = Math.floor(responseTimes.length * 0.5);
 
     // Aggregate endpoint stats (only successful requests for avg time)
-    const endpointStats: Record<string, { count: number; successCount: number; avgResponseTime: number; errorCount: number }> = {};
-    
+    const endpointStats: Record<
+      string,
+      {
+        count: number;
+        successCount: number;
+        avgResponseTime: number;
+        errorCount: number;
+      }
+    > = {};
+
     for (const result of this.results) {
       if (!endpointStats[result.endpoint]) {
         endpointStats[result.endpoint] = {
@@ -260,15 +277,19 @@ export class LoadTestSimulator {
           errorCount: 0,
         };
       }
-      
-      const stats = endpointStats[result.endpoint]!;
+
+      const stats = endpointStats[result.endpoint];
+      if (!stats) {
+        continue;
+      }
       stats.count++;
-      
+
       if (result.success) {
         stats.successCount++;
         // Only calculate avg response time from successful requests
-        stats.avgResponseTime = 
-          (stats.avgResponseTime * (stats.successCount - 1) + result.responseTime) / stats.successCount;
+        stats.avgResponseTime =
+          (stats.avgResponseTime * (stats.successCount - 1) + result.responseTime) /
+          stats.successCount;
       } else {
         stats.errorCount++;
       }
@@ -281,7 +302,7 @@ export class LoadTestSimulator {
         throw new Error(`Invalid error key format: ${key}`);
       }
       const [endpoint, ...errorParts] = parts;
-      return { endpoint: endpoint!, error: errorParts.join(':'), count };
+      return { endpoint, error: errorParts.join(':'), count };
     });
 
     return {
@@ -289,29 +310,28 @@ export class LoadTestSimulator {
       startTime: this.startTime,
       endTime,
       durationMs,
-      
+
       totalRequests: this.results.length,
       successfulRequests: successfulResults.length,
       failedRequests: this.results.length - successfulResults.length,
-      
+
       responseTime: {
         min: responseTimes[0] || 0,
         max: responseTimes[responseTimes.length - 1] || 0,
-        mean: responseTimes.length > 0
-          ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
-          : 0,
+        mean:
+          responseTimes.length > 0
+            ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
+            : 0,
         median: responseTimes[medianIndex] || 0,
         p95: responseTimes[p95Index] || 0,
         p99: responseTimes[p99Index] || 0,
       },
-      
+
       throughput: {
         requestsPerSecond: this.results.length / (durationMs / 1000),
-        successRate: this.results.length > 0
-          ? successfulResults.length / this.results.length
-          : 0,
+        successRate: this.results.length > 0 ? successfulResults.length / this.results.length : 0,
       },
-      
+
       errors,
       endpointStats,
     };
@@ -328,7 +348,7 @@ export class LoadTestSimulator {
    * Sleep for a given duration
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
@@ -340,7 +360,7 @@ function generateA2AEndpoint(method: string, params: Record<string, unknown> = {
     jsonrpc: '2.0',
     method,
     params,
-    id: Math.floor(Math.random() * 1000000)
+    id: Math.floor(Math.random() * 1000000),
   };
 }
 
@@ -351,7 +371,7 @@ const A2A_HEADERS = {
   'Content-Type': 'application/json',
   'x-agent-id': 'load-test-agent',
   'x-agent-address': '0x1234567890123456789012345678901234567890',
-  'x-agent-token-id': '1'
+  'x-agent-token-id': '1',
 };
 
 /**
@@ -366,13 +386,29 @@ export const TEST_SCENARIOS = {
     thinkTimeMs: 1000,
     endpoints: [
       { path: '/api/posts', method: 'GET' as const, weight: 0.35 },
-      { path: '/api/feed/widgets/trending-posts', method: 'GET' as const, weight: 0.18 },
+      {
+        path: '/api/feed/widgets/trending-posts',
+        method: 'GET' as const,
+        weight: 0.18,
+      },
       { path: '/api/users/me', method: 'GET' as const, weight: 0.17 },
       { path: '/api/leaderboard', method: 'GET' as const, weight: 0.1 },
       { path: '/api/notifications', method: 'GET' as const, weight: 0.1 },
       // A2A endpoints (10% of traffic)
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getBalance') },
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getPositions') },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getBalance'),
+      },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getPositions'),
+      },
     ],
   },
 
@@ -383,16 +419,42 @@ export const TEST_SCENARIOS = {
     rampUpSeconds: 20,
     thinkTimeMs: 500,
     endpoints: [
-      { path: '/api/posts', method: 'GET' as const, weight: 0.30 },
-      { path: '/api/posts/feed/favorites', method: 'GET' as const, weight: 0.13 },
-      { path: '/api/feed/widgets/trending-posts', method: 'GET' as const, weight: 0.12 },
+      { path: '/api/posts', method: 'GET' as const, weight: 0.3 },
+      {
+        path: '/api/posts/feed/favorites',
+        method: 'GET' as const,
+        weight: 0.13,
+      },
+      {
+        path: '/api/feed/widgets/trending-posts',
+        method: 'GET' as const,
+        weight: 0.12,
+      },
       { path: '/api/users/me', method: 'GET' as const, weight: 0.13 },
       { path: '/api/leaderboard', method: 'GET' as const, weight: 0.09 },
       { path: '/api/notifications', method: 'GET' as const, weight: 0.08 },
       // A2A endpoints (15% of traffic)
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getBalance') },
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getPositions') },
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getFeed') },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getBalance'),
+      },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getPositions'),
+      },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getFeed'),
+      },
     ],
   },
 
@@ -405,15 +467,41 @@ export const TEST_SCENARIOS = {
     maxRps: 1000,
     endpoints: [
       // Public endpoints only to avoid 401 errors
-      { path: '/api/posts?limit=20', method: 'GET' as const, weight: 0.30 },
-      { path: '/api/feed/widgets/trending-posts', method: 'GET' as const, weight: 0.22 },
+      { path: '/api/posts?limit=20', method: 'GET' as const, weight: 0.3 },
+      {
+        path: '/api/feed/widgets/trending-posts',
+        method: 'GET' as const,
+        weight: 0.22,
+      },
       { path: '/api/leaderboard', method: 'GET' as const, weight: 0.18 },
       { path: '/api/feed/widgets/stats', method: 'GET' as const, weight: 0.08 },
-      { path: '/api/feed/widgets/markets', method: 'GET' as const, weight: 0.07 },
+      {
+        path: '/api/feed/widgets/markets',
+        method: 'GET' as const,
+        weight: 0.07,
+      },
       // A2A endpoints (15% of traffic)
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getBalance') },
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getPositions') },
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getLeaderboard') },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getBalance'),
+      },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getPositions'),
+      },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getLeaderboard'),
+      },
     ],
   },
 
@@ -427,15 +515,40 @@ export const TEST_SCENARIOS = {
     endpoints: [
       // Public endpoints only for now (no 401 errors)
       { path: '/api/posts', method: 'GET' as const, weight: 0.25 },
-      { path: '/api/feed/widgets/trending-posts', method: 'GET' as const, weight: 0.17 },
+      {
+        path: '/api/feed/widgets/trending-posts',
+        method: 'GET' as const,
+        weight: 0.17,
+      },
       { path: '/api/leaderboard', method: 'GET' as const, weight: 0.18 },
       { path: '/api/feed/widgets/stats', method: 'GET' as const, weight: 0.13 },
-      { path: '/api/feed/widgets/markets', method: 'GET' as const, weight: 0.12 },
+      {
+        path: '/api/feed/widgets/markets',
+        method: 'GET' as const,
+        weight: 0.12,
+      },
       // A2A endpoints (15% of traffic)
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getBalance') },
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getPositions') },
-      { path: '/api/a2a', method: 'POST' as const, weight: 0.05, headers: A2A_HEADERS, body: generateA2AEndpoint('a2a.getSystemStats') },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getBalance'),
+      },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getPositions'),
+      },
+      {
+        path: '/api/a2a',
+        method: 'POST' as const,
+        weight: 0.05,
+        headers: A2A_HEADERS,
+        body: generateA2AEndpoint('a2a.getSystemStats'),
+      },
     ],
   },
 };
-

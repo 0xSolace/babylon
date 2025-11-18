@@ -1,9 +1,9 @@
 /**
  * Character Mapping Service
- * 
+ *
  * Handles find/replace of real names with parody names in text.
  * Uses database-backed mappings that can be edited via admin panel.
- * 
+ *
  * @module services/character-mapping-service
  */
 
@@ -11,12 +11,12 @@ import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import type { CharacterMapping, OrganizationMapping } from '@prisma/client';
 
-export interface TextReplacementResult {
+export type TextReplacementResult = {
   transformedText: string;
   characterMappings: Record<string, string>; // real -> parody
   organizationMappings: Record<string, string>; // real -> parody
   replacementCount: number;
-}
+};
 
 /**
  * Character Mapping Service
@@ -81,21 +81,19 @@ export class CharacterMappingService {
 
         const matches = transformedText.match(regex);
         if (matches) {
-          transformedText = transformedText.replace(
-            regex,
-            (match) => {
-              // Preserve leading/trailing punctuation or whitespace
-              const leadingChar = match[0] !== searchName[0] ? match[0] : '';
-              const trailingChar = match[match.length - 1] !== searchName[searchName.length - 1]
+          transformedText = transformedText.replace(regex, (match) => {
+            // Preserve leading/trailing punctuation or whitespace
+            const leadingChar = match[0] !== searchName[0] ? match[0] : '';
+            const trailingChar =
+              match[match.length - 1] !== searchName[searchName.length - 1]
                 ? match[match.length - 1]
                 : '';
-              
-              characterMappings[searchName] = mapping.parodyName;
-              replacementCount++;
-              
-              return `${leadingChar}${mapping.parodyName}${trailingChar}`;
-            }
-          );
+
+            characterMappings[searchName] = mapping.parodyName;
+            replacementCount++;
+
+            return `${leadingChar}${mapping.parodyName}${trailingChar}`;
+          });
         }
       }
     }
@@ -112,20 +110,18 @@ export class CharacterMappingService {
 
         const matches = transformedText.match(regex);
         if (matches) {
-          transformedText = transformedText.replace(
-            regex,
-            (match) => {
-              const leadingChar = match[0] !== searchName[0] ? match[0] : '';
-              const trailingChar = match[match.length - 1] !== searchName[searchName.length - 1]
+          transformedText = transformedText.replace(regex, (match) => {
+            const leadingChar = match[0] !== searchName[0] ? match[0] : '';
+            const trailingChar =
+              match[match.length - 1] !== searchName[searchName.length - 1]
                 ? match[match.length - 1]
                 : '';
-              
-              organizationMappings[searchName] = mapping.parodyName;
-              replacementCount++;
-              
-              return `${leadingChar}${mapping.parodyName}${trailingChar}`;
-            }
-          );
+
+            organizationMappings[searchName] = mapping.parodyName;
+            replacementCount++;
+
+            return `${leadingChar}${mapping.parodyName}${trailingChar}`;
+          });
         }
       }
     }
@@ -150,13 +146,10 @@ export class CharacterMappingService {
     // Check characters
     for (const mapping of this.characterMappingsCache) {
       const searchNames = [mapping.realName, ...mapping.aliases];
-      
+
       for (const searchName of searchNames) {
-        const regex = new RegExp(
-          `\\b${escapeRegex(searchName)}\\b`,
-          'i'
-        );
-        
+        const regex = new RegExp(`\\b${escapeRegex(searchName)}\\b`, 'i');
+
         if (regex.test(text)) {
           foundNames.push(searchName);
         }
@@ -166,13 +159,10 @@ export class CharacterMappingService {
     // Check organizations
     for (const mapping of this.organizationMappingsCache) {
       const searchNames = [mapping.realName, ...mapping.aliases];
-      
+
       for (const searchName of searchNames) {
-        const regex = new RegExp(
-          `\\b${escapeRegex(searchName)}\\b`,
-          'i'
-        );
-        
+        const regex = new RegExp(`\\b${escapeRegex(searchName)}\\b`, 'i');
+
         if (regex.test(text)) {
           foundNames.push(searchName);
         }
@@ -215,8 +205,3 @@ function escapeRegex(str: string): string {
 
 // Singleton instance
 export const characterMappingService = new CharacterMappingService();
-
-
-
-
-

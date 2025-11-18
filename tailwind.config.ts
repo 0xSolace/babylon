@@ -1,13 +1,9 @@
-import type { Config } from 'tailwindcss'
-import type { PluginAPI } from 'tailwindcss/types/config'
+import type { Config } from 'tailwindcss';
+import type { PluginAPI } from 'tailwindcss/types/config';
 
 const config: Config = {
   darkMode: ['class'],
-  content: [
-    './src/**/*.{ts,tsx}',
-    './app/**/*.{ts,tsx}',
-    './components/**/*.{ts,tsx}',
-  ],
+  content: ['./src/**/*.{ts,tsx}', './app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
       fontFamily: {
@@ -63,9 +59,9 @@ const config: Config = {
         sm: 'calc(var(--radius) - 4px)',
       },
       maxWidth: {
-        'feed': '600px',      // Main feed content
-        'modal': '600px',     // Modals and dialogs
-        'sidebar': '350px',   // Widget sidebar
+        feed: '600px', // Main feed content
+        modal: '600px', // Modals and dialogs
+        sidebar: '350px', // Widget sidebar
         'nav-sidebar': '280px', // Navigation sidebar
       },
       fontSize: {
@@ -103,13 +99,13 @@ const config: Config = {
         xs: '2px',
       },
       boxShadow: {
-        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.08)',
+        glass: '0 8px 32px 0 rgba(0, 0, 0, 0.08)',
         'glass-lg': '0 12px 48px 0 rgba(0, 0, 0, 0.12)',
         'glass-xl': '0 20px 60px 0 rgba(0, 0, 0, 0.16)',
         'glass-dark': '0 8px 32px 0 rgba(255, 255, 255, 0.05)',
         'glass-dark-lg': '0 12px 48px 0 rgba(255, 255, 255, 0.08)',
         'depth-sm': '0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)',
-        'depth': '0 4px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06)',
+        depth: '0 4px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06)',
         'depth-lg': '0 10px 20px rgba(0,0,0,0.15), 0 3px 6px rgba(0,0,0,0.1)',
         'depth-xl': '0 20px 40px rgba(0,0,0,0.2), 0 5px 10px rgba(0,0,0,0.15)',
       },
@@ -117,19 +113,19 @@ const config: Config = {
   },
   plugins: [
     require('tailwindcss-animate'),
-    function({ addUtilities }: PluginAPI) {
+    ({ addUtilities }: PluginAPI) => {
       addUtilities({
         '.scrollbar-hide': {
           /* Firefox */
           'scrollbar-width': 'none',
           /* Safari and Chrome */
           '&::-webkit-scrollbar': {
-            display: 'none'
-          }
-        }
-      })
-    }
+            display: 'none',
+          },
+        },
+      });
+    },
   ],
-}
+};
 
-export default config
+export default config;

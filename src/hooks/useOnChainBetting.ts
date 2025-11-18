@@ -1,21 +1,21 @@
-import { CHAIN } from '@/constants/chains'
-import { useSmartWallet } from '@/hooks/useSmartWallet'
-import { getContractAddresses } from '@/lib/deployment/addresses'
-import { logger } from '@/lib/logger'
-import { useCallback, useState } from 'react'
-import { encodeFunctionData, pad } from 'viem'
+import { getContractAddresses } from '@/lib/deployment/addresses';
+import { logger } from '@/lib/logger';
+import { useSmartWallet } from '@/hooks/useSmartWallet';
+import { CHAIN } from '@/constants/chains';
+import { useCallback, useState } from 'react';
+import { encodeFunctionData, pad } from 'viem';
 
 /**
  * Result of an on-chain betting transaction.
  */
-export interface OnChainBetResult {
+export type OnChainBetResult = {
   /** Transaction hash */
-  txHash: string
+  txHash: string;
   /** Number of shares purchased/sold */
-  shares: number
+  shares: number;
   /** Gas used (if available) */
-  gasUsed?: string
-}
+  gasUsed?: string;
+};
 
 /**
  * Convert market ID (Snowflake ID string) to bytes32.
@@ -23,13 +23,13 @@ export interface OnChainBetResult {
  */
 function marketIdToBytes32(marketId: string): `0x${string}` {
   // Convert string number to BigInt, then to hex, then pad to 32 bytes
-  const bigintValue = BigInt(marketId)
-  const hexValue = `0x${bigintValue.toString(16)}` as `0x${string}`
-  return pad(hexValue, { size: 32 })
+  const bigintValue = BigInt(marketId);
+  const hexValue = `0x${bigintValue.toString(16)}` as `0x${string}`;
+  return pad(hexValue, { size: 32 });
 }
 
 // Get contract addresses for current network (localnet or testnet/mainnet)
-const { diamond: DIAMOND_ADDRESS, network: NETWORK } = getContractAddresses()
+const { diamond: DIAMOND_ADDRESS, network: NETWORK } = getContractAddresses();
 
 // Prediction Market Facet ABI
 const PREDICTION_MARKET_ABI = [
@@ -39,10 +39,10 @@ const PREDICTION_MARKET_ABI = [
     inputs: [
       { name: '_marketId', type: 'bytes32' },
       { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' }
+      { name: '_numShares', type: 'uint256' },
     ],
     outputs: [],
-    stateMutability: 'nonpayable'
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -50,10 +50,10 @@ const PREDICTION_MARKET_ABI = [
     inputs: [
       { name: '_marketId', type: 'bytes32' },
       { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' }
+      { name: '_numShares', type: 'uint256' },
     ],
     outputs: [],
-    stateMutability: 'nonpayable'
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -61,32 +61,32 @@ const PREDICTION_MARKET_ABI = [
     inputs: [
       { name: '_marketId', type: 'bytes32' },
       { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' }
+      { name: '_numShares', type: 'uint256' },
     ],
     outputs: [{ name: 'cost', type: 'uint256' }],
-    stateMutability: 'view'
-  }
-] as const
+    stateMutability: 'view',
+  },
+] as const;
 
 /**
  * Hook for on-chain prediction market betting with Base Sepolia ETH.
- * 
+ *
  * Enables users to buy and sell shares in prediction markets using their
  * smart wallet. Transactions execute on the Base Sepolia blockchain through
  * the prediction market diamond contract. Supports gasless transactions when
  * using an embedded wallet.
- * 
+ *
  * @returns An object containing:
  * - `buyShares`: Function to buy shares for a prediction market
  * - `sellShares`: Function to sell shares for a prediction market
  * - `loading`: Whether a transaction is currently in progress
  * - `error`: Any error that occurred during the transaction
  * - `smartWalletReady`: Whether the smart wallet is ready for transactions
- * 
+ *
  * @example
  * ```tsx
  * const { buyShares, loading, error } = useOnChainBetting();
- * 
+ *
  * const handleBuy = async () => {
  *   try {
  *     const result = await buyShares(marketId, 'YES', 10);
@@ -98,13 +98,13 @@ const PREDICTION_MARKET_ABI = [
  * ```
  */
 export function useOnChainBetting() {
-  const { client, smartWalletReady, sendSmartWalletTransaction } = useSmartWallet()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { client, smartWalletReady, sendSmartWalletTransaction } = useSmartWallet();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   /**
    * Buy shares on-chain with smart wallet.
-   * 
+   *
    * @param marketId - The Snowflake ID of the prediction market
    * @param outcome - Whether to buy 'YES' or 'NO' shares
    * @param numShares - Number of shares to buy (will be converted to wei)
@@ -112,20 +112,24 @@ export function useOnChainBetting() {
    * @throws Error if smart wallet is not ready or transaction fails
    */
   const buyShares = useCallback(
-    async (marketId: string, outcome: 'YES' | 'NO', numShares: number): Promise<OnChainBetResult> => {
+    async (
+      marketId: string,
+      outcome: 'YES' | 'NO',
+      numShares: number
+    ): Promise<OnChainBetResult> => {
       if (!smartWalletReady || !client) {
-        throw new Error('Smart wallet not ready. Please connect your wallet.')
+        throw new Error('Smart wallet not ready. Please connect your wallet.');
       }
 
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
       try {
-        const outcomeIndex = outcome === 'YES' ? 1 : 0
-        const sharesBigInt = BigInt(Math.floor(numShares * 1e18))
-        
+        const outcomeIndex = outcome === 'YES' ? 1 : 0;
+        const sharesBigInt = BigInt(Math.floor(numShares * 1e18));
+
         // Convert Snowflake ID to bytes32
-        const marketIdBytes32 = marketIdToBytes32(marketId)
+        const marketIdBytes32 = marketIdToBytes32(marketId);
 
         logger.info('Buying shares on-chain', {
           network: NETWORK,
@@ -134,48 +138,48 @@ export function useOnChainBetting() {
           marketIdBytes32,
           outcome,
           numShares,
-          outcomeIndex
-        })
+          outcomeIndex,
+        });
 
         // Encode the function call
         const data = encodeFunctionData({
           abi: PREDICTION_MARKET_ABI,
           functionName: 'buyShares',
-          args: [marketIdBytes32, outcomeIndex, sharesBigInt]
-        })
+          args: [marketIdBytes32, outcomeIndex, sharesBigInt],
+        });
 
         // Send transaction via smart wallet
         const hash = await sendSmartWalletTransaction({
           to: DIAMOND_ADDRESS,
           data,
           chain: CHAIN,
-        })
+        });
 
         logger.info('Buy shares transaction sent', {
           marketId,
           outcome,
-          txHash: hash
-        })
+          txHash: hash,
+        });
 
         return {
           txHash: hash,
-          shares: numShares
-        }
+          shares: numShares,
+        };
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Buy shares failed'
-        setError(errorMsg)
-        logger.error('Buy shares on-chain failed', { error: err }, 'useOnChainBetting')
-        throw new Error(errorMsg)
+        const errorMsg = err instanceof Error ? err.message : 'Buy shares failed';
+        setError(errorMsg);
+        logger.error('Buy shares on-chain failed', { error: err }, 'useOnChainBetting');
+        throw new Error(errorMsg);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     },
     [smartWalletReady, client, sendSmartWalletTransaction]
-  )
+  );
 
   /**
    * Sell shares on-chain with smart wallet.
-   * 
+   *
    * @param marketId - The Snowflake ID of the prediction market
    * @param outcome - Whether to sell 'YES' or 'NO' shares
    * @param numShares - Number of shares to sell (will be converted to wei)
@@ -183,70 +187,73 @@ export function useOnChainBetting() {
    * @throws Error if smart wallet is not ready or transaction fails
    */
   const sellShares = useCallback(
-    async (marketId: string, outcome: 'YES' | 'NO', numShares: number): Promise<OnChainBetResult> => {
+    async (
+      marketId: string,
+      outcome: 'YES' | 'NO',
+      numShares: number
+    ): Promise<OnChainBetResult> => {
       if (!smartWalletReady || !client) {
-        throw new Error('Smart wallet not ready. Please connect your wallet.')
+        throw new Error('Smart wallet not ready. Please connect your wallet.');
       }
 
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
       try {
-        const outcomeIndex = outcome === 'YES' ? 1 : 0
-        const sharesBigInt = BigInt(Math.floor(numShares * 1e18))
-        
+        const outcomeIndex = outcome === 'YES' ? 1 : 0;
+        const sharesBigInt = BigInt(Math.floor(numShares * 1e18));
+
         // Convert Snowflake ID to bytes32
-        const marketIdBytes32 = marketIdToBytes32(marketId)
+        const marketIdBytes32 = marketIdToBytes32(marketId);
 
         logger.info('Selling shares on-chain', {
           marketId,
           marketIdBytes32,
           outcome,
-          numShares
-        })
+          numShares,
+        });
 
         // Encode the function call
         const data = encodeFunctionData({
           abi: PREDICTION_MARKET_ABI,
           functionName: 'sellShares',
-          args: [marketIdBytes32, outcomeIndex, sharesBigInt]
-        })
+          args: [marketIdBytes32, outcomeIndex, sharesBigInt],
+        });
 
         // Send transaction via smart wallet
         const hash = await sendSmartWalletTransaction({
           to: DIAMOND_ADDRESS,
           data,
           chain: CHAIN,
-        })
+        });
 
         logger.info('Sell shares transaction sent', {
           marketId,
           outcome,
-          txHash: hash
-        })
+          txHash: hash,
+        });
 
         return {
           txHash: hash,
-          shares: numShares
-        }
+          shares: numShares,
+        };
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Sell shares failed'
-        setError(errorMsg)
-        logger.error('Sell shares on-chain failed', { error: err }, 'useOnChainBetting')
-        throw new Error(errorMsg)
+        const errorMsg = err instanceof Error ? err.message : 'Sell shares failed';
+        setError(errorMsg);
+        logger.error('Sell shares on-chain failed', { error: err }, 'useOnChainBetting');
+        throw new Error(errorMsg);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     },
     [smartWalletReady, client, sendSmartWalletTransaction]
-  )
+  );
 
   return {
     buyShares,
     sellShares,
     loading,
     error,
-    smartWalletReady
-  }
+    smartWalletReady,
+  };
 }
-

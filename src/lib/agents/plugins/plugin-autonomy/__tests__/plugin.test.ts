@@ -1,20 +1,20 @@
-import { describe, expect, it, beforeEach } from 'bun:test';
+import type { JsonValue } from '@/types/common';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import type { IAgentRuntime, Memory, State, UUID } from '@elizaos/core';
+import { sendToAdminAction } from '../src/action';
 import { autonomyPlugin } from '../src/index';
 import { adminChatProvider } from '../src/provider';
-import { sendToAdminAction } from '../src/action';
 import { AutonomyService } from '../src/service';
 import { autonomyStatusProvider } from '../src/status-provider';
-import type { IAgentRuntime, Memory, State, UUID } from '@elizaos/core';
-import type { JsonValue } from '@/types/common';
 
 describe('Autonomy Plugin Tests', () => {
   let mockRuntime: IAgentRuntime;
   let mockMessage: Memory;
   let mockState: State;
-  interface UpdateAgentCall {
+  type UpdateAgentCall = {
     agentId: UUID;
     updates: Record<string, JsonValue>;
-  }
+  };
   let updateAgentCalls: UpdateAgentCall[] = [];
 
   beforeEach(() => {
@@ -37,7 +37,11 @@ describe('Autonomy Plugin Tests', () => {
       setSetting: (key: string, value: JsonValue) => {
         mockRuntime.character.settings = mockRuntime.character.settings || {};
         if (value !== null) {
-          mockRuntime.character.settings[key] = value as string | number | boolean | Record<string, unknown>;
+          mockRuntime.character.settings[key] = value as
+            | string
+            | number
+            | boolean
+            | Record<string, unknown>;
         }
         (dynamicSettings as Record<string, JsonValue>)[key] = value; // Update dynamic settings
       },

@@ -1,9 +1,9 @@
-import { type Plugin } from '@elizaos/core';
-import { AutonomyService } from './service';
-import { adminChatProvider } from './provider';
-import { autonomyStatusProvider } from './status-provider';
+import type { Plugin } from '@elizaos/core';
 import { sendToAdminAction } from './action';
+import { adminChatProvider } from './provider';
 import { autonomyRoutes } from './routes';
+import { AutonomyService } from './service';
+import { autonomyStatusProvider } from './status-provider';
 
 /**
  * Clean autonomy plugin with settings-based control:
@@ -23,11 +23,11 @@ export const autonomyPlugin: Plugin = {
   routes: autonomyRoutes,
 };
 
+export { sendToAdminAction } from './action';
+export { adminChatProvider } from './provider';
+export { autonomyRoutes } from './routes';
 // Export components
 export { AutonomyService } from './service';
-export { adminChatProvider } from './provider';
 export { autonomyStatusProvider } from './status-provider';
-export { sendToAdminAction } from './action';
-export { autonomyRoutes } from './routes';
 
 export default autonomyPlugin;

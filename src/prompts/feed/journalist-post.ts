@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating individual journalist breaking news posts.
- * 
+ *
  * Creates news posts from individual journalists reporting on events.
  * Uses journalistic tone with breaking news urgency and references
  * specific events, sources, and market impacts.
- * 
+ *
  * Returns XML with journalist post and metadata.
  */
 export const journalistPost = definePrompt({
@@ -56,5 +56,5 @@ Respond with ONLY this XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

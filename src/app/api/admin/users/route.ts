@@ -1,14 +1,14 @@
 /**
  * Admin User Management API
- * 
+ *
  * @route GET /api/admin/users - Get user list
  * @access Admin
- * 
+ *
  * @description
  * Returns paginated user list with comprehensive metrics, filtering, and sorting.
  * Includes moderation metrics, engagement stats, and user flags. Requires admin
  * authentication.
- * 
+ *
  * @openapi
  * /api/admin/users:
  *   get:
@@ -78,41 +78,43 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/admin/users?limit=20&filter=banned&sortBy=reports_received', {
  *   headers: { 'Authorization': `Bearer ${adminToken}` }
  * });
  * ```
- * 
+ *
  * @see {@link /lib/api/admin-middleware} Admin middleware
  */
 
-import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { prisma } from '@/lib/prisma';
-import { z } from 'zod';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 const QuerySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
   offset: z.coerce.number().min(0).default(0),
   search: z.string().optional(),
   filter: z.enum(['all', 'actors', 'users', 'banned', 'admins']).default('all'),
-  sortBy: z.enum([
-    'created', 
-    'balance', 
-    'reputation', 
-    'username',
-    'reports_received',
-    'blocks_received',
-    'mutes_received',
-    'report_ratio',
-    'block_ratio',
-    'bad_user_score'
-  ]).default('created'),
+  sortBy: z
+    .enum([
+      'created',
+      'balance',
+      'reputation',
+      'username',
+      'reports_received',
+      'blocks_received',
+      'mutes_received',
+      'report_ratio',
+      'block_ratio',
+      'bad_user_score',
+    ])
+    .default('created'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 
@@ -202,7 +204,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const total = await prisma.user.count({ where });
 
   // Calculate moderation metrics and bad user scores
-  const usersWithMetrics = users.map(user => {
+  const usersWithMetrics = users.map((user) => {
     const followers = user._count.Follow_Follow_followingIdToUser;
     const reportsReceived = user._count.Report_Report_reportedUserIdToUser;
     const blocksReceived = user._count.UserBlock_UserBlock_blockedIdToUser;
@@ -217,7 +219,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     // Calculate combined bad user score
     // Formula: (reportRatio * 5) + (blockRatio * 3) + (muteRatio * 1)
     // This weighs reports more heavily than blocks, and blocks more than mutes
-    const badUserScore = (reportRatio * 5) + (blockRatio * 3) + (muteRatio * 1);
+    const badUserScore = reportRatio * 5 + blockRatio * 3 + muteRatio * 1;
 
     return {
       ...user,
@@ -327,7 +329,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
       // Recalculate metrics for re-fetched data
       usersWithMetrics.length = 0;
-      users.forEach(user => {
+      users.forEach((user) => {
         const followers = user._count.Follow_Follow_followingIdToUser;
         const reportsReceived = user._count.Report_Report_reportedUserIdToUser;
         const blocksReceived = user._count.UserBlock_UserBlock_blockedIdToUser;
@@ -337,7 +339,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         const reportRatio = followers > 0 ? reportsReceived / followers : reportsReceived;
         const blockRatio = followers > 0 ? blocksReceived / followers : blocksReceived;
         const muteRatio = followers > 0 ? mutesReceived / followers : mutesReceived;
-        const badUserScore = (reportRatio * 5) + (blockRatio * 3) + (muteRatio * 1);
+        const badUserScore = reportRatio * 5 + blockRatio * 3 + muteRatio * 1;
 
         usersWithMetrics.push({
           ...user,
@@ -357,7 +359,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   return successResponse({
-    users: usersWithMetrics.map(user => ({
+    users: usersWithMetrics.map((user) => ({
       ...user,
       virtualBalance: user.virtualBalance.toString(),
       totalDeposited: user.totalDeposited.toString(),
@@ -392,4 +394,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-

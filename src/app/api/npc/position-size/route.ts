@@ -1,13 +1,13 @@
 /**
  * NPC Position Size Recommendation API
- * 
+ *
  * @route GET /api/npc/position-size - Get position size recommendation
  * @access Public
- * 
+ *
  * @description
  * Calculates recommended position size based on portfolio metrics, strategy,
  * and reputation. Returns position size as decimal (0.10 = 10%).
- * 
+ *
  * @openapi
  * /api/npc/position-size:
  *   get:
@@ -53,7 +53,7 @@
  *                   type: object
  *       400:
  *         description: Invalid query parameters
- * 
+ *
  * @example
  * ```typescript
  * const { positionSize } = await fetch('/api/npc/position-size?npcUserId=id&poolId=pool&strategy=balanced')
@@ -61,32 +61,44 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { NPCInvestmentManager } from '@/lib/npc/npc-investment-manager'
-import { getReputationBreakdown } from '@/lib/reputation/reputation-service'
-import { logger } from '@/lib/logger'
+import { logger } from '@/lib/logger';
+import { NPCInvestmentManager } from '@/lib/npc/npc-investment-manager';
+import { getReputationBreakdown } from '@/lib/reputation/reputation-service';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const npcUserId = searchParams.get('npcUserId')!
-  const poolId = searchParams.get('poolId')!
-  const strategy = searchParams.get('strategy')! as 'aggressive' | 'conservative' | 'balanced'
+  const { searchParams } = new URL(request.url);
+  const npcUserId = searchParams.get('npcUserId');
+  const poolId = searchParams.get('poolId');
+  const strategyParam = searchParams.get('strategy');
+
+  if (!npcUserId || !poolId || !strategyParam) {
+    return NextResponse.json(
+      { success: false, error: 'npcUserId, poolId, and strategy are required' },
+      { status: 400 }
+    );
+  }
+
+  const strategy = strategyParam as 'aggressive' | 'conservative' | 'balanced';
 
   const positionSize = await NPCInvestmentManager.getRecommendedPositionSize(
     poolId,
     npcUserId,
     strategy
-  )
+  );
 
-  const metrics = await NPCInvestmentManager.getPortfolioMetrics(poolId)
+  const metrics = await NPCInvestmentManager.getPortfolioMetrics(poolId);
 
-  const riskAdjusted = metrics.riskScore > 0.6 || metrics.utilization > 70
+  const riskAdjusted = metrics.riskScore > 0.6 || metrics.utilization > 70;
 
-  const reputation = await getReputationBreakdown(npcUserId)
-  const reputationBoost = reputation!.reputationScore >= 70
+  const reputation = await getReputationBreakdown(npcUserId);
+  const reputationScore = reputation?.reputationScore ?? 0;
+  const reputationBoost = reputationScore >= 70;
 
-  logger.debug('Could not check reputation for position size')
+  if (!reputation) {
+    logger.debug('Could not check reputation for position size');
+  }
 
   logger.info('Position size calculated', {
     npcUserId,
@@ -95,7 +107,7 @@ export async function GET(request: NextRequest) {
     positionSize,
     riskAdjusted,
     reputationBoost,
-  })
+  });
 
   return NextResponse.json({
     success: true,
@@ -109,5 +121,5 @@ export async function GET(request: NextRequest) {
       positionCount: metrics.positionCount,
       unrealizedPnL: metrics.unrealizedPnL,
     },
-  })
+  });
 }

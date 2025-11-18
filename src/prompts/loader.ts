@@ -6,16 +6,16 @@
  * serverless environments.
  */
 
-import type { PromptDefinition } from './define-prompt';
 import type { JsonValue } from '@/types/common';
+import type { PromptDefinition } from './define-prompt';
 
 /**
  * Render a prompt template with variable substitution.
- * 
+ *
  * Replaces {{variable}} placeholders in the prompt template with actual
  * values from the variables object. Validates that required variables
  * are present and non-empty (unless marked as optional).
- * 
+ *
  * @param prompt - Prompt definition to render
  * @param variables - Variables to substitute in template (key-value pairs)
  * @param options - Rendering options:
@@ -23,7 +23,7 @@ import type { JsonValue } from '@/types/common';
  *   - `optionalVars`: List of variable names that are allowed to be empty
  * @returns Rendered prompt string with all variables substituted
  * @throws Error if required variables are missing or empty
- * 
+ *
  * @example
  * ```ts
  * const rendered = renderPrompt(ambientPost, {
@@ -49,13 +49,30 @@ export function renderPrompt(
     optionalVars?: string[];
   } = {}
 ): string {
-  const { allowEmpty = false, optionalVars = ['trendContext', 'previousPostsContext', 'worldActors', 'currentMarkets', 'activePredictions', 'recentTrades', 'realityGrounding', 'currentDateTime', 'currentDate', 'currentTime', 'currentYear', 'currentMonth', 'currentDay'] } = options;
-  
+  const {
+    allowEmpty = false,
+    optionalVars = [
+      'trendContext',
+      'previousPostsContext',
+      'worldActors',
+      'currentMarkets',
+      'activePredictions',
+      'recentTrades',
+      'realityGrounding',
+      'currentDateTime',
+      'currentDate',
+      'currentTime',
+      'currentYear',
+      'currentMonth',
+      'currentDay',
+    ],
+  } = options;
+
   let rendered = prompt.template;
-  
+
   for (const [key, value] of Object.entries(variables)) {
     const stringValue = String(value ?? '');
-    
+
     // Validate non-optional variables are not empty
     if (!allowEmpty && !optionalVars.includes(key)) {
       if (value === undefined || value === null) {
@@ -65,28 +82,28 @@ export function renderPrompt(
         throw new Error(`Required variable "${key}" is empty string in prompt "${prompt.id}"`);
       }
     }
-    
+
     const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
     rendered = rendered.replace(pattern, stringValue);
   }
-  
+
   return rendered;
 }
 
 /**
  * Get LLM parameters from a prompt definition.
- * 
+ *
  * Extracts temperature and maxTokens settings from a prompt definition
  * for use in LLM API calls. Returns undefined for values that aren't set.
- * 
+ *
  * @param prompt - Prompt definition to extract parameters from
  * @returns Object with temperature and maxTokens (may be undefined)
- * 
+ *
  * @example
  * ```ts
  * const params = getPromptParams(ambientPost);
  * // { temperature: 0.9, maxTokens: 5000 }
- * 
+ *
  * await callLLM({
  *   ...params,
  *   prompt: renderedPrompt

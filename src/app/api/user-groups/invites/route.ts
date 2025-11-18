@@ -1,14 +1,14 @@
 /**
  * User Group Invites API
- * 
+ *
  * @route GET /api/user-groups/invites - Get pending invites
  * @route POST /api/user-groups/invites/[id] - Accept/decline invite
  * @access Authenticated
- * 
+ *
  * @description
  * Manages group invites. GET returns all pending invites for authenticated user.
  * POST accepts or declines an invite.
- * 
+ *
  * @openapi
  * /api/user-groups/invites:
  *   get:
@@ -42,7 +42,7 @@
  *                         format: date-time
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * const { invites } = await fetch('/api/user-groups/invites', {
@@ -51,10 +51,10 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { authenticate } from '@/lib/api/auth-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/user-groups/invites
@@ -103,18 +103,22 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         id: invite.id,
         groupId: invite.groupId,
         invitedAt: invite.invitedAt,
-        group: group ? {
-          id: group.id,
-          name: group.name,
-          description: group.description,
-          memberCount: group.UserGroupMember.length,
-        } : null,
-        inviter: inviter ? {
-          id: inviter.id,
-          name: inviter.displayName || inviter.username,
-          username: inviter.username,
-          profileImageUrl: inviter.profileImageUrl,
-        } : null,
+        group: group
+          ? {
+              id: group.id,
+              name: group.name,
+              description: group.description,
+              memberCount: group.UserGroupMember.length,
+            }
+          : null,
+        inviter: inviter
+          ? {
+              id: inviter.id,
+              name: inviter.displayName || inviter.username,
+              username: inviter.username,
+              profileImageUrl: inviter.profileImageUrl,
+            }
+          : null,
       };
     })
   );
@@ -126,4 +130,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-

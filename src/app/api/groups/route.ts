@@ -1,11 +1,11 @@
 /**
  * User Groups API
- * 
+ *
  * @description
  * Manages user-created groups for organizing communities, trading clubs,
  * discussion groups, etc. Provides group listing, creation, and automatic
  * chat integration for each group.
- * 
+ *
  * **Features:**
  * - Create custom groups
  * - Multi-member support
@@ -13,18 +13,18 @@
  * - Automatic chat creation for each group
  * - Member and admin tracking
  * - Group discovery
- * 
+ *
  * **Group Roles:**
  * - **Creator:** Original group creator (also admin)
  * - **Admin:** Can manage group settings and members
  * - **Member:** Can participate in group chat
- * 
+ *
  * **Automatic Features:**
  * - Group creator automatically becomes admin
  * - Group creator automatically becomes member
  * - Group gets dedicated chat room
  * - All members added to chat automatically
- * 
+ *
  * @openapi
  * /api/groups:
  *   get:
@@ -114,7 +114,7 @@
  *         description: Invalid input
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * // List user's groups
@@ -122,12 +122,12 @@
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
  * const { groups } = await response.json();
- * 
+ *
  * groups.forEach(group => {
  *   console.log(`${group.name}: ${group.memberCount} members`);
  *   if (group.isAdmin) console.log('  (You are admin)');
  * });
- * 
+ *
  * // Create new group
  * const newGroup = await fetch('/api/groups', {
  *   method: 'POST',
@@ -137,34 +137,34 @@
  *     memberIds: ['user1', 'user2', 'user3']
  *   })
  * });
- * 
+ *
  * const { group } = await newGroup.json();
  * console.log(`Created group: ${group.id}, Chat: ${group.chatId}`);
  * ```
- * 
+ *
  * @see {@link /lib/db/context} RLS context
  * @see {@link /src/app/groups/page.tsx} Groups UI
  */
 
-import type { NextRequest } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { logger } from '@/lib/logger'
-import { asUser } from '@/lib/db/context'
-import { z } from 'zod'
-import { nanoid } from 'nanoid'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { asUser } from '@/lib/db/context';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { nanoid } from 'nanoid';
+import type { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 const CreateGroupSchema = z.object({
   name: z.string().min(1).max(100),
   memberIds: z.array(z.string()).optional().default([]),
-})
+});
 
 /**
  * GET /api/groups
  * List all groups the user is a member or admin of
  */
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const user = await authenticate(request)
+  const user = await authenticate(request);
 
   const groups = await asUser(user, async (db) => {
     // Find groups where user is either a member or admin
@@ -207,7 +207,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       orderBy: {
         createdAt: 'desc',
       },
-    })
+    });
 
     return userGroups.map((group) => ({
       id: group.id,
@@ -218,22 +218,26 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       memberCount: group._count.UserGroupMember,
       isAdmin: group.UserGroupAdmin.some((admin) => admin.userId === user.userId),
       isCreator: group.createdById === user.userId,
-    }))
-  })
+    }));
+  });
 
-  logger.info('Groups list retrieved', { userId: user.userId, groupCount: groups.length }, 'GET /api/groups')
+  logger.info(
+    'Groups list retrieved',
+    { userId: user.userId, groupCount: groups.length },
+    'GET /api/groups'
+  );
 
-  return successResponse({ groups })
-})
+  return successResponse({ groups });
+});
 
 /**
  * POST /api/groups
  * Create a new group
  */
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  const user = await authenticate(request)
-  const body = await request.json()
-  const data = CreateGroupSchema.parse(body)
+  const user = await authenticate(request);
+  const body = await request.json();
+  const data = CreateGroupSchema.parse(body);
 
   const group = await asUser(user, async (db) => {
     // Create the group
@@ -244,7 +248,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         createdById: user.userId,
         updatedAt: new Date(),
       },
-    })
+    });
 
     // Add creator as admin
     await db.userGroupAdmin.create({
@@ -255,7 +259,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         grantedBy: user.userId,
         grantedAt: new Date(),
       },
-    })
+    });
 
     // Add creator as member
     await db.userGroupMember.create({
@@ -266,7 +270,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         addedBy: user.userId,
         joinedAt: new Date(),
       },
-    })
+    });
 
     // Add initial members if provided
     if (data.memberIds.length > 0) {
@@ -280,7 +284,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
             addedBy: user.userId,
             joinedAt: new Date(),
           })),
-      })
+      });
     }
 
     // Create associated chat for the group
@@ -293,10 +297,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         createdAt: new Date(),
         updatedAt: new Date(),
       },
-    })
+    });
 
     // Add all members to chat
-    const allMemberIds = [user.userId, ...data.memberIds.filter((id) => id !== user.userId)]
+    const allMemberIds = [user.userId, ...data.memberIds.filter((id) => id !== user.userId)];
     await db.chatParticipant.createMany({
       data: allMemberIds.map((userId) => ({
         id: nanoid(),
@@ -304,19 +308,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         userId,
         joinedAt: new Date(),
       })),
-    })
+    });
 
     return {
       group: newGroup,
       chatId: chat.id,
-    }
-  })
+    };
+  });
 
   logger.info(
     'Group created',
     { userId: user.userId, groupId: group.group.id, chatId: group.chatId },
     'POST /api/groups'
-  )
+  );
 
   return successResponse({
     group: {
@@ -325,6 +329,5 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       createdAt: group.group.createdAt,
       chatId: group.chatId,
     },
-  })
-})
-
+  });
+});

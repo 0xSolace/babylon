@@ -1,13 +1,13 @@
 /**
  * Smart Contract Type Definitions
- * 
+ *
  * Complete interfaces for blockchain contract interactions
  */
 
 /**
  * Contract method interfaces for Identity Registry
  */
-export interface IdentityRegistryContract {
+export type IdentityRegistryContract = {
   getTokenId(address: string): Promise<bigint>;
   ownerOf(tokenId: number): Promise<string>;
   getAgentProfile(tokenId: number): Promise<AgentProfileResult>;
@@ -15,29 +15,29 @@ export interface IdentityRegistryContract {
   getAllActiveAgents(): Promise<bigint[]>;
   isEndpointActive(endpoint: string): Promise<boolean>;
   getAgentsByCapability(capabilityHash: string): Promise<bigint[]>;
-}
+};
 
 /**
  * Contract method interfaces for Reputation System
  */
-export interface ReputationSystemContract {
+export type ReputationSystemContract = {
   getReputation(tokenId: number): Promise<ReputationResult>;
   getFeedbackCount(tokenId: number): Promise<bigint>;
   getFeedback(tokenId: number, index: number): Promise<FeedbackResult>;
   getAgentsByMinScore(minScore: number): Promise<bigint[]>;
-}
+};
 
 /**
  * Agent profile result from contract call
  */
-export interface AgentProfileResult {
+export type AgentProfileResult = {
   name: string;
   endpoint: string;
   capabilitiesHash: string;
   registeredAt: bigint;
   isActive: boolean;
   metadata: string;
-}
+};
 
 /**
  * Reputation result tuple from contract call
@@ -49,17 +49,15 @@ export type ReputationResult = [
   bigint, // profitLoss
   bigint, // accuracyScore
   bigint, // trustScore
-  boolean // isBanned
+  boolean, // isBanned
 ];
 
 /**
  * Feedback result from contract call
  */
-export interface FeedbackResult {
+export type FeedbackResult = {
   from: string;
   rating: number; // int8 mapped to number
   comment: string;
   timestamp: bigint;
-}
-
-
+};

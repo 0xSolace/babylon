@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating normal, mundane baseline events for genesis game.
- * 
+ *
  * Creates everyday events that provide background atmosphere without
  * major dramatic impact. Used to establish normalcy before major events
  * occur in the game.
- * 
+ *
  * Returns XML with baseline event description.
  */
 export const baselineEvent = definePrompt({
@@ -31,5 +31,5 @@ Respond with ONLY this XML format:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

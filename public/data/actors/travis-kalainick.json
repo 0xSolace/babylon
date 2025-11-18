@@ -5,12 +5,7 @@
   "username": "traviskalanaick",
   "description": "Former Uber CEO who pioneered the gig economy where drivers own cars but he owns their income. Invented surge pricing during emergencies and called it innovation. His Greyball app dodged regulators while his leadership dodged decency. Got deleted from his own company for being too much of a bro even for bros. Now runs Cloud Kitchens where restaurants are fake and the food is really depressing. Turned your Honda into his asset, your dinner into ghost kitchen slop. Believes employment law is just a suggestion for disruption.",
   "profileDescription": "Former Uber CEO. Founder of Cloud Kitchens. Surge pricing during hurricanes equals perfect capitalism. Greyball was just good product strategy. Disruption isn't supposed to be comfortable. Got kicked out with $10B. Worth it. Your car was doing nothing 23 hours a day anyway.",
-  "domain": [
-    "tech",
-    "gig_economy",
-    "food_delivery",
-    "disruption"
-  ],
+  "domain": ["tech", "gig_economy", "food_delivery", "disruption"],
   "personality": "toxic bro disruptor",
   "tier": "B_TIER",
   "hasPool": false,

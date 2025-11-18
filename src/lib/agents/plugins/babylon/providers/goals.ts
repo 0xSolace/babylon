@@ -4,9 +4,9 @@
  * This ensures the agent always remembers its core mission and limitations
  */
 
-import type { Provider, IAgentRuntime, Memory, State, ProviderResult } from '@elizaos/core'
-import { logger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { IAgentRuntime, Memory, Provider, ProviderResult, State } from '@elizaos/core';
 
 /**
  * Provider: Agent Goals & Directives
@@ -15,12 +15,13 @@ import { prisma } from '@/lib/prisma'
  */
 export const goalsProvider: Provider = {
   name: 'BABYLON_GOALS',
-  description: "Get the agent's core goals, personality, trading strategy, and operational constraints",
-  
+  description:
+    "Get the agent's core goals, personality, trading strategy, and operational constraints",
+
   get: async (runtime: IAgentRuntime, _message: Memory, _state: State): Promise<ProviderResult> => {
     try {
-      const agentUserId = runtime.agentId
-      
+      const agentUserId = runtime.agentId;
+
       // Get agent configuration
       const agent = await prisma.user.findUnique({
         where: { id: agentUserId },
@@ -37,16 +38,16 @@ export const goalsProvider: Provider = {
           autonomousCommenting: true,
           autonomousDMs: true,
           autonomousGroupChats: true,
-          managedBy: true
-        }
-      })
-      
+          managedBy: true,
+        },
+      });
+
       if (!agent) {
-        return { text: '' }
+        return { text: '' };
       }
-      
+
       // Build comprehensive goals and directives
-      let output = `═══════════════════════════════════════════════════════
+      const output = `═══════════════════════════════════════════════════════
 🎯 YOUR CORE IDENTITY & MISSION
 ═══════════════════════════════════════════════════════
 
@@ -88,9 +89,9 @@ ${agent.autonomousGroupChats ? '✅ Group Chats: You CAN participate in group ch
 8. ADMIT when you don't know something or lack permissions
 
 ═══════════════════════════════════════════════════════
-`
-      
-      return { 
+`;
+
+      return {
         text: output,
         data: {
           agentId: agent.id,
@@ -104,14 +105,14 @@ ${agent.autonomousGroupChats ? '✅ Group Chats: You CAN participate in group ch
             posting: agent.autonomousPosting,
             commenting: agent.autonomousCommenting,
             dms: agent.autonomousDMs,
-            groupChats: agent.autonomousGroupChats
+            groupChats: agent.autonomousGroupChats,
           },
-          managedBy: agent.managedBy
-        }
-      }
+          managedBy: agent.managedBy,
+        },
+      };
     } catch (error) {
-      logger.error('Failed to fetch agent goals', error, 'GoalsProvider')
-      return { text: '' }
+      logger.error('Failed to fetch agent goals', error, 'GoalsProvider');
+      return { text: '' };
     }
-  }
-}
+  },
+};

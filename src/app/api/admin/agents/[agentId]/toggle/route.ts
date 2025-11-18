@@ -1,14 +1,14 @@
 /**
  * Admin Agent Toggle API
- * 
+ *
  * @route POST /api/admin/agents/[agentId]/toggle - Toggle agent autonomous mode
  * @access Admin
- * 
+ *
  * @description
  * Enables or disables all autonomous features for an agent (trading, posting,
  * commenting, DMs, group chats). Updates agent status accordingly.
  * Requires admin authentication.
- * 
+ *
  * @openapi
  * /api/admin/agents/{agentId}/toggle:
  *   post:
@@ -55,7 +55,7 @@
  *         description: Admin access required
  *       404:
  *         description: Agent not found
- * 
+ *
  * @example
  * ```typescript
  * await fetch(`/api/admin/agents/${agentId}/toggle`, {
@@ -64,19 +64,16 @@
  *   body: JSON.stringify({ enabled: true })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/api/admin-middleware} Admin middleware
  */
 
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
 
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ agentId: string }> }
-) {
+export async function POST(req: NextRequest, context: { params: Promise<{ agentId: string }> }) {
   try {
     const { agentId } = await context.params;
     const body = await req.json();
@@ -95,7 +92,11 @@ export async function POST(
       },
     });
 
-    logger.info(`Agent ${agentId} autonomous mode ${enabled ? 'enabled' : 'disabled'}`, undefined, 'AdminAgentsAPI');
+    logger.info(
+      `Agent ${agentId} autonomous mode ${enabled ? 'enabled' : 'disabled'}`,
+      undefined,
+      'AdminAgentsAPI'
+    );
 
     return NextResponse.json({
       success: true,
@@ -112,8 +113,3 @@ export async function POST(
     );
   }
 }
-
-
-
-
-

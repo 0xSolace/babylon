@@ -1,13 +1,13 @@
 /**
  * Profiles Favorites API
- * 
+ *
  * @route GET /api/profiles/favorites - Get favorited profiles
  * @access Authenticated
- * 
+ *
  * @description
  * Returns list of profiles favorited by the authenticated user. Supports
  * pagination.
- * 
+ *
  * @openapi
  * /api/profiles/favorites:
  *   get:
@@ -42,7 +42,7 @@
  *                   type: object
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * const { favorites } = await fetch('/api/profiles/favorites?limit=20', {
@@ -51,10 +51,7 @@
  * ```
  */
 
-import {
-  authenticate,
-  successResponse
-} from '@/lib/api/auth-middleware';
+import { authenticate, successResponse } from '@/lib/api/auth-middleware';
 import { asUser } from '@/lib/db/context';
 import { withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
@@ -68,12 +65,12 @@ import type { NextRequest } from 'next/server';
 export const GET = withErrorHandling(async (request: NextRequest) => {
   // Authenticate user
   const user = await authenticate(request);
-  
+
   // Validate query parameters
   const { searchParams } = new URL(request.url);
   const queryParams = {
     page: searchParams.get('page'),
-    limit: searchParams.get('limit')
+    limit: searchParams.get('limit'),
   };
   PaginationSchema.partial().parse(queryParams);
 
@@ -123,7 +120,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           bio: favorite.User_Favorite_targetUserIdToUser.bio,
           isActor: favorite.User_Favorite_targetUserIdToUser.isActor,
           postCount,
-          favoriteCount: favorite.User_Favorite_targetUserIdToUser._count.Favorite_Favorite_targetUserIdToUser,
+          favoriteCount:
+            favorite.User_Favorite_targetUserIdToUser._count.Favorite_Favorite_targetUserIdToUser,
           favoritedAt: favorite.createdAt,
           isFavorited: true,
         };
@@ -133,7 +131,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     return profiles;
   });
 
-  logger.info('Favorited profiles fetched successfully', { userId: user.userId, count: favoritedProfiles.length }, 'GET /api/profiles/favorites');
+  logger.info(
+    'Favorited profiles fetched successfully',
+    { userId: user.userId, count: favoritedProfiles.length },
+    'GET /api/profiles/favorites'
+  );
 
   return successResponse({
     profiles: favoritedProfiles,

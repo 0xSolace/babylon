@@ -1,5 +1,5 @@
 export default {
   architecture: 'System Architecture',
   'agent-architecture': 'Agent Architecture',
-  'database-schema': 'Database Schema'
-}
+  'database-schema': 'Database Schema',
+};

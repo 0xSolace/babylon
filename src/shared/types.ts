@@ -4,7 +4,7 @@
  * Centralized TypeScript types to eliminate duplication and ensure consistency
  */
 
-import type { ACTOR_TIERS, POST_TYPES, ORG_TYPES } from '@/shared/constants';
+import type { ACTOR_TIERS, ORG_TYPES, POST_TYPES } from '@/shared/constants';
 
 /**
  * Actor tier type from constants
@@ -25,7 +25,7 @@ export type OrgType = (typeof ORG_TYPES)[keyof typeof ORG_TYPES];
  * Core Actor data structure
  * Used across all game systems
  */
-export interface Actor {
+export type Actor = {
   id: string;
   name: string;
   description?: string;
@@ -44,27 +44,27 @@ export interface Actor {
   tradingBalance?: number; // NPC's trading balance
   reputationPoints?: number; // Reputation points for leaderboard
   profileImageUrl?: string; // Actor profile image
-  
+
   // NPC Persona (for consistency and learnability)
   persona?: {
-    reliability: number;           // 0-1, how often tells truth
-    insiderOrgs: string[];        // Org IDs with insider knowledge
-    expertise: string[];          // Domain expertise
-    willingToLie: boolean;        // Will strategically deceive
+    reliability: number; // 0-1, how often tells truth
+    insiderOrgs: string[]; // Org IDs with insider knowledge
+    expertise: string[]; // Domain expertise
+    willingToLie: boolean; // Will strategically deceive
     selfInterest: 'wealth' | 'reputation' | 'ideology' | 'chaos';
-    favorsActors: string[];       // Actor IDs they favor
-    opposesActors: string[];      // Actor IDs they oppose
-    favorsOrgs: string[];         // Org IDs they favor
-    opposesOrgs: string[];        // Org IDs they oppose
+    favorsActors: string[]; // Actor IDs they favor
+    opposesActors: string[]; // Actor IDs they oppose
+    favorsOrgs: string[]; // Org IDs they favor
+    opposesOrgs: string[]; // Org IDs they oppose
   };
-  
+
   // Track record (updated as game progresses)
   trackRecord?: {
     totalPosts: number;
     accuratePosts: number;
-    historicalAccuracy: number;   // accuratePosts / totalPosts
+    historicalAccuracy: number; // accuratePosts / totalPosts
   };
-}
+};
 
 /**
  * Extended actor with game state
@@ -81,10 +81,10 @@ export interface SelectedActor extends Actor {
  * Actor runtime state
  * Tracks mood and luck during game progression
  */
-export interface ActorState {
+export type ActorState = {
   mood: number; // -1 to 1
   luck: 'low' | 'medium' | 'high';
-}
+};
 
 /**
  * Relationship types between actors
@@ -113,12 +113,12 @@ export const RELATIONSHIP_TYPES = {
   FORMER_COLLEAGUES: 'former-colleagues',
 } as const;
 
-export type RelationshipType = typeof RELATIONSHIP_TYPES[keyof typeof RELATIONSHIP_TYPES];
+export type RelationshipType = (typeof RELATIONSHIP_TYPES)[keyof typeof RELATIONSHIP_TYPES];
 
 /**
  * Rich relationship data between two actors
  */
-export interface ActorRelationship {
+export type ActorRelationship = {
   id: string;
   actor1Id: string;
   actor2Id: string;
@@ -130,44 +130,44 @@ export interface ActorRelationship {
   affects?: Record<string, number>; // Behavioral modifiers
   createdAt: Date;
   updatedAt: Date;
-}
+};
 
 /**
  * Actor follow relationship
  */
-export interface ActorFollow {
+export type ActorFollow = {
   id: string;
   followerId: string;
   followingId: string;
   isMutual: boolean;
   createdAt: Date;
-}
+};
 
 /**
  * Legacy: Simple connection between actors (used in game setup)
  * @deprecated Use ActorRelationship instead
  */
-export interface ActorConnection {
+export type ActorConnection = {
   actor1: string;
   actor2: string;
   relationship: string;
   context: string;
-}
+};
 
 /**
  * Stock price at a specific moment
  */
-export interface StockPrice {
+export type StockPrice = {
   price: number;
   timestamp: string; // ISO timestamp
   change: number; // Change from previous price
   changePercent: number; // Percentage change
-}
+};
 
 /**
  * Price update with reason
  */
-export interface PriceUpdate {
+export type PriceUpdate = {
   organizationId: string;
   timestamp: string;
   oldPrice: number;
@@ -176,21 +176,21 @@ export interface PriceUpdate {
   changePercent: number;
   reason: string; // Event that caused the change
   impact: 'major' | 'moderate' | 'minor'; // Magnitude of impact
-}
+};
 
 /**
  * Markov chain state for price generation
  */
-export interface MarkovChainState {
+export type MarkovChainState = {
   trend: 'bullish' | 'bearish' | 'neutral';
   volatility: number; // 0-1
   momentum: number; // -1 to 1
-}
+};
 
 /**
  * Organization entity
  */
-export interface Organization {
+export type Organization = {
   id: string;
   name: string;
   ticker?: string; // 4-6 character trading ticker (e.g., METAI, NVDAI, AINDRL)
@@ -208,12 +208,12 @@ export interface Organization {
   // Name replacement fields (for data files)
   originalName?: string; // For name replacement
   originalHandle?: string; // For name replacement
-}
+};
 
 /**
  * Feed post (social media post)
  */
-export interface FeedPost {
+export type FeedPost = {
   id: string;
   day?: number;
   timestamp: string;
@@ -256,7 +256,7 @@ export interface FeedPost {
   originalAuthorProfileImageUrl?: string | null;
   originalContent?: string | null; // Original post content for quote posts
   quoteComment?: string | null;
-}
+};
 
 /**
  * Alias for backwards compatibility
@@ -266,7 +266,7 @@ export type FeedEvent = FeedPost;
 /**
  * World event (things that happen in the game world)
  */
-export interface WorldEvent {
+export type WorldEvent = {
   id: string;
   day: number;
   type:
@@ -286,37 +286,37 @@ export interface WorldEvent {
   relatedQuestion?: number | null;
   pointsToward?: 'YES' | 'NO' | null;
   visibility: 'public' | 'leaked' | 'secret' | 'private' | 'group';
-}
+};
 
 /**
  * Scenario for prediction market
  */
-export interface Scenario {
+export type Scenario = {
   id: number;
   title: string;
   description: string;
   mainActors: string[];
   involvedOrganizations?: string[];
   theme: string;
-}
+};
 
 /**
  * Eliza Character Message Example
  * Used in character files for AI agent conversation training
  */
-export interface ElizaMessageExample {
+export type ElizaMessageExample = {
   user: string;
   content: {
     text: string;
     action?: string;
   };
-}
+};
 
 /**
  * Eliza Character Definition
  * Full character configuration for AI agents
  */
-export interface ElizaCharacter {
+export type ElizaCharacter = {
   name: string;
   username: string;
   bio: string[];
@@ -343,7 +343,7 @@ export interface ElizaCharacter {
     minConfidence?: number;
     autoTrading?: boolean;
   };
-}
+};
 
 /**
  * Extended Actor definition for data files
@@ -365,7 +365,7 @@ export interface ActorData extends Actor {
  * Used in prisma/seed.ts for seeding the database
  * This extends the basic ActorsDatabase with additional seed-specific requirements
  */
-export interface SeedActorsDatabase {
+export type SeedActorsDatabase = {
   actors: ActorData[];
   organizations: Organization[];
   relationships?: Array<{
@@ -378,12 +378,12 @@ export interface SeedActorsDatabase {
     actor1FollowsActor2: boolean;
     actor2FollowsActor1: boolean;
   }>;
-}
+};
 
 /**
  * Question for prediction market
  */
-export interface Question {
+export type Question = {
   id: number | string; // Can be number or string (database uses string IDs)
   text: string;
   scenario: number;
@@ -410,29 +410,29 @@ export interface Question {
       deceivers: string[];
     };
   };
-}
+};
 
 /**
  * Group chat configuration
  */
-export interface GroupChat {
+export type GroupChat = {
   id: string;
   name: string;
   admin: string;
   members: string[];
   theme: string;
-}
+};
 
 /**
  * Chat message in group chat (for game generation/timeline)
  * Note: This is different from the system ChatMessage used in useChatMessages
  */
-export interface GroupChatMessage {
+export type GroupChatMessage = {
   from: string;
   message: string;
   timestamp: string;
   clueStrength: number; // 0-1
-}
+};
 
 /**
  * @deprecated Use GroupChatMessage instead
@@ -442,27 +442,27 @@ export type ChatMessage = GroupChatMessage;
 /**
  * Luck change event
  */
-export interface LuckChange {
+export type LuckChange = {
   actor: string;
   from: string;
   to: string;
   reason: string;
-}
+};
 
 /**
  * Mood change event
  */
-export interface MoodChange {
+export type MoodChange = {
   actor: string;
   from: number;
   to: number;
   reason: string;
-}
+};
 
 /**
  * Day timeline (single day in game)
  */
-export interface DayTimeline {
+export type DayTimeline = {
   day: number;
   summary: string;
   events: WorldEvent[];
@@ -470,31 +470,31 @@ export interface DayTimeline {
   feedPosts: FeedPost[];
   luckChanges: LuckChange[];
   moodChanges: MoodChange[];
-}
+};
 
 /**
  * Question outcome at game resolution
  */
-export interface QuestionOutcome {
+export type QuestionOutcome = {
   questionId: number | string; // Can be number or string to match Question.id
   answer: boolean;
   explanation: string;
   keyEvents: string[];
-}
+};
 
 /**
  * Game resolution (final state)
  */
-export interface GameResolution {
+export type GameResolution = {
   day: 30;
   outcomes: QuestionOutcome[];
   finalNarrative: string;
-}
+};
 
 /**
  * Game setup configuration
  */
-export interface GameSetup {
+export type GameSetup = {
   mainActors: SelectedActor[];
   supportingActors: SelectedActor[];
   extras: SelectedActor[];
@@ -503,12 +503,12 @@ export interface GameSetup {
   questions: Question[];
   groupChats: GroupChat[];
   connections: ActorConnection[];
-}
+};
 
 /**
  * Game state for continuous generation
  */
-export interface GameState {
+export type GameState = {
   id: string;
   currentDay: number;
   currentDate: string; // ISO date
@@ -517,12 +517,12 @@ export interface GameState {
   organizations: Organization[]; // Organizations with current prices
   priceUpdates: PriceUpdate[]; // Recent price updates
   lastGeneratedDate: string; // ISO timestamp of last generation
-}
+};
 
 /**
  * Complete generated game
  */
-export interface GeneratedGame {
+export type GeneratedGame = {
   id: string;
   version: string;
   generatedAt: string;
@@ -531,7 +531,7 @@ export interface GeneratedGame {
   resolution: GameResolution;
   // New fields for continuous game
   gameState?: GameState; // Current game state (for continuous games)
-}
+};
 
 /**
  * Actors database structure
@@ -540,7 +540,7 @@ export interface GeneratedGame {
  * - Individual files in public/data/organizations/*.json
  * - Loaded via loadActorsData() utility
  */
-export interface ActorsDatabase {
+export type ActorsDatabase = {
   actors: ActorData[];
   organizations: Organization[];
   relationships?: Array<{
@@ -553,12 +553,12 @@ export interface ActorsDatabase {
     actor1FollowsActor2: boolean;
     actor2FollowsActor1: boolean;
   }>;
-}
+};
 
 /**
  * Game history summary (for context in subsequent games)
  */
-export interface GameHistory {
+export type GameHistory = {
   gameNumber: number;
   completedAt: string;
   summary: string;
@@ -569,12 +569,12 @@ export interface GameHistory {
   }[];
   highlights: string[];
   topMoments: string[];
-}
+};
 
 /**
  * Genesis game (initial 7-day game)
  */
-export interface GenesisGame {
+export type GenesisGame = {
   id: string;
   version: string;
   generatedAt: string;
@@ -585,4 +585,4 @@ export interface GenesisGame {
   actors: SelectedActor[];
   timeline: DayTimeline[];
   summary: string;
-}
+};

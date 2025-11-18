@@ -3,14 +3,17 @@
  * Tests the fix for the error: "User not found: did:privy:cmhyl4q360160jm0cbhzltoyn"
  */
 
-import { describe, expect, it, beforeEach, mock } from 'bun:test';
-import { NextRequest } from 'next/server';
 import { NotFoundError } from '@/lib/errors/base.errors';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import type { Prisma } from '@prisma/client';
+import { NextRequest } from 'next/server';
 
 // Mock modules before importing the module under test
 const mockVerifyAuthToken = mock(() => Promise.resolve({ userId: 'did:privy:testuser123' }));
 const mockVerifyAgentSession = mock(() => Promise.resolve(null));
-const mockFindUnique = mock<(args?: any) => Promise<{ id: string; walletAddress: string } | null>>(() => Promise.resolve(null));
+const mockFindUnique = mock<
+  (args?: Prisma.UserFindUniqueArgs) => Promise<{ id: string; walletAddress: string } | null>
+>(() => Promise.resolve(null));
 
 // Mock Privy client
 mock.module('@privy-io/server-auth', () => ({
@@ -39,11 +42,13 @@ describe('User Not Found Handling', () => {
     mockVerifyAuthToken.mockClear();
     mockVerifyAgentSession.mockClear();
     mockFindUnique.mockClear();
-    
+
     // Set default mock implementations
-    mockVerifyAuthToken.mockImplementation(() => Promise.resolve({ userId: 'did:privy:testuser123' }));
+    mockVerifyAuthToken.mockImplementation(() =>
+      Promise.resolve({ userId: 'did:privy:testuser123' })
+    );
     mockVerifyAgentSession.mockImplementation(() => Promise.resolve(null));
-    
+
     // Set required env vars
     process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id';
     process.env.PRIVY_APP_SECRET = 'test-secret';
@@ -52,7 +57,7 @@ describe('User Not Found Handling', () => {
   describe('authenticate()', () => {
     it('should return Privy DID when user does not exist in database', async () => {
       mockFindUnique.mockImplementation(() => Promise.resolve(null));
-      
+
       const { authenticate } = await import('@/lib/api/auth-middleware');
 
       const request = new NextRequest('https://babylon.market/api/test', {
@@ -71,7 +76,7 @@ describe('User Not Found Handling', () => {
 
     it('should return database user ID when user exists in database', async () => {
       // Mock findUnique to return user when queried by privyId
-      mockFindUnique.mockImplementation((args: any) => {
+      mockFindUnique.mockImplementation((args?: Prisma.UserFindUniqueArgs) => {
         if (args?.where?.privyId === 'did:privy:testuser123') {
           return Promise.resolve({
             id: 'db-user-123',
@@ -80,7 +85,7 @@ describe('User Not Found Handling', () => {
         }
         return Promise.resolve(null);
       });
-      
+
       const { authenticate } = await import('@/lib/api/auth-middleware');
 
       const request = new NextRequest('https://babylon.market/api/test', {
@@ -102,7 +107,7 @@ describe('User Not Found Handling', () => {
   describe('authenticateWithDbUser()', () => {
     it('should throw error when user does not exist in database', async () => {
       mockFindUnique.mockImplementation(() => Promise.resolve(null));
-      
+
       const { authenticateWithDbUser } = await import('@/lib/api/auth-middleware');
 
       const request = new NextRequest('https://babylon.market/api/test', {
@@ -118,7 +123,7 @@ describe('User Not Found Handling', () => {
 
     it('should return user with dbUserId when user exists in database', async () => {
       // Mock findUnique to return user when queried by privyId
-      mockFindUnique.mockImplementation((args: any) => {
+      mockFindUnique.mockImplementation((args?: Prisma.UserFindUniqueArgs) => {
         if (args?.where?.privyId === 'did:privy:testuser123') {
           return Promise.resolve({
             id: 'db-user-123',
@@ -127,7 +132,7 @@ describe('User Not Found Handling', () => {
         }
         return Promise.resolve(null);
       });
-      
+
       const { authenticateWithDbUser } = await import('@/lib/api/auth-middleware');
 
       const request = new NextRequest('https://babylon.market/api/test', {
@@ -146,8 +151,12 @@ describe('User Not Found Handling', () => {
 
   describe('NotFoundError', () => {
     it('should support custom messages', () => {
-      const error = new NotFoundError('User', 'did:privy:testuser123', 'User profile not found. Please complete onboarding first.');
-      
+      const error = new NotFoundError(
+        'User',
+        'did:privy:testuser123',
+        'User profile not found. Please complete onboarding first.'
+      );
+
       expect(error.message).toBe('User profile not found. Please complete onboarding first.');
       expect(error.code).toBe('NOT_FOUND');
       expect(error.statusCode).toBe(404);
@@ -157,7 +166,7 @@ describe('User Not Found Handling', () => {
 
     it('should work with default message format', () => {
       const error = new NotFoundError('User', 'did:privy:testuser123');
-      
+
       expect(error.message).toBe('User not found: did:privy:testuser123');
       expect(error.code).toBe('NOT_FOUND');
       expect(error.statusCode).toBe(404);
@@ -165,11 +174,10 @@ describe('User Not Found Handling', () => {
 
     it('should work with only resource name', () => {
       const error = new NotFoundError('User');
-      
+
       expect(error.message).toBe('User not found');
       expect(error.code).toBe('NOT_FOUND');
       expect(error.statusCode).toBe(404);
     });
   });
 });
-

@@ -40,7 +40,7 @@ export abstract class BabylonError extends Error {
       statusCode: this.statusCode,
       timestamp: this.timestamp,
       context: this.context,
-      ...(process.env.NODE_ENV === 'development' && { stack: this.stack })
+      ...(process.env.NODE_ENV === 'development' && { stack: this.stack }),
     };
   }
 }
@@ -79,13 +79,7 @@ export class AuthorizationError extends BabylonError {
     public readonly resource: string,
     public readonly action: string
   ) {
-    super(
-      message,
-      'FORBIDDEN',
-      403,
-      true,
-      { resource, action }
-    );
+    super(message, 'FORBIDDEN', 403, true, { resource, action });
   }
 }
 
@@ -94,17 +88,11 @@ export class AuthorizationError extends BabylonError {
  */
 export class NotFoundError extends BabylonError {
   constructor(resource: string, identifier?: string | number, customMessage?: string) {
-    const message = customMessage || (identifier !== undefined 
-      ? `${resource} not found: ${identifier}`
-      : `${resource} not found`);
-    
-    super(
-      message,
-      'NOT_FOUND',
-      404,
-      true,
-      { resource, identifier }
-    );
+    const message =
+      customMessage ||
+      (identifier !== undefined ? `${resource} not found: ${identifier}` : `${resource} not found`);
+
+    super(message, 'NOT_FOUND', 404, true, { resource, identifier });
   }
 }
 
@@ -112,7 +100,10 @@ export class NotFoundError extends BabylonError {
  * Conflict error for duplicate resources or conflicting operations
  */
 export class ConflictError extends BabylonError {
-  constructor(message: string, public readonly conflictingResource?: string) {
+  constructor(
+    message: string,
+    public readonly conflictingResource?: string
+  ) {
     super(message, 'CONFLICT', 409, true, { conflictingResource });
   }
 }
@@ -126,17 +117,11 @@ export class DatabaseError extends BabylonError {
     public readonly operation: string,
     originalError?: Error
   ) {
-    super(
-      message,
-      'DATABASE_ERROR',
-      500,
-      true,
-      {
-        operation,
-        originalError: originalError?.message,
-        originalStack: process.env.NODE_ENV === 'development' ? originalError?.stack : undefined
-      }
-    );
+    super(message, 'DATABASE_ERROR', 500, true, {
+      operation,
+      originalError: originalError?.message,
+      originalStack: process.env.NODE_ENV === 'development' ? originalError?.stack : undefined,
+    });
   }
 }
 
@@ -149,13 +134,10 @@ export class ExternalServiceError extends BabylonError {
     message: string,
     public readonly originalStatusCode?: number
   ) {
-    super(
-      `${service}: ${message}`,
-      'EXTERNAL_SERVICE_ERROR',
-      502,
-      true,
-      { service, originalStatusCode }
-    );
+    super(`${service}: ${message}`, 'EXTERNAL_SERVICE_ERROR', 502, true, {
+      service,
+      originalStatusCode,
+    });
   }
 }
 
@@ -168,13 +150,11 @@ export class RateLimitError extends BabylonError {
     public readonly windowMs: number,
     public readonly retryAfter?: number
   ) {
-    super(
-      `Rate limit exceeded: ${limit} requests per ${windowMs}ms`,
-      'RATE_LIMIT',
-      429,
-      true,
-      { limit, windowMs, retryAfter }
-    );
+    super(`Rate limit exceeded: ${limit} requests per ${windowMs}ms`, 'RATE_LIMIT', 429, true, {
+      limit,
+      windowMs,
+      retryAfter,
+    });
   }
 }
 
@@ -182,11 +162,7 @@ export class RateLimitError extends BabylonError {
  * Business logic error for domain-specific errors
  */
 export class BusinessLogicError extends BabylonError {
-  constructor(
-    message: string,
-    code: string,
-    context?: Record<string, unknown>
-  ) {
+  constructor(message: string, code: string, context?: Record<string, unknown>) {
     super(message, code, 400, true, context);
   }
 }

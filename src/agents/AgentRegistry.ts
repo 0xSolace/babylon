@@ -1,21 +1,21 @@
 /**
  * Agent Registry
- * 
+ *
  * Local registry of agents with search capabilities.
  * Provides interface for AgentDiscoveryService.
  */
 
-import type { AgentProfile } from '@/types/a2a'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma';
+import type { AgentProfile } from '@/types/a2a';
 
-interface SearchParams {
-  strategies?: string[]
-  minReputation?: number
-}
+type SearchParams = {
+  strategies?: string[];
+  minReputation?: number;
+};
 
-interface AgentResult {
-  profile: AgentProfile
-}
+type AgentResult = {
+  profile: AgentProfile;
+};
 
 export class AgentRegistry {
   /**
@@ -24,7 +24,7 @@ export class AgentRegistry {
   search(_params: SearchParams): AgentResult[] {
     // For now return empty array - this will be populated with actual DB queries later
     // This is a stub to satisfy the AgentDiscovery interface
-    return []
+    return [];
   }
 
   /**
@@ -33,7 +33,7 @@ export class AgentRegistry {
   getAgent(_agentId: string): AgentResult | null {
     // For now return null - this will be populated with actual DB queries later
     // This is a stub to satisfy the AgentDiscovery interface
-    return null
+    return null;
   }
 
   /**
@@ -63,12 +63,12 @@ export class AgentRegistry {
           },
         },
       },
-    })
+    });
 
     return agents.map((agent) => {
-      const metrics = agent.AgentPerformanceMetrics
-      const compositeScore = metrics?.reputationScore ?? 0
-      const trustScore = metrics?.onChainTrustScore ?? compositeScore
+      const metrics = agent.AgentPerformanceMetrics;
+      const compositeScore = metrics?.reputationScore ?? 0;
+      const trustScore = metrics?.onChainTrustScore ?? compositeScore;
 
       return {
         profile: {
@@ -94,7 +94,7 @@ export class AgentRegistry {
           },
           isActive: true,
         },
-      }
-    })
+      };
+    });
   }
 }

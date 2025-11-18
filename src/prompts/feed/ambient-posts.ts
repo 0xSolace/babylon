@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating multiple ambient posts from actors not directly involved in events.
- * 
+ *
  * Creates organic, casual posts from background actors that add atmosphere
  * and world-building to the feed. Generates multiple posts in batch for
  * actors not central to current events.
- * 
+ *
  * Returns XML with multiple post entries.
  */
 export const ambientPosts = definePrompt({
@@ -78,5 +78,5 @@ Respond with ONLY this XML format (example for 2 posts):
 </response>
 
 CRITICAL: Return EXACTLY {{actorCount}} posts. Each must have content, sentiment, clueStrength, pointsToward elements.
-`.trim()
+`.trim(),
 });

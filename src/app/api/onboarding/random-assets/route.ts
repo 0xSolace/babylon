@@ -1,13 +1,13 @@
 /**
  * Onboarding Random Assets API
- * 
+ *
  * @route GET /api/onboarding/random-assets - Get random assets
  * @access Public
- * 
+ *
  * @description
  * Returns random profile picture and banner indices for onboarding.
  * Used to assign random assets to new users.
- * 
+ *
  * @openapi
  * /api/onboarding/random-assets:
  *   get:
@@ -31,7 +31,7 @@
  *                   type: integer
  *                   minimum: 0
  *                   maximum: 99
- * 
+ *
  * @example
  * ```typescript
  * const { profilePictureIndex, bannerIndex } = await fetch('/api/onboarding/random-assets')
@@ -46,10 +46,10 @@ import type { NextRequest } from 'next/server';
 const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 
-interface RandomAssets {
+type RandomAssets = {
   profilePictureIndex: number;
   bannerIndex: number;
-}
+};
 
 /**
  * GET /api/onboarding/random-assets
@@ -68,4 +68,3 @@ export async function GET(_request: NextRequest) {
 
   return successResponse(assets);
 }
-

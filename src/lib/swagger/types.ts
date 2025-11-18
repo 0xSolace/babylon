@@ -1,17 +1,17 @@
 /**
  * OpenAPI Type Definitions
- * 
+ *
  * Type definitions for OpenAPI/Swagger documentation.
- * 
+ *
  * @module lib/swagger/types
  */
 
 /**
  * OpenAPI route documentation
- * 
+ *
  * @description Used to document API routes in a type-safe way
  */
-export interface OpenAPIRoute {
+export type OpenAPIRoute = {
   /** Route path (e.g., '/api/users/me') */
   path: string;
   /** HTTP method(s) supported */
@@ -33,12 +33,12 @@ export interface OpenAPIRoute {
   };
   /** Response schemas */
   responses: Record<number, OpenAPIResponse>;
-}
+};
 
 /**
  * OpenAPI parameter definition
  */
-export interface OpenAPIParameter {
+export type OpenAPIParameter = {
   /** Parameter name */
   name: string;
   /** Where the parameter is located */
@@ -54,15 +54,14 @@ export interface OpenAPIParameter {
     enum?: string[];
     default?: unknown;
   };
-}
+};
 
 /**
  * OpenAPI response definition
  */
-export interface OpenAPIResponse {
+export type OpenAPIResponse = {
   /** Response description */
   description: string;
   /** Response content types */
   content?: Record<string, { schema: object; example?: unknown }>;
-}
-
+};

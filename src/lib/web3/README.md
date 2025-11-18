@@ -129,7 +129,7 @@ function RegisterAgent() {
     }
   }
 
-  return <button onClick={handleRegister}>Register Agent</button>
+  return <button type="button" onClick={handleRegister}>Register Agent</button>
 }
 ```
 
@@ -182,7 +182,7 @@ function BuyShares({ marketId }: { marketId: `0x${string}` }) {
     }
   }
 
-  return <button onClick={handleBuy}>Buy Shares (0.1 ETH)</button>
+  return <button type="button" onClick={handleBuy}>Buy Shares (0.1 ETH)</button>
 }
 ```
 

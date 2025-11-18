@@ -1,6 +1,6 @@
 /**
  * Moderation Filters
- * 
+ *
  * Helper functions to filter content based on user blocks and mutes
  */
 
@@ -14,8 +14,8 @@ export async function getBlockedUserIds(userId: string): Promise<string[]> {
     where: { blockerId: userId },
     select: { blockedId: true },
   });
-  
-  return blocks.map(b => b.blockedId);
+
+  return blocks.map((b) => b.blockedId);
 }
 
 /**
@@ -26,8 +26,8 @@ export async function getBlockedByUserIds(userId: string): Promise<string[]> {
     where: { blockedId: userId },
     select: { blockerId: true },
   });
-  
-  return blocks.map(b => b.blockerId);
+
+  return blocks.map((b) => b.blockerId);
 }
 
 /**
@@ -38,8 +38,8 @@ export async function getMutedUserIds(userId: string): Promise<string[]> {
     where: { muterId: userId },
     select: { mutedId: true },
   });
-  
-  return mutes.map(m => m.mutedId);
+
+  return mutes.map((m) => m.mutedId);
 }
 
 /**
@@ -51,7 +51,7 @@ export async function getFilteredUserIds(userId: string): Promise<string[]> {
     getBlockedUserIds(userId),
     getBlockedByUserIds(userId),
   ]);
-  
+
   // Combine and deduplicate
   return [...new Set([...blockedByMe, ...blockedMe])];
 }
@@ -59,10 +59,7 @@ export async function getFilteredUserIds(userId: string): Promise<string[]> {
 /**
  * Check if user A has blocked user B
  */
-export async function hasBlocked(
-  blockerId: string,
-  blockedId: string
-): Promise<boolean> {
+export async function hasBlocked(blockerId: string, blockedId: string): Promise<boolean> {
   const block = await prisma.userBlock.findUnique({
     where: {
       blockerId_blockedId: {
@@ -71,17 +68,14 @@ export async function hasBlocked(
       },
     },
   });
-  
+
   return !!block;
 }
 
 /**
  * Check if user A has muted user B
  */
-export async function hasMuted(
-  muterId: string,
-  mutedId: string
-): Promise<boolean> {
+export async function hasMuted(muterId: string, mutedId: string): Promise<boolean> {
   const mute = await prisma.userMute.findUnique({
     where: {
       muterId_mutedId: {
@@ -90,7 +84,7 @@ export async function hasMuted(
       },
     },
   });
-  
+
   return !!mute;
 }
 
@@ -103,8 +97,8 @@ export function filterPostsByModeration<T extends { authorId?: string }>(
   mutedUserIds: string[] = []
 ): T[] {
   const excludedIds = new Set([...blockedUserIds, ...mutedUserIds]);
-  
-  return posts.filter(post => {
+
+  return posts.filter((post) => {
     if (!post.authorId) return true;
     return !excludedIds.has(post.authorId);
   });
@@ -117,12 +111,10 @@ export function buildBlockedUsersWhereClause(blockedUserIds: string[]) {
   if (blockedUserIds.length === 0) {
     return {};
   }
-  
+
   return {
     authorId: {
       notIn: blockedUserIds,
     },
   };
 }
-
-

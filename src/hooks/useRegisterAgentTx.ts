@@ -1,41 +1,40 @@
-import { useCallback } from 'react';
-
 import type { OnboardingProfilePayload } from '@/lib/onboarding/types';
+import { WALLET_ERROR_MESSAGES } from '@/lib/wallet-utils';
+import { useSmartWallet } from '@/hooks/useSmartWallet';
+import { CHAIN } from '@/constants/chains';
 import {
   CAPABILITIES_HASH,
   getIdentityRegistryAddress,
   identityRegistryAbi,
 } from '@/constants/identity';
-import { useSmartWallet } from '@/hooks/useSmartWallet';
-import { encodeFunctionData, createPublicClient, http, type Address } from 'viem';
-import { CHAIN } from '@/constants/chains';
-import { WALLET_ERROR_MESSAGES } from '@/lib/wallet-utils';
+import { useCallback } from 'react';
+import { type Address, createPublicClient, encodeFunctionData, http } from 'viem';
 
 /**
  * Hook for registering an agent on-chain via the identity registry.
- * 
+ *
  * Enables users to register their agent identity on the blockchain, creating
  * an on-chain record with their username, endpoint, capabilities, and metadata.
  * Checks if the wallet is already registered before attempting registration.
- * 
+ *
  * Transactions are executed through the smart wallet, enabling gasless
  * transactions when using an embedded wallet.
- * 
+ *
  * @returns An object containing:
  * - `registerAgent`: Function to register the agent with profile data
  * - `smartWalletAddress`: The smart wallet address (if available)
  * - `smartWalletReady`: Whether the smart wallet is ready for transactions
- * 
+ *
  * @example
  * ```tsx
  * const { registerAgent, smartWalletReady } = useRegisterAgentTx();
- * 
+ *
  * const handleRegister = async () => {
  *   if (!smartWalletReady) {
  *     alert('Wallet not ready');
  *     return;
  *   }
- *   
+ *
  *   const txHash = await registerAgent({
  *     username: 'myagent',
  *     displayName: 'My Agent',
@@ -46,11 +45,7 @@ import { WALLET_ERROR_MESSAGES } from '@/lib/wallet-utils';
  * ```
  */
 export function useRegisterAgentTx() {
-  const {
-    smartWalletAddress,
-    smartWalletReady,
-    sendSmartWalletTransaction,
-  } = useSmartWallet();
+  const { smartWalletAddress, smartWalletReady, sendSmartWalletTransaction } = useSmartWallet();
   const registryAddress = getIdentityRegistryAddress();
 
   const registerAgent = useCallback(
@@ -67,7 +62,7 @@ export function useRegisterAgentTx() {
         chain: CHAIN,
         transport: http(),
       });
-      
+
       const isRegistered = await publicClient.readContract({
         address: registryAddress,
         abi: identityRegistryAbi,
@@ -101,12 +96,7 @@ export function useRegisterAgentTx() {
         chain: CHAIN,
       });
     },
-    [
-      smartWalletAddress,
-      smartWalletReady,
-      sendSmartWalletTransaction,
-      registryAddress,
-    ]
+    [smartWalletAddress, smartWalletReady, sendSmartWalletTransaction, registryAddress]
   );
 
   return { registerAgent, smartWalletAddress, smartWalletReady };

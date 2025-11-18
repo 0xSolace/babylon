@@ -2,7 +2,7 @@
  * Tests for NewsArticlePacingEngine
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { NewsArticlePacingEngine } from '../NewsArticlePacingEngine';
 
 describe('NewsArticlePacingEngine', () => {
@@ -288,7 +288,7 @@ describe('NewsArticlePacingEngine', () => {
 
     it('should return empty array if all orgs have published', () => {
       // Mark all orgs as published
-      orgs.forEach(org => {
+      orgs.forEach((org) => {
         pacer.recordArticle(1, org.id, 'breaking', `article-${org.id}`, 10);
       });
 
@@ -302,19 +302,19 @@ describe('NewsArticlePacingEngine', () => {
       pacer.recordArticle(1, 'fox', 'breaking', 'article-2', 11);
 
       const selected = pacer.selectOrgsForStage(orgs, 1, 'breaking');
-      
+
       // Should not include CNN or Fox
-      expect(selected.every(org => org.id !== 'cnn' && org.id !== 'fox')).toBe(true);
+      expect(selected.every((org) => org.id !== 'cnn' && org.id !== 'fox')).toBe(true);
     });
 
     it('should select different orgs each time (randomness)', () => {
       const selections = new Set<string>();
-      
+
       // Run selection multiple times with valid question IDs
       for (let i = 1; i <= 10; i++) {
         const freshPacer = new NewsArticlePacingEngine();
         const selected = freshPacer.selectOrgsForStage(orgs, i, 'breaking');
-        selections.add(JSON.stringify(selected.map(o => o.id).sort()));
+        selections.add(JSON.stringify(selected.map((o) => o.id).sort()));
       }
 
       // Should have some variety (at least 3 different selections)
@@ -325,7 +325,7 @@ describe('NewsArticlePacingEngine', () => {
   describe('Edge Cases', () => {
     it('should handle single org available', () => {
       const orgs = [{ id: 'only-org', name: 'Only News' }];
-      
+
       const selected = pacer.selectOrgsForStage(orgs, 1, 'breaking');
       expect(selected.length).toBe(1);
       expect(selected[0]?.id).toBe('only-org');
@@ -334,7 +334,7 @@ describe('NewsArticlePacingEngine', () => {
     it('should handle more orgs than limit for breaking', () => {
       const orgs = Array.from({ length: 20 }, (_, i) => ({
         id: `org-${i}`,
-        name: `Org ${i}`
+        name: `Org ${i}`,
       }));
 
       const selected = pacer.selectOrgsForStage(orgs, 1, 'breaking');
@@ -354,4 +354,3 @@ describe('NewsArticlePacingEngine', () => {
     });
   });
 });
-

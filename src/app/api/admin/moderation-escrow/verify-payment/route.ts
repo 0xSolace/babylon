@@ -1,13 +1,13 @@
 /**
  * Admin Moderation Escrow Verify Payment API
- * 
+ *
  * @route POST /api/admin/moderation-escrow/verify-payment - Verify payment
  * @access Admin
- * 
+ *
  * @description
  * Verifies that an escrow payment was completed on-chain. Checks transaction
  * hash and updates payment status. Uses X402 manager for verification.
- * 
+ *
  * @openapi
  * /api/admin/moderation-escrow/verify-payment:
  *   post:
@@ -41,7 +41,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/moderation-escrow/verify-payment', {
@@ -55,19 +55,19 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/api/admin-middleware'
-import { X402Manager } from '@/lib/a2a/payments/x402-manager'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { z } from 'zod'
+import { X402Manager } from '@/lib/a2a/payments/x402-manager';
+import { requireAdmin } from '@/lib/api/admin-middleware';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 // Initialize x402 manager
 const x402Manager = new X402Manager({
   rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
   paymentTimeout: 15 * 60 * 1000, // 15 minutes
-})
+});
 
 const VerifyEscrowPaymentSchema = z.object({
   escrowId: z.string().min(1, 'Escrow ID is required'),
@@ -75,27 +75,29 @@ const VerifyEscrowPaymentSchema = z.object({
   fromAddress: z.string().min(1, 'From address is required'),
   toAddress: z.string().min(1, 'To address is required'),
   amount: z.string().min(1, 'Amount is required'),
-})
+});
 
 export async function POST(req: NextRequest) {
-  let escrowId: string | undefined
+  let escrowId: string | undefined;
   try {
-    const adminUser = await requireAdmin(req)
-    const adminId = adminUser.userId
+    const adminUser = await requireAdmin(req);
+    const adminId = adminUser.userId;
 
-    const body = await req.json()
-    const validation = VerifyEscrowPaymentSchema.safeParse(body)
+    const body = await req.json();
+    const validation = VerifyEscrowPaymentSchema.safeParse(body);
 
     if (!validation.success) {
       return NextResponse.json(
-        { error: validation.error.issues[0]?.message || 'Invalid request data' },
+        {
+          error: validation.error.issues[0]?.message || 'Invalid request data',
+        },
         { status: 400 }
-      )
+      );
     }
 
-    const validationData = validation.data
-    escrowId = validationData.escrowId
-    const { txHash, fromAddress, toAddress, amount } = validationData
+    const validationData = validation.data;
+    escrowId = validationData.escrowId;
+    const { txHash, fromAddress, toAddress, amount } = validationData;
 
     // Get escrow record
     const escrow = await prisma.moderationEscrow.findUnique({
@@ -115,13 +117,10 @@ export async function POST(req: NextRequest) {
           },
         },
       },
-    })
+    });
 
     if (!escrow) {
-      return NextResponse.json(
-        { error: 'Escrow payment not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Escrow payment not found' }, { status: 404 });
     }
 
     // Check if expired
@@ -130,25 +129,19 @@ export async function POST(req: NextRequest) {
       await prisma.moderationEscrow.update({
         where: { id: escrowId },
         data: { status: 'expired' },
-      })
-      return NextResponse.json(
-        { error: 'Escrow payment has expired' },
-        { status: 400 }
-      )
+      });
+      return NextResponse.json({ error: 'Escrow payment has expired' }, { status: 400 });
     }
 
     if (escrow.status !== 'pending') {
       return NextResponse.json(
         { error: `Escrow payment is already ${escrow.status}` },
         { status: 400 }
-      )
+      );
     }
 
     if (!escrow.paymentRequestId) {
-      return NextResponse.json(
-        { error: 'Escrow payment request ID not found' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Escrow payment request ID not found' }, { status: 400 });
     }
 
     // Verify admin is the one who created the escrow (or allow any admin)
@@ -161,12 +154,14 @@ export async function POST(req: NextRequest) {
     // }
 
     // Verify fromAddress matches admin's wallet (from metadata or Admin record)
-    const expectedFromAddress = escrow.Admin?.walletAddress || (escrow.metadata as { adminWalletAddress?: string })?.adminWalletAddress
+    const expectedFromAddress =
+      escrow.Admin?.walletAddress ||
+      (escrow.metadata as { adminWalletAddress?: string })?.adminWalletAddress;
     if (expectedFromAddress && fromAddress.toLowerCase() !== expectedFromAddress.toLowerCase()) {
       return NextResponse.json(
         { error: 'Transaction sender does not match admin wallet address' },
         { status: 400 }
-      )
+      );
     }
 
     // Use database transaction to prevent race conditions
@@ -174,14 +169,14 @@ export async function POST(req: NextRequest) {
       // Re-fetch escrow within transaction to get latest state
       const currentEscrow = await tx.moderationEscrow.findUnique({
         where: { id: escrowId },
-      })
+      });
 
       if (!currentEscrow || currentEscrow.status !== 'pending') {
-        throw new Error(`Escrow is already ${currentEscrow?.status || 'not found'}`)
+        throw new Error(`Escrow is already ${currentEscrow?.status || 'not found'}`);
       }
 
       if (!currentEscrow.paymentRequestId) {
-        throw new Error('Escrow payment request ID not found')
+        throw new Error('Escrow payment request ID not found');
       }
 
       // Verify payment via X402
@@ -193,10 +188,10 @@ export async function POST(req: NextRequest) {
         amount,
         timestamp: Date.now(),
         confirmed: true,
-      })
+      });
 
       if (!x402Result.verified) {
-        throw new Error(x402Result.error || 'Payment verification failed')
+        throw new Error(x402Result.error || 'Payment verification failed');
       }
 
       // Update escrow status atomically
@@ -206,10 +201,10 @@ export async function POST(req: NextRequest) {
           status: 'paid',
           paymentTxHash: txHash,
         },
-      })
+      });
 
-      return { verified: true, escrow: updatedEscrow }
-    })
+      return { verified: true, escrow: updatedEscrow };
+    });
 
     logger.info(
       `Escrow payment verified successfully for ${escrowId}`,
@@ -221,7 +216,7 @@ export async function POST(req: NextRequest) {
         adminId,
       },
       'ModerationEscrow'
-    )
+    );
 
     return NextResponse.json({
       success: true,
@@ -232,13 +227,16 @@ export async function POST(req: NextRequest) {
         status: verificationResult.escrow.status,
         paymentTxHash: verificationResult.escrow.paymentTxHash,
       },
-    })
+    });
   } catch (error) {
-    logger.error('Failed to verify escrow payment', { error, escrowId }, 'ModerationEscrow')
+    logger.error('Failed to verify escrow payment', { error, escrowId }, 'ModerationEscrow');
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to verify escrow payment' },
-      { status: error instanceof Error && error.message.includes('already') ? 400 : 500 }
-    )
+      {
+        error: error instanceof Error ? error.message : 'Failed to verify escrow payment',
+      },
+      {
+        status: error instanceof Error && error.message.includes('already') ? 400 : 500,
+      }
+    );
   }
 }
-

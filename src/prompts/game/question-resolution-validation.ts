@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating resolution events that definitively prove question outcomes.
- * 
+ *
  * Creates definitive resolution events that provide clear, unambiguous proof
  * of whether a prediction market question resolved as YES or NO. Events
  * must be concrete and observable.
- * 
+ *
  * Returns XML with resolution event that proves the outcome.
  */
 export const questionResolutionValidation = definePrompt({
@@ -42,5 +42,5 @@ Respond with ONLY this XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

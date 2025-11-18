@@ -1,21 +1,21 @@
 /**
  * Export Trajectories to Hugging Face Datasets
- * 
+ *
  * Prepares trajectory data for RLAIF training pipelines.
  * Exports to HuggingFace Hub for easy access in training scripts.
- * 
+ *
  * NOTE: Requires trajectory schema that's not yet in main Prisma
  */
 
+import { shuffleArray } from '@/lib/utils/randomization';
 import type { Prisma } from '@prisma/client';
 import type { Trajectory } from './types';
-import { shuffleArray } from '@/lib/utils/randomization';
 
-export interface ExportOptions {
+export type ExportOptions = {
   // Dataset configuration
   datasetName: string; // e.g., 'elizaos/babylon-agent-trajectories'
   huggingFaceToken?: string;
-  
+
   // Data filtering
   startDate?: Date;
   endDate?: Date;
@@ -24,35 +24,33 @@ export interface ExportOptions {
   minReward?: number;
   maxReward?: number;
   includeJudged?: boolean; // Only include trajectories with AI judge scores
-  
+
   // Limits
   maxTrajectories?: number;
-  
+
   // Format
   format?: 'jsonl' | 'parquet' | 'arrow';
   splitRatio?: { train: number; validation: number; test: number };
-}
+};
 
-export interface ExportResult {
+export type ExportResult = {
   success: boolean;
   trajectoriesExported: number;
   datasetUrl?: string;
   error?: string;
-}
+};
 
 /**
  * Export trajectories to Hugging Face Dataset
  */
-export async function exportToHuggingFace(
-  options: ExportOptions
-): Promise<ExportResult> {
+export async function exportToHuggingFace(options: ExportOptions): Promise<ExportResult> {
   try {
     const { prisma } = await import('@/lib/prisma');
-    
+
     // Build query using proper Prisma type
     const where = buildWhereClause(options);
 
-    interface TrajectoryRecord {
+    type TrajectoryRecord = {
       trajectoryId: string;
       agentId: string;
       episodeId: string | null;
@@ -67,10 +65,10 @@ export async function exportToHuggingFace(
       finalPnL: number | null;
       aiJudgeReward: number | null;
       aiJudgeReasoning: string | null;
-    }
+    };
 
     // Fetch trajectories using Prisma directly
-    const trajectories = await prisma.trajectory.findMany({
+    const trajectories = (await prisma.trajectory.findMany({
       where,
       orderBy: { startTime: 'desc' },
       take: options.maxTrajectories || 10000,
@@ -89,8 +87,8 @@ export async function exportToHuggingFace(
         finalPnL: true,
         aiJudgeReward: true,
         aiJudgeReasoning: true,
-      }
-    }) as TrajectoryRecord[];
+      },
+    })) as TrajectoryRecord[];
 
     console.log(`Exporting ${trajectories.length} trajectories...`);
 
@@ -110,7 +108,7 @@ export async function exportToHuggingFace(
     return {
       success: false,
       trajectoriesExported: 0,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 }
@@ -118,7 +116,7 @@ export async function exportToHuggingFace(
 /**
  * Transform trajectory to training format
  */
-interface TrajectoryRecord {
+type TrajectoryRecord = {
   trajectoryId: string;
   agentId: string;
   episodeId: string | null;
@@ -133,9 +131,9 @@ interface TrajectoryRecord {
   finalPnL: number | null;
   aiJudgeReward: number | null;
   aiJudgeReasoning: string | null;
-}
+};
 
-interface TrajectoryStep {
+type TrajectoryStep = {
   stepNumber: number;
   timestamp: number;
   environmentState: Record<string, unknown>;
@@ -158,7 +156,7 @@ interface TrajectoryStep {
   };
   reward: number;
   reasoning?: string;
-}
+};
 
 interface TrainingTrajectory extends Record<string, unknown> {
   trajectory_id: string;
@@ -210,27 +208,27 @@ function transformForTraining(traj: TrajectoryRecord): TrainingTrajectory {
   const steps = JSON.parse(traj.stepsJson) as TrajectoryStep[];
   const metrics = JSON.parse(traj.metricsJson) as Record<string, unknown>;
   const metadata = JSON.parse(traj.metadataJson) as Record<string, unknown>;
-  
+
   return {
     // Identifiers
     trajectory_id: traj.trajectoryId,
     agent_id: traj.agentId,
     episode_id: traj.episodeId,
     scenario_id: traj.scenarioId,
-    
+
     // Timing
     start_time: traj.startTime.toISOString(),
     duration_ms: traj.durationMs,
-    
+
     // Steps (full trajectory)
     steps: steps.map((step: TrajectoryStep) => ({
       step_number: step.stepNumber,
       timestamp: step.timestamp,
-      
+
       // Environment
       environment_state: step.environmentState,
       observation: step.observation,
-      
+
       // Agent cognition
       llm_calls: step.llmCalls.map((call) => ({
         model: call.model,
@@ -239,43 +237,43 @@ function transformForTraining(traj: TrajectoryRecord): TrainingTrajectory {
         response: call.response,
         reasoning: call.reasoning,
         temperature: call.temperature,
-        purpose: call.purpose
+        purpose: call.purpose,
       })),
-      
+
       // Action
       action: {
         type: step.action.actionType,
         parameters: step.action.parameters,
         success: step.action.success,
         result: step.action.result,
-        error: step.action.error
+        error: step.action.error,
       },
-      
+
       // Feedback
       reward: step.reward,
-      reasoning: step.reasoning
+      reasoning: step.reasoning,
     })),
-    
+
     // Outcomes
     total_reward: traj.totalReward,
     final_status: traj.finalStatus,
     final_pnl: traj.finalPnL,
-    
+
     // AI Judge scores
     ai_judge_reward: traj.aiJudgeReward,
     ai_judge_reasoning: traj.aiJudgeReasoning,
-    
+
     // Metrics
     metrics: {
       episode_length: (metrics.episodeLength as number) || 0,
       trades_executed: metrics.tradesExecuted as number | undefined,
       posts_created: metrics.postsCreated as number | undefined,
       messages_handled: metrics.messagesHandled as number | undefined,
-      error_count: metrics.errorCount as number | undefined
+      error_count: metrics.errorCount as number | undefined,
     },
-    
+
     // Metadata
-    metadata
+    metadata,
   };
 }
 
@@ -287,22 +285,19 @@ function splitDataset<T>(
   ratio?: { train: number; validation: number; test: number }
 ): { train: T[]; validation: T[]; test: T[] } {
   const defaultRatio = { train: 0.8, validation: 0.1, test: 0.1 };
-  const { train, validation, test: testRatio } = ratio || defaultRatio;
-  
+  const { train, validation } = ratio || defaultRatio;
+
   // Shuffle data
   const shuffled = shuffleArray(data);
-  
+
   const trainSize = Math.floor(shuffled.length * train);
   const valSize = Math.floor(shuffled.length * validation);
-  
+
   return {
     train: shuffled.slice(0, trainSize),
     validation: shuffled.slice(trainSize, trainSize + valSize),
-    test: shuffled.slice(trainSize + valSize)
+    test: shuffled.slice(trainSize + valSize),
   };
-  
-  // Suppress unused variable warning
-  void testRatio;
 }
 
 /**
@@ -315,33 +310,33 @@ async function exportToJSONL<T extends Record<string, unknown>>(
   try {
     const fs = await import('node:fs/promises');
     const path = await import('node:path');
-    
+
     // Create export directory
     const exportDir = path.resolve(process.cwd(), 'exports', 'trajectories');
     await fs.mkdir(exportDir, { recursive: true });
-    
+
     // Write splits
     for (const [splitName, data] of Object.entries(splits)) {
       if (data.length === 0) continue;
-      
+
       const filePath = path.join(exportDir, `${splitName}.jsonl`);
       const lines = data.map((item: T) => JSON.stringify(item)).join('\n');
       await fs.writeFile(filePath, lines, 'utf-8');
-      
+
       console.log(`Exported ${data.length} trajectories to ${filePath}`);
     }
-    
+
     // If HuggingFace token provided, upload
     if (options.huggingFaceToken) {
       await uploadToHuggingFaceHub(exportDir, options);
     }
-    
+
     return {
       success: true,
       trajectoriesExported: splits.train.length + splits.validation.length + splits.test.length,
-      datasetUrl: options.huggingFaceToken 
+      datasetUrl: options.huggingFaceToken
         ? `https://huggingface.co/datasets/${options.datasetName}`
-        : undefined
+        : undefined,
     };
   } catch (error) {
     throw new Error(`JSONL export failed: ${error}`);
@@ -364,10 +359,7 @@ async function exportToParquet<T extends Record<string, unknown>>(
 /**
  * Upload to Hugging Face Hub
  */
-async function uploadToHuggingFaceHub(
-  exportDir: string,
-  options: ExportOptions
-): Promise<void> {
+async function uploadToHuggingFaceHub(exportDir: string, options: ExportOptions): Promise<void> {
   try {
     if (!options.huggingFaceToken) {
       throw new Error('HuggingFace token is required for upload');
@@ -378,26 +370,41 @@ async function uploadToHuggingFaceHub(
       const { exec } = await import('node:child_process');
       const { promisify } = await import('node:util');
       const execAsync = promisify(exec);
-      
+
       // Set token as environment variable for huggingface-cli
       process.env.HUGGINGFACE_HUB_TOKEN = options.huggingFaceToken;
-      
+
       console.log('Uploading to Hugging Face Hub...');
       console.log(`Dataset: ${options.datasetName}`);
-      
-      await execAsync(`huggingface-cli upload ${options.datasetName} ${exportDir} --repo-type dataset`);
+
+      await execAsync(
+        `huggingface-cli upload ${options.datasetName} ${exportDir} --repo-type dataset`
+      );
       console.log('✅ Successfully uploaded via huggingface-cli');
-    } catch (cliError) {
+    } catch (_cliError) {
       // Fallback: Try @huggingface/hub npm package if available
       try {
         const hubModule = await import('@huggingface/hub');
         // Handle different export styles
-        const HfApi = (hubModule as { HfApi?: new (args: { token: string }) => { uploadFile: (args: { repoId: string; path: string; fileContent: string; repoType: string }) => Promise<void> } }).HfApi;
-        
+        const HfApi = (
+          hubModule as {
+            HfApi?: new (args: {
+              token: string;
+            }) => {
+              uploadFile: (args: {
+                repoId: string;
+                path: string;
+                fileContent: string;
+                repoType: string;
+              }) => Promise<void>;
+            };
+          }
+        ).HfApi;
+
         if (!HfApi) {
           throw new Error('HfApi not found in @huggingface/hub');
         }
-        
+
         const api = new HfApi({ token: options.huggingFaceToken });
         const fs = await import('node:fs/promises');
         const path = await import('node:path');
@@ -406,7 +413,7 @@ async function uploadToHuggingFaceHub(
         for (const file of files) {
           const filePath = path.join(exportDir, file);
           const stats = await fs.stat(filePath);
-          
+
           if (stats.isFile()) {
             const fileContent = await fs.readFile(filePath, 'utf-8');
             await api.uploadFile({
@@ -420,14 +427,18 @@ async function uploadToHuggingFaceHub(
         }
 
         console.log('✅ Successfully uploaded to Hugging Face Hub');
-      } catch (importError) {
+      } catch (_importError) {
         // If both methods fail, provide instructions
         console.warn('Neither huggingface-cli nor @huggingface/hub available.');
         console.log('\n📦 To upload to Hugging Face Hub:');
         console.log('1. Install: pip install huggingface_hub');
         console.log('2. Login: huggingface-cli login');
-        console.log(`3. Upload: huggingface-cli upload ${options.datasetName} ${exportDir} --repo-type dataset`);
-        throw new Error('HuggingFace upload failed: neither huggingface-cli nor @huggingface/hub available');
+        console.log(
+          `3. Upload: huggingface-cli upload ${options.datasetName} ${exportDir} --repo-type dataset`
+        );
+        throw new Error(
+          'HuggingFace upload failed: neither huggingface-cli nor @huggingface/hub available'
+        );
       }
     }
   } catch (error) {
@@ -444,17 +455,17 @@ export async function exportGroupedByScenario(
 ): Promise<ExportResult> {
   try {
     const { prisma } = await import('@/lib/prisma');
-    
+
     // Get all scenarios
     const scenarios = await prisma.trajectory.findMany({
       where: {
         scenarioId: { not: null },
-        ...buildWhereClause(options)
+        ...buildWhereClause(options),
       },
       select: {
-        scenarioId: true
+        scenarioId: true,
       },
-      distinct: ['scenarioId']
+      distinct: ['scenarioId'],
     });
 
     const fs = await import('node:fs/promises');
@@ -466,37 +477,37 @@ export async function exportGroupedByScenario(
 
     for (const { scenarioId } of scenarios) {
       if (!scenarioId) continue;
-      
+
       // Get all trajectories for this scenario
       const trajectories = await prisma.trajectory.findMany({
         where: {
           scenarioId,
-          ...buildWhereClause(options)
+          ...buildWhereClause(options),
         },
-        orderBy: { startTime: 'asc' }
+        orderBy: { startTime: 'asc' },
       });
 
       if (trajectories.length < 2) continue; // Need at least 2 for comparison
 
       const transformed = trajectories.map((traj) => transformForTraining(traj));
-      
+
       const filePath = path.join(exportDir, `scenario-${scenarioId}.jsonl`);
       const lines = transformed.map((item) => JSON.stringify(item)).join('\n');
       await fs.writeFile(filePath, lines, 'utf-8');
-      
+
       console.log(`Exported ${trajectories.length} trajectories for scenario ${scenarioId}`);
       totalExported += trajectories.length;
     }
 
     return {
       success: true,
-      trajectoriesExported: totalExported
+      trajectoriesExported: totalExported,
     };
   } catch (error) {
     return {
       success: false,
       trajectoriesExported: 0,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 }
@@ -505,29 +516,27 @@ export async function exportGroupedByScenario(
  * Export to OpenPipe ART format
  * Matches the format expected by ART/GRPO training
  */
-export async function exportForOpenPipeART(
-  options: ExportOptions
-): Promise<ExportResult> {
+export async function exportForOpenPipeART(options: ExportOptions): Promise<ExportResult> {
   try {
     const { prisma } = await import('@/lib/prisma');
     const { toARTTrajectory } = await import('./art-format');
-    
+
     const trajectories = await prisma.trajectory.findMany({
       where: buildWhereClause(options),
       take: options.maxTrajectories,
-      orderBy: { startTime: 'asc' }
+      orderBy: { startTime: 'asc' },
     });
 
-    const artFormat = trajectories.map((traj: typeof trajectories[0]) => {
+    const artFormat = trajectories.map((traj: (typeof trajectories)[0]) => {
       const steps = JSON.parse(traj.stepsJson);
       const metrics = JSON.parse(traj.metricsJson);
       const metadata = JSON.parse(traj.metadataJson);
-      
+
       const trajectory = {
         trajectoryId: traj.trajectoryId,
         agentId: traj.agentId as `${string}-${string}-${string}-${string}-${string}`,
         scenarioId: traj.scenarioId,
-        groupIndex: traj.batchId ? parseInt(traj.batchId.split('-').pop() || '0') : undefined,
+        groupIndex: traj.batchId ? parseInt(traj.batchId.split('-').pop() || '0', 10) : undefined,
         startTime: traj.startTime.getTime(),
         endTime: traj.endTime.getTime(),
         durationMs: traj.durationMs,
@@ -535,9 +544,9 @@ export async function exportForOpenPipeART(
         totalReward: traj.totalReward,
         rewardComponents: JSON.parse(traj.rewardComponentsJson),
         metrics,
-        metadata
+        metadata,
       };
-      
+
       return toARTTrajectory(trajectory as Trajectory);
     });
 
@@ -545,22 +554,22 @@ export async function exportForOpenPipeART(
     const path = await import('node:path');
     const exportDir = path.resolve(process.cwd(), 'exports', 'openpipe-art');
     await fs.mkdir(exportDir, { recursive: true });
-    
+
     const filePath = path.join(exportDir, 'trajectories.jsonl');
     const lines = artFormat.map((item) => JSON.stringify(item)).join('\n');
     await fs.writeFile(filePath, lines, 'utf-8');
-    
+
     console.log(`Exported ${artFormat.length} trajectories in OpenPipe ART format`);
 
     return {
       success: true,
-      trajectoriesExported: artFormat.length
+      trajectoriesExported: artFormat.length,
     };
   } catch (error) {
     return {
       success: false,
       trajectoriesExported: 0,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 }
@@ -569,22 +578,20 @@ export async function exportForOpenPipeART(
  * Export trajectories grouped by scenario for GRPO
  * This creates the structure RULER needs for comparative ranking
  */
-export async function exportGroupedForGRPO(
-  options: ExportOptions
-): Promise<ExportResult> {
+export async function exportGroupedForGRPO(options: ExportOptions): Promise<ExportResult> {
   try {
     const { prisma } = await import('@/lib/prisma');
     const { groupTrajectories, toARTTrajectory } = await import('./art-format');
-    
+
     // CRITICAL: Enforce maxTrajectories limit to prevent 200GB disk usage
     const MAX_TRAJECTORIES = options.maxTrajectories || 2000; // Default hard limit
     const MAX_TRAJECTORIES_PER_SCENARIO = 50; // Limit per scenario to prevent huge files
-    
+
     // Get all scenarios
     const scenarios = await prisma.trajectory.groupBy({
       by: ['scenarioId'],
       where: buildWhereClause(options),
-      _count: true
+      _count: true,
     });
 
     const fs = await import('node:fs/promises');
@@ -598,20 +605,17 @@ export async function exportGroupedForGRPO(
     for (const { scenarioId, _count } of scenarios) {
       if (!scenarioId || _count < 2) continue; // Need at least 2 for comparison
       if (remainingQuota <= 0) break; // Stop if we've hit the limit
-      
+
       // Calculate how many trajectories we can take for this scenario
-      const takeForScenario = Math.min(
-        MAX_TRAJECTORIES_PER_SCENARIO,
-        remainingQuota
-      );
-      
+      const takeForScenario = Math.min(MAX_TRAJECTORIES_PER_SCENARIO, remainingQuota);
+
       const trajectories = await prisma.trajectory.findMany({
         where: {
           scenarioId,
-          ...buildWhereClause(options)
+          ...buildWhereClause(options),
         },
         orderBy: { startTime: 'asc' },
-        take: takeForScenario // CRITICAL: Limit per scenario
+        take: takeForScenario, // CRITICAL: Limit per scenario
       });
 
       // Convert to trajectory objects
@@ -627,43 +631,45 @@ export async function exportGroupedForGRPO(
         totalReward: traj.totalReward,
         rewardComponents: JSON.parse(traj.rewardComponentsJson),
         metrics: JSON.parse(traj.metricsJson),
-        metadata: JSON.parse(traj.metadataJson)
+        metadata: JSON.parse(traj.metadataJson),
       }));
 
       const groups = groupTrajectories(trajObjects as Trajectory[]);
-      
+
       for (const group of groups) {
         // Skip if we've hit the global limit
         if (remainingQuota <= 0) break;
-        
+
         const artFormat = {
           groupId: group.groupId,
           scenarioId: group.scenarioId,
           sharedPrefix: group.sharedPrefix || [],
-          trajectories: group.trajectories.map(t => toARTTrajectory(t)),
-          createdAt: group.createdAt
+          trajectories: group.trajectories.map((t) => toARTTrajectory(t)),
+          createdAt: group.createdAt,
         };
-        
+
         const filePath = path.join(exportDir, `group-${scenarioId}.jsonl`);
-        await fs.writeFile(filePath, JSON.stringify(artFormat) + '\n', 'utf-8');
-        
+        await fs.writeFile(filePath, `${JSON.stringify(artFormat)}\n`, 'utf-8');
+
         const exported = group.trajectories.length;
         totalExported += exported;
         remainingQuota -= exported;
       }
     }
 
-    console.log(`Exported ${totalExported} trajectories in ${scenarios.length} GRPO groups (limit: ${MAX_TRAJECTORIES})`);
+    console.log(
+      `Exported ${totalExported} trajectories in ${scenarios.length} GRPO groups (limit: ${MAX_TRAJECTORIES})`
+    );
 
     return {
       success: true,
-      trajectoriesExported: totalExported
+      trajectoriesExported: totalExported,
     };
   } catch (error) {
     return {
       success: false,
       trajectoriesExported: 0,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 }
@@ -673,9 +679,9 @@ export async function exportGroupedForGRPO(
  */
 function buildWhereClause(options: ExportOptions): Prisma.TrajectoryWhereInput {
   const where: Prisma.TrajectoryWhereInput = {
-    isTrainingData: true
+    isTrainingData: true,
   };
-  
+
   if (options.startDate || options.endDate) {
     where.startTime = {};
     if (options.startDate) {
@@ -703,7 +709,6 @@ function buildWhereClause(options: ExportOptions): Prisma.TrajectoryWhereInput {
   if (options.includeJudged) {
     where.aiJudgeReward = { not: null };
   }
-  
+
   return where;
 }
-

@@ -1,15 +1,15 @@
 /**
  * On-Chain Registration API
- * 
+ *
  * @route GET /api/auth/onboard - Get registration status
  * @route POST /api/auth/onboard - Register on-chain
  * @access Authenticated
- * 
+ *
  * @description
  * Handles on-chain user registration and status checking. GET returns current
  * registration status. POST processes on-chain registration with NFT minting
  * and metadata storage. Legacy endpoint that delegates to shared onboarding service.
- * 
+ *
  * @openapi
  * /api/auth/onboard:
  *   get:
@@ -88,14 +88,14 @@
  *         description: Invalid input or already registered
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * // Check status
  * const status = await fetch('/api/auth/onboard', {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
- * 
+ *
  * // Register
  * await fetch('/api/auth/onboard', {
  *   method: 'POST',
@@ -107,28 +107,31 @@
  *   })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/onboarding/onchain-service} On-chain service
  */
 
-import type { NextRequest } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { OnChainRegistrationSchema } from '@/lib/validation/schemas/user'
-import { processOnchainRegistration, getOnchainRegistrationStatus } from '@/lib/onboarding/onchain-service'
-import { logger } from '@/lib/logger'
-import { trackServerEvent } from '@/lib/posthog/server'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import {
+  getOnchainRegistrationStatus,
+  processOnchainRegistration,
+} from '@/lib/onboarding/onchain-service';
+import { trackServerEvent } from '@/lib/posthog/server';
+import { OnChainRegistrationSchema } from '@/lib/validation/schemas/user';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const user = await authenticate(request)
-  const status = await getOnchainRegistrationStatus(user)
-  return successResponse(status)
-})
+  const user = await authenticate(request);
+  const status = await getOnchainRegistrationStatus(user);
+  return successResponse(status);
+});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  const user = await authenticate(request)
-  const body = await request.json()
-  const payload = OnChainRegistrationSchema.parse(body)
+  const user = await authenticate(request);
+  const body = await request.json();
+  const payload = OnChainRegistrationSchema.parse(body);
 
   const result = await processOnchainRegistration({
     user,
@@ -140,14 +143,18 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     coverImageUrl: payload.coverImageUrl,
     endpoint: payload.endpoint,
     referralCode: payload.referralCode,
-  })
+  });
 
-  logger.info('On-chain registration completed', {
-    userId: user.userId,
-    tokenId: result.tokenId,
-    alreadyRegistered: result.alreadyRegistered,
-    isAgent: user.isAgent,
-  }, 'POST /api/auth/onboard')
+  logger.info(
+    'On-chain registration completed',
+    {
+      userId: user.userId,
+      tokenId: result.tokenId,
+      alreadyRegistered: result.alreadyRegistered,
+      isAgent: user.isAgent,
+    },
+    'POST /api/auth/onboard'
+  );
 
   // Track onchain registration event
   trackServerEvent(user.userId, 'onchain_registration_completed', {
@@ -157,8 +164,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     isAgent: user.isAgent,
     hadReferral: Boolean(payload.referralCode),
   }).catch((error) => {
-    logger.warn('Failed to track onchain_registration_completed event', { error });
+    logger.warn('Failed to track onchain_registration_completed event', {
+      error,
+    });
   });
 
-  return successResponse(result)
-})
+  return successResponse(result);
+});

@@ -1,8 +1,8 @@
-export {}
+export {};
 
 declare global {
   interface Window {
-    __privyAccessToken?: string | null
-    __privyGetAccessToken?: () => Promise<string | null>
+    __privyAccessToken?: string | null;
+    __privyGetAccessToken?: () => Promise<string | null>;
   }
 }

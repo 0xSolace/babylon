@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating expert commentary and analysis on world events.
- * 
+ *
  * Creates analytical posts from experts providing commentary on events,
  * market movements, or policy changes. Uses informed, analytical tone
  * with specific references to events and their implications.
- * 
+ *
  * Returns XML with expert commentary and metadata.
  */
 export const commentary = definePrompt({
@@ -74,5 +74,5 @@ Respond with ONLY this XML format (example for 2 commentators):
 </response>
 
 CRITICAL: Return EXACTLY {{commentatorCount}} commentary posts. Each must have post, sentiment, clueStrength, pointsToward elements.
-`.trim()
+`.trim(),
 });

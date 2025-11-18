@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Environment Setup for Prisma CLI
- * 
+ *
  * This script ensures DATABASE_URL is set before running Prisma CLI commands.
  * It handles the Vercel Prisma integration which uses PRISMA_DATABASE_URL.
- * 
+ *
  * Usage:
  *   node prisma/setup-env.js && prisma generate
  *   node prisma/setup-env.js && prisma migrate dev
@@ -43,4 +43,3 @@ const dbUrl = process.env.DATABASE_URL || '';
 const maskedUrl = dbUrl.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@');
 console.log(`Database: ${maskedUrl.substring(0, 60)}...`);
 console.log('');
-

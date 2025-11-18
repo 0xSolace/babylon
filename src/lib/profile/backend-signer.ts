@@ -1,28 +1,27 @@
 /**
  * Backend Profile Signer
- * 
+ *
  * Allows the server to sign profile updates on behalf of users,
  * eliminating the need for signature popups in the UI.
- * 
+ *
  * This enables a seamless UX where profile updates (including username changes)
  * happen instantly without user interaction, while still being recorded on-chain.
  */
 
-import { createPublicClient, createWalletClient, http, type Address } from 'viem';
+import { logger } from '@/lib/logger';
+import {
+  CAPABILITIES_HASH,
+  getIdentityRegistryAddress,
+  identityRegistryAbi,
+} from '@/constants/identity';
+import { type Address, createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
-
-import { 
-  CAPABILITIES_HASH, 
-  getIdentityRegistryAddress, 
-  identityRegistryAbi 
-} from '@/constants/identity';
-import { logger } from '@/lib/logger';
 
 const PROFILE_MANAGER_PRIVATE_KEY = process.env.PROFILE_MANAGER_PRIVATE_KEY;
 const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
 
-export interface ProfileMetadata {
+export type ProfileMetadata = {
   name: string;
   username: string | null;
   bio: string | null;
@@ -30,18 +29,18 @@ export interface ProfileMetadata {
   coverImageUrl: string | null;
   type?: string;
   updated?: string;
-}
+};
 
-export interface BackendSignedUpdateParams {
+export type BackendSignedUpdateParams = {
   userAddress: Address;
   metadata: ProfileMetadata;
   endpoint: string;
-}
+};
 
-export interface BackendSignedUpdateResult {
+export type BackendSignedUpdateResult = {
   txHash: `0x${string}`;
   metadata: ProfileMetadata;
-}
+};
 
 /**
  * Check if backend signing is configured
@@ -52,10 +51,10 @@ export function isBackendSigningEnabled(): boolean {
 
 /**
  * Update user profile by signing the transaction server-side
- * 
+ *
  * This eliminates the need for users to sign transactions for profile updates.
  * The server signs on behalf of the user, providing a seamless UX.
- * 
+ *
  * @param params - Profile update parameters
  * @returns Transaction hash and metadata
  */
@@ -100,10 +99,10 @@ export async function updateProfileBackendSigned({
 
   logger.debug(
     'Submitting on-chain update',
-    { 
-      registry: registryAddress, 
+    {
+      registry: registryAddress,
       endpoint,
-      signer: account.address 
+      signer: account.address,
     },
     'BackendSigner'
   );
@@ -116,11 +115,7 @@ export async function updateProfileBackendSigned({
     args: [endpoint, CAPABILITIES_HASH, metadataJson],
   });
 
-  logger.info(
-    'Profile update transaction submitted',
-    { txHash, userAddress },
-    'BackendSigner'
-  );
+  logger.info('Profile update transaction submitted', { txHash, userAddress }, 'BackendSigner');
 
   // Wait for transaction confirmation
   const receipt = await publicClient.waitForTransactionReceipt({
@@ -146,13 +141,11 @@ export async function updateProfileBackendSigned({
 
 /**
  * Verify a backend-signed transaction was successful
- * 
+ *
  * @param txHash - Transaction hash to verify
  * @returns Whether the transaction succeeded
  */
-export async function verifyBackendSignedUpdate(
-  txHash: `0x${string}`
-): Promise<boolean> {
+export async function verifyBackendSignedUpdate(txHash: `0x${string}`): Promise<boolean> {
   const publicClient = createPublicClient({
     chain: baseSepolia,
     transport: http(RPC_URL),
@@ -161,4 +154,3 @@ export async function verifyBackendSignedUpdate(
   const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
   return receipt.status === 'success';
 }
-

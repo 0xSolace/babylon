@@ -1,19 +1,19 @@
-import { PageContainer } from '@/components/shared/PageContainer'
-import { ChatListSkeleton, Skeleton } from '@/components/shared/Skeleton'
-import { Separator } from '@/components/shared/Separator'
+import { PageContainer } from '@/components/shared/PageContainer';
+import { Separator } from '@/components/shared/Separator';
+import { ChatListSkeleton, Skeleton } from '@/components/shared/Skeleton';
 
 export default function ChatsLoading() {
   return (
     <PageContainer noPadding className="flex flex-col">
       {/* Desktop: Full width content */}
-      <div className="hidden xl:flex flex-1 flex-col overflow-hidden">
+      <div className="hidden flex-1 flex-col overflow-hidden xl:flex">
         <div className="flex-1 overflow-hidden">
           <div className="flex h-full">
             {/* Left Column - Groups List */}
-            <div className="w-full md:w-96 flex flex-col bg-background">
+            <div className="flex w-full flex-col bg-background md:w-96">
               {/* Header with Search */}
               <div className="p-4">
-                <Skeleton className="h-7 w-32 mb-3" />
+                <Skeleton className="mb-3 h-7 w-32" />
                 {/* Search Bar */}
                 <div className="mb-2">
                   <Skeleton className="h-10 w-full rounded-lg" />
@@ -29,12 +29,12 @@ export default function ChatsLoading() {
             </div>
 
             {/* Right Column - Empty state */}
-            <div className="flex-1 flex flex-col bg-background">
-              <div className="flex-1 flex items-center justify-center p-8">
-                <div className="text-center space-y-3 max-w-md w-full px-4">
-                  <Skeleton className="w-16 h-16 rounded-full mx-auto" />
-                  <Skeleton className="h-6 w-48 max-w-full mx-auto" />
-                  <Skeleton className="h-4 w-64 max-w-full mx-auto" />
+            <div className="flex flex-1 flex-col bg-background">
+              <div className="flex flex-1 items-center justify-center p-8">
+                <div className="w-full max-w-md space-y-3 px-4 text-center">
+                  <Skeleton className="mx-auto h-16 w-16 rounded-full" />
+                  <Skeleton className="mx-auto h-6 w-48 max-w-full" />
+                  <Skeleton className="mx-auto h-4 w-64 max-w-full" />
                 </div>
               </div>
             </div>
@@ -43,14 +43,14 @@ export default function ChatsLoading() {
       </div>
 
       {/* Mobile/Tablet: Full width content */}
-      <div className="flex xl:hidden flex-col flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden xl:hidden">
         <div className="flex-1 overflow-hidden">
           <div className="flex h-full">
             {/* Groups List */}
-            <div className="w-full flex flex-col bg-background">
+            <div className="flex w-full flex-col bg-background">
               {/* Header with Search */}
               <div className="p-4">
-                <Skeleton className="h-7 w-32 mb-3" />
+                <Skeleton className="mb-3 h-7 w-32" />
                 {/* Search Bar */}
                 <div className="mb-2">
                   <Skeleton className="h-10 w-full rounded-lg" />
@@ -68,6 +68,5 @@ export default function ChatsLoading() {
         </div>
       </div>
     </PageContainer>
-  )
+  );
 }
-

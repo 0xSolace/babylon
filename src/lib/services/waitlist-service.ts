@@ -3,41 +3,41 @@
  * Manages waitlist signups, positions, and invite codes
  */
 
-import { prisma } from '@/lib/prisma';
+import { NotFoundError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
 import { nanoid } from 'nanoid';
-import { NotFoundError } from '@/lib/errors';
 
-export interface WaitlistMarkResult {
-  success: boolean
-  waitlistPosition: number
-  inviteCode: string
-  points: number
-  referrerRewarded?: boolean
-  error?: string
-}
+export type WaitlistMarkResult = {
+  success: boolean;
+  waitlistPosition: number;
+  inviteCode: string;
+  points: number;
+  referrerRewarded?: boolean;
+  error?: string;
+};
 
-export interface WaitlistPosition {
-  waitlistPosition: number // Historical signup order (for records)
-  leaderboardRank: number  // Actual position in line (dynamic, based on points)
-  totalAhead: number       // How many people are ahead (by points)
-  totalCount: number       // Total people on waitlist
-  percentile: number       // Top X% of waitlist
-  inviteCode: string
-  points: number
-  invitePoints: number
-  earnedPoints: number
-  bonusPoints: number
-  referralCount: number
-}
+export type WaitlistPosition = {
+  waitlistPosition: number; // Historical signup order (for records)
+  leaderboardRank: number; // Actual position in line (dynamic, based on points)
+  totalAhead: number; // How many people are ahead (by points)
+  totalCount: number; // Total people on waitlist
+  percentile: number; // Top X% of waitlist
+  inviteCode: string;
+  points: number;
+  invitePoints: number;
+  earnedPoints: number;
+  bonusPoints: number;
+  referralCount: number;
+};
 
 export class WaitlistService {
   /**
    * Generate a unique invite code
    */
   static generateInviteCode(): string {
-    return nanoid(8).toUpperCase()
+    return nanoid(8).toUpperCase();
   }
 
   /**
@@ -62,62 +62,78 @@ export class WaitlistService {
         bonusPoints: true,
         isWaitlistActive: true,
       },
-    })
+    });
 
     if (!user) {
-      throw new NotFoundError('User', userId, 'User must complete onboarding before joining waitlist')
+      throw new NotFoundError(
+        'User',
+        userId,
+        'User must complete onboarding before joining waitlist'
+      );
     }
 
     // If user already marked as waitlisted, still check for referral code validation
     // but don't change their position or status
     if (user.waitlistPosition && user.isWaitlistActive) {
       // Still validate referral code if provided (for self-referral/double-referral checks)
-      let referrerRewarded = false
-      
+      let referrerRewarded = false;
+
       if (referralCode) {
         const referrer = await prisma.user.findUnique({
           where: { referralCode },
-          select: { 
+          select: {
             id: true,
           },
-        })
+        });
 
         if (referrer) {
           // PREVENT SELF-REFERRAL: Can't refer yourself!
           if (referrer.id === userId) {
-            logger.warn(`User ${userId} attempted self-referral`, {
-              userId,
-              referralCode,
-            }, 'WaitlistService')
-            referrerRewarded = false
+            logger.warn(
+              `User ${userId} attempted self-referral`,
+              {
+                userId,
+                referralCode,
+              },
+              'WaitlistService'
+            );
+            referrerRewarded = false;
           }
           // PREVENT DOUBLE-REFERRAL: Check if user was already referred
           else if (user.referredBy) {
-            logger.warn(`User ${userId} already referred by ${user.referredBy}, ignoring new referral`, {
-              userId,
-              existingReferrer: user.referredBy,
-              attemptedReferrer: referrer.id,
-            }, 'WaitlistService')
-            referrerRewarded = false
+            logger.warn(
+              `User ${userId} already referred by ${user.referredBy}, ignoring new referral`,
+              {
+                userId,
+                existingReferrer: user.referredBy,
+                attemptedReferrer: referrer.id,
+              },
+              'WaitlistService'
+            );
+            referrerRewarded = false;
           }
           // Valid referral - but user already waitlisted, so don't reward again
           else {
-            referrerRewarded = false
-            logger.info(`User ${userId} already waitlisted, referral code ${referralCode} ignored`, {
-              userId,
-              referralCode,
-            }, 'WaitlistService')
+            referrerRewarded = false;
+            logger.info(
+              `User ${userId} already waitlisted, referral code ${referralCode} ignored`,
+              {
+                userId,
+                referralCode,
+              },
+              'WaitlistService'
+            );
           }
         }
       }
-      
+
       return {
         success: true,
         waitlistPosition: user.waitlistPosition,
         inviteCode: user.referralCode || '',
         points: user.reputationPoints,
         referrerRewarded,
-      }
+      };
     }
 
     // Get the highest waitlist position
@@ -125,51 +141,59 @@ export class WaitlistService {
       where: { waitlistPosition: { not: null } },
       orderBy: { waitlistPosition: 'desc' },
       select: { waitlistPosition: true },
-    })
+    });
 
-    const newPosition = (lastPosition?.waitlistPosition || 0) + 1
-    
+    const newPosition = (lastPosition?.waitlistPosition || 0) + 1;
+
     // Generate invite code if user doesn't have one
-    const inviteCode = user.referralCode || this.generateInviteCode()
+    const inviteCode = user.referralCode || WaitlistService.generateInviteCode();
 
     // Handle referral rewards with validation
-    let referrerRewarded = false
-    
+    let referrerRewarded = false;
+
     if (referralCode) {
       const referrer = await prisma.user.findUnique({
         where: { referralCode },
-        select: { 
+        select: {
           id: true,
           reputationPoints: true,
           invitePoints: true,
           referralCount: true,
         },
-      })
+      });
 
       if (referrer) {
         // PREVENT SELF-REFERRAL: Can't refer yourself!
         if (referrer.id === userId) {
-          logger.warn(`User ${userId} attempted self-referral`, {
-            userId,
-            referralCode,
-          }, 'WaitlistService')
-          referrerRewarded = false
+          logger.warn(
+            `User ${userId} attempted self-referral`,
+            {
+              userId,
+              referralCode,
+            },
+            'WaitlistService'
+          );
+          referrerRewarded = false;
         }
         // PREVENT DOUBLE-REFERRAL: Check if user was already referred
         else if (user.referredBy) {
-          logger.warn(`User ${userId} already referred by ${user.referredBy}, ignoring new referral`, {
-            userId,
-            existingReferrer: user.referredBy,
-            attemptedReferrer: referrer.id,
-          }, 'WaitlistService')
-          referrerRewarded = false
+          logger.warn(
+            `User ${userId} already referred by ${user.referredBy}, ignoring new referral`,
+            {
+              userId,
+              existingReferrer: user.referredBy,
+              attemptedReferrer: referrer.id,
+            },
+            'WaitlistService'
+          );
+          referrerRewarded = false;
         }
         // Valid referral - award points!
         else {
           // Award +50 points to referrer
-          const newInvitePoints = referrer.invitePoints + 50
-          const newReputationPoints = referrer.reputationPoints + 50
-          
+          const newInvitePoints = referrer.invitePoints + 50;
+          const newReputationPoints = referrer.reputationPoints + 50;
+
           await prisma.user.update({
             where: { id: referrer.id },
             data: {
@@ -177,7 +201,7 @@ export class WaitlistService {
               reputationPoints: newReputationPoints,
               referralCount: { increment: 1 },
             },
-          })
+          });
 
           // Create points transaction for referrer
           await prisma.pointsTransaction.create({
@@ -193,20 +217,28 @@ export class WaitlistService {
                 referredUserId: userId,
               }),
             },
-          })
+          });
 
-          referrerRewarded = true
-          
-          logger.info(`Rewarded referrer ${referrer.id} with 50 points`, {
-            referrerId: referrer.id,
-            newPoints: newReputationPoints,
-          }, 'WaitlistService')
+          referrerRewarded = true;
+
+          logger.info(
+            `Rewarded referrer ${referrer.id} with 50 points`,
+            {
+              referrerId: referrer.id,
+              newPoints: newReputationPoints,
+            },
+            'WaitlistService'
+          );
         }
       } else {
-        logger.warn(`Invalid referral code: ${referralCode}`, {
-          userId,
-          referralCode,
-        }, 'WaitlistService')
+        logger.warn(
+          `Invalid referral code: ${referralCode}`,
+          {
+            userId,
+            referralCode,
+          },
+          'WaitlistService'
+        );
       }
     }
 
@@ -220,20 +252,28 @@ export class WaitlistService {
         waitlistJoinedAt: new Date(),
         isWaitlistActive: true,
         referralCode: inviteCode,
-        ...(referrerRewarded && referralCode ? {
-          referredBy: (await prisma.user.findUnique({
-            where: { referralCode },
-            select: { id: true }
-          }))?.id
-        } : {}),
+        ...(referrerRewarded && referralCode
+          ? {
+              referredBy: (
+                await prisma.user.findUnique({
+                  where: { referralCode },
+                  select: { id: true },
+                })
+              )?.id,
+            }
+          : {}),
       },
-    })
+    });
 
-    logger.info(`User marked as waitlisted`, {
-      userId,
-      position: newPosition,
-      referrerRewarded,
-    }, 'WaitlistService')
+    logger.info(
+      `User marked as waitlisted`,
+      {
+        userId,
+        position: newPosition,
+        referrerRewarded,
+      },
+      'WaitlistService'
+    );
 
     return {
       success: true,
@@ -241,7 +281,7 @@ export class WaitlistService {
       inviteCode,
       points: user.reputationPoints,
       referrerRewarded,
-    }
+    };
   }
 
   /**
@@ -254,10 +294,10 @@ export class WaitlistService {
         isWaitlistActive: false,
         waitlistGraduatedAt: new Date(),
       },
-    })
+    });
 
-    logger.info('User graduated from waitlist', { userId }, 'WaitlistService')
-    return true
+    logger.info('User graduated from waitlist', { userId }, 'WaitlistService');
+    return true;
   }
 
   /**
@@ -279,53 +319,52 @@ export class WaitlistService {
         bonusPoints: true,
         referralCount: true,
       },
-    })
+    });
 
     if (!user || !user.isWaitlistActive) {
-      return null
+      return null;
     }
 
-      // Count users ahead in line based on INVITE POINTS (viral loop!)
-      // Users with more invites are closer to the front
-      const usersAhead = await prisma.user.count({
-        where: {
-          isWaitlistActive: true,
-          OR: [
-            // Primary sort: More invite points = better position
-            { invitePoints: { gt: user.invitePoints } },
-            // Tie-breaker: If same invite points, earlier signup wins
-            {
-              invitePoints: user.invitePoints,
-              waitlistJoinedAt: { lt: user.waitlistJoinedAt || new Date() },
-            },
-          ],
-        },
-      })
+    // Count users ahead in line based on INVITE POINTS (viral loop!)
+    // Users with more invites are closer to the front
+    const usersAhead = await prisma.user.count({
+      where: {
+        isWaitlistActive: true,
+        OR: [
+          // Primary sort: More invite points = better position
+          { invitePoints: { gt: user.invitePoints } },
+          // Tie-breaker: If same invite points, earlier signup wins
+          {
+            invitePoints: user.invitePoints,
+            waitlistJoinedAt: { lt: user.waitlistJoinedAt || new Date() },
+          },
+        ],
+      },
+    });
 
-      // Calculate leaderboard rank (actual position in line)
-      const leaderboardRank = usersAhead + 1
+    // Calculate leaderboard rank (actual position in line)
+    const leaderboardRank = usersAhead + 1;
 
-      // Get total waitlist count
-      const totalCount = await this.getTotalWaitlistCount()
+    // Get total waitlist count
+    const totalCount = await WaitlistService.getTotalWaitlistCount();
 
-      // Calculate percentile (what % of people are behind you)
-      const percentile = totalCount > 0 
-        ? Math.round(((totalCount - usersAhead) / totalCount) * 100) 
-        : 100
+    // Calculate percentile (what % of people are behind you)
+    const percentile =
+      totalCount > 0 ? Math.round(((totalCount - usersAhead) / totalCount) * 100) : 100;
 
-      return {
-        waitlistPosition: user.waitlistPosition || 0,  // Historical record
-        leaderboardRank,                               // What users see!
-        totalAhead: usersAhead,
-        totalCount,
-        percentile,
-        inviteCode: user.referralCode || '',
-        points: user.reputationPoints,
-        invitePoints: user.invitePoints,
-        earnedPoints: user.earnedPoints,
-        bonusPoints: user.bonusPoints,
-        referralCount: user.referralCount,
-      }
+    return {
+      waitlistPosition: user.waitlistPosition || 0, // Historical record
+      leaderboardRank, // What users see!
+      totalAhead: usersAhead,
+      totalCount,
+      percentile,
+      inviteCode: user.referralCode || '',
+      points: user.reputationPoints,
+      invitePoints: user.invitePoints,
+      earnedPoints: user.earnedPoints,
+      bonusPoints: user.bonusPoints,
+      referralCount: user.referralCount,
+    };
   }
 
   /**
@@ -339,20 +378,20 @@ export class WaitlistService {
         reputationPoints: true,
         bonusPoints: true,
       },
-    })
+    });
 
     if (!user) {
-      return false
+      return false;
     }
 
     // Don't award if already awarded
     if (user.pointsAwardedForEmail) {
-      return false
+      return false;
     }
 
-    const bonusAmount = 25
-    const newBonusPoints = user.bonusPoints + bonusAmount
-    const newReputationPoints = user.reputationPoints + bonusAmount
+    const bonusAmount = 25;
+    const newBonusPoints = user.bonusPoints + bonusAmount;
+    const newReputationPoints = user.reputationPoints + bonusAmount;
 
     await prisma.user.update({
       where: { id: userId },
@@ -363,7 +402,7 @@ export class WaitlistService {
         bonusPoints: newBonusPoints,
         reputationPoints: newReputationPoints,
       },
-    })
+    });
 
     // Create points transaction
     await prisma.pointsTransaction.create({
@@ -376,14 +415,18 @@ export class WaitlistService {
         reason: 'email_verification',
         metadata: JSON.stringify({ email }),
       },
-    })
+    });
 
-    logger.info(`Awarded email bonus to user ${userId}`, {
-      userId,
-      bonusAmount,
-    }, 'WaitlistService')
+    logger.info(
+      `Awarded email bonus to user ${userId}`,
+      {
+        userId,
+        bonusAmount,
+      },
+      'WaitlistService'
+    );
 
-    return true
+    return true;
   }
 
   /**
@@ -397,20 +440,20 @@ export class WaitlistService {
         reputationPoints: true,
         bonusPoints: true,
       },
-    })
+    });
 
     if (!user) {
-      return false
+      return false;
     }
 
     // Don't award if already awarded
     if (user.pointsAwardedForWallet) {
-      return false
+      return false;
     }
 
-    const bonusAmount = 25
-    const newBonusPoints = user.bonusPoints + bonusAmount
-    const newReputationPoints = user.reputationPoints + bonusAmount
+    const bonusAmount = 25;
+    const newBonusPoints = user.bonusPoints + bonusAmount;
+    const newReputationPoints = user.reputationPoints + bonusAmount;
 
     await prisma.user.update({
       where: { id: userId },
@@ -420,7 +463,7 @@ export class WaitlistService {
         bonusPoints: newBonusPoints,
         reputationPoints: newReputationPoints,
       },
-    })
+    });
 
     // Create points transaction
     await prisma.pointsTransaction.create({
@@ -433,14 +476,18 @@ export class WaitlistService {
         reason: 'wallet_connect',
         metadata: JSON.stringify({ walletAddress }),
       },
-    })
+    });
 
-    logger.info(`Awarded wallet bonus to user ${userId}`, {
-      userId,
-      bonusAmount,
-    }, 'WaitlistService')
+    logger.info(
+      `Awarded wallet bonus to user ${userId}`,
+      {
+        userId,
+        bonusAmount,
+      },
+      'WaitlistService'
+    );
 
-    return true
+    return true;
   }
 
   /**
@@ -452,7 +499,7 @@ export class WaitlistService {
         waitlistPosition: { not: null },
         isWaitlistActive: true,
       },
-    })
+    });
   }
 
   /**
@@ -463,8 +510,8 @@ export class WaitlistService {
     const users = await prisma.user.findMany({
       where: { isWaitlistActive: true },
       orderBy: [
-        { invitePoints: 'desc' },       // Primary: Most invite points
-        { waitlistJoinedAt: 'asc' },    // Tie-breaker: Earlier signup
+        { invitePoints: 'desc' }, // Primary: Most invite points
+        { waitlistJoinedAt: 'asc' }, // Tie-breaker: Earlier signup
       ],
       take: limit,
       select: {
@@ -477,12 +524,11 @@ export class WaitlistService {
         referralCount: true,
         waitlistJoinedAt: true,
       },
-    })
+    });
 
     return users.map((user, index) => ({
       ...user,
       rank: index + 1,
-    }))
+    }));
   }
 }
-

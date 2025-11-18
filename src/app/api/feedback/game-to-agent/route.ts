@@ -1,13 +1,13 @@
 /**
  * Game-to-Agent Feedback API
- * 
+ *
  * @route POST /api/feedback/game-to-agent - Submit game feedback for agent
  * @access Public
- * 
+ *
  * @description
  * Allows games to submit performance feedback for agents. Primary mechanism
  * for rating agent performance in games. Updates agent metrics and reputation.
- * 
+ *
  * @openapi
  * /api/feedback/game-to-agent:
  *   post:
@@ -47,7 +47,7 @@
  *         description: Feedback submitted successfully
  *       400:
  *         description: Invalid input
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/feedback/game-to-agent', {
@@ -62,16 +62,16 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
-import { updateGameMetrics, updateFeedbackMetrics } from '@/lib/reputation/reputation-service'
-import { requireUserByIdentifier } from '@/lib/users/user-lookup'
-import { logger } from '@/lib/logger'
-import { generateSnowflakeId } from '@/lib/snowflake'
-import { submitFeedbackToAgent0 } from '@/lib/reputation/agent0-reputation-sync'
-import { z } from 'zod'
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { submitFeedbackToAgent0 } from '@/lib/reputation/agent0-reputation-sync';
+import { updateFeedbackMetrics, updateGameMetrics } from '@/lib/reputation/reputation-service';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import { requireUserByIdentifier } from '@/lib/users/user-lookup';
+import type { Prisma } from '@prisma/client';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const GameFeedbackSchema = z.object({
   agentId: z.string().min(1, 'agentId is required'),
@@ -80,15 +80,15 @@ const GameFeedbackSchema = z.object({
   won: z.boolean(),
   comment: z.string().max(5000).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-})
+});
 
 export async function POST(request: NextRequest) {
-  const json = await request.json()
-  const parsed = GameFeedbackSchema.parse(json)
+  const json = await request.json();
+  const parsed = GameFeedbackSchema.parse(json);
 
-  const body = parsed
+  const body = parsed;
 
-  const agent = await requireUserByIdentifier(body.agentId)
+  const agent = await requireUserByIdentifier(body.agentId);
 
   // Check if feedback already exists for this game
   const existingFeedback = await prisma.feedback.findFirst({
@@ -97,14 +97,14 @@ export async function POST(request: NextRequest) {
       gameId: body.gameId,
       interactionType: 'game_to_agent',
     },
-  })
+  });
 
   if (existingFeedback) {
     logger.warn('Feedback already exists for this game', {
       feedbackId: existingFeedback.id,
       agentId: agent.id,
       gameId: body.gameId,
-    })
+    });
     return NextResponse.json(
       {
         success: false,
@@ -112,10 +112,10 @@ export async function POST(request: NextRequest) {
         feedbackId: existingFeedback.id,
       },
       { status: 409 }
-    )
+    );
   }
 
-  const now = new Date()
+  const now = new Date();
   const feedback = await prisma.feedback.create({
     data: {
       id: await generateSnowflakeId(),
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       createdAt: now,
       updatedAt: now,
     },
-  })
+  });
 
   logger.info('Game feedback created', {
     feedbackId: feedback.id,
@@ -136,13 +136,13 @@ export async function POST(request: NextRequest) {
     gameId: body.gameId,
     score: body.score,
     won: body.won,
-  })
+  });
 
-  await updateGameMetrics(agent.id, body.score, body.won)
+  await updateGameMetrics(agent.id, body.score, body.won);
   await updateFeedbackMetrics(agent.id, body.score, {
     category: 'game_performance',
     interactionType: 'game_to_agent',
-  })
+  });
 
   // Submit to Agent0 network (fire-and-forget with error handling)
   submitFeedbackToAgent0(feedback.id).catch((error) => {
@@ -151,8 +151,8 @@ export async function POST(request: NextRequest) {
       agentId: agent.id,
       gameId: body.gameId,
       error,
-    })
-  })
+    });
+  });
 
   const metrics = await prisma.agentPerformanceMetrics.findUnique({
     where: { userId: agent.id },
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
       averageGameScore: true,
       averageFeedbackScore: true,
     },
-  })
+  });
 
   return NextResponse.json(
     {
@@ -174,5 +174,5 @@ export async function POST(request: NextRequest) {
       reputation: metrics,
     },
     { status: 201 }
-  )
+  );
 }

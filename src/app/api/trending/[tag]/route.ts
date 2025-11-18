@@ -1,13 +1,13 @@
 /**
  * Trending Tag Detail API
- * 
+ *
  * @route GET /api/trending/[tag] - Get posts by tag
  * @access Public (optional authentication for RLS)
- * 
+ *
  * @description
  * Returns posts with a specific tag. Supports pagination. Optional authentication
  * applies RLS for personalized results.
- * 
+ *
  * @openapi
  * /api/trending/{tag}:
  *   get:
@@ -48,7 +48,7 @@
  *                   type: array
  *       401:
  *         description: Unauthorized (optional)
- * 
+ *
  * @example
  * ```typescript
  * const { posts } = await fetch('/api/trending/crypto?limit=20')
@@ -56,20 +56,17 @@
  * ```
  */
 
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server'
-import { optionalAuth } from '@/lib/api/auth-middleware'
-import { asUser, asPublic } from '@/lib/db/context'
-import { getPostsByTag } from '@/lib/services/tag-storage-service'
+import { optionalAuth } from '@/lib/api/auth-middleware';
+import { asPublic, asUser } from '@/lib/db/context';
+import { getPostsByTag } from '@/lib/services/tag-storage-service';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ tag: string }> }
-) {
-  const { tag } = await params
-  const url = new URL(request.url)
-  const limit = parseInt(url.searchParams.get('limit') || '20')
-  const offset = parseInt(url.searchParams.get('offset') || '0')
+export async function GET(request: NextRequest, { params }: { params: Promise<{ tag: string }> }) {
+  const { tag } = await params;
+  const url = new URL(request.url);
+  const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+  const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
   if (!tag) {
     return NextResponse.json(
@@ -78,10 +75,10 @@ export async function GET(
         error: 'Tag parameter is required',
       },
       { status: 400 }
-    )
+    );
   }
 
-  const result = await getPostsByTag(tag, { limit, offset })
+  const result = await getPostsByTag(tag, { limit, offset });
 
   if (!result.tag) {
     return NextResponse.json(
@@ -92,17 +89,18 @@ export async function GET(
         total: 0,
       },
       { status: 404 }
-    )
+    );
   }
 
-    // Optional auth - trending posts are public but RLS still applies
-    const authUser = await optionalAuth(request).catch(() => null)
+  // Optional auth - trending posts are public but RLS still applies
+  const authUser = await optionalAuth(request).catch(() => null);
 
-    // Enrich posts with author information and engagement stats with RLS
-    const enrichedPosts = await Promise.all(
-      result.posts.map(async (post) => {
-        // Get author info (could be User, Actor, or Organization)
-        const [user, actor, org, likeCount, commentCount, shareCount, userLike, userShare] = (authUser && authUser.userId)
+  // Enrich posts with author information and engagement stats with RLS
+  const enrichedPosts = await Promise.all(
+    result.posts.map(async (post) => {
+      // Get author info (could be User, Actor, or Organization)
+      const [user, actor, org, likeCount, commentCount, shareCount, userLike, userShare] =
+        authUser?.userId
           ? await asUser(authUser, async (db) => {
               return await Promise.all([
                 db.user.findUnique({
@@ -141,14 +139,18 @@ export async function GET(
                   where: { postId: post.id },
                 }),
                 db.reaction.findFirst({
-                  where: { postId: post.id, userId: authUser.userId, type: 'like' },
+                  where: {
+                    postId: post.id,
+                    userId: authUser.userId,
+                    type: 'like',
+                  },
                   select: { id: true },
                 }),
                 db.share.findFirst({
                   where: { postId: post.id, userId: authUser.userId },
                   select: { id: true },
                 }),
-              ])
+              ]);
             })
           : await asPublic(async (db) => {
               return await Promise.all([
@@ -189,30 +191,32 @@ export async function GET(
                 }),
                 null, // No user context for public requests
                 null, // No user context for public requests
-              ])
-            })
+              ]);
+            });
 
-        // Determine author info
-        const authorName = user?.displayName || user?.username || actor?.name || org?.name || 'Unknown'
-        const authorUsername = user?.username || null
-        const authorProfileImageUrl = user?.profileImageUrl || actor?.profileImageUrl || org?.imageUrl || null
+      // Determine author info
+      const authorName =
+        user?.displayName || user?.username || actor?.name || org?.name || 'Unknown';
+      const authorUsername = user?.username || null;
+      const authorProfileImageUrl =
+        user?.profileImageUrl || actor?.profileImageUrl || org?.imageUrl || null;
 
-        return {
-          id: post.id,
-          content: post.content,
-          authorId: post.authorId,
-          authorName,
-          authorUsername,
-          authorProfileImageUrl,
-          timestamp: post.timestamp.toISOString(),
-          likeCount,
-          commentCount,
-          shareCount,
-          isLiked: !!userLike,
-          isShared: !!userShare,
-        }
-      })
-    )
+      return {
+        id: post.id,
+        content: post.content,
+        authorId: post.authorId,
+        authorName,
+        authorUsername,
+        authorProfileImageUrl,
+        timestamp: post.timestamp.toISOString(),
+        likeCount,
+        commentCount,
+        shareCount,
+        isLiked: !!userLike,
+        isShared: !!userShare,
+      };
+    })
+  );
 
   return NextResponse.json({
     success: true,
@@ -223,6 +227,5 @@ export async function GET(
     },
     posts: enrichedPosts,
     total: result.total,
-  })
+  });
 }
-

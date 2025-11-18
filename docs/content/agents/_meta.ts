@@ -10,5 +10,5 @@ export default {
   'trajectory-logging': 'Trajectory Logging & Training',
   'python-training': 'Python RL Training System',
   'examples-python-langgraph': 'Example: Python LangGraph Agent',
-  'examples-typescript-autonomous': 'Example: TypeScript Autonomous Agent'
-}
+  'examples-typescript-autonomous': 'Example: TypeScript Autonomous Agent',
+};

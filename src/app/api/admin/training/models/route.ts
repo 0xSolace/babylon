@@ -1,13 +1,13 @@
 /**
  * Admin Training Models API
- * 
+ *
  * @route GET /api/admin/training/models - Get trained models
  * @access Admin
- * 
+ *
  * @description
  * Returns all trained model versions with metadata from database and blob storage.
  * Includes version, performance metrics, and deployment status.
- * 
+ *
  * @openapi
  * /api/admin/training/models:
  *   get:
@@ -40,7 +40,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const { models } = await fetch('/api/admin/training/models', {
@@ -49,9 +49,9 @@
  * ```
  */
 
-import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { modelStorage } from '@/lib/training/storage/ModelStorageService';
+import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,15 +60,15 @@ export async function GET() {
     // Get models from database
     const dbModels = await prisma.trainedModel.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 20
+      take: 20,
     });
 
     // Get models from Vercel Blob
     const blobModels = await modelStorage.listModels();
 
     // Merge data
-    const models = dbModels.map(dbModel => {
-      const blobModel = blobModels.find(b => b.version === dbModel.version);
+    const models = dbModels.map((dbModel) => {
+      const blobModel = blobModels.find((b) => b.version === dbModel.version);
 
       return {
         version: dbModel.version,
@@ -80,24 +80,22 @@ export async function GET() {
         agentsUsing: dbModel.agentsUsing,
         blobUrl: dbModel.storagePath,
         size: blobModel?.size || 0,
-        wandbRunId: dbModel.wandbRunId
+        wandbRunId: dbModel.wandbRunId,
       };
     });
 
     return NextResponse.json({
       success: true,
       models,
-      total: models.length
+      total: models.length,
     });
-
   } catch (error) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch models'
+        error: error instanceof Error ? error.message : 'Failed to fetch models',
       },
       { status: 500 }
     );
   }
 }
-

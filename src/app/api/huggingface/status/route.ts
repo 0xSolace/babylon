@@ -1,13 +1,13 @@
 /**
  * HuggingFace Integration Status API
- * 
+ *
  * @route GET /api/huggingface/status - Get HuggingFace status
  * @access Public
- * 
+ *
  * @description
  * Returns status and statistics for the HuggingFace integration system.
  * Useful for monitoring, debugging, and dashboard displays.
- * 
+ *
  * @openapi
  * /api/huggingface/status:
  *   get:
@@ -27,7 +27,7 @@
  *                   type: string
  *                 statistics:
  *                   type: object
- * 
+ *
  * @example
  * ```typescript
  * const status = await fetch('/api/huggingface/status')
@@ -35,9 +35,9 @@
  * ```
  */
 
-import { NextResponse } from 'next/server';
 import { huggingFaceIntegration } from '@/lib/huggingface/HuggingFaceIntegrationService';
 import { logger } from '@/lib/logger';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
@@ -64,7 +64,8 @@ export async function GET() {
       environment: {
         hasToken: !!(process.env.HUGGING_FACE_TOKEN || process.env.HF_TOKEN),
         datasetName: process.env.HF_DATASET_NAME || 'babylonlabs/agent-benchmarks',
-        trajectoryDatasetName: process.env.HF_TRAJECTORY_DATASET_NAME || 'babylonlabs/agent-trajectories',
+        trajectoryDatasetName:
+          process.env.HF_TRAJECTORY_DATASET_NAME || 'babylonlabs/agent-trajectories',
         modelNamePrefix: process.env.HF_MODEL_NAME || 'babylonlabs/babylon-agent',
       },
       nextScheduledRun: 'Sundays at 2 AM UTC',
@@ -81,6 +82,3 @@ export async function GET() {
     );
   }
 }
-
-
-

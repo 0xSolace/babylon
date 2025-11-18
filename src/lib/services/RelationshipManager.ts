@@ -1,6 +1,6 @@
 /**
  * Relationship Manager Service
- * 
+ *
  * Handles all actor relationship logic including:
  * - Relationship queries and lookups
  * - Follow relationship management
@@ -9,13 +9,13 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import type { Actor, ActorRelationship, ActorTier, RELATIONSHIP_TYPES } from '@/shared/types';
+import type { Actor, ActorRelationship, RELATIONSHIP_TYPES } from '@/shared/types';
 import type { Prisma } from '@prisma/client';
 
 /**
  * Relationship context for LLM prompts
  */
-export interface RelationshipContext {
+export type RelationshipContext = {
   actorId: string;
   relationships: Array<{
     otherActorId: string;
@@ -26,19 +26,19 @@ export interface RelationshipContext {
     history?: string;
   }>;
   contextString: string;
-}
+};
 
 /**
  * Relationship statistics for an actor
  */
-export interface RelationshipStats {
+export type RelationshipStats = {
   actorId: string;
   followerCount: number;
   followingCount: number;
   mutualFollowCount: number;
   relationshipCount: number;
   relationshipsByType: Record<string, number>;
-}
+};
 
 export class RelationshipManager {
   /**
@@ -47,10 +47,7 @@ export class RelationshipManager {
   static async getActorRelationships(actorId: string): Promise<ActorRelationship[]> {
     const relationships = await prisma.actorRelationship.findMany({
       where: {
-        OR: [
-          { actor1Id: actorId },
-          { actor2Id: actorId },
-        ],
+        OR: [{ actor1Id: actorId }, { actor2Id: actorId }],
       },
       include: {
         Actor_ActorRelationship_actor1IdToActor: {
@@ -72,11 +69,12 @@ export class RelationshipManager {
       },
     });
 
-    return relationships.map(rel => ({
+    return relationships.map((rel) => ({
       id: rel.id,
       actor1Id: rel.actor1Id,
       actor2Id: rel.actor2Id,
-      relationshipType: rel.relationshipType as typeof RELATIONSHIP_TYPES[keyof typeof RELATIONSHIP_TYPES],
+      relationshipType:
+        rel.relationshipType as (typeof RELATIONSHIP_TYPES)[keyof typeof RELATIONSHIP_TYPES],
       strength: rel.strength,
       sentiment: rel.sentiment,
       isPublic: rel.isPublic,
@@ -109,7 +107,8 @@ export class RelationshipManager {
       id: relationship.id,
       actor1Id: relationship.actor1Id,
       actor2Id: relationship.actor2Id,
-      relationshipType: relationship.relationshipType as typeof RELATIONSHIP_TYPES[keyof typeof RELATIONSHIP_TYPES],
+      relationshipType:
+        relationship.relationshipType as (typeof RELATIONSHIP_TYPES)[keyof typeof RELATIONSHIP_TYPES],
       strength: relationship.strength,
       sentiment: relationship.sentiment,
       isPublic: relationship.isPublic,
@@ -136,8 +135,8 @@ export class RelationshipManager {
       },
     });
 
-    return follows.map(f => ({
-      ...this.mapActorFromPrisma(f.Actor_ActorFollow_followingIdToActor),
+    return follows.map((f) => ({
+      ...RelationshipManager.mapActorFromPrisma(f.Actor_ActorFollow_followingIdToActor),
       followedAt: f.createdAt,
     }));
   }
@@ -158,8 +157,8 @@ export class RelationshipManager {
       },
     });
 
-    return follows.map(f => ({
-      ...this.mapActorFromPrisma(f.Actor_ActorFollow_followerIdToActor),
+    return follows.map((f) => ({
+      ...RelationshipManager.mapActorFromPrisma(f.Actor_ActorFollow_followerIdToActor),
       followedAt: f.createdAt,
     }));
   }
@@ -224,9 +223,11 @@ export class RelationshipManager {
       },
     });
 
-    const relationshipData = relationships.map(rel => {
+    const relationshipData = relationships.map((rel) => {
       const isActor1 = rel.actor1Id === actorId;
-      const otherActor = isActor1 ? rel.Actor_ActorRelationship_actor2IdToActor : rel.Actor_ActorRelationship_actor1IdToActor;
+      const otherActor = isActor1
+        ? rel.Actor_ActorRelationship_actor2IdToActor
+        : rel.Actor_ActorRelationship_actor1IdToActor;
 
       return {
         otherActorId: otherActor.id,
@@ -238,50 +239,13 @@ export class RelationshipManager {
       };
     });
 
-    const contextString = this.formatRelationshipContext(relationshipData);
+    const contextString = RelationshipManager.formatRelationshipContext(relationshipData);
 
     return {
       actorId,
       relationships: relationshipData,
       contextString,
     };
-  }
-
-  /**
-   * Format relationship context for LLM prompts
-   */
-  private static formatRelationshipContext(
-    relationships: Array<{
-      otherActorName: string;
-      type: string;
-      strength: number;
-      sentiment: number;
-      history?: string;
-    }>
-  ): string {
-    if (relationships.length === 0) return '';
-
-    const lines = relationships.map(rel => {
-      const sentimentDesc =
-        rel.sentiment > 0.5
-          ? 'respect them'
-          : rel.sentiment < -0.5
-          ? 'have beef with them'
-          : 'neutral toward them';
-
-      const strengthDesc =
-        rel.strength > 0.7 ? 'strong' : rel.strength > 0.4 ? 'moderate' : 'weak';
-
-      let line = `- ${strengthDesc} ${rel.type} with ${rel.otherActorName} (you ${sentimentDesc})`;
-
-      if (rel.history) {
-        line += `: ${rel.history}`;
-      }
-
-      return line;
-    });
-
-    return lines.join('\n');
   }
 
   /**
@@ -306,42 +270,36 @@ export class RelationshipManager {
         Actor_ActorRelationship_actor1IdToActor: true,
         Actor_ActorRelationship_actor2IdToActor: true,
       },
-      orderBy: [
-        { strength: 'desc' },
-        { sentiment: 'desc' },
-      ],
+      orderBy: [{ strength: 'desc' }, { sentiment: 'desc' }],
       take: count * 2,
     };
 
     const relationships = await prisma.actorRelationship.findMany(query);
 
-    const relatedActorIds = relationships.map(rel => 
+    const relatedActorIds = relationships.map((rel) =>
       rel.actor1Id === actorId ? rel.actor2Id : rel.actor1Id
     );
-    
+
     // Fetch full actor details
     const relatedActors = await prisma.actor.findMany({
       where: { id: { in: relatedActorIds } },
     });
 
     // Remove duplicates and limit to count
-    const uniqueActors = Array.from(new Set(relatedActors.map(a => a.id)))
-      .map(id => relatedActors.find(a => a.id === id)!)
+    const actorById = new Map(relatedActors.map((actor) => [actor.id, actor]));
+    const uniqueActors = Array.from(new Set(relatedActors.map((a) => a.id)))
+      .map((id) => actorById.get(id))
+      .filter((actor): actor is (typeof relatedActors)[number] => Boolean(actor))
       .slice(0, count);
 
-    return uniqueActors.map(a => this.mapActorFromPrisma(a));
+    return uniqueActors.map((a) => RelationshipManager.mapActorFromPrisma(a));
   }
 
   /**
    * Get relationship statistics for an actor
    */
   static async getRelationshipStats(actorId: string): Promise<RelationshipStats> {
-    const [
-      followerCount,
-      followingCount,
-      mutualFollowCount,
-      relationships,
-    ] = await Promise.all([
+    const [followerCount, followingCount, mutualFollowCount, relationships] = await Promise.all([
       prisma.actorFollow.count({
         where: { followingId: actorId },
       }),
@@ -362,7 +320,7 @@ export class RelationshipManager {
     ]);
 
     const relationshipsByType: Record<string, number> = {};
-    relationships.forEach(rel => {
+    relationships.forEach((rel) => {
       relationshipsByType[rel.relationshipType] =
         (relationshipsByType[rel.relationshipType] || 0) + 1;
     });
@@ -387,9 +345,11 @@ export class RelationshipManager {
       },
     });
 
-    const actorsWithNoFollowers = actors.filter(a => a.ActorFollow_ActorFollow_followingIdToActor.length === 0);
+    const actorsWithNoFollowers = actors.filter(
+      (a) => a.ActorFollow_ActorFollow_followingIdToActor.length === 0
+    );
 
-    return actorsWithNoFollowers.map(a => this.mapActorFromPrisma(a));
+    return actorsWithNoFollowers.map((a) => RelationshipManager.mapActorFromPrisma(a));
   }
 
   /**
@@ -419,48 +379,4 @@ export class RelationshipManager {
       attackLikelihood: affects.attackLikelihood ?? baseModifiers.attackLikelihood,
     };
   }
-
-  /**
-   * Map Prisma actor to shared Actor type
-   */
-  private static mapActorFromPrisma(prismaActor: {
-    id: string;
-    name: string;
-    description?: string | null;
-    domain: string[];
-    personality?: string | null;
-    role?: string | null;
-    affiliations: string[];
-    postStyle?: string | null;
-    postExample: string[];
-    tier?: string | null;
-    initialLuck?: string;
-    initialMood?: number;
-    hasPool?: boolean;
-    tradingBalance?: unknown;
-    reputationPoints?: number;
-    profileImageUrl?: string | null;
-  }): Actor {
-    return {
-      id: prismaActor.id,
-      name: prismaActor.name,
-      description: prismaActor.description || undefined,
-      domain: prismaActor.domain || [],
-      personality: prismaActor.personality || undefined,
-      role: prismaActor.role || undefined,
-      affiliations: prismaActor.affiliations || [],
-      postStyle: prismaActor.postStyle || undefined,
-      postExample: prismaActor.postExample || [],
-      tier: (prismaActor.tier as ActorTier | null) || undefined,
-      initialLuck: (prismaActor.initialLuck as 'low' | 'medium' | 'high' | null) || undefined,
-      initialMood: prismaActor.initialMood ?? undefined,
-      hasPool: prismaActor.hasPool || undefined,
-      tradingBalance: prismaActor.tradingBalance
-        ? Number(prismaActor.tradingBalance)
-        : undefined,
-      reputationPoints: prismaActor.reputationPoints || undefined,
-      profileImageUrl: prismaActor.profileImageUrl || undefined,
-    };
-  }
 }
-

@@ -9,33 +9,33 @@ import type { JsonValue } from '@/types/common';
 // Post Interaction Types
 // ============================================================================
 
-export interface PostInteraction {
+export type PostInteraction = {
   postId: string;
   likeCount: number;
   commentCount: number;
   shareCount: number;
   isLiked: boolean;
   isShared: boolean;
-}
+};
 
-export interface PostInteractionCounts {
+export type PostInteractionCounts = {
   likes: number;
   comments: number;
   shares: number;
-}
+};
 
 // ============================================================================
 // Comment Interaction Types
 // ============================================================================
 
-export interface CommentInteraction {
+export type CommentInteraction = {
   commentId: string;
   likeCount: number;
   replyCount: number;
   isLiked: boolean;
-}
+};
 
-export interface CommentWithReplies {
+export type CommentWithReplies = {
   id: string;
   content: string;
   createdAt: Date;
@@ -49,9 +49,9 @@ export interface CommentWithReplies {
   likeCount: number;
   isLiked: boolean;
   replies: CommentWithReplies[];
-}
+};
 
-export interface CommentData {
+export type CommentData = {
   id: string;
   content: string;
   postId: string;
@@ -73,13 +73,13 @@ export interface CommentData {
     reactions: number;
     replies: number;
   };
-}
+};
 
 // ============================================================================
 // Favorite Profile Types
 // ============================================================================
 
-export interface FavoriteProfile {
+export type FavoriteProfile = {
   id: string;
   name: string;
   username?: string;
@@ -87,9 +87,9 @@ export interface FavoriteProfile {
   bio?: string;
   isFavorited: boolean;
   favoritedAt?: Date;
-}
+};
 
-export interface FavoriteData {
+export type FavoriteData = {
   id: string;
   userId: string;
   targetUserId: string;
@@ -101,13 +101,13 @@ export interface FavoriteData {
     profileImageUrl: string | null;
     bio: string | null;
   };
-}
+};
 
 // ============================================================================
 // Share/Repost Types
 // ============================================================================
 
-export interface ShareData {
+export type ShareData = {
   id: string;
   userId: string;
   postId: string;
@@ -129,110 +129,110 @@ export interface ShareData {
       profileImageUrl: string | null;
     };
   };
-}
+};
 
 // ============================================================================
 // API Request/Response Types
 // ============================================================================
 
-export interface LikePostRequest {
+export type LikePostRequest = {
   postId: string;
-}
+};
 
-export interface LikeCommentRequest {
+export type LikeCommentRequest = {
   commentId: string;
-}
+};
 
-export interface CreateCommentRequest {
+export type CreateCommentRequest = {
   postId: string;
   content: string;
   parentCommentId?: string;
-}
+};
 
-export interface UpdateCommentRequest {
+export type UpdateCommentRequest = {
   content: string;
-}
+};
 
-export interface SharePostRequest {
+export type SharePostRequest = {
   postId: string;
-}
+};
 
-export interface FavoriteProfileRequest {
+export type FavoriteProfileRequest = {
   targetUserId: string;
-}
+};
 
-export interface InteractionResponse<T = JsonValue> {
+export type InteractionResponse<T = JsonValue> = {
   success: boolean;
   data?: T;
   error?: string;
-}
+};
 
-export interface PostInteractionsResponse {
+export type PostInteractionsResponse = {
   postId: string;
   likeCount: number;
   commentCount: number;
   shareCount: number;
   isLiked: boolean;
   isShared: boolean;
-}
+};
 
-export interface CommentsResponse {
+export type CommentsResponse = {
   comments: CommentWithReplies[];
   total: number;
   hasMore: boolean;
-}
+};
 
 // ============================================================================
 // Optimistic Update Types
 // ============================================================================
 
-export interface OptimisticUpdate<T> {
+export type OptimisticUpdate<T> = {
   id: string;
   type: 'like' | 'unlike' | 'comment' | 'share' | 'unshare' | 'favorite' | 'unfavorite';
   data: T;
   timestamp: number;
   reverted?: boolean;
-}
+};
 
-export interface PendingInteraction<T = JsonValue> {
+export type PendingInteraction<T = JsonValue> = {
   id: string;
   type: 'like' | 'comment' | 'share' | 'favorite';
   targetId: string;
   timestamp: number;
   optimisticData: T;
-}
+};
 
 // ============================================================================
 // Real-time Polling Types
 // ============================================================================
 
-export interface PollingConfig {
+export type PollingConfig = {
   interval: number; // milliseconds
   enabled: boolean;
   postIds: string[];
-}
+};
 
-export interface PollingUpdate {
+export type PollingUpdate = {
   postId: string;
   interactions: PostInteractionCounts;
   timestamp: number;
-}
+};
 
 // ============================================================================
 // Error Types
 // ============================================================================
 
-export interface InteractionError {
+export type InteractionError = {
   code: 'UNAUTHORIZED' | 'NOT_FOUND' | 'DUPLICATE' | 'NETWORK_ERROR' | 'UNKNOWN';
   message: string;
   details?: JsonValue | Record<string, JsonValue>;
-}
+};
 
 // ============================================================================
 // Zustand Store State Types
 // ============================================================================
 
-export interface InteractionStoreState {
+export type InteractionStoreState = {
   // State maps
   postInteractions: Map<string, PostInteraction>;
   commentInteractions: Map<string, CommentInteraction>;
@@ -248,9 +248,9 @@ export interface InteractionStoreState {
 
   // Error states
   errors: Map<string, InteractionError>;
-}
+};
 
-export interface InteractionStoreActions {
+export type InteractionStoreActions = {
   // Like actions
   toggleLike: (postId: string) => Promise<void>;
   toggleCommentLike: (commentId: string) => Promise<void>;
@@ -281,7 +281,7 @@ export interface InteractionStoreActions {
   getPostInteraction: (postId: string) => PostInteraction | null;
   getCommentInteraction: (commentId: string) => CommentInteraction | null;
   isFavorited: (profileId: string) => boolean;
-}
+};
 
 export type InteractionStore = InteractionStoreState & InteractionStoreActions;
 
@@ -289,7 +289,7 @@ export type InteractionStore = InteractionStoreState & InteractionStoreActions;
 // Component Props Types
 // ============================================================================
 
-export interface LikeButtonProps {
+export type LikeButtonProps = {
   targetId: string;
   targetType: 'post' | 'comment';
   initialLiked?: boolean;
@@ -298,17 +298,17 @@ export interface LikeButtonProps {
   size?: 'sm' | 'md' | 'lg';
   showCount?: boolean;
   className?: string;
-}
+};
 
-export interface CommentButtonProps {
+export type CommentButtonProps = {
   postId: string;
   commentCount: number;
   onClick?: () => void;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
-}
+};
 
-export interface RepostButtonProps {
+export type RepostButtonProps = {
   postId: string;
   shareCount: number;
   initialShared?: boolean;
@@ -324,17 +324,17 @@ export interface RepostButtonProps {
     authorProfileImageUrl?: string | null;
     timestamp: string;
   };
-}
+};
 
-export interface FavoriteButtonProps {
+export type FavoriteButtonProps = {
   profileId: string;
   initialFavorited?: boolean;
   size?: 'sm' | 'md' | 'lg';
   variant?: 'icon' | 'button';
   className?: string;
-}
+};
 
-export interface InteractionBarProps {
+export type InteractionBarProps = {
   postId: string;
   initialInteractions?: PostInteraction;
   onCommentClick?: () => void;
@@ -354,9 +354,9 @@ export interface InteractionBarProps {
     isShared?: boolean;
     originalPostId?: string | null;
   };
-}
+};
 
-export interface CommentCardProps {
+export type CommentCardProps = {
   comment: CommentWithReplies;
   postId: string; // Post ID needed for replies
   onReply?: (commentId: string) => void;
@@ -366,9 +366,9 @@ export interface CommentCardProps {
   depth?: number;
   maxDepth?: number;
   className?: string;
-}
+};
 
-export interface CommentInputProps {
+export type CommentInputProps = {
   postId: string;
   parentCommentId?: string;
   placeholder?: string;
@@ -376,4 +376,4 @@ export interface CommentInputProps {
   onSubmit?: (comment: CommentData) => void;
   onCancel?: () => void;
   className?: string;
-}
+};

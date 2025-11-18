@@ -1,13 +1,13 @@
 /**
  * Admin Moderation Human Review API
- * 
+ *
  * @route GET /api/admin/moderation/human-review - Get appeals for review
  * @access Admin
- * 
+ *
  * @description
  * Returns list of user appeals that need human review. Shows banned users
  * with appeal status 'human_review' and their appeal details.
- * 
+ *
  * @openapi
  * /api/admin/moderation/human-review:
  *   get:
@@ -43,7 +43,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const { appeals } = await fetch('/api/admin/moderation/human-review', {
@@ -52,13 +52,13 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { requireAdmin } from '@/lib/api/admin-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { prisma } from '@/lib/prisma'
+import { requireAdmin } from '@/lib/api/admin-middleware';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  await requireAdmin(request)
+  await requireAdmin(request);
 
   const appeals = await prisma.user.findMany({
     where: {
@@ -89,8 +89,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     orderBy: {
       appealSubmittedAt: 'asc', // Oldest first
     },
-  })
+  });
 
-  return successResponse({ appeals })
-})
-
+  return successResponse({ appeals });
+});

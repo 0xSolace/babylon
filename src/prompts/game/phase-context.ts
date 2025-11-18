@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt providing phase-specific narrative instructions for content generation.
- * 
+ *
  * Defines narrative instructions for each game phase (Wild, Escalation, Resolution).
  * Used as context to guide content generation based on which phase the game
  * is currently in. Temperature 0 as it's instructional, not generative.
- * 
+ *
  * Returns phase context instructions.
  */
 export const phaseContext = definePrompt({
@@ -54,5 +54,5 @@ This file defines narrative instructions for each game phase:
 - All questions resolved
 - Epilogue content
 - Narrative closure
-`.trim()
+`.trim(),
 });

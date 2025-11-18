@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating yes/no prediction market questions for each scenario.
- * 
+ *
  * Creates 5 bettable yes/no questions per scenario that are provable,
  * definable, and resolve by Day 30. Questions must be concrete and
  * observable, avoiding vague emotional states or abstract concepts.
- * 
+ *
  * Returns XML with questions for each scenario.
  */
 export const questions = definePrompt({
@@ -96,5 +96,5 @@ Return XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

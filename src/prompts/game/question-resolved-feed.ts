@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating feed posts announcing question resolutions.
- * 
+ *
  * Creates feed posts that announce when prediction market questions
  * have been resolved, including the outcome and relevant context.
  * Used to notify players of resolution results.
- * 
+ *
  * Returns XML with resolution announcement post.
  */
 export const questionResolvedFeed = definePrompt({
@@ -46,5 +46,5 @@ Respond with ONLY this XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

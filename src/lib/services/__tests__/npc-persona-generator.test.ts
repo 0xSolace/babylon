@@ -1,20 +1,29 @@
 /**
  * NPC Persona Generator Test Suite
- * 
+ *
  * @description
  * Tests for NPC persona generation and validation.
  * Ensures personas create learnable patterns for agents.
  */
 
-import { describe, test, expect } from 'bun:test';
-import { NPCPersonaGenerator } from '../npc-persona-generator';
 import type { Actor, Organization } from '@/shared/types';
+import { describe, expect, test } from 'bun:test';
+import type { PersonaAssignment } from '../npc-persona-generator';
+import { NPCPersonaGenerator } from '../npc-persona-generator';
+
+const getPersonaOrThrow = (
+  personas: Map<string, PersonaAssignment>,
+  actorId: string
+): PersonaAssignment => {
+  const persona = personas.get(actorId);
+  if (!persona) {
+    throw new Error(`Persona not found for ${actorId}`);
+  }
+  return persona;
+};
 
 // Helper to create test actor
-function createTestActor(
-  id: string,
-  overrides: Partial<Actor> = {}
-): Actor {
+function createTestActor(id: string, overrides: Partial<Actor> = {}): Actor {
   return {
     id,
     name: `Test Actor ${id}`,
@@ -47,23 +56,23 @@ describe('NPCPersonaGenerator', () => {
         createTestActor('actor-3'),
       ];
       const orgs = [createTestOrg('org-1', 'company')];
-      
+
       const personas = generator.assignPersonas(actors, orgs);
-      
+
       expect(personas.size).toBe(3);
       expect(personas.has('actor-1')).toBe(true);
       expect(personas.has('actor-2')).toBe(true);
       expect(personas.has('actor-3')).toBe(true);
     });
-    
+
     test('persona has all required fields', () => {
       const generator = new NPCPersonaGenerator();
       const actors = [createTestActor('actor-1')];
       const orgs = [createTestOrg('org-1', 'company')];
-      
+
       const personas = generator.assignPersonas(actors, orgs);
-      const persona = personas.get('actor-1')!;
-      
+      const persona = getPersonaOrThrow(personas, 'actor-1');
+
       expect(persona.actorId).toBe('actor-1');
       expect(typeof persona.reliability).toBe('number');
       expect(persona.reliability).toBeGreaterThanOrEqual(0);
@@ -74,7 +83,7 @@ describe('NPCPersonaGenerator', () => {
       expect(['wealth', 'reputation', 'ideology', 'chaos']).toContain(persona.selfInterest);
     });
   });
-  
+
   describe('Reliability Levels', () => {
     test('conspiracy theorists have low reliability', () => {
       const generator = new NPCPersonaGenerator();
@@ -85,15 +94,15 @@ describe('NPCPersonaGenerator', () => {
         }),
       ];
       const orgs: Organization[] = [];
-      
+
       const personas = generator.assignPersonas(actors, orgs);
-      const persona = personas.get('conspiracy-1')!;
-      
+      const persona = getPersonaOrThrow(personas, 'conspiracy-1');
+
       expect(persona.reliability).toBeLessThan(0.4); // Low reliability
       expect(persona.willingToLie).toBe(true);
       expect(persona.selfInterest).toBe('chaos');
     });
-    
+
     test('politicians have low reliability and willing to lie', () => {
       const generator = new NPCPersonaGenerator();
       const actors = [
@@ -103,15 +112,15 @@ describe('NPCPersonaGenerator', () => {
         }),
       ];
       const orgs: Organization[] = [];
-      
+
       const personas = generator.assignPersonas(actors, orgs);
-      const persona = personas.get('politician-1')!;
-      
+      const persona = getPersonaOrThrow(personas, 'politician-1');
+
       expect(persona.reliability).toBeLessThan(0.5);
       expect(persona.willingToLie).toBe(true);
       expect(persona.selfInterest).toBe('reputation');
     });
-    
+
     test('journalists have medium reliability', () => {
       const generator = new NPCPersonaGenerator();
       const actors = [
@@ -121,15 +130,15 @@ describe('NPCPersonaGenerator', () => {
         }),
       ];
       const orgs: Organization[] = [];
-      
+
       const personas = generator.assignPersonas(actors, orgs);
-      const persona = personas.get('journalist-1')!;
-      
-      expect(persona.reliability).toBeGreaterThanOrEqual(0.50);
+      const persona = getPersonaOrThrow(personas, 'journalist-1');
+
+      expect(persona.reliability).toBeGreaterThanOrEqual(0.5);
       expect(persona.reliability).toBeLessThanOrEqual(0.75);
       expect(persona.willingToLie).toBe(false);
     });
-    
+
     test('insiders have high reliability', () => {
       const generator = new NPCPersonaGenerator();
       const actors = [
@@ -138,18 +147,15 @@ describe('NPCPersonaGenerator', () => {
           domain: ['tech'],
         }),
       ];
-      const orgs = [
-        createTestOrg('techcorp', 'company'),
-        createTestOrg('megainc', 'company'),
-      ];
-      
+      const orgs = [createTestOrg('techcorp', 'company'), createTestOrg('megainc', 'company')];
+
       const personas = generator.assignPersonas(actors, orgs);
-      const persona = personas.get('insider-1')!;
-      
-      expect(persona.reliability).toBeGreaterThanOrEqual(0.70); // Insiders minimum 0.7
+      const persona = getPersonaOrThrow(personas, 'insider-1');
+
+      expect(persona.reliability).toBeGreaterThanOrEqual(0.7); // Insiders minimum 0.7
       expect(persona.insiderOrgs).toEqual(['techcorp', 'megainc']);
     });
-    
+
     test('experts have medium-high reliability', () => {
       const generator = new NPCPersonaGenerator();
       const actors = [
@@ -159,62 +165,70 @@ describe('NPCPersonaGenerator', () => {
         }),
       ];
       const orgs: Organization[] = [];
-      
+
       const personas = generator.assignPersonas(actors, orgs);
-      const persona = personas.get('expert-1')!;
-      
-      expect(persona.reliability).toBeGreaterThanOrEqual(0.60);
+      const persona = getPersonaOrThrow(personas, 'expert-1');
+
+      expect(persona.reliability).toBeGreaterThanOrEqual(0.6);
       expect(persona.reliability).toBeLessThanOrEqual(0.85);
     });
   });
-  
+
   describe('Distribution Validation', () => {
     test('generates balanced reliability distribution', () => {
       const generator = new NPCPersonaGenerator();
-      
+
       // Create mix of actor types
       const actors = [
-        ...Array.from({ length: 3 }, (_, i) => createTestActor(`insider-${i}`, {
-          affiliations: ['techcorp'],
-          tier: 'A_TIER',
-        })),
-        ...Array.from({ length: 5 }, (_, i) => createTestActor(`journalist-${i}`, {
-          domain: ['media'],
-          role: 'journalist',
-        })),
-        ...Array.from({ length: 2 }, (_, i) => createTestActor(`politician-${i}`, {
-          domain: ['politics'],
-        })),
-        ...Array.from({ length: 2 }, (_, i) => createTestActor(`conspiracy-${i}`, {
-          personality: 'contrarian',
-        })),
+        ...Array.from({ length: 3 }, (_, i) =>
+          createTestActor(`insider-${i}`, {
+            affiliations: ['techcorp'],
+            tier: 'A_TIER',
+          })
+        ),
+        ...Array.from({ length: 5 }, (_, i) =>
+          createTestActor(`journalist-${i}`, {
+            domain: ['media'],
+            role: 'journalist',
+          })
+        ),
+        ...Array.from({ length: 2 }, (_, i) =>
+          createTestActor(`politician-${i}`, {
+            domain: ['politics'],
+          })
+        ),
+        ...Array.from({ length: 2 }, (_, i) =>
+          createTestActor(`conspiracy-${i}`, {
+            personality: 'contrarian',
+          })
+        ),
       ];
-      
+
       const orgs = [createTestOrg('techcorp', 'company')];
-      
+
       const personas = generator.assignPersonas(actors, orgs);
-      
-      const reliabilities = Array.from(personas.values()).map(p => p.reliability);
+
+      const reliabilities = Array.from(personas.values()).map((p) => p.reliability);
       const avgReliability = reliabilities.reduce((a, b) => a + b, 0) / reliabilities.length;
-      
+
       // Average should be in reasonable range
-      expect(avgReliability).toBeGreaterThan(0.40);
-      expect(avgReliability).toBeLessThan(0.70);
-      
+      expect(avgReliability).toBeGreaterThan(0.4);
+      expect(avgReliability).toBeLessThan(0.7);
+
       // Should have mix of high/medium/low
-      const highRel = reliabilities.filter(r => r > 0.7).length;
-      const lowRel = reliabilities.filter(r => r < 0.4).length;
-      
+      const highRel = reliabilities.filter((r) => r > 0.7).length;
+      const lowRel = reliabilities.filter((r) => r < 0.4).length;
+
       // With insiders (3), journalists (5), politicians (2), conspiracy (2)
       // We expect: insiders -> high, politicians+conspiracy -> low
       expect(highRel).toBeGreaterThanOrEqual(0); // May have high reliability
       expect(lowRel).toBeGreaterThanOrEqual(0); // May have low reliability
-      
+
       // At minimum, should have variance (not all same)
       const variance = Math.max(...reliabilities) - Math.min(...reliabilities);
       expect(variance).toBeGreaterThan(0.2); // At least 20% range
     });
-    
+
     test('insiders are identified correctly', () => {
       const generator = new NPCPersonaGenerator();
       const actors = [
@@ -222,15 +236,14 @@ describe('NPCPersonaGenerator', () => {
         createTestActor('outsider-1', { affiliations: [] }),
       ];
       const orgs = [createTestOrg('techcorp', 'company')];
-      
+
       const personas = generator.assignPersonas(actors, orgs);
-      
-      const insider = personas.get('insider-1')!;
-      const outsider = personas.get('outsider-1')!;
-      
+
+      const insider = getPersonaOrThrow(personas, 'insider-1');
+      const outsider = getPersonaOrThrow(personas, 'outsider-1');
+
       expect(insider.insiderOrgs.length).toBeGreaterThan(0);
       expect(outsider.insiderOrgs.length).toBe(0);
     });
   });
 });
-

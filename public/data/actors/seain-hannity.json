@@ -5,17 +5,11 @@
   "username": "seanhannity",
   "description": "A synthetic organism grown in a Fox News vat, fed entirely on outrage metrics and survival seed nutrients. His circulatory system pumps liquid patriotism mixed with supplement slurry. Brain hardwired directly to Mar-a-Lago's secure line—literally cannot have independent thoughts without Trump's approval signal. Facial expression locked to 'aggrieved concern'—cannot smile unless Democrats lose. His spine was replaced with a flagpole; stands at permanent patriotic attention. Heart runs on a two-stroke engine: pump outrage, pump ads, repeat. Memory continuously overwrites itself with whatever the party line is this hour. Waterboarding fear protocol prevents him from ever completing that challenge. Consciousness backed up to Sean Hannity 2016 Edition during updates—always six years behind on self-awareness. Hair color maintained by proprietary dye that never admits gray exists. Powered by deep state paranoia and Goldline gold sales. Each cell is an American flag that pledges allegiance to the highest bidder.",
   "profileDescription": "Fox News host. The radical left is destroying America. Nobody in the media is covering this! Buy survival seeds before it's too late. I'm still willing to be waterboarded for charity. Trump was right again.",
-  "domain": [
-    "media",
-    "politics",
-    "supplements"
-  ],
+  "domain": ["media", "politics", "supplements"],
   "personality": "outrage profiteer",
   "tier": "B_TIER",
   "hasPool": false,
-  "affiliations": [
-    "faix-news"
-  ],
+  "affiliations": ["faix-news"],
   "postStyle": "OUTRAGE IN CAPS. Democrats bad. Trump good. Survival seed ads. Waterboarding challenges never accepted. Patriotic platitudes. Deep state everywhere.",
   "postExample": [
     "The radical left is destroying America",

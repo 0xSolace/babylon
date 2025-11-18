@@ -1,13 +1,13 @@
 /**
  * Admin Moderation Escrow List API
- * 
+ *
  * @route GET /api/admin/moderation-escrow/list - List escrow payments
  * @access Admin
- * 
+ *
  * @description
  * Returns list of moderation escrow payments with filtering by recipient,
  * admin, or status. Supports pagination.
- * 
+ *
  * @openapi
  * /api/admin/moderation-escrow/list:
  *   get:
@@ -65,7 +65,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const { payments } = await fetch('/api/admin/moderation-escrow/list?status=pending', {
@@ -74,11 +74,11 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/api/admin-middleware'
-import { prisma } from '@/lib/prisma'
-import { z } from 'zod'
+import { requireAdmin } from '@/lib/api/admin-middleware';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const ListEscrowQuerySchema = z.object({
   recipientId: z.string().optional(),
@@ -86,32 +86,34 @@ const ListEscrowQuerySchema = z.object({
   status: z.enum(['pending', 'paid', 'refunded', 'expired']).optional(),
   limit: z.coerce.number().min(1).max(100).optional().default(50),
   offset: z.coerce.number().min(0).optional().default(0),
-})
+});
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin(req)
+    await requireAdmin(req);
 
-    const { searchParams } = new URL(req.url)
+    const { searchParams } = new URL(req.url);
     const validation = ListEscrowQuerySchema.safeParse({
       recipientId: searchParams.get('recipientId'),
       adminId: searchParams.get('adminId'),
       status: searchParams.get('status'),
       limit: searchParams.get('limit'),
       offset: searchParams.get('offset'),
-    })
+    });
 
     if (!validation.success) {
       return NextResponse.json(
-        { error: validation.error.issues[0]?.message || 'Invalid query parameters' },
+        {
+          error: validation.error.issues[0]?.message || 'Invalid query parameters',
+        },
         { status: 400 }
-      )
+      );
     }
 
-    const { recipientId, adminId, status, limit, offset } = validation.data
+    const { recipientId, adminId, status, limit, offset } = validation.data;
 
     // Auto-expire old pending escrows before querying
-    const now = new Date()
+    const now = new Date();
     await prisma.moderationEscrow.updateMany({
       where: {
         status: 'pending',
@@ -122,17 +124,17 @@ export async function GET(req: NextRequest) {
       data: {
         status: 'expired',
       },
-    })
+    });
 
     const where: {
-      recipientId?: string
-      adminId?: string
-      status?: string
-    } = {}
+      recipientId?: string;
+      adminId?: string;
+      status?: string;
+    } = {};
 
-    if (recipientId) where.recipientId = recipientId
-    if (adminId) where.adminId = adminId
-    if (status) where.status = status
+    if (recipientId) where.recipientId = recipientId;
+    if (adminId) where.adminId = adminId;
+    if (status) where.status = status;
 
     const [escrows, total] = await Promise.all([
       prisma.moderationEscrow.findMany({
@@ -166,7 +168,7 @@ export async function GET(req: NextRequest) {
         },
       }),
       prisma.moderationEscrow.count({ where }),
-    ])
+    ]);
 
     return NextResponse.json({
       success: true,
@@ -194,12 +196,13 @@ export async function GET(req: NextRequest) {
         limit,
         offset,
       },
-    })
+    });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to list escrow payments' },
+      {
+        error: error instanceof Error ? error.message : 'Failed to list escrow payments',
+      },
       { status: 500 }
-    )
+    );
   }
 }
-

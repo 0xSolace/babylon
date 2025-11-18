@@ -1,14 +1,16 @@
 /**
  * Babylon Plugin Service Exports
- * 
+ *
  * Re-exports autonomous services that use the Babylon A2A plugin
  */
 
-export { autonomousA2AService, AutonomousA2AService } from '../../autonomous/AutonomousA2AService'
-export { 
-  initializeAgentA2AClient, 
-  enhanceRuntimeWithBabylon, 
-  disconnectAgentA2AClient, 
-  hasActiveA2AConnection 
-} from './integration'
-
+export {
+  AutonomousA2AService,
+  autonomousA2AService,
+} from '../../autonomous/AutonomousA2AService';
+export {
+  disconnectAgentA2AClient,
+  enhanceRuntimeWithBabylon,
+  hasActiveA2AConnection,
+  initializeAgentA2AClient,
+} from './integration';

@@ -1,12 +1,12 @@
 /**
  * OpenAPI Specification API Route
- * 
+ *
  * @description Serves the automatically generated OpenAPI specification in JSON format
- * 
+ *
  * @route GET /api/docs
  * @access Public
  * @returns {object} OpenAPI 3.0 specification
- * 
+ *
  * @openapi
  * /api/docs:
  *   get:
@@ -40,17 +40,17 @@
  *                   type: string
  */
 
-import { NextResponse } from 'next/server';
 import { generateAutoSpec } from '@/lib/swagger/auto-generator';
+import { NextResponse } from 'next/server';
 
 /**
  * GET /api/docs
- * 
+ *
  * @description Returns the complete OpenAPI specification for all API routes.
  * Automatically generated from @openapi tags in route files.
- * 
+ *
  * @returns {NextResponse} OpenAPI specification in JSON format
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/docs');
@@ -60,13 +60,17 @@ import { generateAutoSpec } from '@/lib/swagger/auto-generator';
  */
 export async function GET() {
   try {
-    const spec = await generateAutoSpec() as { openapi?: string; swagger?: string; [key: string]: unknown }; // Now automated!
-    
+    const spec = (await generateAutoSpec()) as {
+      openapi?: string;
+      swagger?: string;
+      [key: string]: unknown;
+    }; // Now automated!
+
     // Ensure openapi version field is present (required by Swagger UI)
     if (!spec.openapi && !spec.swagger) {
       spec.openapi = '3.0.0';
     }
-    
+
     return NextResponse.json(spec, {
       headers: {
         'Content-Type': 'application/json',
@@ -76,18 +80,17 @@ export async function GET() {
   } catch (error) {
     console.error('Error generating API docs:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to generate API documentation',
         openapi: '3.0.0',
         info: {
           title: 'Babylon API',
           version: '1.0.0',
-          description: 'API documentation temporarily unavailable'
+          description: 'API documentation temporarily unavailable',
         },
-        paths: {}
+        paths: {},
       },
       { status: 500 }
     );
   }
 }
-

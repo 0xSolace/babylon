@@ -1,129 +1,136 @@
-'use client'
+'use client';
 
-import { Avatar } from '@/components/shared/Avatar'
-import { Dropdown, DropdownItem } from '@/components/shared/Dropdown'
-import { useAuth } from '@/hooks/useAuth'
-import { useAuthStore } from '@/stores/authStore'
-import { Check, Copy, LogOut } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Avatar } from '@/components/shared/Avatar';
+import { Dropdown, DropdownItem } from '@/components/shared/Dropdown';
+import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/stores/authStore';
+import { Check, Copy, LogOut } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Global fetch tracking to prevent duplicate calls across all UserMenu instances.
  */
-let userMenuFetchInFlight = false
-let userMenuIntervalId: ReturnType<typeof setInterval> | null = null
+let userMenuFetchInFlight = false;
+let userMenuIntervalId: ReturnType<typeof setInterval> | null = null;
 
 /**
  * User menu component displaying user profile and account actions.
- * 
+ *
  * Shows user avatar, name, username, points balance, referral code, and logout
  * option in a dropdown menu. Automatically fetches and refreshes user data every
  * 30 seconds. Prevents duplicate API calls across multiple instances.
- * 
+ *
  * Features:
  * - User profile display with avatar
  * - Points balance (total and available)
  * - Referral code copy functionality
  * - Logout action
- * 
+ *
  * @returns User menu dropdown element or null if no user
  */
 export function UserMenu() {
-  const { logout } = useAuth()
-  const { user } = useAuthStore()
-  const [pointsData, setPointsData] = useState<{ available: number; total: number } | null>(null)
-  const [referralCode, setReferralCode] = useState<string | null>(null)
-  const [copiedCode, setCopiedCode] = useState(false)
-  const lastFetchedUserIdRef = useRef<string | null>(null)
+  const { logout } = useAuth();
+  const { user } = useAuthStore();
+  const [pointsData, setPointsData] = useState<{
+    available: number;
+    total: number;
+  } | null>(null);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const lastFetchedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Don't refetch if user ID hasn't changed
     if (lastFetchedUserIdRef.current === user?.id && user?.id) {
-      return
+      return;
     }
 
     const fetchData = async () => {
       if (!user?.id) {
-        setPointsData(null)
-        setReferralCode(null)
-        lastFetchedUserIdRef.current = null
-        return
+        setPointsData(null);
+        setReferralCode(null);
+        lastFetchedUserIdRef.current = null;
+        return;
       }
 
       // Prevent duplicate fetches globally
-      if (userMenuFetchInFlight) return
-      userMenuFetchInFlight = true
+      if (userMenuFetchInFlight) return;
+      userMenuFetchInFlight = true;
 
-      const token = typeof window !== 'undefined' ? window.__privyAccessToken : null
+      const token = typeof window !== 'undefined' ? window.__privyAccessToken : null;
       if (!token) {
-        userMenuFetchInFlight = false
-        return
+        userMenuFetchInFlight = false;
+        return;
       }
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+        Authorization: `Bearer ${token}`,
+      };
 
       // Fetch points
-      const balanceResponse = await fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, { headers })
+      const balanceResponse = await fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, {
+        headers,
+      });
       if (balanceResponse.ok) {
-        const data = await balanceResponse.json()
+        const data = await balanceResponse.json();
         setPointsData({
           available: Number(data.balance || 0),
           total: Number(data.totalDeposited || 0),
-        })
+        });
       }
 
       // Fetch referral code
-      const referralResponse = await fetch(`/api/users/${encodeURIComponent(user.id)}/referrals`, { headers })
+      const referralResponse = await fetch(`/api/users/${encodeURIComponent(user.id)}/referrals`, {
+        headers,
+      });
       if (referralResponse.ok) {
-        const data = await referralResponse.json()
-        setReferralCode(data.user?.referralCode || null)
+        const data = await referralResponse.json();
+        setReferralCode(data.user?.referralCode || null);
       }
 
-      lastFetchedUserIdRef.current = user.id
-      userMenuFetchInFlight = false
-    }
+      lastFetchedUserIdRef.current = user.id;
+      userMenuFetchInFlight = false;
+    };
 
     // Clear any existing interval
     if (userMenuIntervalId) {
-      clearInterval(userMenuIntervalId)
-      userMenuIntervalId = null
+      clearInterval(userMenuIntervalId);
+      userMenuIntervalId = null;
     }
 
     // Fetch immediately
-    fetchData()
-    
+    fetchData();
+
     // Set up interval for refresh
-    userMenuIntervalId = setInterval(fetchData, 30000)
+    userMenuIntervalId = setInterval(fetchData, 30000);
 
     return () => {
       if (userMenuIntervalId) {
-        clearInterval(userMenuIntervalId)
-        userMenuIntervalId = null
+        clearInterval(userMenuIntervalId);
+        userMenuIntervalId = null;
       }
-    }
-  }, [user?.id])
+    };
+  }, [user?.id]);
 
   const handleCopyReferralCode = async () => {
-    if (!referralCode) return
+    if (!referralCode) return;
     // Create full referral URL
-    const referralUrl = `${window.location.origin}?ref=${referralCode}`
-    await navigator.clipboard.writeText(referralUrl)
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
-  }
+    const referralUrl = `${window.location.origin}?ref=${referralCode}`;
+    await navigator.clipboard.writeText(referralUrl);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
 
   if (!user) {
-    return null
+    return null;
   }
 
-  const displayName = user.displayName || user.email?.split('@')[0] || 'Anonymous'
-  const username = user.username || `user${user.id.slice(0, 8)}`
+  const displayName = user.displayName || user.email?.split('@')[0] || 'Anonymous';
+  const username = user.username || `user${user.id.slice(0, 8)}`;
 
   const trigger = (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-full hover:bg-sidebar-accent cursor-pointer transition-colors">
+    <div className="flex cursor-pointer items-center gap-3 rounded-full px-3 py-2.5 transition-colors hover:bg-sidebar-accent">
       <Avatar
         id={user.id}
         name={displayName}
@@ -132,51 +139,49 @@ export function UserMenu() {
         src={user.profileImageUrl || undefined}
         imageUrl={user.profileImageUrl || undefined}
       />
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-sidebar-foreground truncate text-[15px] leading-5">
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-semibold text-[15px] text-sidebar-foreground leading-5">
           {displayName}
         </p>
-        <p className="text-[13px] leading-4 text-muted-foreground truncate">
-          @{username}
-        </p>
+        <p className="truncate text-[13px] text-muted-foreground leading-4">@{username}</p>
       </div>
     </div>
-  )
+  );
 
   return (
     <Dropdown trigger={trigger} placement="top-right" width="default">
       {/* Points Display */}
       {pointsData && (
-        <div className="px-5 py-4 border-b border-sidebar-accent">
-          <div className="flex justify-between items-center">
-            <span className="text-sm font-semibold text-muted-foreground">Total Points</span>
-            <span className="text-xl font-bold text-foreground">
+        <div className="border-sidebar-accent border-b px-5 py-4">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-muted-foreground text-sm">Total Points</span>
+            <span className="font-bold text-foreground text-xl">
               {pointsData.total.toLocaleString()}
             </span>
           </div>
-          <div className="flex justify-between items-center mt-2">
-            <span className="text-xs text-muted-foreground">Available</span>
-            <span className="text-sm font-semibold text-foreground">
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-muted-foreground text-xs">Available</span>
+            <span className="font-semibold text-foreground text-sm">
               {pointsData.available.toLocaleString()}
             </span>
           </div>
         </div>
       )}
-      
+
       {referralCode && (
         <DropdownItem onClick={handleCopyReferralCode}>
           <div className="flex items-center gap-3 py-2">
             {copiedCode ? (
               <>
-                <Check className="w-5 h-5 text-green-500" />
-                <span className="text-sm font-semibold text-green-500">Link Copied!</span>
+                <Check className="h-5 w-5 text-green-500" />
+                <span className="font-semibold text-green-500 text-sm">Link Copied!</span>
               </>
             ) : (
               <>
-                <Copy className="w-5 h-5" style={{ color: '#0066FF' }} />
-                <div className="flex flex-col flex-1 min-w-0">
-                  <span className="text-sm font-semibold text-foreground">Copy Referral Link</span>
-                  <span className="text-xs text-muted-foreground font-mono truncate">
+                <Copy className="h-5 w-5" style={{ color: '#0066FF' }} />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="font-semibold text-foreground text-sm">Copy Referral Link</span>
+                  <span className="truncate font-mono text-muted-foreground text-xs">
                     {typeof window !== 'undefined' && `${window.location.host}?ref=${referralCode}`}
                   </span>
                 </div>
@@ -185,13 +190,13 @@ export function UserMenu() {
           </div>
         </DropdownItem>
       )}
-      
+
       <DropdownItem onClick={logout}>
         <div className="flex items-center gap-3 py-2 text-destructive hover:text-destructive/90">
-          <LogOut className="w-5 h-5" />
+          <LogOut className="h-5 w-5" />
           <span className="font-semibold">Logout</span>
         </div>
       </DropdownItem>
     </Dropdown>
-  )
+  );
 }

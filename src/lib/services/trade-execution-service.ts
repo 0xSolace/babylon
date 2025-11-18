@@ -4,37 +4,33 @@
  * Executes LLM-generated trading decisions for NPCs.
  * Creates positions, updates balances, records trades.
  */
-import { Prisma } from '@prisma/client';
 
 import { invalidateAfterPredictionTrade } from '@/lib/cache/trade-cache-invalidation';
 import { logger } from '@/lib/logger';
+import { getReadyPerpsEngine } from '@/lib/perps-service';
+import { PredictionPricing } from '@/lib/prediction-pricing';
 import { prisma } from '@/lib/prisma';
-import { generateSnowflakeId } from '@/lib/snowflake';
+import { FeeService } from '@/lib/services/fee-service';
 import { PredictionMarketEventService } from '@/lib/services/prediction-market-event-service';
 import { PredictionPriceHistoryService } from '@/lib/services/prediction-price-history-service';
-import { FeeService } from '@/lib/services/fee-service';
-import { PredictionPricing } from '@/lib/prediction-pricing';
-
+import { generateSnowflakeId } from '@/lib/snowflake';
 import type {
   ExecutedTrade,
   TradingDecision,
+  TradingExecutionResult,
 } from '@/types/market-decisions';
-import type { TradingExecutionResult } from '@/types/market-decisions';
-
+import { Prisma } from '@prisma/client';
 import {
   type AggregatedImpact,
   type TradeImpactInput,
   aggregateTradeImpacts,
 } from './market-impact-service';
-import { getReadyPerpsEngine } from '@/lib/perps-service';
 
 export class TradeExecutionService {
   /**
    * Execute a batch of trading decisions
    */
-  async executeDecisionBatch(
-    decisions: TradingDecision[]
-  ): Promise<TradingExecutionResult> {
+  async executeDecisionBatch(decisions: TradingDecision[]): Promise<TradingExecutionResult> {
     const startTime = Date.now();
 
     const result: TradingExecutionResult = {
@@ -75,14 +71,14 @@ export class TradeExecutionService {
 
         // Use warn level for expected failures (non-existent organizations, insufficient balance)
         // Use error level for unexpected system failures
-        const isExpectedFailure = 
+        const isExpectedFailure =
           errorMessage.includes('Organization not found') ||
           errorMessage.includes('Insufficient trading balance') ||
           errorMessage.includes('Market not found') ||
           errorMessage.includes('Market already resolved') ||
           errorMessage.includes('Market expired');
         const logLevel = isExpectedFailure ? 'warn' : 'error';
-        
+
         logger[logLevel](
           `Failed to execute trade for ${decision.npcName}`,
           {
@@ -111,9 +107,7 @@ export class TradeExecutionService {
   /**
    * Execute a single trading decision
    */
-  async executeSingleDecision(
-    decision: TradingDecision
-  ): Promise<ExecutedTrade> {
+  async executeSingleDecision(decision: TradingDecision): Promise<ExecutedTrade> {
     // Get NPC actor
     const actor = await prisma.actor.findUnique({
       where: { id: decision.npcId },
@@ -125,14 +119,14 @@ export class TradeExecutionService {
 
     // Check actor's trading balance
     const availableBalance = parseFloat(actor.tradingBalance.toString());
-    
+
     // For prediction markets, estimate total cost (amount + fee)
     if (decision.action === 'buy_yes' || decision.action === 'buy_no') {
       if (decision.marketId) {
         const market = await prisma.market.findUnique({
           where: { id: decision.marketId.toString() },
         });
-        
+
         if (market) {
           const side = decision.action === 'buy_yes' ? 'yes' : 'no';
           const calculation = PredictionPricing.calculateBuyWithFees(
@@ -142,7 +136,7 @@ export class TradeExecutionService {
             decision.amount
           );
           const totalWithFee = calculation.totalWithFee ?? decision.amount;
-          
+
           if (availableBalance < totalWithFee) {
             logger.warn(
               `Insufficient trading balance for ${decision.npcName}: ${availableBalance} < ${totalWithFee} (requested: ${decision.amount})`,
@@ -163,14 +157,14 @@ export class TradeExecutionService {
         }
       }
     }
-    
+
     // For perp positions, estimate total cost (margin + fee)
     if (decision.action === 'open_long' || decision.action === 'open_short') {
       const leverage = 5; // Standard leverage
       const positionSize = decision.amount * leverage;
       const feeCalc = FeeService.calculateFee(positionSize);
       const totalCost = decision.amount + feeCalc.feeAmount;
-      
+
       if (availableBalance < totalCost) {
         logger.warn(
           `Insufficient trading balance for ${decision.npcName}: ${availableBalance} < ${totalCost} (requested margin: ${decision.amount})`,
@@ -223,13 +217,13 @@ export class TradeExecutionService {
       where: { id: decision.ticker },
     });
 
-    // If not found by exact ID, try lowercase contains match  
+    // If not found by exact ID, try lowercase contains match
     if (!org) {
       org = await prisma.organization.findFirst({
-      where: {
-        id: { contains: decision.ticker.toLowerCase() },
-      },
-    });
+        where: {
+          id: { contains: decision.ticker.toLowerCase() },
+        },
+      });
     }
 
     if (!org?.currentPrice) {
@@ -440,7 +434,7 @@ export class TradeExecutionService {
 
       // Update market shares with CPMM output
       await tx.market.update({
-        where: { id: decision.marketId!.toString() },
+        where: { id: decision.marketId?.toString() },
         data: {
           yesShares: new Prisma.Decimal(calculation.newYesShares),
           noShares: new Prisma.Decimal(calculation.newNoShares),
@@ -458,7 +452,7 @@ export class TradeExecutionService {
           id: await generateSnowflakeId(),
           poolId: actorId, // Using actorId for backward compatibility with existing schema
           marketType: 'prediction',
-          marketId: decision.marketId!.toString(),
+          marketId: decision.marketId?.toString(),
           side,
           entryPrice,
           currentPrice: postTradePrice,
@@ -477,7 +471,7 @@ export class TradeExecutionService {
           npcActorId: decision.npcId,
           poolId: null, // No longer using pools
           marketType: 'prediction',
-          marketId: decision.marketId!.toString(),
+          marketId: decision.marketId?.toString(),
           action: decision.action,
           side,
           amount: totalWithFee,
@@ -493,7 +487,7 @@ export class TradeExecutionService {
     const liquidityAfter = Number(market.liquidity ?? 0) + calculation.netAmount;
 
     await PredictionPriceHistoryService.recordSnapshot({
-      marketId: decision.marketId!.toString(),
+      marketId: decision.marketId?.toString(),
       yesPrice: calculation.newYesPrice,
       noPrice: calculation.newNoPrice,
       yesShares: calculation.newYesShares,
@@ -502,15 +496,23 @@ export class TradeExecutionService {
       eventType: 'trade',
       source: 'npc_trade',
     }).catch((error) => {
-      logger.warn('Failed to record price history for NPC buy', { error, marketId: decision.marketId }, 'TradeExecutionService');
+      logger.warn(
+        'Failed to record price history for NPC buy',
+        { error, marketId: decision.marketId },
+        'TradeExecutionService'
+      );
     });
 
     await invalidateAfterPredictionTrade(decision.marketId).catch((error) => {
-      logger.warn('Failed to invalidate cache after NPC prediction buy', { error, marketId: decision.marketId }, 'TradeExecutionService');
+      logger.warn(
+        'Failed to invalidate cache after NPC prediction buy',
+        { error, marketId: decision.marketId },
+        'TradeExecutionService'
+      );
     });
 
     PredictionMarketEventService.emitTradeUpdate({
-      marketId: decision.marketId!.toString(),
+      marketId: decision.marketId?.toString(),
       yesPrice: calculation.newYesPrice,
       noPrice: calculation.newNoPrice,
       yesShares: calculation.newYesShares,
@@ -551,10 +553,7 @@ export class TradeExecutionService {
   /**
    * Close an existing position
    */
-  private async closePosition(
-    decision: TradingDecision,
-    actorId: string
-  ): Promise<ExecutedTrade> {
+  private async closePosition(decision: TradingDecision, actorId: string): Promise<ExecutedTrade> {
     if (!decision.positionId) {
       throw new Error('PositionId required to close position');
     }
@@ -614,11 +613,13 @@ export class TradeExecutionService {
       const postTradePrice =
         (side === 'YES' ? calculation.newYesPrice : calculation.newNoPrice) * 100;
       const realizedPnL = netProceeds - position.size;
-      const liquidityAfter = Math.max(
-        0,
-        Number(market.liquidity ?? 0) - grossProceeds
-      );
+      const liquidityAfter = Math.max(0, Number(market.liquidity ?? 0) - grossProceeds);
       const sideLabel: 'yes' | 'no' = side === 'YES' ? 'yes' : 'no';
+
+      const marketId = position.marketId;
+      if (!marketId) {
+        throw new Error('Pool position missing marketId');
+      }
 
       await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         await tx.poolPosition.update({
@@ -633,7 +634,7 @@ export class TradeExecutionService {
         });
 
         await tx.market.update({
-          where: { id: position.marketId! },
+          where: { id: marketId },
           data: {
             yesShares: new Prisma.Decimal(calculation.newYesShares),
             noShares: new Prisma.Decimal(calculation.newNoShares),
@@ -679,11 +680,19 @@ export class TradeExecutionService {
         eventType: 'trade',
         source: 'npc_trade',
       }).catch((error) => {
-        logger.warn('Failed to record price history for NPC close', { error, marketId: position.marketId }, 'TradeExecutionService');
+        logger.warn(
+          'Failed to record price history for NPC close',
+          { error, marketId: position.marketId },
+          'TradeExecutionService'
+        );
       });
 
       await invalidateAfterPredictionTrade(position.marketId).catch((error) => {
-        logger.warn('Failed to invalidate cache after NPC prediction close', { error, marketId: position.marketId }, 'TradeExecutionService');
+        logger.warn(
+          'Failed to invalidate cache after NPC prediction close',
+          { error, marketId: position.marketId },
+          'TradeExecutionService'
+        );
       });
 
       PredictionMarketEventService.emitTradeUpdate({
@@ -772,10 +781,13 @@ export class TradeExecutionService {
     const netReturn = Math.max(0, grossReturn - feeCalc.feeAmount);
 
     // Execute in transaction
+    if (!decision.positionId) {
+      throw new Error('Trade decision missing position ID');
+    }
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Close position
       await tx.poolPosition.update({
-        where: { id: decision.positionId! },
+        where: { id: decision.positionId },
         data: {
           closedAt: now,
           currentPrice,
@@ -848,9 +860,7 @@ export class TradeExecutionService {
   /**
    * Get total trade impact by ticker/market
    */
-  async getTradeImpacts(
-    executedTrades: ExecutedTrade[]
-  ): Promise<Map<string, AggregatedImpact>> {
+  async getTradeImpacts(executedTrades: ExecutedTrade[]): Promise<Map<string, AggregatedImpact>> {
     const inputs: TradeImpactInput[] = executedTrades.map((trade: ExecutedTrade) => ({
       marketType: trade.marketType,
       ticker: trade.ticker,

@@ -1,6 +1,6 @@
 /**
  * Integration Tests: Points Transfer System
- * 
+ *
  * Comprehensive tests for peer-to-peer point transfers including:
  * - Transfer API endpoint
  * - Transaction records
@@ -9,10 +9,10 @@
  * - Edge cases and error handling
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { prisma } from '@/lib/prisma';
-import type { User } from '@prisma/client';
 import { generateSnowflakeId } from '@/lib/snowflake';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import type { User } from '@prisma/client';
 
 let testUser1: User;
 let testUser2: User;
@@ -58,9 +58,15 @@ beforeAll(async () => {
     },
   });
 
-  console.log(`✓ Created test user 1: ${testUser1.username} (${testUser1.reputationPoints} points)`);
-  console.log(`✓ Created test user 2: ${testUser2.username} (${testUser2.reputationPoints} points)`);
-  console.log(`✓ Created test user 3: ${testUser3.username} (${testUser3.reputationPoints} points)\n`);
+  console.log(
+    `✓ Created test user 1: ${testUser1.username} (${testUser1.reputationPoints} points)`
+  );
+  console.log(
+    `✓ Created test user 2: ${testUser2.username} (${testUser2.reputationPoints} points)`
+  );
+  console.log(
+    `✓ Created test user 3: ${testUser3.username} (${testUser3.reputationPoints} points)\n`
+  );
 });
 
 afterAll(async () => {
@@ -141,8 +147,12 @@ describe('Points Transfer - Basic Functionality', () => {
     });
 
     // Verify balances
-    const updatedSender = await prisma.user.findUnique({ where: { id: testUser1.id } });
-    const updatedRecipient = await prisma.user.findUnique({ where: { id: testUser2.id } });
+    const updatedSender = await prisma.user.findUnique({
+      where: { id: testUser1.id },
+    });
+    const updatedRecipient = await prisma.user.findUnique({
+      where: { id: testUser2.id },
+    });
 
     expect(updatedSender?.reputationPoints).toBe(initialSenderBalance - amount);
     expect(updatedRecipient?.reputationPoints).toBe(initialRecipientBalance + amount);
@@ -193,8 +203,16 @@ describe('Points Transfer - Basic Functionality', () => {
   it('should include message in transaction metadata', async () => {
     const amount = 50;
     const message = 'Thanks for your help!';
-    const currentSenderBalance = (await prisma.user.findUnique({ where: { id: testUser1.id } }))!.reputationPoints;
-    const currentRecipientBalance = (await prisma.user.findUnique({ where: { id: testUser2.id } }))!.reputationPoints;
+    const currentSenderBalance = (
+      await prisma.user.findUnique({
+        where: { id: testUser1.id },
+      })
+    )?.reputationPoints;
+    const currentRecipientBalance = (
+      await prisma.user.findUnique({
+        where: { id: testUser2.id },
+      })
+    )?.reputationPoints;
 
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -248,7 +266,7 @@ describe('Points Transfer - Basic Functionality', () => {
       orderBy: { createdAt: 'desc' },
     });
 
-    const metadata = JSON.parse(transaction!.metadata || '{}');
+    const metadata = JSON.parse(transaction?.metadata || '{}');
     expect(metadata.message).toBe(message);
 
     console.log('✅ Message stored in transaction metadata');
@@ -258,7 +276,11 @@ describe('Points Transfer - Basic Functionality', () => {
 describe('Points Transfer - Edge Cases', () => {
   it('should prevent transfers with insufficient balance', async () => {
     const amount = 999999; // More than testUser3 has
-    const user3Balance = (await prisma.user.findUnique({ where: { id: testUser3.id } }))!.reputationPoints;
+    const user3Balance = (
+      await prisma.user.findUnique({
+        where: { id: testUser3.id },
+      })
+    )?.reputationPoints;
 
     expect(user3Balance).toBeLessThan(amount);
     console.log('✅ Insufficient balance check would prevent transfer');
@@ -266,7 +288,11 @@ describe('Points Transfer - Edge Cases', () => {
 
   it('should handle zero-balance user receiving points', async () => {
     const amount = 25;
-    const currentBalance = (await prisma.user.findUnique({ where: { id: testUser3.id } }))!.reputationPoints;
+    const currentBalance = (
+      await prisma.user.findUnique({
+        where: { id: testUser3.id },
+      })
+    )?.reputationPoints;
 
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -284,8 +310,14 @@ describe('Points Transfer - Edge Cases', () => {
           id: await generateSnowflakeId(),
           userId: testUser1.id,
           amount: -amount,
-          pointsBefore: (await prisma.user.findUnique({ where: { id: testUser1.id } }))!.reputationPoints + amount,
-          pointsAfter: (await prisma.user.findUnique({ where: { id: testUser1.id } }))!.reputationPoints,
+          pointsBefore:
+            (await prisma.user.findUnique({ where: { id: testUser1.id } }))?.reputationPoints +
+            amount,
+          pointsAfter: (
+            await prisma.user.findUnique({
+              where: { id: testUser1.id },
+            })
+          )?.reputationPoints,
           reason: 'transfer_sent',
           metadata: JSON.stringify({
             recipientId: testUser3.id,
@@ -310,17 +342,31 @@ describe('Points Transfer - Edge Cases', () => {
       });
     });
 
-    const updatedUser3 = await prisma.user.findUnique({ where: { id: testUser3.id } });
+    const updatedUser3 = await prisma.user.findUnique({
+      where: { id: testUser3.id },
+    });
     expect(updatedUser3?.reputationPoints).toBe(currentBalance + amount);
 
     console.log('✅ Zero-balance user can receive points');
   });
 
   it('should maintain correct point totals across multiple transfers', async () => {
-    const user1Before = (await prisma.user.findUnique({ where: { id: testUser1.id } }))!.reputationPoints;
-    const user2Before = (await prisma.user.findUnique({ where: { id: testUser2.id } }))!.reputationPoints;
-    const user3Before = (await prisma.user.findUnique({ where: { id: testUser3.id } }))!.reputationPoints;
-    
+    const user1Before = (
+      await prisma.user.findUnique({
+        where: { id: testUser1.id },
+      })
+    )?.reputationPoints;
+    const user2Before = (
+      await prisma.user.findUnique({
+        where: { id: testUser2.id },
+      })
+    )?.reputationPoints;
+    const user3Before = (
+      await prisma.user.findUnique({
+        where: { id: testUser3.id },
+      })
+    )?.reputationPoints;
+
     const totalBefore = user1Before + user2Before + user3Before;
 
     console.log(`   Total points before: ${totalBefore}`);
@@ -335,8 +381,16 @@ describe('Points Transfer - Edge Cases', () => {
 
 describe('Points Transfer - Transaction Atomicity', () => {
   it('should rollback on transaction failure', async () => {
-    const user1Before = (await prisma.user.findUnique({ where: { id: testUser1.id } }))!.reputationPoints;
-    const user2Before = (await prisma.user.findUnique({ where: { id: testUser2.id } }))!.reputationPoints;
+    const user1Before = (
+      await prisma.user.findUnique({
+        where: { id: testUser1.id },
+      })
+    )?.reputationPoints;
+    const user2Before = (
+      await prisma.user.findUnique({
+        where: { id: testUser2.id },
+      })
+    )?.reputationPoints;
 
     try {
       await prisma.$transaction(async (tx) => {
@@ -348,12 +402,20 @@ describe('Points Transfer - Transaction Atomicity', () => {
         // Simulate error
         throw new Error('Simulated transaction error');
       });
-    } catch (err) {
+    } catch (_err) {
       // Expected to fail
     }
 
-    const user1After = (await prisma.user.findUnique({ where: { id: testUser1.id } }))!.reputationPoints;
-    const user2After = (await prisma.user.findUnique({ where: { id: testUser2.id } }))!.reputationPoints;
+    const user1After = (
+      await prisma.user.findUnique({
+        where: { id: testUser1.id },
+      })
+    )?.reputationPoints;
+    const user2After = (
+      await prisma.user.findUnique({
+        where: { id: testUser2.id },
+      })
+    )?.reputationPoints;
 
     expect(user1After).toBe(user1Before);
     expect(user2After).toBe(user2Before);
@@ -378,7 +440,7 @@ describe('Points Transfer - Trades Feed Integration', () => {
     for (const transfer of transfers) {
       expect(transfer.reason).toMatch(/^transfer_(sent|received)$/);
       expect(transfer.metadata).toBeTruthy();
-      
+
       const metadata = JSON.parse(transfer.metadata || '{}');
       expect(metadata.senderId || metadata.recipientId).toBeTruthy();
     }
@@ -426,7 +488,8 @@ describe('Points Transfer - Notification Creation', () => {
     expect(notification.type).toBe('points_received');
     expect(notification.userId).toBe(testUser2.id);
     expect(notification.actorId).toBe(testUser1.id);
-    expect(notification.message).toContain(testUser1.displayName || testUser1.username!);
+    const actorName = testUser1.displayName || testUser1.username || 'User';
+    expect(notification.message).toContain(actorName);
 
     console.log('✅ Notification created with correct data');
 
@@ -520,4 +583,3 @@ describe('Points Transfer - Data Integrity', () => {
 });
 
 console.log('\n🎉 All points transfer integration tests complete!\n');
-

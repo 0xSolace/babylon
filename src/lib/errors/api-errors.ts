@@ -5,9 +5,9 @@
  * Ensures consistent error responses across all endpoints.
  */
 
-import { NextResponse } from 'next/server'
-import { logger } from '@/lib/logger'
-import { z } from 'zod'
+import { logger } from '@/lib/logger';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 /**
  * Base API Error class
@@ -18,8 +18,8 @@ export class ApiError extends Error {
     public statusCode: number = 500,
     public code?: string
   ) {
-    super(message)
-    this.name = 'ApiError'
+    super(message);
+    this.name = 'ApiError';
   }
 }
 
@@ -28,8 +28,8 @@ export class ApiError extends Error {
  */
 export class BadRequestError extends ApiError {
   constructor(message: string, code?: string) {
-    super(message, 400, code)
-    this.name = 'BadRequestError'
+    super(message, 400, code);
+    this.name = 'BadRequestError';
   }
 }
 
@@ -38,8 +38,8 @@ export class BadRequestError extends ApiError {
  */
 export class UnauthorizedError extends ApiError {
   constructor(message: string = 'Unauthorized', code?: string) {
-    super(message, 401, code)
-    this.name = 'UnauthorizedError'
+    super(message, 401, code);
+    this.name = 'UnauthorizedError';
   }
 }
 
@@ -48,8 +48,8 @@ export class UnauthorizedError extends ApiError {
  */
 export class ForbiddenError extends ApiError {
   constructor(message: string = 'Forbidden', code?: string) {
-    super(message, 403, code)
-    this.name = 'ForbiddenError'
+    super(message, 403, code);
+    this.name = 'ForbiddenError';
   }
 }
 
@@ -58,8 +58,8 @@ export class ForbiddenError extends ApiError {
  */
 export class NotFoundError extends ApiError {
   constructor(resource: string = 'Resource', code?: string) {
-    super(`${resource} not found`, 404, code)
-    this.name = 'NotFoundError'
+    super(`${resource} not found`, 404, code);
+    this.name = 'NotFoundError';
   }
 }
 
@@ -68,8 +68,8 @@ export class NotFoundError extends ApiError {
  */
 export class ConflictError extends ApiError {
   constructor(message: string, code?: string) {
-    super(message, 409, code)
-    this.name = 'ConflictError'
+    super(message, 409, code);
+    this.name = 'ConflictError';
   }
 }
 
@@ -82,8 +82,8 @@ export class ValidationError extends ApiError {
     public errors?: Record<string, string[]>,
     code?: string
   ) {
-    super(message, 422, code)
-    this.name = 'ValidationError'
+    super(message, 422, code);
+    this.name = 'ValidationError';
   }
 }
 
@@ -96,8 +96,8 @@ export class RateLimitError extends ApiError {
     public reset?: number,
     code?: string
   ) {
-    super(message, 429, code)
-    this.name = 'RateLimitError'
+    super(message, 429, code);
+    this.name = 'RateLimitError';
   }
 }
 
@@ -106,8 +106,8 @@ export class RateLimitError extends ApiError {
  */
 export class InternalServerError extends ApiError {
   constructor(message: string = 'Internal server error', code?: string) {
-    super(message, 500, code)
-    this.name = 'InternalServerError'
+    super(message, 500, code);
+    this.name = 'InternalServerError';
   }
 }
 
@@ -116,8 +116,8 @@ export class InternalServerError extends ApiError {
  */
 export class ServiceUnavailableError extends ApiError {
   constructor(message: string = 'Service temporarily unavailable', code?: string) {
-    super(message, 503, code)
-    this.name = 'ServiceUnavailableError'
+    super(message, 503, code);
+    this.name = 'ServiceUnavailableError';
   }
 }
 
@@ -139,49 +139,49 @@ export function createErrorResponse(
   error: unknown,
   request?: Request
 ): NextResponse<ErrorResponse> {
-  let statusCode = 500
-  let message = 'An unexpected error occurred'
-  let code: string | undefined
-  let errors: Record<string, string[]> | undefined
+  let statusCode = 500;
+  let message = 'An unexpected error occurred';
+  let code: string | undefined;
+  let errors: Record<string, string[]> | undefined;
 
   if (error instanceof ApiError) {
-    statusCode = error.statusCode
-    message = error.message
-    code = error.code
+    statusCode = error.statusCode;
+    message = error.message;
+    code = error.code;
 
     if (error instanceof ValidationError) {
-      errors = error.errors
+      errors = error.errors;
     }
   } else if (error instanceof z.ZodError) {
     // Handle Zod validation errors
-    statusCode = 422
-    message = 'Validation error'
-    code = 'VALIDATION_ERROR'
-    errors = {}
+    statusCode = 422;
+    message = 'Validation error';
+    code = 'VALIDATION_ERROR';
+    errors = {};
 
     for (const issue of error.issues) {
-      const path = issue.path.join('.')
+      const path = issue.path.join('.');
       if (!errors[path]) {
-        errors[path] = []
+        errors[path] = [];
       }
-      errors[path].push(issue.message)
+      errors[path].push(issue.message);
     }
   } else if (error instanceof Error) {
-    message = error.message
+    message = error.message;
 
     // Check for specific error patterns
     if (error.message.includes('not found')) {
-      statusCode = 404
-      code = 'NOT_FOUND'
+      statusCode = 404;
+      code = 'NOT_FOUND';
     } else if (error.message.includes('unauthorized') || error.message.includes('authentication')) {
-      statusCode = 401
-      code = 'UNAUTHORIZED'
+      statusCode = 401;
+      code = 'UNAUTHORIZED';
     } else if (error.message.includes('forbidden') || error.message.includes('permission')) {
-      statusCode = 403
-      code = 'FORBIDDEN'
+      statusCode = 403;
+      code = 'FORBIDDEN';
     } else if (error.message.includes('duplicate') || error.message.includes('already exists')) {
-      statusCode = 409
-      code = 'CONFLICT'
+      statusCode = 409;
+      code = 'CONFLICT';
     }
   }
 
@@ -189,22 +189,27 @@ export function createErrorResponse(
     error: {
       message,
       code: code || 'UNKNOWN_ERROR',
-      violations: errors ? Object.entries(errors).map(([field, msgs]) => ({ field, message: msgs.join(', ') })) : undefined,
-      context: request ? { path: new URL(request.url).pathname } : undefined
-    }
-  }
+      violations: errors
+        ? Object.entries(errors).map(([field, msgs]) => ({
+            field,
+            message: msgs.join(', '),
+          }))
+        : undefined,
+      context: request ? { path: new URL(request.url).pathname } : undefined,
+    },
+  };
 
   // Log error
   if (statusCode >= 500) {
     logger.error('API error', {
       error: errorResponse,
       stack: error instanceof Error ? error.stack : undefined,
-    })
+    });
   } else {
-    logger.warn('API client error', errorResponse)
+    logger.warn('API client error', errorResponse);
   }
 
-  return NextResponse.json(errorResponse, { status: statusCode })
+  return NextResponse.json(errorResponse, { status: statusCode });
 }
 
 /**
@@ -218,11 +223,11 @@ export function withErrorHandling<T extends unknown[]>(
 ) {
   return async (...args: T): Promise<NextResponse> => {
     try {
-      return await handler(...args)
+      return await handler(...args);
     } catch (error) {
-      return createErrorResponse(error, args[0] as Request)
+      return createErrorResponse(error, args[0] as Request);
     }
-  }
+  };
 }
 
 /**
@@ -238,19 +243,19 @@ export async function validateRequestBody<T extends z.ZodType>(
   schema: T
 ): Promise<z.infer<T>> {
   try {
-    let body: unknown
+    let body: unknown;
     try {
-      body = await request.json()
+      body = await request.json();
     } catch {
-      throw new BadRequestError('Invalid JSON in request body', 'INVALID_JSON')
+      throw new BadRequestError('Invalid JSON in request body', 'INVALID_JSON');
     }
-    return schema.parse(body)
+    return schema.parse(body);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw error
+      throw error;
     }
 
-    throw new BadRequestError('Invalid JSON in request body')
+    throw new BadRequestError('Invalid JSON in request body');
   }
 }
 
@@ -266,8 +271,8 @@ export function validateQueryParams<T extends z.ZodType>(
   searchParams: URLSearchParams,
   schema: T
 ): z.infer<T> {
-  const params = Object.fromEntries(searchParams.entries())
-  return schema.parse(params)
+  const params = Object.fromEntries(searchParams.entries());
+  return schema.parse(params);
 }
 
 /**
@@ -278,7 +283,7 @@ export function validateQueryParams<T extends z.ZodType>(
  */
 export function requireAuth(userId: string | null | undefined): asserts userId is string {
   if (!userId) {
-    throw new UnauthorizedError('Authentication required')
+    throw new UnauthorizedError('Authentication required');
   }
 }
 
@@ -294,7 +299,7 @@ export function requirePermission(
   resource: string = 'this resource'
 ): asserts hasPermission {
   if (!hasPermission) {
-    throw new ForbiddenError(`You don't have permission to access ${resource}`)
+    throw new ForbiddenError(`You don't have permission to access ${resource}`);
   }
 }
 
@@ -310,6 +315,6 @@ export function requireResource<T>(
   name: string = 'Resource'
 ): asserts resource is T {
   if (resource === null || resource === undefined) {
-    throw new NotFoundError(name)
+    throw new NotFoundError(name);
   }
 }

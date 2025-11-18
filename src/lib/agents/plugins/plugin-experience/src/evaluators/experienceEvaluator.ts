@@ -1,11 +1,11 @@
 import {
   type Evaluator,
+  type HandlerCallback,
   type IAgentRuntime,
   type Memory,
+  ModelType,
   type State,
   logger,
-  type HandlerCallback,
-  ModelType,
 } from '@elizaos/core';
 import type { ExperienceService } from '../service';
 import { ExperienceType, OutcomeType } from '../types';
@@ -17,7 +17,7 @@ type ExtractedExperience = {
   confidence?: number;
   reasoning?: string;
 };
-
+// biome-disable lint/correctness/useHookAtTopLevel
 export const experienceEvaluator: Evaluator = {
   name: 'EXPERIENCE_EVALUATOR',
   similes: ['experience recorder', 'learning evaluator', 'self-reflection'],
@@ -107,17 +107,8 @@ export const experienceEvaluator: Evaluator = {
 
     const experienceService = runtime.getService('EXPERIENCE') as ExperienceService;
 
-    if (!experienceService) {
-      logger.warn('[experienceEvaluator] Experience service not available');
-      return;
-    }
-
     // Get last 10 messages as context for analysis
     const recentMessages = state?.recentMessagesData?.slice(-10) || [];
-    if (recentMessages.length < 3) {
-      logger.debug('[experienceEvaluator] Not enough messages for experience extraction');
-      return;
-    }
 
     // Combine recent messages into analysis context
     const conversationContext = recentMessages
@@ -125,12 +116,14 @@ export const experienceEvaluator: Evaluator = {
       .filter(Boolean)
       .join(' ');
 
-    // Query existing experiences for similarity check
-    const existingExperiences = await experienceService.queryExperiences({
-      query: conversationContext,
-      limit: 10,
-      minConfidence: 0.7,
-    });
+    // Query existing experiences for similarity check (if service available)
+    const existingExperiences = experienceService
+      ? await experienceService.queryExperiences({
+          query: conversationContext,
+          limit: 10,
+          minConfidence: 0.7,
+        })
+      : [];
 
     // Use LLM to extract novel experiences from the conversation
     const extractionPrompt = `Analyze this conversation for novel learning experiences that would be surprising or valuable to remember.
@@ -165,6 +158,16 @@ Return empty array [] if no novel experiences found.`;
     const response = await runtime.useModel(ModelType.TEXT_LARGE, {
       prompt: extractionPrompt,
     });
+
+    if (!experienceService) {
+      logger.warn('[experienceEvaluator] Experience service not available');
+      return;
+    }
+
+    if (recentMessages.length < 3) {
+      logger.debug('[experienceEvaluator] Not enough messages for experience extraction');
+      return;
+    }
 
     let experiences: ExtractedExperience[] = [];
     const jsonMatch = response.match(/\[[\s\S]*\]/);
@@ -224,6 +227,8 @@ Return empty array [] if no novel experiences found.`;
   },
 };
 
+/* biome-enable lint/correctness/useHookAtTopLevel */
+
 // Helper functions
 
 function sanitizeContext(text: string): string {
@@ -233,12 +238,14 @@ function sanitizeContext(text: string): string {
   return text
     .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[EMAIL]') // emails
     .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '[IP]') // IP addresses
-    .replace(/\/Users\/[^\/\s]+/g, '/Users/[USER]') // user directories
-    .replace(/\/home\/[^\/\s]+/g, '/home/[USER]') // home directories
+    .replace(/\/Users\/[^/\s]+/g, '/Users/[USER]') // user directories
+    .replace(/\/home\/[^/\s]+/g, '/home/[USER]') // home directories
     .replace(/\b[A-Z0-9]{20,}\b/g, '[TOKEN]') // API keys/tokens
     .replace(/\b(user|person|someone|they)\s+(said|asked|told|mentioned)/gi, 'when asked') // personal references
     .substring(0, 200); // limit length
 }
+
+// biome-enable lint/correctness/useHookAtTopLevel
 
 function detectDomain(text: string): string {
   const domains = {

@@ -1,40 +1,40 @@
 /**
  * HuggingFace Model Uploader
- * 
+ *
  * Uploads trained RL models to HuggingFace Hub with benchmark results and model cards.
  * Handles conversion from WANDB format to HuggingFace format.
  */
 
-import { promises as fs } from 'fs';
-import * as path from 'path';
+import type { SimulationMetrics } from '@/lib/benchmark/SimulationEngine';
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
-import type { SimulationMetrics } from '@/lib/benchmark/SimulationEngine';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 
-export interface ModelBenchmarkResult {
+export type ModelBenchmarkResult = {
   benchmarkId: string;
   runAt: string;
   metrics: SimulationMetrics;
-}
+};
 
-export interface ModelUploadOptions {
+export type ModelUploadOptions = {
   modelId: string; // Database model ID
   modelName: string; // HuggingFace model name (e.g., 'babylonlabs/babylon-agent-v1')
   description?: string;
   private?: boolean;
   includeWeights?: boolean;
   outputDir?: string;
-}
+};
 
-export interface ModelUploadResult {
+export type ModelUploadResult = {
   success: boolean;
   modelUrl?: string;
   modelId: string;
   filesUploaded: number;
   error?: string;
-}
+};
 
-export interface ModelCardData {
+export type ModelCardData = {
   modelId: string;
   modelName: string;
   version: string;
@@ -48,13 +48,14 @@ export interface ModelCardData {
     avgOptimality: number;
     benchmarkCount: number;
   };
-}
+};
 
 export class HuggingFaceModelUploader {
   private huggingFaceToken: string | undefined;
 
   constructor(huggingFaceToken?: string) {
-    this.huggingFaceToken = huggingFaceToken || process.env.HUGGING_FACE_TOKEN || process.env.HF_TOKEN;
+    this.huggingFaceToken =
+      huggingFaceToken || process.env.HUGGING_FACE_TOKEN || process.env.HF_TOKEN;
   }
 
   /**
@@ -62,11 +63,15 @@ export class HuggingFaceModelUploader {
    */
   async uploadModel(options: ModelUploadOptions): Promise<ModelUploadResult> {
     try {
-      logger.info('Starting HuggingFace model upload', { modelId: options.modelId });
+      logger.info('Starting HuggingFace model upload', {
+        modelId: options.modelId,
+      });
 
       // Validate token
       if (!this.huggingFaceToken) {
-        throw new Error('HuggingFace token not configured. Set HUGGING_FACE_TOKEN or HF_TOKEN environment variable.');
+        throw new Error(
+          'HuggingFace token not configured. Set HUGGING_FACE_TOKEN or HF_TOKEN environment variable.'
+        );
       }
 
       // Step 1: Load model from database
@@ -83,7 +88,9 @@ export class HuggingFaceModelUploader {
       const benchmarkResults = await this.getBenchmarkResults(options.modelId);
 
       if (benchmarkResults.length === 0) {
-        logger.warn('No benchmark results found for model', { modelId: options.modelId });
+        logger.warn('No benchmark results found for model', {
+          modelId: options.modelId,
+        });
       }
 
       // Step 3: Prepare model card data
@@ -99,7 +106,8 @@ export class HuggingFaceModelUploader {
       };
 
       // Step 4: Create output directory
-      const outputDir = options.outputDir || path.join(process.cwd(), 'exports', 'models', model.version);
+      const outputDir =
+        options.outputDir || path.join(process.cwd(), 'exports', 'models', model.version);
       await fs.mkdir(outputDir, { recursive: true });
 
       // Step 5: Generate model card
@@ -108,17 +116,24 @@ export class HuggingFaceModelUploader {
 
       // Step 6: Save metadata
       const metadataPath = path.join(outputDir, 'model_metadata.json');
-      await fs.writeFile(metadataPath, JSON.stringify({
-        modelId: model.modelId,
-        version: model.version,
-        baseModel: model.baseModel,
-        storagePath: model.storagePath,
-        wandbRunId: model.wandbRunId,
-        trainedAt: model.createdAt.toISOString(),
-        benchmarkScore: model.benchmarkScore,
-        avgReward: model.avgReward,
-        accuracy: model.accuracy,
-      }, null, 2));
+      await fs.writeFile(
+        metadataPath,
+        JSON.stringify(
+          {
+            modelId: model.modelId,
+            version: model.version,
+            baseModel: model.baseModel,
+            storagePath: model.storagePath,
+            wandbRunId: model.wandbRunId,
+            trainedAt: model.createdAt.toISOString(),
+            benchmarkScore: model.benchmarkScore,
+            avgReward: model.avgReward,
+            accuracy: model.accuracy,
+          },
+          null,
+          2
+        )
+      );
 
       // Step 7: Save benchmark results
       const benchmarksPath = path.join(outputDir, 'benchmark_results.json');
@@ -126,9 +141,11 @@ export class HuggingFaceModelUploader {
 
       // Step 8: Upload to HuggingFace (if weights available and requested)
       let filesUploaded = 2; // README.md + metadata
-      
+
       if (options.includeWeights && model.storagePath) {
-        logger.info('Uploading model to HuggingFace', { modelName: options.modelName });
+        logger.info('Uploading model to HuggingFace', {
+          modelName: options.modelName,
+        });
         const uploadCount = await this.uploadToHub(
           options.modelName,
           outputDir,
@@ -140,7 +157,7 @@ export class HuggingFaceModelUploader {
       }
 
       const modelUrl = `https://huggingface.co/${options.modelName}`;
-      
+
       logger.info('Model uploaded successfully', { modelUrl, filesUploaded });
 
       // Update model status in database
@@ -180,14 +197,14 @@ export class HuggingFaceModelUploader {
         orderBy: { runAt: 'desc' },
       });
 
-      return results.map(r => ({
+      return results.map((r) => ({
         benchmarkId: r.benchmarkId,
         runAt: r.runAt.toISOString(),
         metrics: r.detailedMetrics as unknown as SimulationMetrics,
       }));
     } catch (error) {
       logger.warn('Could not load benchmark results from database', { error });
-      
+
       // Fallback to files if database fails
       return await this.getBenchmarkResultsFromFiles(modelId);
     }
@@ -198,16 +215,16 @@ export class HuggingFaceModelUploader {
    */
   private async getBenchmarkResultsFromFiles(modelId: string): Promise<ModelBenchmarkResult[]> {
     const results: ModelBenchmarkResult[] = [];
-    
+
     try {
       const benchmarksDir = path.join(process.cwd(), 'benchmarks');
       const files = await fs.readdir(benchmarksDir);
-      
+
       for (const file of files) {
         if (file.endsWith('.json') && file.includes(modelId)) {
           const filePath = path.join(benchmarksDir, file);
           const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-          
+
           if (data.metrics) {
             results.push({
               benchmarkId: data.benchmarkId || file,
@@ -218,7 +235,9 @@ export class HuggingFaceModelUploader {
         }
       }
     } catch (error) {
-      logger.warn('Could not load benchmark results from files either', { error });
+      logger.warn('Could not load benchmark results from files either', {
+        error,
+      });
     }
 
     return results;
@@ -243,7 +262,10 @@ export class HuggingFaceModelUploader {
     }
 
     const totalPnl = benchmarkResults.reduce((sum, r) => sum + r.metrics.totalPnl, 0);
-    const totalAccuracy = benchmarkResults.reduce((sum, r) => sum + r.metrics.predictionMetrics.accuracy, 0);
+    const totalAccuracy = benchmarkResults.reduce(
+      (sum, r) => sum + r.metrics.predictionMetrics.accuracy,
+      0
+    );
     const totalOptimality = benchmarkResults.reduce((sum, r) => sum + r.metrics.optimalityScore, 0);
 
     return {
@@ -283,7 +305,9 @@ ${data.wandbRunId ? `- **W&B Run:** ${data.wandbRunId}` : ''}
 
 ## Performance Metrics
 
-${data.benchmarkResults.length > 0 ? `
+${
+  data.benchmarkResults.length > 0
+    ? `
 ### Benchmark Results (${data.benchmarkResults.length} runs)
 
 | Metric | Value |
@@ -295,7 +319,9 @@ ${data.benchmarkResults.length > 0 ? `
 ### Detailed Benchmark Results
 
 ${this.generateBenchmarkTable(data.benchmarkResults)}
-` : 'No benchmark results available yet.'}
+`
+    : 'No benchmark results available yet.'
+}
 
 ## Training Details
 
@@ -427,7 +453,7 @@ For questions or issues, please contact the Babylon team or open an issue on the
     let table = '| Benchmark | Date | P&L | Accuracy | Win Rate | Optimality |\n';
     table += '|-----------|------|-----|----------|----------|------------|\n';
 
-    results.forEach(result => {
+    results.forEach((result) => {
       const date = new Date(result.runAt).toISOString().split('T')[0];
       table += `| ${result.benchmarkId.substring(0, 20)}... | ${date} | ${result.metrics.totalPnl.toFixed(2)} | ${(result.metrics.predictionMetrics.accuracy * 100).toFixed(1)}% | ${(result.metrics.perpMetrics.winRate * 100).toFixed(1)}% | ${result.metrics.optimalityScore.toFixed(1)} |\n`;
     });
@@ -451,7 +477,7 @@ For questions or issues, please contact the Babylon team or open an issue on the
     try {
       // Use shared upload utility
       const { HuggingFaceUploadUtil } = await import('./shared/HuggingFaceUploadUtil');
-      
+
       return await HuggingFaceUploadUtil.uploadDirectory(
         modelName,
         'model',
@@ -460,7 +486,7 @@ For questions or issues, please contact the Babylon team or open an issue on the
       );
     } catch (error) {
       logger.error('Failed to upload to HuggingFace Hub', { error });
-      
+
       // Provide helpful manual upload instructions
       const { HuggingFaceUploadUtil } = await import('./shared/HuggingFaceUploadUtil');
       const instructions = HuggingFaceUploadUtil.getManualUploadInstructions(
@@ -468,11 +494,10 @@ For questions or issues, please contact the Babylon team or open an issue on the
         'model',
         localDir
       );
-      
+
       logger.info('To upload manually:', { instructions });
-      
+
       throw error;
     }
   }
 }
-

@@ -1,13 +1,13 @@
 /**
  * NPC Investment Actions API
- * 
+ *
  * @route POST /api/npc/[actorId]/invest - Execute investment actions
  * @access Public
- * 
+ *
  * @description
  * Executes investment actions for an NPC actor including portfolio monitoring,
  * rebalancing, risk management, and position adjustments.
- * 
+ *
  * @openapi
  * /api/npc/{actorId}/invest:
  *   post:
@@ -48,7 +48,7 @@
  *         description: Invalid action or input
  *       404:
  *         description: NPC actor not found
- * 
+ *
  * @example
  * ```typescript
  * await fetch(`/api/npc/${actorId}/invest`, {
@@ -58,52 +58,52 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { requireUserByIdentifier } from '@/lib/users/user-lookup'
-import { NPCInvestmentManager } from '@/lib/npc/npc-investment-manager'
+import { NPCInvestmentManager } from '@/lib/npc/npc-investment-manager';
+import { prisma } from '@/lib/prisma';
+import { requireUserByIdentifier } from '@/lib/users/user-lookup';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-interface RouteParams {
+type RouteParams = {
   params: Promise<{
-    actorId: string
-  }>
-}
+    actorId: string;
+  }>;
+};
 
-interface MonitorRequest {
-  action: 'monitor'
-  strategy?: 'aggressive' | 'conservative' | 'balanced'
-}
+type MonitorRequest = {
+  action: 'monitor';
+  strategy?: 'aggressive' | 'conservative' | 'balanced';
+};
 
-interface RebalanceRequest {
-  action: 'rebalance'
-  strategy?: 'aggressive' | 'conservative' | 'balanced'
-}
+type RebalanceRequest = {
+  action: 'rebalance';
+  strategy?: 'aggressive' | 'conservative' | 'balanced';
+};
 
-interface ExecuteRequest {
-  action: 'execute'
+type ExecuteRequest = {
+  action: 'execute';
   rebalanceAction: {
-    type: 'open' | 'close' | 'resize'
-    positionId?: string
-    marketType: 'perp' | 'prediction'
-    ticker?: string
-    marketId?: string
-    side: string
-    targetSize: number
-    reason: string
-  }
-}
+    type: 'open' | 'close' | 'resize';
+    positionId?: string;
+    marketType: 'perp' | 'prediction';
+    ticker?: string;
+    marketId?: string;
+    side: string;
+    targetSize: number;
+    reason: string;
+  };
+};
 
-type InvestRequest = MonitorRequest | RebalanceRequest | ExecuteRequest
+type InvestRequest = MonitorRequest | RebalanceRequest | ExecuteRequest;
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const { actorId } = await params
+  const { actorId } = await params;
 
-  const body = (await request.json()) as InvestRequest
+  const body = (await request.json()) as InvestRequest;
 
-  const actor = await requireUserByIdentifier(actorId)
+  const actor = await requireUserByIdentifier(actorId);
 
-  const pool = await prisma.pool.findFirst({
+const pool = await prisma.pool.findFirst({
     where: {
       npcActorId: actor.id,
       isActive: true,
@@ -114,78 +114,77 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           personality: true,
         },
       },
-    },
-  })
+  },
+});
 
-  let strategy: 'aggressive' | 'conservative' | 'balanced' = 'balanced'
+  if (!pool) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Active pool not found for this NPC',
+      },
+      { status: 404 }
+    );
+  }
+
+  let strategy: 'aggressive' | 'conservative' | 'balanced' = 'balanced';
 
   if ('strategy' in body && body.strategy) {
-    strategy = body.strategy
-  } else if (pool!.Actor?.personality) {
-    const personalityLower = pool!.Actor.personality.toLowerCase()
-    const aggressiveKeywords = ['erratic', 'disaster', 'memecoin', 'degen']
-    const conservativeKeywords = ['vampire', 'yacht', 'philosopher']
+    strategy = body.strategy;
+  } else if (pool.Actor?.personality) {
+    const personalityLower = pool.Actor.personality.toLowerCase();
+    const aggressiveKeywords = ['erratic', 'disaster', 'memecoin', 'degen'];
+    const conservativeKeywords = ['vampire', 'yacht', 'philosopher'];
 
     if (aggressiveKeywords.some((kw) => personalityLower.includes(kw))) {
-      strategy = 'aggressive'
+      strategy = 'aggressive';
     } else if (conservativeKeywords.some((kw) => personalityLower.includes(kw))) {
-      strategy = 'conservative'
+      strategy = 'conservative';
     }
   }
 
   if (body.action === 'monitor') {
-    const actions = await NPCInvestmentManager.monitorPortfolio(
-      pool!.id,
-      actor.id,
-      strategy
-    )
+    const actions = await NPCInvestmentManager.monitorPortfolio(pool.id, actor.id, strategy);
 
     return NextResponse.json({
       success: true,
       actorId: actor.id,
-      poolId: pool!.id,
+      poolId: pool.id,
       strategy,
       actions,
       actionCount: actions.length,
-      message: actions.length > 0
-        ? `Found ${actions.length} recommended action(s)`
-        : 'Portfolio is balanced, no actions needed',
-    })
+      message:
+        actions.length > 0
+          ? `Found ${actions.length} recommended action(s)`
+          : 'Portfolio is balanced, no actions needed',
+    });
   } else if (body.action === 'rebalance') {
-    const actions = await NPCInvestmentManager.monitorPortfolio(
-      pool!.id,
-      actor.id,
-      strategy
-    )
+    const actions = await NPCInvestmentManager.monitorPortfolio(pool.id, actor.id, strategy);
 
-    const results = []
+    const results = [];
     for (const action of actions) {
-      await NPCInvestmentManager.executeRebalanceAction(actor.id, pool!.id, action)
-      results.push({ action, success: true })
+      await NPCInvestmentManager.executeRebalanceAction(actor.id, pool.id, action);
+      results.push({ action, success: true });
     }
 
     return NextResponse.json({
       success: true,
       actorId: actor.id,
-      poolId: pool!.id,
+      poolId: pool.id,
       strategy,
       actionsExecuted: results.length,
       results,
       message: `Executed ${results.filter((r) => r.success).length} of ${results.length} actions`,
-    })
+    });
   } else {
-    await NPCInvestmentManager.executeRebalanceAction(
-      actor.id,
-      pool!.id,
-      body.rebalanceAction
-    )
+    await NPCInvestmentManager.executeRebalanceAction(actor.id, pool.id, body.rebalanceAction);
 
     return NextResponse.json({
       success: true,
       actorId: actor.id,
-      poolId: pool!.id,
+      poolId: pool.id,
       action: body.rebalanceAction,
       message: `Executed ${body.rebalanceAction.type} action for ${body.rebalanceAction.ticker || body.rebalanceAction.marketId}`,
-    })
+    });
   }
 }

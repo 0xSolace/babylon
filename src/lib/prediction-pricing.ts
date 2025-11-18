@@ -1,13 +1,13 @@
 /**
  * Prediction Market AMM Pricing
  * Pure math - no dependencies, can be used client or server side
- * 
+ *
  * Uses Constant Product Market Maker (CPMM): k = yesShares * noShares
  */
 
-import { FEE_CONFIG } from '@/lib/config/fees'
+import { FEE_CONFIG } from '@/lib/config/fees';
 
-export interface ShareCalculation {
+export type ShareCalculation = {
   sharesBought: number;
   avgPrice: number;
   newYesPrice: number;
@@ -16,7 +16,7 @@ export interface ShareCalculation {
   totalCost: number;
   newYesShares: number;
   newNoShares: number;
-}
+};
 
 export interface ShareCalculationWithFees extends ShareCalculation {
   fee: number;
@@ -61,7 +61,7 @@ export class PredictionPricing {
       newYesShares = k / newNoShares;
       sharesBought = currentYesShares - newYesShares;
     } else {
-      // User pays USD → increases YES reserves  
+      // User pays USD → increases YES reserves
       // User gets NO shares → decreases NO reserves
       newYesShares = currentYesShares + usdAmount;
       newNoShares = k / newYesShares;
@@ -192,24 +192,24 @@ export class PredictionPricing {
     totalAmount: number
   ): ShareCalculationWithFees {
     // Calculate fee
-    const fee = totalAmount * FEE_CONFIG.TRADING_FEE_RATE
-    const netAmount = totalAmount - fee
-    
+    const fee = totalAmount * FEE_CONFIG.TRADING_FEE_RATE;
+    const netAmount = totalAmount - fee;
+
     // Calculate shares with net amount
-    const baseCalc = this.calculateBuy(
+    const baseCalc = PredictionPricing.calculateBuy(
       currentYesShares,
       currentNoShares,
       side,
       netAmount
-    )
-    
+    );
+
     return {
       ...baseCalc,
       fee,
       netAmount,
       totalWithFee: totalAmount,
       totalCost: netAmount,
-    }
+    };
   }
 
   /**
@@ -223,24 +223,24 @@ export class PredictionPricing {
     sharesToSell: number
   ): ShareCalculationWithFees {
     // Calculate base proceeds
-    const baseCalc = this.calculateSell(
+    const baseCalc = PredictionPricing.calculateSell(
       currentYesShares,
       currentNoShares,
       side,
       sharesToSell
-    )
-    
-    const grossProceeds = baseCalc.totalCost
-    const fee = grossProceeds * FEE_CONFIG.TRADING_FEE_RATE
-    const netProceeds = grossProceeds - fee
-    
+    );
+
+    const grossProceeds = baseCalc.totalCost;
+    const fee = grossProceeds * FEE_CONFIG.TRADING_FEE_RATE;
+    const netProceeds = grossProceeds - fee;
+
     return {
       ...baseCalc,
       fee,
       netAmount: netProceeds,
       netProceeds,
       totalCost: grossProceeds,
-    }
+    };
   }
 }
 

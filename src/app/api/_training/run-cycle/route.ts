@@ -1,14 +1,14 @@
 /**
  * Internal Training Cycle API
- * 
+ *
  * @route GET /api/_training/run-cycle - Get training cycle status
  * @route POST /api/_training/run-cycle - Run training cycle (disabled)
  * @access Internal
- * 
+ *
  * @description
  * Internal training endpoint. Training functionality is handled by separate
  * Eliza agent processes. This endpoint is kept for future integration.
- * 
+ *
  * @openapi
  * /api/_training/run-cycle:
  *   get:
@@ -49,12 +49,12 @@
  *                   type: string
  */
 
-import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { NextResponse } from 'next/server';
 
 export async function POST() {
   logger.info('Training cycle endpoint called (currently disabled)');
-  
+
   return NextResponse.json({
     success: false,
     message: 'Manual training cycles are currently disabled',

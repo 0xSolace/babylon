@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 /**
  * Game Control (Direct Database)
- * 
+ *
  * Direct database script to start/pause the game (works without running server)
- * 
+ *
  * Usage:
  *   bun run scripts/game-control-db().ts start   - Start the game
  *   bun run scripts/game-control-db().ts pause   - Pause the game
@@ -31,7 +31,11 @@ async function controlGame(action: 'start' | 'pause') {
         updatedAt: new Date(),
       },
     });
-    logger.info(`✅ Game created and ${action === 'start' ? 'started' : 'paused'}!`, { gameId: game.id }, 'Game Control');
+    logger.info(
+      `✅ Game created and ${action === 'start' ? 'started' : 'paused'}!`,
+      { gameId: game.id },
+      'Game Control'
+    );
   } else {
     // Update the existing game
     const isRunning = action === 'start';
@@ -55,19 +59,27 @@ async function controlGame(action: 'start' | 'pause') {
       data: updateData,
     });
 
-    logger.info(`✅ Game ${action === 'start' ? 'started' : 'paused'}!`, { 
-      gameId: game.id,
-      isRunning: game.isRunning,
-      currentDay: game.currentDay 
-    }, 'Game Control');
+    logger.info(
+      `✅ Game ${action === 'start' ? 'started' : 'paused'}!`,
+      {
+        gameId: game.id,
+        isRunning: game.isRunning,
+        currentDay: game.currentDay,
+      },
+      'Game Control'
+    );
   }
 
-  logger.info('Game Details:', {
-    id: game.id,
-    isRunning: game.isRunning,
-    currentDay: game.currentDay,
-    lastTickAt: game.lastTickAt?.toISOString() || 'Never',
-  }, 'Game Control');
+  logger.info(
+    'Game Details:',
+    {
+      id: game.id,
+      isRunning: game.isRunning,
+      currentDay: game.currentDay,
+      lastTickAt: game.lastTickAt?.toISOString() || 'Never',
+    },
+    'Game Control'
+  );
 
   await prisma.$disconnect();
 }
@@ -78,7 +90,11 @@ async function getStatus() {
   });
 
   if (!game) {
-    logger.warn('⚠️  No game found. Use "bun run game:start" to create and start one.', undefined, 'Game Control');
+    logger.warn(
+      '⚠️  No game found. Use "bun run game:start" to create and start one.',
+      undefined,
+      'Game Control'
+    );
     await prisma.$disconnect();
     return;
   }
@@ -87,21 +103,29 @@ async function getStatus() {
   logger.info('═'.repeat(60), undefined, 'Game Control');
   logger.info('📊 Game Status', undefined, 'Game Control');
   logger.info('═'.repeat(60), undefined, 'Game Control');
-  logger.info(`   Status: ${game.isRunning ? '✅ RUNNING' : '⏸️  PAUSED'}`, undefined, 'Game Control');
+  logger.info(
+    `   Status: ${game.isRunning ? '✅ RUNNING' : '⏸️  PAUSED'}`,
+    undefined,
+    'Game Control'
+  );
   logger.info(`   Current Day: ${game.currentDay}`, undefined, 'Game Control');
   logger.info(`   Current Date: ${game.currentDate.toLocaleString()}`, undefined, 'Game Control');
   logger.info(`   Active Questions: ${game.activeQuestions}`, undefined, 'Game Control');
   logger.info(`   Speed: ${game.speed}ms between ticks`, undefined, 'Game Control');
-  logger.info(`   Last Tick: ${game.lastTickAt ? game.lastTickAt.toLocaleString() : 'Never'}`, undefined, 'Game Control');
-  
+  logger.info(
+    `   Last Tick: ${game.lastTickAt ? game.lastTickAt.toLocaleString() : 'Never'}`,
+    undefined,
+    'Game Control'
+  );
+
   if (game.startedAt) {
     logger.info(`   Started At: ${game.startedAt.toLocaleString()}`, undefined, 'Game Control');
   }
-  
+
   if (game.pausedAt) {
     logger.info(`   Paused At: ${game.pausedAt.toLocaleString()}`, undefined, 'Game Control');
   }
-  
+
   logger.info('═'.repeat(60), undefined, 'Game Control');
   logger.info('', undefined, 'Game Control');
 
@@ -110,7 +134,7 @@ async function getStatus() {
   } else {
     logger.info('💡 To pause the game, run: bun run game:pause', undefined, 'Game Control');
   }
-  
+
   await prisma.$disconnect();
 }
 

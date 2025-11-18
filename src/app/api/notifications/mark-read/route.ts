@@ -1,13 +1,13 @@
 /**
  * Mark Notifications as Read API
- * 
+ *
  * @route POST /api/notifications/mark-read - Mark notifications as read
  * @access Authenticated
- * 
+ *
  * @description
  * Marks one or more notifications as read/acknowledged. Supports marking
  * specific notifications, all notifications of a type, or all notifications.
- * 
+ *
  * @openapi
  * /api/notifications/mark-read:
  *   post:
@@ -41,7 +41,7 @@
  *         description: Invalid input
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/notifications/mark-read', {
@@ -52,10 +52,10 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { authenticate } from '@/lib/api/auth-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
 const markReadSchema = z.object({
@@ -139,4 +139,3 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-

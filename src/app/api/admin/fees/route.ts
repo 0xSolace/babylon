@@ -1,14 +1,14 @@
 /**
  * Admin Fees API
- * 
+ *
  * @route GET /api/admin/fees - Get fee statistics
  * @access Admin
- * 
+ *
  * @description
  * Returns comprehensive fee statistics including global totals, breakdown by type,
  * top fee payers, and recent transactions. Supports date range filtering.
  * Requires admin authentication.
- * 
+ *
  * @openapi
  * /api/admin/fees:
  *   get:
@@ -58,24 +58,24 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const stats = await fetch('/api/admin/fees?startDate=2024-01-01&limit=50', {
  *   headers: { 'Authorization': `Bearer ${adminToken}` }
  * }).then(r => r.json());
  * ```
- * 
+ *
  * @see {@link /lib/api/admin-middleware} Admin middleware
  * @see {@link /lib/services/fee-service} Fee service
  */
 
-import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api/admin-middleware';
 import { errorResponse, successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { prisma } from '@/lib/prisma';
 import { FeeService } from '@/lib/services/fee-service';
 import type { Prisma } from '@prisma/client';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/admin/fees
@@ -123,14 +123,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const limit = Math.min(parsedLimit, 100);
 
-  const dateFilter: Prisma.TradingFeeWhereInput = startDate || endDate
-    ? {
-        createdAt: {
-          ...(startDate ? { gte: startDate } : {}),
-          ...(endDate ? { lte: endDate } : {}),
-        },
-      }
-    : {};
+  const dateFilter: Prisma.TradingFeeWhereInput =
+    startDate || endDate
+      ? {
+          createdAt: {
+            ...(startDate ? { gte: startDate } : {}),
+            ...(endDate ? { lte: endDate } : {}),
+          },
+        }
+      : {};
 
   // Get platform-wide fee statistics (user fees from TradingFee table)
   const platformStats = await FeeService.getPlatformFeeStats(startDate, endDate);
@@ -252,27 +253,45 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Enrich with user data
-  const enrichedTopReferralEarners = await Promise.all(
-    topReferralEarners.map(async (item) => {
-      const user = await prisma.user.findUnique({
-        where: { id: item.referrerId! },
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          profileImageUrl: true,
-        },
-      });
+  const enrichedTopReferralEarners = (
+    await Promise.all(
+      topReferralEarners.map(async (item) => {
+        const referrerId = item.referrerId;
+        if (!referrerId) {
+          return null;
+        }
 
-      return {
-        userId: item.referrerId!,
-        username: user?.username || 'Unknown',
-        displayName: user?.displayName || 'Unknown User',
-        profileImageUrl: user?.profileImageUrl || null,
-        totalEarned: Number(item._sum.referrerFee || 0),
-        referralCount: item._count,
-      };
-    })
+        const user = await prisma.user.findUnique({
+          where: { id: referrerId },
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            profileImageUrl: true,
+          },
+        });
+
+        return {
+          userId: referrerId,
+          username: user?.username || 'Unknown',
+          displayName: user?.displayName || 'Unknown User',
+          profileImageUrl: user?.profileImageUrl || null,
+          totalEarned: Number(item._sum.referrerFee || 0),
+          referralCount: item._count,
+        };
+      })
+    )
+  ).filter(
+    (
+      entry
+    ): entry is {
+      userId: string;
+      username: string;
+      displayName: string;
+      profileImageUrl: string | null;
+      totalEarned: number;
+      referralCount: number;
+    } => entry !== null
   );
 
   // Get recent fee transactions
@@ -305,7 +324,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const enrichedRecentFees = await Promise.all(
     recentFees.map(async (fee) => {
       let userData = fee.User_TradingFee_userIdToUser;
-      
+
       // If no user data, try to find actor
       if (!userData) {
         const actor = await prisma.actor.findUnique({
@@ -346,8 +365,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const trendStartDate =
-    startDate && startDate > thirtyDaysAgo ? startDate : thirtyDaysAgo;
+  const trendStartDate = startDate && startDate > thirtyDaysAgo ? startDate : thirtyDaysAgo;
 
   const dailyFeeRecords = await prisma.tradingFee.findMany({
     where: {
@@ -366,10 +384,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 
-  const trendMap = new Map<
-    string,
-    { totalFees: number; tradeCount: number }
-  >();
+  const trendMap = new Map<string, { totalFees: number; tradeCount: number }>();
 
   for (const record of dailyFeeRecords) {
     const dayKey = record.createdAt?.toISOString().split('T')[0];
@@ -412,4 +427,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     feeTrend,
   });
 });
-

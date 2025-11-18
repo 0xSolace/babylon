@@ -1,13 +1,13 @@
 /**
  * Chat Unread Count API
- * 
+ *
  * @route GET /api/chats/unread-count - Get unread message counts
  * @access Authenticated
- * 
+ *
  * @description
  * Lightweight endpoint for polling unread message counts. Returns pending DM
  * requests and new message indicators. Optimized for frequent polling.
- * 
+ *
  * @openapi
  * /api/chats/unread-count:
  *   get:
@@ -33,7 +33,7 @@
  *                   description: Whether there are new messages in last 24h
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * // Poll for unread counts
@@ -42,34 +42,34 @@
  * });
  * const { pendingDMs, hasNewMessages } = await response.json();
  * ```
- * 
+ *
  * @see {@link /lib/db/context} RLS context
  */
 
-import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/api/auth-middleware';
 import { asUser } from '@/lib/db/context';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/chats/unread-count
  * Get counts of pending DMs and unread messages
- * 
+ *
  * Returns:
  * - pendingDMs: Number of DM requests from anons awaiting acceptance
  * - hasNewMessages: Boolean indicating if there are any new messages
  */
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const user = await authenticate(request)
+  const user = await authenticate(request);
 
   const counts = await asUser(user, async (db) => {
-    let pendingDMCount = 0
+    let pendingDMCount = 0;
     pendingDMCount = await db.dMAcceptance.count({
       where: {
         userId: user.userId,
         status: 'pending',
       },
-    })
+    });
 
     const chatsWithParticipation = await db.chatParticipant.findMany({
       where: {
@@ -78,11 +78,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       select: {
         chatId: true,
       },
-    })
+    });
 
-    const chatIds = chatsWithParticipation.map(cp => cp.chatId)
+    const chatIds = chatsWithParticipation.map((cp) => cp.chatId);
 
-    let recentMessageCount = 0
+    let recentMessageCount = 0;
     recentMessageCount = await db.message.count({
       where: {
         chatId: {
@@ -96,14 +96,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         },
       },
       take: 1,
-    })
+    });
 
     return {
       pendingDMs: pendingDMCount,
       hasNewMessages: recentMessageCount > 0,
-    }
-  })
+    };
+  });
 
-  return successResponse(counts)
-})
-
+  return successResponse(counts);
+});

@@ -4,22 +4,22 @@
  * Centralized service for managing reputation points and rewards
  * Tracks all point transactions and ensures no duplicate awards
  */
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
-import { generateSnowflakeId } from '@/lib/snowflake';
-import { POINTS, type PointsReason } from '@/lib/constants/points';
 
+import { POINTS, type PointsReason } from '@/lib/constants/points';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
 import type { JsonValue } from '@/types/common';
 
 type LeaderboardCategory = 'all' | 'earned' | 'referral';
 
-interface AwardPointsResult {
+type AwardPointsResult = {
   success: boolean;
   pointsAwarded: number;
   newTotal: number;
   alreadyAwarded?: boolean;
   error?: string;
-}
+};
 
 export class PointsService {
   /**
@@ -56,7 +56,7 @@ export class PointsService {
     }
 
     // Check if points were already awarded for this reason
-    const alreadyAwarded = this.checkAlreadyAwarded(user, reason);
+    const alreadyAwarded = PointsService.checkAlreadyAwarded(user, reason);
     if (alreadyAwarded) {
       return {
         success: true,
@@ -71,13 +71,13 @@ export class PointsService {
 
     // Build update data with proper typing for Prisma
     const updateData: {
-      reputationPoints: number
-      invitePoints?: number
-      bonusPoints?: number
-      pointsAwardedForProfile?: boolean
-      pointsAwardedForFarcaster?: boolean
-      pointsAwardedForTwitter?: boolean
-      pointsAwardedForWallet?: boolean
+      reputationPoints: number;
+      invitePoints?: number;
+      bonusPoints?: number;
+      pointsAwardedForProfile?: boolean;
+      pointsAwardedForFarcaster?: boolean;
+      pointsAwardedForTwitter?: boolean;
+      pointsAwardedForWallet?: boolean;
     } = {
       reputationPoints: pointsAfter,
     };
@@ -150,14 +150,8 @@ export class PointsService {
    * Award points for profile completion (username + image + bio)
    * This consolidates what were previously separate rewards
    */
-  static async awardProfileCompletion(
-    userId: string
-  ): Promise<AwardPointsResult> {
-    return this.awardPoints(
-      userId,
-      POINTS.PROFILE_COMPLETION,
-      'profile_completion'
-    );
+  static async awardProfileCompletion(userId: string): Promise<AwardPointsResult> {
+    return PointsService.awardPoints(userId, POINTS.PROFILE_COMPLETION, 'profile_completion');
   }
 
   /**
@@ -167,7 +161,7 @@ export class PointsService {
     userId: string,
     farcasterUsername?: string
   ): Promise<AwardPointsResult> {
-    return this.awardPoints(
+    return PointsService.awardPoints(
       userId,
       POINTS.FARCASTER_LINK,
       'farcaster_link',
@@ -182,7 +176,7 @@ export class PointsService {
     userId: string,
     twitterUsername?: string
   ): Promise<AwardPointsResult> {
-    return this.awardPoints(
+    return PointsService.awardPoints(
       userId,
       POINTS.TWITTER_LINK,
       'twitter_link',
@@ -197,7 +191,7 @@ export class PointsService {
     userId: string,
     walletAddress?: string
   ): Promise<AwardPointsResult> {
-    return this.awardPoints(
+    return PointsService.awardPoints(
       userId,
       POINTS.WALLET_CONNECT,
       'wallet_connect',
@@ -214,11 +208,10 @@ export class PointsService {
     contentType: string,
     contentId?: string
   ): Promise<AwardPointsResult> {
-    const amount =
-      platform === 'twitter' ? POINTS.SHARE_TO_TWITTER : POINTS.SHARE_ACTION;
+    const amount = platform === 'twitter' ? POINTS.SHARE_TO_TWITTER : POINTS.SHARE_ACTION;
     const reason = platform === 'twitter' ? 'share_to_twitter' : 'share_action';
 
-    return this.awardPoints(userId, amount, reason, {
+    return PointsService.awardPoints(userId, amount, reason, {
       platform,
       contentType,
       ...(contentId ? { contentId } : {}),
@@ -232,7 +225,7 @@ export class PointsService {
     referrerId: string,
     referredUserId: string
   ): Promise<AwardPointsResult> {
-    const result = await this.awardPoints(
+    const result = await PointsService.awardPoints(
       referrerId,
       POINTS.REFERRAL_SIGNUP,
       'referral_signup',
@@ -260,13 +253,13 @@ export class PointsService {
     paymentTxHash?: string
   ): Promise<AwardPointsResult> {
     // Calculate points: 100 points per $1
-    const pointsAmount = Math.floor(amountUSD * 100)
+    const pointsAmount = Math.floor(amountUSD * 100);
 
     // Get current user state
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { reputationPoints: true },
-    })
+    });
 
     if (!user) {
       return {
@@ -274,11 +267,11 @@ export class PointsService {
         pointsAwarded: 0,
         newTotal: 0,
         error: 'User not found',
-      }
+      };
     }
 
-    const pointsBefore = user.reputationPoints
-    const pointsAfter = pointsBefore + pointsAmount
+    const pointsBefore = user.reputationPoints;
+    const pointsAfter = pointsBefore + pointsAmount;
 
     // Execute in transaction
     await prisma.$transaction(async (tx) => {
@@ -313,39 +306,13 @@ export class PointsService {
       `User ${userId} purchased ${pointsAmount} points for $${amountUSD}`,
       { userId, pointsAmount, amountUSD, paymentRequestId },
       'PointsService'
-    )
+    );
 
     return {
       success: true,
       pointsAwarded: pointsAmount,
       newTotal: pointsAfter,
-    }
-  }
-
-  /**
-   * Check if points were already awarded for a specific reason
-   */
-  private static checkAlreadyAwarded(
-    user: {
-      pointsAwardedForProfile: boolean;
-      pointsAwardedForFarcaster: boolean;
-      pointsAwardedForTwitter: boolean;
-      pointsAwardedForWallet: boolean;
-    },
-    reason: PointsReason
-  ): boolean {
-    switch (reason) {
-      case 'profile_completion':
-        return user.pointsAwardedForProfile;
-      case 'farcaster_link':
-        return user.pointsAwardedForFarcaster;
-      case 'twitter_link':
-        return user.pointsAwardedForTwitter;
-      case 'wallet_connect':
-        return user.pointsAwardedForWallet;
-      default:
-        return false; // For share actions and referrals, allow multiple awards
-    }
+    };
   }
 
   /**

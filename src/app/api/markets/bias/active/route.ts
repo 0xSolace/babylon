@@ -1,14 +1,14 @@
 /**
  * Active Market Biases API
- * 
+ *
  * @route GET /api/markets/bias/active - Get active market biases
  * @access Public
- * 
+ *
  * @description
  * Returns list of all active market biases configured in the system. Shows
  * current sentiment/price manipulations affecting markets. Used for transparency
  * and market analysis.
- * 
+ *
  * @openapi
  * /api/markets/bias/active:
  *   get:
@@ -53,23 +53,23 @@
  *                         type: number
  *                 count:
  *                   type: integer
- * 
+ *
  * @example
  * ```typescript
  * const { biases } = await fetch('/api/markets/bias/active')
  *   .then(r => r.json());
  * ```
- * 
+ *
  * @see {@link /lib/feedback/bias-engine} Bias engine
  */
 
-import { NextResponse } from 'next/server'
-import { biasEngine } from '@/lib/feedback/bias-engine'
-import { withErrorHandling } from '@/lib/errors/error-handler'
+import { withErrorHandling } from '@/lib/errors/error-handler';
+import { biasEngine } from '@/lib/feedback/bias-engine';
+import { NextResponse } from 'next/server';
 
 export const GET = withErrorHandling(async function GET() {
   // Get all active biases from the singleton engine
-  const activeBiases = biasEngine.getActiveBiases()
+  const activeBiases = biasEngine.getActiveBiases();
 
   // Format biases for API response
   const biases = activeBiases.map((bias) => ({
@@ -82,11 +82,11 @@ export const GET = withErrorHandling(async function GET() {
     decayRate: bias.decayRate,
     // Get current adjustment values
     adjustment: biasEngine.getBiasAdjustment(bias.entityId),
-  }))
+  }));
 
   return NextResponse.json({
     success: true,
     biases,
     count: biases.length,
-  })
-})
+  });
+});

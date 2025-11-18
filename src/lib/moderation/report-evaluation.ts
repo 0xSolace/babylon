@@ -1,85 +1,85 @@
 /**
  * Report Evaluation Service
- * 
+ *
  * Collects context (chat messages, posts, reports) and uses AI to evaluate
  * report validity and determine appropriate actions.
  */
 
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { callClaudeDirect } from '@/lib/agents/llm/direct-claude'
-import { createNotification } from '@/lib/services/notification-service'
+import { callClaudeDirect } from '@/lib/agents/llm/direct-claude';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { createNotification } from '@/lib/services/notification-service';
 
 export type ReportEvaluationOutcome =
   | 'valid_report' // Reporter has valid reason, reported user is abusive
   | 'invalid_report' // Reporter has fair reason but is not right
   | 'abusive_reporter' // Reporter is being abusive themselves
-  | 'insufficient_evidence' // Not enough evidence to make a determination
+  | 'insufficient_evidence'; // Not enough evidence to make a determination
 
-export interface ReportEvaluationResult {
-  outcome: ReportEvaluationOutcome
-  confidence: number // 0-1
-  reasoning: string
-  recommendedActions: string[]
+export type ReportEvaluationResult = {
+  outcome: ReportEvaluationOutcome;
+  confidence: number; // 0-1
+  reasoning: string;
+  recommendedActions: string[];
   evidenceSummary: {
-    chatMessages: number
-    posts: number
-    reportsReceived: number
-    reportsSent: number
-  }
-}
+    chatMessages: number;
+    posts: number;
+    reportsReceived: number;
+    reportsSent: number;
+  };
+};
 
-interface ReportContext {
+type ReportContext = {
   reporter: {
-    id: string
-    username: string | null
-    displayName: string | null
-    recentReportsSent: number
-    recentReportsReceived: number
-    earnedPoints: number
-    totalDeposited: number
-    totalWithdrawn: number
-    lifetimePnL: number
-  }
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    recentReportsSent: number;
+    recentReportsReceived: number;
+    earnedPoints: number;
+    totalDeposited: number;
+    totalWithdrawn: number;
+    lifetimePnL: number;
+  };
   reported: {
-    id: string
-    username: string | null
-    displayName: string | null
-    recentReportsReceived: number
-    recentReportsSent: number
-    earnedPoints: number
-    totalDeposited: number
-    totalWithdrawn: number
-    lifetimePnL: number
-  }
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    recentReportsReceived: number;
+    recentReportsSent: number;
+    earnedPoints: number;
+    totalDeposited: number;
+    totalWithdrawn: number;
+    lifetimePnL: number;
+  };
   report: {
-    id: string
-    category: string
-    reason: string
-    evidence: string | null
-    createdAt: Date
-  }
+    id: string;
+    category: string;
+    reason: string;
+    evidence: string | null;
+    createdAt: Date;
+  };
   chatMessages: Array<{
-    id: string
-    senderId: string
-    content: string
-    createdAt: Date
-  }>
+    id: string;
+    senderId: string;
+    content: string;
+    createdAt: Date;
+  }>;
   posts: Array<{
-    id: string
-    content: string
-    createdAt: Date
-  }>
-}
+    id: string;
+    content: string;
+    createdAt: Date;
+  }>;
+};
 
 /**
  * Evaluate a report by collecting context and using AI
  */
 export async function evaluateReport(reportId: string): Promise<ReportEvaluationResult> {
-  logger.info('Evaluating report', { reportId }, 'ReportEvaluation')
+  logger.info('Evaluating report', { reportId }, 'ReportEvaluation');
 
   // Collect context
-  const context = await collectReportContext(reportId)
+  const context = await collectReportContext(reportId);
 
   if (!context) {
     return {
@@ -93,38 +93,42 @@ export async function evaluateReport(reportId: string): Promise<ReportEvaluation
         reportsReceived: 0,
         reportsSent: 0,
       },
-    }
+    };
   }
 
   // Use AI to evaluate
-  const evaluation = await evaluateWithAI(context)
+  const evaluation = await evaluateWithAI(context);
 
-  logger.info('Report evaluation complete', {
-    reportId,
-    outcome: evaluation.outcome,
-    confidence: evaluation.confidence,
-  }, 'ReportEvaluation')
+  logger.info(
+    'Report evaluation complete',
+    {
+      reportId,
+      outcome: evaluation.outcome,
+      confidence: evaluation.confidence,
+    },
+    'ReportEvaluation'
+  );
 
   // Send notification to reporter about evaluation result
   try {
     const report = await prisma.report.findUnique({
       where: { id: reportId },
       select: { reporterId: true, reportedUserId: true },
-    })
-    
+    });
+
     if (report) {
       await createNotification({
         userId: report.reporterId,
         type: 'system',
         title: 'Report Evaluation Complete',
         message: `Your report has been evaluated. Outcome: ${evaluation.outcome.replace('_', ' ')}. ${evaluation.reasoning.substring(0, 100)}...`,
-      })
+      });
     }
   } catch {
-    logger.warn('Failed to send evaluation notification', { reportId }, 'ReportEvaluation')
+    logger.warn('Failed to send evaluation notification', { reportId }, 'ReportEvaluation');
   }
 
-  return evaluation
+  return evaluation;
 }
 
 /**
@@ -157,21 +161,21 @@ async function collectReportContext(reportId: string): Promise<ReportContext | n
         },
       },
     },
-  })
+  });
 
   if (!report || !report.reportedUserId || !report.reporter) {
-    return null
+    return null;
   }
 
-  const reporterId = report.reporterId
-  const reportedId = report.reportedUserId
+  const reporterId = report.reporterId;
+  const reportedId = report.reportedUserId;
 
   // Get recent chat messages between reporter and reported (last 30 days)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   // Find DM chat between reporter and reported
-  const sortedIds = [reporterId, reportedId].sort()
-  const chatId = `dm-${sortedIds.join('-')}`
+  const sortedIds = [reporterId, reportedId].sort();
+  const chatId = `dm-${sortedIds.join('-')}`;
 
   const chatMessages = await prisma.message.findMany({
     where: {
@@ -186,7 +190,7 @@ async function collectReportContext(reportId: string): Promise<ReportContext | n
       content: true,
       createdAt: true,
     },
-  })
+  });
 
   // Get recent posts from both users (last 30 days)
   const [reporterPosts, reportedPosts] = await Promise.all([
@@ -218,10 +222,15 @@ async function collectReportContext(reportId: string): Promise<ReportContext | n
         createdAt: true,
       },
     }),
-  ])
+  ]);
 
   // Get report counts
-  const [reporterReportsSent, reporterReportsReceived, reportedReportsSent, reportedReportsReceived] = await Promise.all([
+  const [
+    reporterReportsSent,
+    reporterReportsReceived,
+    reportedReportsSent,
+    reportedReportsReceived,
+  ] = await Promise.all([
     prisma.report.count({
       where: {
         reporterId,
@@ -246,7 +255,7 @@ async function collectReportContext(reportId: string): Promise<ReportContext | n
         createdAt: { gte: thirtyDaysAgo },
       },
     }),
-  ])
+  ]);
 
   return {
     reporter: {
@@ -279,8 +288,10 @@ async function collectReportContext(reportId: string): Promise<ReportContext | n
       createdAt: report.createdAt,
     },
     chatMessages,
-    posts: [...reporterPosts, ...reportedPosts].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
-  }
+    posts: [...reporterPosts, ...reportedPosts].sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+    ),
+  };
 }
 
 /**
@@ -324,16 +335,22 @@ REPORTED USER:
 - Lifetime P&L: $${context.reported.lifetimePnL.toFixed(2)}
 
 RECENT CHAT MESSAGES (${context.chatMessages.length} messages):
-${context.chatMessages.slice(0, 20).map(msg => {
-  const sender = msg.senderId === context.reporter.id ? 'REPORTER' : 'REPORTED'
-  return `[${sender}] ${msg.content.substring(0, 200)}`
-}).join('\n')}
+${context.chatMessages
+  .slice(0, 20)
+  .map((msg) => {
+    const sender = msg.senderId === context.reporter.id ? 'REPORTER' : 'REPORTED';
+    return `[${sender}] ${msg.content.substring(0, 200)}`;
+  })
+  .join('\n')}
 
 RECENT POSTS (${context.posts.length} posts):
-${context.posts.slice(0, 10).map(post => {
-  const author = post.id.startsWith(context.reporter.id) ? 'REPORTER' : 'REPORTED'
-  return `[${author}] ${post.content.substring(0, 200)}`
-}).join('\n')}
+${context.posts
+  .slice(0, 10)
+  .map((post) => {
+    const author = post.id.startsWith(context.reporter.id) ? 'REPORTER' : 'REPORTED';
+    return `[${author}] ${post.content.substring(0, 200)}`;
+  })
+  .join('\n')}
 
 EVALUATION CRITERIA (ONLY evaluate for scamming or CSAM):
 1. Is the reported user attempting to SCAM others (steal points or real money)?
@@ -358,30 +375,35 @@ Respond with a JSON object:
   "confidence": 0.0-1.0,
   "reasoning": "Detailed explanation focusing ONLY on scamming or CSAM evidence",
   "recommendedActions": ["action1", "action2", ...]
-}`
+}`;
 
   try {
     const response = await callClaudeDirect({
       prompt,
-      system: 'You are a moderation AI for a right-leaning libertarian platform. You ONLY ban for scamming (stealing points/money) or CSAM. You do NOT ban for crude jokes, harassment, or offensive language.',
+      system:
+        'You are a moderation AI for a right-leaning libertarian platform. You ONLY ban for scamming (stealing points/money) or CSAM. You do NOT ban for crude jokes, harassment, or offensive language.',
       model: 'claude-sonnet-4-5',
       temperature: 0.2, // Lower temperature for more consistent evaluations
       maxTokens: 4096,
-    })
+    });
 
-    const content = response.trim()
-    
+    const content = response.trim();
+
     // Try to extract JSON from the response
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      throw new Error('No JSON found in AI response')
+      throw new Error('No JSON found in AI response');
     }
 
-    const evaluation = JSON.parse(jsonMatch[0]) as ReportEvaluationResult
+    const evaluation = JSON.parse(jsonMatch[0]) as ReportEvaluationResult;
 
     // Validate outcome
-    if (!['valid_report', 'invalid_report', 'abusive_reporter', 'insufficient_evidence'].includes(evaluation.outcome)) {
-      evaluation.outcome = 'insufficient_evidence'
+    if (
+      !['valid_report', 'invalid_report', 'abusive_reporter', 'insufficient_evidence'].includes(
+        evaluation.outcome
+      )
+    ) {
+      evaluation.outcome = 'insufficient_evidence';
     }
 
     // Add evidence summary
@@ -390,12 +412,16 @@ Respond with a JSON object:
       posts: context.posts.length,
       reportsReceived: context.reported.recentReportsReceived,
       reportsSent: context.reporter.recentReportsSent,
-    }
+    };
 
-    return evaluation
+    return evaluation;
   } catch (error) {
-    logger.error('AI evaluation failed', { error, reportId: context.report.id }, 'ReportEvaluation')
-    
+    logger.error(
+      'AI evaluation failed',
+      { error, reportId: context.report.id },
+      'ReportEvaluation'
+    );
+
     // Fallback: basic heuristic evaluation
     return {
       outcome: 'insufficient_evidence',
@@ -408,7 +434,7 @@ Respond with a JSON object:
         reportsReceived: context.reported.recentReportsReceived,
         reportsSent: context.reporter.recentReportsSent,
       },
-    }
+    };
   }
 }
 
@@ -426,6 +452,5 @@ export async function storeEvaluationResult(
       status: evaluation.outcome === 'valid_report' ? 'resolved' : 'reviewing',
       updatedAt: new Date(),
     },
-  })
+  });
 }
-

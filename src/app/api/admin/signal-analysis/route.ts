@@ -1,14 +1,14 @@
 /**
  * Admin Signal Analysis API
- * 
+ *
  * @route GET /api/admin/signal-analysis - Get signal analysis
  * @access Admin
- * 
+ *
  * @description
  * Internal debugging endpoint for admins to view signal analysis. Reveals
  * secret game data and must NEVER be exposed to regular users or agents.
  * Admin authentication required.
- * 
+ *
  * @openapi
  * /api/admin/signal-analysis:
  *   get:
@@ -32,7 +32,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const analysis = await fetch('/api/admin/signal-analysis', {
@@ -41,16 +41,16 @@
  * ```
  */
 
+import { authenticate } from '@/lib/api/auth-middleware';
+import { asSystem } from '@/lib/db/context';
+import { withErrorHandling } from '@/lib/errors/error-handler';
+import { SignalExtractionService } from '@/lib/services/signal-extraction-service';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { authenticate } from '@/lib/api/auth-middleware';
-import { withErrorHandling } from '@/lib/errors/error-handler';
-import { asSystem } from '@/lib/db/context';
-import { SignalExtractionService } from '@/lib/services/signal-extraction-service';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const user = await authenticate(request);
-  
+
   // Verify admin status
   const dbUser = await asSystem(async (db) => {
     return await db.user.findUnique({
@@ -60,20 +60,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }, 'admin-signal-analysis');
 
   if (!dbUser?.isAdmin) {
-    return NextResponse.json(
-      { error: 'Admin access required' },
-      { status: 403 }
-    );
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
   const questionNumber = searchParams.get('questionNumber');
 
   if (!questionNumber) {
-    return NextResponse.json(
-      { error: 'questionNumber parameter required' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'questionNumber parameter required' }, { status: 400 });
   }
 
   // Extract signal (admin only, for debugging)
@@ -85,4 +79,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     warning: 'This data is for admin debugging only. Never expose to agents.',
   });
 });
-

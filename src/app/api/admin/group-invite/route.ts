@@ -1,13 +1,13 @@
 /**
  * Admin Group Invite API
- * 
+ *
  * @route POST /api/admin/group-invite - Send NPC group invite
  * @access Admin
- * 
+ *
  * @description
  * Sends a group chat invite on behalf of an NPC to a user. Admin only.
  * Used for game mechanics and NPC interactions.
- * 
+ *
  * @openapi
  * /api/admin/group-invite:
  *   post:
@@ -50,7 +50,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/group-invite', {
@@ -66,11 +66,11 @@
  * ```
  */
 
+import { authenticate } from '@/lib/api/auth-middleware';
+import { asSystem } from '@/lib/db/context';
+import { withErrorHandling } from '@/lib/errors/error-handler';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { authenticate } from '@/lib/api/auth-middleware';
-import { withErrorHandling } from '@/lib/errors/error-handler';
-import { asSystem } from '@/lib/db/context';
 
 /**
  * POST /api/admin/group-invite
@@ -79,18 +79,18 @@ import { asSystem } from '@/lib/db/context';
  */
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const user = await authenticate(request);
-  
+
   const body = await request.json();
   const { npcId, userId, chatId, chatName } = body;
-  
+
   // Check admin permissions using asSystem
   const dbUser = await asSystem(async (db) => {
     return await db.user.findUnique({
       where: { id: user.userId },
-      select: { 
+      select: {
         id: true,
         username: true,
-        isAdmin: true 
+        isAdmin: true,
       },
     });
   }, 'admin-group-invite-permission-check');
@@ -98,21 +98,18 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   console.log('[Admin Group Invite] Auth user:', user.userId, 'DB user:', dbUser);
 
   if (!dbUser) {
-    return NextResponse.json(
-      { error: 'User not found in database' },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: 'User not found in database' }, { status: 404 });
   }
 
   if (!dbUser.isAdmin) {
     return NextResponse.json(
-      { 
+      {
         error: 'Admin access required',
         debug: {
           userId: user.userId,
           username: dbUser.username,
-          isAdmin: dbUser.isAdmin
-        }
+          isAdmin: dbUser.isAdmin,
+        },
       },
       { status: 403 }
     );
@@ -120,10 +117,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Validate inputs
   if (!npcId || !userId) {
-    return NextResponse.json(
-      { error: 'npcId and userId are required' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'npcId and userId are required' }, { status: 400 });
   }
 
   // Verify NPC exists
@@ -132,7 +126,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       where: { id: npcId },
       select: { id: true, name: true },
     });
-    
+
     if (!actor) {
       // Try as User with isActor=true
       return await db.user.findUnique({
@@ -140,15 +134,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         select: { id: true, displayName: true, username: true },
       });
     }
-    
+
     return actor;
   });
 
   if (!npc) {
-    return NextResponse.json(
-      { error: 'NPC not found' },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: 'NPC not found' }, { status: 404 });
   }
 
   // Verify user exists
@@ -160,10 +151,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   });
 
   if (!targetUser) {
-    return NextResponse.json(
-      { error: 'User not found' },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
   // Check if user is already a member
@@ -178,22 +166,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   });
 
   if (existingMembership) {
-    return NextResponse.json(
-      { error: 'User is already a member of this group' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'User is already a member of this group' }, { status: 400 });
   }
 
   // Generate chat ID and name if not provided
   const finalChatId = chatId || `${npcId}-owned-chat`;
-  const npcName = 'name' in npc ? npc.name : (npc.displayName || npc.username || 'Unknown');
+  const npcName = 'name' in npc ? npc.name : npc.displayName || npc.username || 'Unknown';
   const finalChatName = chatName || `${npcName}'s Inner Circle`;
 
   // Record the invite
   await asSystem(async (db) => {
     // Use the GroupChatInvite service, but we need to bypass RLS
     // So we'll replicate the logic here with asSystem
-    
+
     // Create chat if it doesn't exist
     await db.chat.upsert({
       where: { id: finalChatId },
@@ -251,4 +236,3 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-

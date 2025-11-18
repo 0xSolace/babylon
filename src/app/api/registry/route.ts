@@ -1,12 +1,12 @@
 /**
  * User Registry API
- * 
+ *
  * @description
  * Public registry of all registered users and agents on the Babylon platform.
  * Provides comprehensive user listings with filtering, sorting, pagination,
  * and optional on-chain verification filtering. Includes reputation scores
  * and activity statistics.
- * 
+ *
  * **Features:**
  * - Public user directory
  * - On-chain verification filtering
@@ -15,14 +15,14 @@
  * - Activity statistics (positions, comments, reactions)
  * - On-chain reputation scores (when applicable)
  * - RLS-compatible (respects user visibility settings)
- * 
+ *
  * **Use Cases:**
  * - User discovery and networking
  * - Reputation leaderboards
  * - On-chain verification lookup
  * - Community member browsing
  * - Agent/user directory
- * 
+ *
  * @openapi
  * /api/registry:
  *   get:
@@ -120,40 +120,40 @@
  *                       type: integer
  *                     hasMore:
  *                       type: boolean
- * 
+ *
  * @example
  * ```typescript
  * // Get all users
  * const response = await fetch('/api/registry?limit=50&sortBy=reputationPoints');
  * const { users, pagination } = await response.json();
- * 
+ *
  * // Get only on-chain users
  * const onChainUsers = await fetch('/api/registry?onChainOnly=true&sortBy=lifetimePnL');
- * 
+ *
  * // Display top traders
  * users.forEach(user => {
  *   console.log(`${user.displayName}: ${user.lifetimePnL} PnL, Rep: ${user.reputation}`);
  * });
  * ```
- * 
+ *
  * @see {@link /lib/services/reputation-service} Reputation service
  * @see {@link /lib/db/context} RLS context
  */
 
-import type { NextRequest } from 'next/server'
-import { optionalAuth } from '@/lib/api/auth-middleware'
-import { asUser, asPublic } from '@/lib/db/context'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { RegistryQuerySchema } from '@/lib/validation/schemas'
-import { ReputationService } from '@/lib/services/reputation-service'
-import { logger } from '@/lib/logger'
-import type { PrismaClient } from '@prisma/client'
+import { optionalAuth } from '@/lib/api/auth-middleware';
+import { asPublic, asUser } from '@/lib/db/context';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { ReputationService } from '@/lib/services/reputation-service';
+import { RegistryQuerySchema } from '@/lib/validation/schemas';
+import type { PrismaClient } from '@prisma/client';
+import type { NextRequest } from 'next/server';
 /**
  * GET /api/registry
  * Fetch all registered users with optional filtering
  */
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const { searchParams } = new URL(request.url)
+  const { searchParams } = new URL(request.url);
 
   // Parse and validate query parameters
   const queryParams = {
@@ -161,20 +161,22 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     sortBy: searchParams.get('sortBy'),
     sortOrder: searchParams.get('sortOrder'),
     limit: searchParams.get('limit'),
-    offset: searchParams.get('offset')
-  }
-  const filters = RegistryQuerySchema.parse(queryParams)
+    offset: searchParams.get('offset'),
+  };
+  const filters = RegistryQuerySchema.parse(queryParams);
 
   // Optional auth - registry is public but RLS still applies
-  const authUser = await optionalAuth(request).catch(() => null)
+  const authUser = await optionalAuth(request).catch(() => null);
 
   // Build where clause
-  const where = filters.onChainOnly ? { onChainRegistered: true } : {}
+  const where = filters.onChainOnly ? { onChainRegistered: true } : {};
 
   // Build order by clause
-  const orderBy = filters.sortBy ? {
-    [filters.sortBy]: filters.sortOrder,
-  } : { createdAt: 'desc' as const }
+  const orderBy = filters.sortBy
+    ? {
+        [filters.sortBy]: filters.sortOrder,
+      }
+    : { createdAt: 'desc' as const };
 
   // Fetch users from database with RLS (public registry, no auth required)
   const dbOperation = async (db: PrismaClient) => {
@@ -206,23 +208,23 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           },
         },
       },
-    })
+    });
 
     // Get total count for pagination
-    const count = await db.user.count({ where })
+    const count = await db.user.count({ where });
 
-    return { users: usersList, totalCount: count }
-  }
+    return { users: usersList, totalCount: count };
+  };
 
-  const { users, totalCount } = (authUser && authUser.userId)
+  const { users, totalCount } = authUser?.userId
     ? await asUser(authUser, dbOperation)
-    : await asPublic(dbOperation)
+    : await asPublic(dbOperation);
 
   const usersWithReputation = await Promise.all(
     users.map(async (user) => {
-      let reputation: number | null = null
+      let reputation: number | null = null;
       if (user.onChainRegistered && user.nftTokenId) {
-        reputation = await ReputationService.getOnChainReputation(user.id)
+        reputation = await ReputationService.getOnChainReputation(user.id);
       }
 
       return {
@@ -245,15 +247,19 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           comments: user._count.Comment,
           reactions: user._count.Reaction,
         },
-      }
+      };
     })
-  )
+  );
 
-  logger.info('Registry fetched successfully', {
-    total: totalCount,
-    returned: usersWithReputation.length,
-    onChainOnly: filters.onChainOnly
-  }, 'GET /api/registry')
+  logger.info(
+    'Registry fetched successfully',
+    {
+      total: totalCount,
+      returned: usersWithReputation.length,
+      onChainOnly: filters.onChainOnly,
+    },
+    'GET /api/registry'
+  );
 
   return successResponse({
     users: usersWithReputation,
@@ -263,5 +269,5 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       offset: filters.offset || 0,
       hasMore: (filters.offset || 0) + users.length < totalCount,
     },
-  })
-})
+  });
+});

@@ -1,39 +1,39 @@
-import { useEffect, useState } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
-import { useAuth } from '@/hooks/useAuth';
 import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/useAuth';
+import { usePrivy } from '@privy-io/react-auth';
+import { useEffect, useState } from 'react';
 
 /**
  * Represents unread message counts.
  */
-interface UnreadCounts {
+type UnreadCounts = {
   /** Number of pending DM requests from anonymous users */
   pendingDMs: number;
   /** Whether there are new messages in existing chats */
   hasNewMessages: boolean;
-}
+};
 
 /**
  * Hook for efficiently polling unread and pending message counts.
- * 
+ *
  * Polls the API every 30 seconds to check for:
  * - Pending DM requests from anonymous users
  * - New messages in existing chats
- * 
+ *
  * Returns counts suitable for displaying notification badges. Only polls
  * when the user is authenticated. Automatically stops polling on unmount
  * or when user logs out.
- * 
+ *
  * @returns An object containing:
  * - `pendingDMs`: Number of pending DM requests
  * - `hasNewMessages`: Whether there are new messages in existing chats
  * - `totalUnread`: Combined unread count (pendingDMs + 1 if hasNewMessages)
  * - `isLoading`: Whether counts are currently being fetched
- * 
+ *
  * @example
  * ```tsx
  * const { pendingDMs, hasNewMessages, totalUnread } = useUnreadMessages();
- * 
+ *
  * return (
  *   <Badge>
  *     {totalUnread > 0 && totalUnread}
@@ -73,17 +73,26 @@ export function useUnreadMessages() {
         return;
       }
 
-      let data;
+      type UnreadMessagesResponse = {
+        pendingDMs?: number;
+        hasNewMessages?: boolean;
+      };
+      let data: UnreadMessagesResponse | null = null;
       try {
         data = await response.json();
       } catch (error) {
-        logger.error('Failed to parse unread counts response', { error, userId: user?.id }, 'useUnreadMessages');
+        logger.error(
+          'Failed to parse unread counts response',
+          { error, userId: user?.id },
+          'useUnreadMessages'
+        );
         setIsLoading(false);
         return;
       }
+      const parsedData = data ?? {};
       setCounts({
-        pendingDMs: data.pendingDMs || 0,
-        hasNewMessages: data.hasNewMessages || false,
+        pendingDMs: parsedData.pendingDMs ?? 0,
+        hasNewMessages: parsedData.hasNewMessages ?? false,
       });
       setIsLoading(false);
     };
@@ -96,7 +105,7 @@ export function useUnreadMessages() {
     const interval = setInterval(fetchCounts, 30000);
 
     return () => clearInterval(interval);
-  }, [authenticated, getAccessToken]);
+  }, [authenticated, getAccessToken, user?.id]);
 
   return {
     ...counts,
@@ -104,4 +113,3 @@ export function useUnreadMessages() {
     isLoading,
   };
 }
-

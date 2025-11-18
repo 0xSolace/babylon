@@ -1,6 +1,6 @@
 /**
  * Token Counter Utility
- * 
+ *
  * Provides accurate token counting for different LLM models
  * Uses tiktoken for OpenAI models and approximations for others
  */
@@ -53,29 +53,27 @@ export async function truncateToTokenLimit(
   } = {}
 ): Promise<{ text: string; tokens: number }> {
   const { ellipsis = true, preserveEnd = false } = options;
-  
+
   const currentTokens = await countTokens(text);
-  
+
   if (currentTokens <= maxTokens) {
     return { text, tokens: currentTokens };
   }
-  
+
   // Binary search to find the right length
   const ellipsisText = ellipsis ? '...' : '';
   const ellipsisTokens = ellipsis ? await countTokens(ellipsisText) : 0;
   const targetTokens = maxTokens - ellipsisTokens;
-  
+
   let low = 0;
   let high = text.length;
   let bestLength = 0;
-  
+
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);
-    const slice = preserveEnd 
-      ? text.slice(text.length - mid)
-      : text.slice(0, mid);
+    const slice = preserveEnd ? text.slice(text.length - mid) : text.slice(0, mid);
     const tokens = await countTokens(slice);
-    
+
     if (tokens <= targetTokens) {
       bestLength = mid;
       low = mid + 1;
@@ -83,13 +81,13 @@ export async function truncateToTokenLimit(
       high = mid - 1;
     }
   }
-  
+
   const truncated = preserveEnd
     ? ellipsisText + text.slice(text.length - bestLength)
     : text.slice(0, bestLength) + ellipsisText;
-  
+
   const finalTokens = await countTokens(truncated);
-  
+
   return { text: truncated, tokens: finalTokens };
 }
 
@@ -105,26 +103,26 @@ export function truncateToTokenLimitSync(
   } = {}
 ): { text: string; tokens: number } {
   const { ellipsis = true, preserveEnd = false } = options;
-  
+
   const currentTokens = countTokensSync(text);
-  
+
   if (currentTokens <= maxTokens) {
     return { text, tokens: currentTokens };
   }
-  
+
   const ellipsisText = ellipsis ? '...' : '';
   const ellipsisTokens = ellipsis ? countTokensSync(ellipsisText) : 0;
   const targetTokens = maxTokens - ellipsisTokens;
-  
+
   // Approximate character length based on token limit
   const targetChars = Math.floor(targetTokens * 4); // 4 chars per token
-  
+
   const truncated = preserveEnd
     ? ellipsisText + text.slice(text.length - targetChars)
     : text.slice(0, targetChars) + ellipsisText;
-  
+
   const finalTokens = countTokensSync(truncated);
-  
+
   return { text: truncated, tokens: finalTokens };
 }
 
@@ -134,36 +132,36 @@ export function truncateToTokenLimitSync(
  */
 export const MODEL_TOKEN_LIMITS: Record<string, number> = {
   // OpenAI (input context)
-  'gpt-4o': 128000,        // 128k input, separate output limit
-  'gpt-4o-mini': 128000,   // 128k input, separate output limit
+  'gpt-4o': 128000, // 128k input, separate output limit
+  'gpt-4o-mini': 128000, // 128k input, separate output limit
   'gpt-4-turbo': 128000,
   'gpt-4': 8192,
   'gpt-3.5-turbo': 16385,
   'gpt-3.5-turbo-16k': 16385,
-  
+
   // Current Strategy Models - INPUT CONTEXT LIMITS (output is separate!)
-  'qwen/qwen3-32b': 131072,                    // 131k INPUT, 40,960 OUTPUT (separate) - Groq
-  'OpenPipe/Qwen3-14B-Instruct': 32768,        // 32,768 native INPUT via W&B API (NOT 131K extended!)
-  'Qwen/Qwen2.5-32B-Instruct': 131072,         // 131k INPUT, 40,960 OUTPUT (separate)
-  
+  'qwen/qwen3-32b': 131072, // 131k INPUT, 40,960 OUTPUT (separate) - Groq
+  'OpenPipe/Qwen3-14B-Instruct': 32768, // 32,768 native INPUT via W&B API (NOT 131K extended!)
+  'Qwen/Qwen2.5-32B-Instruct': 131072, // 131k INPUT, 40,960 OUTPUT (separate)
+
   // Groq Models - INPUT CONTEXT (per https://console.groq.com/docs/models)
   // Production Models
-  'llama-3.1-8b-instant': 131072,              // 131k INPUT, 131k OUTPUT (unique - same!)
-  'llama-3.3-70b-versatile': 131072,           // 131k INPUT, 32,768 OUTPUT
-  'llama-3.1-70b-versatile': 131072,           // 131k INPUT, 32,768 OUTPUT
-  'meta-llama/llama-guard-4-12b': 131072,      // 131k INPUT, 1,024 OUTPUT
-  'openai/gpt-oss-120b': 131072,               // 131k INPUT, 65,536 OUTPUT
-  'openai/gpt-oss-20b': 131072,                // 131k INPUT, 65,536 OUTPUT
-  'whisper-large-v3': 0,                       // Audio model (no text context)
-  'whisper-large-v3-turbo': 0,                 // Audio model (no text context)
+  'llama-3.1-8b-instant': 131072, // 131k INPUT, 131k OUTPUT (unique - same!)
+  'llama-3.3-70b-versatile': 131072, // 131k INPUT, 32,768 OUTPUT
+  'llama-3.1-70b-versatile': 131072, // 131k INPUT, 32,768 OUTPUT
+  'meta-llama/llama-guard-4-12b': 131072, // 131k INPUT, 1,024 OUTPUT
+  'openai/gpt-oss-120b': 131072, // 131k INPUT, 65,536 OUTPUT
+  'openai/gpt-oss-20b': 131072, // 131k INPUT, 65,536 OUTPUT
+  'whisper-large-v3': 0, // Audio model (no text context)
+  'whisper-large-v3-turbo': 0, // Audio model (no text context)
   // Preview Models
-  'meta-llama/llama-4-maverick-17b-128e-instruct': 131072,  // 131k INPUT, 8,192 OUTPUT
-  'meta-llama/llama-4-scout-17b-16e-instruct': 131072,      // 131k INPUT, 8,192 OUTPUT
-  'moonshotai/kimi-k2-instruct-0905': 262144,  // 262k INPUT, 16,384 OUTPUT
-  'openai/gpt-oss-safeguard-20b': 131072,      // 131k INPUT, 65,536 OUTPUT
+  'meta-llama/llama-4-maverick-17b-128e-instruct': 131072, // 131k INPUT, 8,192 OUTPUT
+  'meta-llama/llama-4-scout-17b-16e-instruct': 131072, // 131k INPUT, 8,192 OUTPUT
+  'moonshotai/kimi-k2-instruct-0905': 262144, // 262k INPUT, 16,384 OUTPUT
+  'openai/gpt-oss-safeguard-20b': 131072, // 131k INPUT, 65,536 OUTPUT
   // Legacy
   'mixtral-8x7b-32768': 32768,
-  
+
   // Anthropic - Claude 4.5 series (200K context)
   'claude-sonnet-4-5': 200000,
   'claude-sonnet-4-5-20250929': 200000,
@@ -196,7 +194,7 @@ export function getSafeContextLimit(
   const inputLimit = getModelTokenLimit(model);
   // Apply minimal safety margin to input context (most models have separate input/output limits)
   const safeLimit = Math.floor(inputLimit * (1 - safetyMargin));
-  
+
   return Math.max(1000, safeLimit); // Minimum 1000 tokens
 }
 
@@ -209,18 +207,18 @@ export function budgetTokens(
   sections: Array<{ name: string; priority: number; minTokens?: number }>
 ): Record<string, number> {
   const budget: Record<string, number> = {};
-  
+
   // First, allocate minimum tokens to each section
   let remaining = totalTokens;
   const minAllocations: Array<{ name: string; min: number }> = [];
-  
+
   for (const section of sections) {
     const min = section.minTokens || 0;
     minAllocations.push({ name: section.name, min });
     remaining -= min;
     budget[section.name] = min;
   }
-  
+
   // If we're already over budget, scale down proportionally
   if (remaining < 0) {
     const scale = totalTokens / (totalTokens - remaining);
@@ -229,15 +227,14 @@ export function budgetTokens(
     }
     return budget;
   }
-  
+
   // Distribute remaining tokens by priority
   const totalPriority = sections.reduce((sum, s) => sum + s.priority, 0);
-  
+
   for (const section of sections) {
     const share = (section.priority / totalPriority) * remaining;
     budget[section.name] = (budget[section.name] || 0) + Math.floor(share);
   }
-  
+
   return budget;
 }
-

@@ -1,11 +1,11 @@
 import {
-  asUUID,
-  EventType,
-  Service,
   type Content,
+  EventType,
   type IAgentRuntime,
   type Memory,
-  type UUID
+  Service,
+  type UUID,
+  asUUID,
 } from '@elizaos/core';
 import { v4 as uuidv4 } from 'uuid';
 import { AutonomousServiceType } from './types';
@@ -284,6 +284,7 @@ export class AutonomyService extends Service {
 
         // Store the response with autonomous metadata
         if (content.text) {
+          const bodyText = content.text;
           const responseMemory: Memory = {
             id: asUUID(uuidv4()),
             entityId: agentEntity.id ? asUUID(agentEntity.id) : this.runtime.agentId, // Use the agent's entity ID from above or fallback to agentId
@@ -294,7 +295,9 @@ export class AutonomyService extends Service {
               actions: content.actions,
               source: typeof content.source === 'string' ? content.source : 'autonomous',
               metadata: {
-                ...(typeof content.metadata === 'object' && content.metadata !== null ? content.metadata : {}),
+                ...(typeof content.metadata === 'object' && content.metadata !== null
+                  ? content.metadata
+                  : {}),
                 isAutonomous: true,
                 isInternalThought: true,
                 channelId: 'autonomous',
@@ -309,10 +312,7 @@ export class AutonomyService extends Service {
           await this.runtime.createMemory(responseMemory, 'messages');
 
           // Broadcast the thought to WebSocket clients
-          await this.broadcastThoughtToMonologue(
-            content.text!,
-            responseMemory.id || asUUID(uuidv4())
-          );
+          await this.broadcastThoughtToMonologue(bodyText, responseMemory.id || asUUID(uuidv4()));
         }
       },
       onComplete: async () => {

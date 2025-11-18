@@ -1,6 +1,6 @@
 /**
  * Test Admin Trade Creation
- * 
+ *
  * Tests creating a trade via admin API and verifying it appears in the public feed
  */
 
@@ -8,7 +8,7 @@ import { prisma } from '../src/lib/prisma';
 
 async function testAdminTrade() {
   console.log('\n🧪 Testing Admin Trade Creation\n');
-  console.log('='.repeat(60) + '\n');
+  console.log(`${'='.repeat(60)}\n`);
 
   try {
     // Step 1: Get a test user
@@ -52,8 +52,8 @@ async function testAdminTrade() {
 
     // Step 3: Create a test trade via API simulation
     console.log('📊 Step 3: Creating test trade (simulating API call)...\n');
-    
-    const testAmount = 100.50;
+
+    const testAmount = 100.5;
     const testDescription = 'Test trade created by admin script';
     const currentBalance = Number(user.virtualBalance);
     const newBalance = currentBalance + testAmount;
@@ -93,7 +93,7 @@ async function testAdminTrade() {
 
     // Step 4: Verify it appears in public feed
     console.log('📊 Step 4: Verifying trade appears in public feed...\n');
-    
+
     const publicFeedTrades = await prisma.balanceTransaction.findMany({
       where: {
         type: {
@@ -115,11 +115,13 @@ async function testAdminTrade() {
       },
     });
 
-    const foundTrade = publicFeedTrades.find(t => t.id === transaction.id);
-    
+    const foundTrade = publicFeedTrades.find((t) => t.id === transaction.id);
+
     if (foundTrade) {
       console.log(`  ✅ Trade found in public feed!`);
-      console.log(`     User: ${foundTrade.User?.displayName || foundTrade.User?.username || 'Unknown'}`);
+      console.log(
+        `     User: ${foundTrade.User?.displayName || foundTrade.User?.username || 'Unknown'}`
+      );
       console.log(`     Description: ${foundTrade.description || 'N/A'}`);
       console.log(`     Amount: $${Number(foundTrade.amount).toFixed(2)}\n`);
     } else {
@@ -135,7 +137,9 @@ async function testAdminTrade() {
     });
 
     if (updatedUser && Number(updatedUser.virtualBalance) === newBalance) {
-      console.log(`  ✅ User balance updated correctly: $${Number(updatedUser.virtualBalance).toFixed(2)}\n`);
+      console.log(
+        `  ✅ User balance updated correctly: $${Number(updatedUser.virtualBalance).toFixed(2)}\n`
+      );
     } else {
       console.log(`  ❌ User balance mismatch!`);
       console.log(`     Expected: $${newBalance.toFixed(2)}`);
@@ -143,12 +147,11 @@ async function testAdminTrade() {
     }
 
     console.log('✅ Test completed successfully!\n');
-    console.log('='.repeat(60) + '\n');
+    console.log(`${'='.repeat(60)}\n`);
     console.log('Next steps:');
     console.log('1. Check the admin dashboard at /admin → Trading Feed tab');
     console.log('2. Check the public feed at /feed → Trades tab');
     console.log(`3. Look for trade ID: ${transaction.id}\n`);
-
   } catch (error) {
     console.error('❌ Test failed:', error);
     if (error instanceof Error) {
@@ -163,7 +166,3 @@ async function testAdminTrade() {
 
 // Run the test
 testAdminTrade().catch(console.error);
-
-
-
-

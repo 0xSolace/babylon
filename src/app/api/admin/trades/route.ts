@@ -1,15 +1,15 @@
 /**
  * Admin Trading Feed API
- * 
+ *
  * @route GET /api/admin/trades - Get trading feed
  * @route POST /api/admin/trades - Create test trade
  * @access Admin
- * 
+ *
  * @description
  * GET returns recent trades across all markets (balance transactions, NPC trades,
  * positions). POST creates/forces a trade for testing purposes. Requires admin
  * authentication.
- * 
+ *
  * @openapi
  * /api/admin/trades:
  *   get:
@@ -79,26 +79,26 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const feed = await fetch('/api/admin/trades?type=balance&limit=20', {
  *   headers: { 'Authorization': `Bearer ${adminToken}` }
  * }).then(r => r.json());
  * ```
- * 
+ *
  * @see {@link /lib/api/admin-middleware} Admin middleware
  */
 
-import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { prisma } from '@/lib/prisma';
-import { z } from 'zod';
+import { BusinessLogicError, NotFoundError } from '@/lib/errors';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
-import { NotFoundError, BusinessLogicError } from '@/lib/errors';
 import { Prisma } from '@prisma/client';
+import type { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 const QuerySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
@@ -129,7 +129,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Fetch users for balance transactions
-  const balanceUserIds = [...new Set(balanceTransactions.map(tx => tx.userId))];
+  const balanceUserIds = [...new Set(balanceTransactions.map((tx) => tx.userId))];
   const balanceUsers = await prisma.user.findMany({
     where: { id: { in: balanceUserIds } },
     select: {
@@ -140,7 +140,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       isActor: true,
     },
   });
-  const balanceUsersMap = new Map(balanceUsers.map(u => [u.id, u]));
+  const balanceUsersMap = new Map(balanceUsers.map((u) => [u.id, u]));
 
   // Get recent NPC trades
   const npcTrades = await prisma.nPCTrade.findMany({
@@ -151,8 +151,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Fetch actors for NPC trades
-  const actorIds = [...new Set(npcTrades.map(trade => trade.npcActorId))];
-  
+  const actorIds = [...new Set(npcTrades.map((trade) => trade.npcActorId))];
+
   const actors = await prisma.actor.findMany({
     where: { id: { in: actorIds } },
     select: {
@@ -161,8 +161,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       profileImageUrl: true,
     },
   });
-  
-  const actorsMap = new Map(actors.map(a => [a.id, a]));
+
+  const actorsMap = new Map(actors.map((a) => [a.id, a]));
 
   // Get recent position changes
   const positions = await prisma.position.findMany({
@@ -173,9 +173,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Fetch users and markets for positions
-  const positionUserIds = [...new Set(positions.map(pos => pos.userId))];
-  const marketIds = [...new Set(positions.map(pos => pos.marketId))];
-  
+  const positionUserIds = [...new Set(positions.map((pos) => pos.userId))];
+  const marketIds = [...new Set(positions.map((pos) => pos.marketId))];
+
   const [positionUsers, markets] = await Promise.all([
     prisma.user.findMany({
       where: { id: { in: positionUserIds } },
@@ -197,13 +197,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       },
     }),
   ]);
-  
-  const positionUsersMap = new Map(positionUsers.map(u => [u.id, u]));
-  const marketsMap = new Map(markets.map(m => [m.id, m]));
+
+  const positionUsersMap = new Map(positionUsers.map((u) => [u.id, u]));
+  const marketsMap = new Map(markets.map((m) => [m.id, m]));
 
   // Merge and sort by timestamp
   const allTrades = [
-    ...balanceTransactions.map(tx => ({
+    ...balanceTransactions.map((tx) => ({
       type: 'balance' as const,
       id: tx.id,
       timestamp: tx.createdAt,
@@ -215,19 +215,21 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       description: tx.description,
       relatedId: tx.relatedId,
     })),
-    ...npcTrades.map(trade => {
+    ...npcTrades.map((trade) => {
       const actor = actorsMap.get(trade.npcActorId);
       return {
         type: 'npc' as const,
         id: trade.id,
         timestamp: trade.executedAt,
-        user: actor ? {
-          id: actor.id,
-          username: actor.name,
-          displayName: actor.name,
-          profileImageUrl: actor.profileImageUrl,
-          isActor: true,
-        } : null,
+        user: actor
+          ? {
+              id: actor.id,
+              username: actor.name,
+              displayName: actor.name,
+              profileImageUrl: actor.profileImageUrl,
+              isActor: true,
+            }
+          : null,
         marketType: trade.marketType,
         ticker: trade.ticker,
         marketId: trade.marketId,
@@ -239,7 +241,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         reason: trade.reason,
       };
     }),
-    ...positions.map(pos => ({
+    ...positions.map((pos) => ({
       type: 'position' as const,
       id: pos.id,
       timestamp: pos.updatedAt,
@@ -250,7 +252,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       avgPrice: pos.avgPrice.toString(),
       createdAt: pos.createdAt,
     })),
-  ].filter(trade => trade.user !== null); // Filter out trades with missing users
+  ].filter((trade) => trade.user !== null); // Filter out trades with missing users
 
   // Sort by timestamp
   allTrades.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
@@ -283,7 +285,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 const CreateBalanceTradeSchema = z.object({
   type: z.literal('balance'),
   userId: z.string().min(1),
-  transactionType: z.enum(['pred_buy', 'pred_sell', 'perp_open', 'perp_close', 'perp_liquidation', 'deposit', 'withdrawal']),
+  transactionType: z.enum([
+    'pred_buy',
+    'pred_sell',
+    'perp_open',
+    'perp_close',
+    'perp_liquidation',
+    'deposit',
+    'withdrawal',
+  ]),
   amount: z.number(),
   description: z.string().optional(),
   relatedId: z.string().optional(),
@@ -323,10 +333,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const body = await request.json();
   const tradeData = CreateTradeSchema.parse(body);
 
-  logger.info(`Admin creating trade`, { 
-    adminUserId: adminUser.userId,
-    tradeType: tradeData.type 
-  }, 'POST /api/admin/trades');
+  logger.info(
+    `Admin creating trade`,
+    {
+      adminUserId: adminUser.userId,
+      tradeType: tradeData.type,
+    },
+    'POST /api/admin/trades'
+  );
 
   if (tradeData.type === 'balance') {
     // Verify user exists
@@ -341,9 +355,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
     const currentBalance = Number(user.virtualBalance);
     const amountDecimal = new Prisma.Decimal(tradeData.amount);
-    const newBalance = tradeData.updateBalance 
-      ? currentBalance + tradeData.amount 
-      : currentBalance;
+    const newBalance = tradeData.updateBalance ? currentBalance + tradeData.amount : currentBalance;
 
     // Create balance transaction
     const transaction = await prisma.$transaction(async (tx) => {
@@ -374,11 +386,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       return balanceTx;
     });
 
-    logger.info(`Balance trade created`, { 
-      transactionId: transaction.id,
-      userId: tradeData.userId,
-      amount: tradeData.amount 
-    }, 'POST /api/admin/trades');
+    logger.info(
+      `Balance trade created`,
+      {
+        transactionId: transaction.id,
+        userId: tradeData.userId,
+        amount: tradeData.amount,
+      },
+      'POST /api/admin/trades'
+    );
 
     return successResponse({
       trade: {
@@ -407,10 +423,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
     // Validate market-specific fields
     if (tradeData.marketType === 'prediction' && !tradeData.marketId) {
-      throw new BusinessLogicError('marketId is required for prediction market trades', 'MISSING_MARKET_ID');
+      throw new BusinessLogicError(
+        'marketId is required for prediction market trades',
+        'MISSING_MARKET_ID'
+      );
     }
     if (tradeData.marketType === 'perp' && !tradeData.ticker) {
-      throw new BusinessLogicError('ticker is required for perpetual market trades', 'MISSING_TICKER');
+      throw new BusinessLogicError(
+        'ticker is required for perpetual market trades',
+        'MISSING_TICKER'
+      );
     }
 
     // Create NPC trade
@@ -432,11 +454,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       },
     });
 
-    logger.info(`NPC trade created`, { 
-      tradeId: npcTrade.id,
-      npcActorId: tradeData.npcActorId,
-      marketType: tradeData.marketType 
-    }, 'POST /api/admin/trades');
+    logger.info(
+      `NPC trade created`,
+      {
+        tradeId: npcTrade.id,
+        npcActorId: tradeData.npcActorId,
+        marketType: tradeData.marketType,
+      },
+      'POST /api/admin/trades'
+    );
 
     return successResponse({
       trade: {
@@ -459,4 +485,3 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   throw new BusinessLogicError('Invalid trade type', 'INVALID_TRADE_TYPE');
 });
-

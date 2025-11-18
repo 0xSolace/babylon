@@ -1,6 +1,6 @@
 /**
  * Notification Service
- * 
+ *
  * Helper functions for creating notifications when users interact
  */
 
@@ -8,10 +8,19 @@ import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
 
+export type NotificationType =
+  | 'comment'
+  | 'reaction'
+  | 'follow'
+  | 'mention'
+  | 'reply'
+  | 'share'
+  | 'system'
+  | 'report_evaluated'
+  | 'appeal_status'
+  | 'points_received';
 
-export type NotificationType = 'comment' | 'reaction' | 'follow' | 'mention' | 'reply' | 'share' | 'system' | 'report_evaluated' | 'appeal_status' | 'points_received';
-
-interface CreateNotificationParams {
+type CreateNotificationParams = {
   userId: string; // Who receives the notification
   type: NotificationType;
   actorId?: string; // Who performed the action
@@ -19,7 +28,7 @@ interface CreateNotificationParams {
   commentId?: string;
   title: string;
   message: string;
-}
+};
 
 /**
  * Create a notification
@@ -143,10 +152,7 @@ export async function notifyReactionOnPost(
 /**
  * Create notification for follow
  */
-export async function notifyFollow(
-  followedUserId: string,
-  followerId: string
-): Promise<void> {
+export async function notifyFollow(followedUserId: string, followerId: string): Promise<void> {
   // Don't notify if user followed themselves
   if (followedUserId === followerId) {
     return;
@@ -262,7 +268,7 @@ export async function notifyMention(
   });
 
   const mentionerName = mentioner?.displayName || mentioner?.username || 'Someone';
-  const message = commentId 
+  const message = commentId
     ? `${mentionerName} mentioned you in a comment`
     : `${mentionerName} mentioned you in a post`;
 
@@ -281,7 +287,8 @@ export async function notifyMention(
  * Create system notification for new account creation
  */
 export async function notifyNewAccount(userId: string): Promise<void> {
-  const message = "🎉 Welcome to Babylon! Edit your profile details to earn free points and unlock rewards.";
+  const message =
+    '🎉 Welcome to Babylon! Edit your profile details to earn free points and unlock rewards.';
 
   await createNotification({
     userId,
@@ -429,12 +436,11 @@ export async function notifyDMMessage(
   });
 
   const senderName = sender?.displayName || sender?.username || 'Someone';
-  
+
   // Truncate message preview to 50 characters
-  const preview = messagePreview.length > 50 
-    ? messagePreview.substring(0, 50) + '...' 
-    : messagePreview;
-  
+  const preview =
+    messagePreview.length > 50 ? `${messagePreview.substring(0, 50)}...` : messagePreview;
+
   const message = `${senderName}: ${preview}`;
 
   await createNotification({
@@ -462,18 +468,17 @@ export async function notifyGroupChatMessage(
   });
 
   const senderName = sender?.displayName || sender?.username || 'Someone';
-  
+
   // Truncate message preview to 50 characters
-  const preview = messagePreview.length > 50 
-    ? messagePreview.substring(0, 50) + '...' 
-    : messagePreview;
-  
+  const preview =
+    messagePreview.length > 50 ? `${messagePreview.substring(0, 50)}...` : messagePreview;
+
   const message = `${senderName} in "${chatName}": ${preview}`;
 
   // Send notification to all participants except the sender
   const notificationPromises = recipientUserIds
-    .filter(userId => userId !== senderUserId)
-    .map(userId => 
+    .filter((userId) => userId !== senderUserId)
+    .map((userId) =>
       createNotification({
         userId,
         type: 'system',
@@ -485,5 +490,3 @@ export async function notifyGroupChatMessage(
 
   await Promise.all(notificationPromises);
 }
-
-

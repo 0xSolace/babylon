@@ -1,13 +1,13 @@
 /**
  * Moderation Blocks List API
- * 
+ *
  * @route GET /api/moderation/blocks - Get blocked users
  * @access Authenticated
- * 
+ *
  * @description
  * Returns list of users blocked by the current user with pagination support.
  * Includes blocked user details and block metadata.
- * 
+ *
  * @openapi
  * /api/moderation/blocks:
  *   get:
@@ -44,7 +44,7 @@
  *                   type: object
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * const { blocks } = await fetch('/api/moderation/blocks?limit=20', {
@@ -53,15 +53,15 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/api/auth-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { prisma } from '@/lib/prisma';
 import { GetBlocksSchema } from '@/lib/validation/schemas/moderation';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
-  
+
   const { searchParams } = new URL(request.url);
   const { limit, offset } = GetBlocksSchema.parse({
     limit: searchParams.get('limit') || '20',
@@ -100,5 +100,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-
-

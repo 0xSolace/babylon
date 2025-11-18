@@ -1,13 +1,13 @@
 /**
  * Onboarding Generate Profile API
- * 
+ *
  * @route GET /api/onboarding/generate-profile - Generate AI profile
  * @access Public
- * 
+ *
  * @description
  * Generates AI profile data for new users including name, bio, and other
  * profile fields. Uses AI to create personalized profile content.
- * 
+ *
  * @openapi
  * /api/onboarding/generate-profile:
  *   get:
@@ -31,7 +31,7 @@
  *                   type: string
  *       500:
  *         description: AI generation failed
- * 
+ *
  * @example
  * ```typescript
  * const profile = await fetch('/api/onboarding/generate-profile')
@@ -39,26 +39,25 @@
  * ```
  */
 
-import { BabylonLLMClient } from '@/generator/llm/openai-client';
 import { successResponse } from '@/lib/api/auth-middleware';
 import { logger } from '@/lib/logger';
+import { BabylonLLMClient } from '@/generator/llm/openai-client';
 import type { NextRequest } from 'next/server';
-import { 
-  uniqueNamesGenerator, 
-  adjectives, 
-  animals, 
+import {
+  adjectives,
+  animals,
   colors,
   countries,
   names,
-  starWars
+  starWars,
+  uniqueNamesGenerator,
 } from 'unique-names-generator';
 
-interface ProfileData {
+type ProfileData = {
   name: string;
   username: string;
   bio: string;
-}
-
+};
 
 /**
  * GET /api/onboarding/generate-profile
@@ -66,15 +65,30 @@ interface ProfileData {
  */
 export async function GET(_request: NextRequest) {
   const llmClient = new BabylonLLMClient();
-  
+
   // Generate random words for entropy/inspiration
-  const randomAnimal = uniqueNamesGenerator({ dictionaries: [animals], length: 1 });
-  const randomColor = uniqueNamesGenerator({ dictionaries: [colors], length: 1 });
-  const randomAdjective = uniqueNamesGenerator({ dictionaries: [adjectives], length: 1 });
-  const randomCountry = uniqueNamesGenerator({ dictionaries: [countries], length: 1 });
+  const randomAnimal = uniqueNamesGenerator({
+    dictionaries: [animals],
+    length: 1,
+  });
+  const randomColor = uniqueNamesGenerator({
+    dictionaries: [colors],
+    length: 1,
+  });
+  const randomAdjective = uniqueNamesGenerator({
+    dictionaries: [adjectives],
+    length: 1,
+  });
+  const randomCountry = uniqueNamesGenerator({
+    dictionaries: [countries],
+    length: 1,
+  });
   const randomName = uniqueNamesGenerator({ dictionaries: [names], length: 1 });
-  const randomStarWars = uniqueNamesGenerator({ dictionaries: [starWars], length: 1 });
-  
+  const randomStarWars = uniqueNamesGenerator({
+    dictionaries: [starWars],
+    length: 1,
+  });
+
   const prompt = `Generate a fun, memetic profile for a new social media user in the style of crypto/tech Twitter.
 
 Requirements:
@@ -129,9 +143,10 @@ Return your response as XML in this exact format:
   );
 
   // Handle XML structure
-  const profileData = 'response' in rawProfileData && rawProfileData.response
-    ? rawProfileData.response
-    : rawProfileData as ProfileData;
+  const profileData =
+    'response' in rawProfileData && rawProfileData.response
+      ? rawProfileData.response
+      : (rawProfileData as ProfileData);
 
   profileData.username = profileData.username
     .replace(/^@/, '')
@@ -143,4 +158,3 @@ Return your response as XML in this exact format:
 
   return successResponse(profileData);
 }
-

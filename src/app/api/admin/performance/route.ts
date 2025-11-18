@@ -1,13 +1,13 @@
 /**
  * Admin Performance Monitoring API
- * 
+ *
  * @route GET /api/admin/performance - Get performance metrics
  * @access Admin
- * 
+ *
  * @description
  * Returns real-time performance metrics including bottlenecks, recommendations,
  * slow queries, and system health. Used for monitoring and optimization.
- * 
+ *
  * @openapi
  * /api/admin/performance:
  *   get:
@@ -37,7 +37,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const metrics = await fetch('/api/admin/performance', {
@@ -46,12 +46,12 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { performanceMonitor } from '@/lib/monitoring/performance-monitor';
 import { queryMonitor } from '@/lib/db/query-monitor';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { performanceMonitor } from '@/lib/monitoring/performance-monitor';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/admin/performance
@@ -62,16 +62,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Get performance snapshot
   const perfSnapshot = performanceMonitor.getStats();
-  
+
   // Get bottlenecks
   const bottlenecks = performanceMonitor.identifyBottlenecks();
-  
+
   // Get recommendations
   const recommendations = performanceMonitor.getRecommendations();
-  
+
   // Get slow queries
   const slowQueries = queryMonitor.getSlowQueryStats();
-  
+
   // Get top slow queries
   const topSlowQueries = Object.entries(slowQueries)
     .sort((a, b) => b[1].avgDuration - a[1].avgDuration)
@@ -83,10 +83,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       maxDuration: Math.round(stats.maxDuration * 100) / 100,
     }));
 
-  logger.info('Performance metrics requested', {
-    bottlenecks: bottlenecks.length,
-    criticalIssues: bottlenecks.filter(b => b.severity === 'critical').length,
-  }, 'GET /api/admin/performance');
+  logger.info(
+    'Performance metrics requested',
+    {
+      bottlenecks: bottlenecks.length,
+      criticalIssues: bottlenecks.filter((b) => b.severity === 'critical').length,
+    },
+    'GET /api/admin/performance'
+  );
 
   return successResponse({
     timestamp: new Date().toISOString(),
@@ -102,9 +106,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     database: {
       totalQueries: perfSnapshot.database.queries,
       slowQueries: perfSnapshot.database.slowQueries,
-      slowQueryRate: perfSnapshot.database.queries > 0 
-        ? perfSnapshot.database.slowQueries / perfSnapshot.database.queries 
-        : 0,
+      slowQueryRate:
+        perfSnapshot.database.queries > 0
+          ? perfSnapshot.database.slowQueries / perfSnapshot.database.queries
+          : 0,
       avgDurationMs: perfSnapshot.database.avgDurationMs,
       p95DurationMs: perfSnapshot.database.p95DurationMs,
       p99DurationMs: perfSnapshot.database.p99DurationMs,
@@ -116,9 +121,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       downloads: perfSnapshot.storage.downloads,
       deletes: perfSnapshot.storage.deletes,
       errors: perfSnapshot.storage.errors,
-      errorRate: (perfSnapshot.storage.uploads + perfSnapshot.storage.downloads + perfSnapshot.storage.deletes) > 0
-        ? perfSnapshot.storage.errors / (perfSnapshot.storage.uploads + perfSnapshot.storage.downloads + perfSnapshot.storage.deletes)
-        : 0,
+      errorRate:
+        perfSnapshot.storage.uploads +
+          perfSnapshot.storage.downloads +
+          perfSnapshot.storage.deletes >
+        0
+          ? perfSnapshot.storage.errors /
+            (perfSnapshot.storage.uploads +
+              perfSnapshot.storage.downloads +
+              perfSnapshot.storage.deletes)
+          : 0,
       avgUploadLatencyMs: perfSnapshot.storage.avgUploadLatencyMs,
       avgDownloadLatencyMs: perfSnapshot.storage.avgDownloadLatencyMs,
       bytesUploaded: perfSnapshot.storage.bytesUploaded,
@@ -133,7 +145,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       requestsPerSecond: perfSnapshot.system.requestsPerSecond,
     },
     vercelCache: perfSnapshot.vercelCache || null,
-    bottlenecks: bottlenecks.map(b => ({
+    bottlenecks: bottlenecks.map((b) => ({
       type: b.type,
       severity: b.severity,
       description: b.description,
@@ -142,10 +154,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     })),
     recommendations,
     summary: {
-      criticalIssues: bottlenecks.filter(b => b.severity === 'critical').length,
-      warnings: bottlenecks.filter(b => b.severity === 'warning').length,
+      criticalIssues: bottlenecks.filter((b) => b.severity === 'critical').length,
+      warnings: bottlenecks.filter((b) => b.severity === 'warning').length,
       totalRecommendations: recommendations.length,
     },
   });
 });
-

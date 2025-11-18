@@ -1,21 +1,21 @@
 /**
  * Unit tests for quote post functionality
- * 
+ *
  * Tests the logic for:
  * - Creating quote posts and reposts
  * - Parsing repost content
  * - Proper originalPostId tracking
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 describe('Quote Post Functionality', () => {
   describe('Repost Content Format', () => {
     test('should format simple repost correctly', () => {
       const originalContent = 'This is the original post';
-      
+
       const repostContent = originalContent;
-      
+
       expect(repostContent).toBe(originalContent);
     });
 
@@ -23,23 +23,24 @@ describe('Quote Post Functionality', () => {
       const quoteComment = 'Great point!';
       const originalContent = 'This is the original post';
       const originalAuthorUsername = 'testuser';
-      
+
       const repostContent = `${quoteComment}\n\n--- Reposted from @${originalAuthorUsername} ---\n${originalContent}`;
-      
+
       expect(repostContent).toContain(quoteComment);
       expect(repostContent).toContain('Reposted from @testuser');
       expect(repostContent).toContain(originalContent);
     });
 
     test('should parse repost content correctly', () => {
-      const repostContent = 'Great point!\n\n--- Reposted from @testuser ---\nThis is the original post';
-      
+      const repostContent =
+        'Great point!\n\n--- Reposted from @testuser ---\nThis is the original post';
+
       const separatorPattern = /\n\n--- Reposted from @(.+?) ---\n/;
       const match = repostContent.match(separatorPattern);
-      
+
       expect(match).toBeTruthy();
       expect(match?.[1]).toBe('testuser');
-      
+
       const parts = repostContent.split(separatorPattern);
       expect(parts[0]?.trim()).toBe('Great point!');
       expect(parts[2]?.trim()).toBe('This is the original post');
@@ -47,10 +48,10 @@ describe('Quote Post Functionality', () => {
 
     test('should handle simple repost without quote comment', () => {
       const repostContent = 'This is the original post';
-      
+
       const separatorPattern = /\n\n--- Reposted from @(.+?) ---\n/;
       const match = repostContent.match(separatorPattern);
-      
+
       expect(match).toBeFalsy();
     });
   });
@@ -67,7 +68,7 @@ describe('Quote Post Functionality', () => {
         originalAuthorUsername: 'testuser',
         originalAuthorProfileImageUrl: 'https://example.com/avatar.jpg',
       };
-      
+
       expect(metadata.isRepost).toBe(true);
       expect(metadata.originalPostId).toBe('post-123');
       expect(metadata.originalAuthorId).toBe('user-456');
@@ -85,7 +86,7 @@ describe('Quote Post Functionality', () => {
         originalAuthorUsername: 'testuser',
         originalAuthorProfileImageUrl: 'https://example.com/avatar.jpg',
       };
-      
+
       expect(metadata.isRepost).toBe(true);
       expect(metadata.quoteComment).toBeNull();
       expect(metadata.originalPostId).toBe('post-123');
@@ -106,13 +107,12 @@ describe('Quote Post Functionality', () => {
         originalAuthorName: 'Original Author',
         originalAuthorUsername: 'original',
       };
-      
+
       // For quote posts (with quoteComment), display author should be the reposter
       const isSimpleRepost = post.isRepost && !post.quoteComment;
-      const displayAuthorId = isSimpleRepost && post.originalAuthorId 
-        ? post.originalAuthorId 
-        : post.authorId;
-      
+      const displayAuthorId =
+        isSimpleRepost && post.originalAuthorId ? post.originalAuthorId : post.authorId;
+
       expect(displayAuthorId).toBe('user-reposter');
     });
 
@@ -129,13 +129,12 @@ describe('Quote Post Functionality', () => {
         originalAuthorName: 'Original Author',
         originalAuthorUsername: 'original',
       };
-      
+
       // For simple reposts (no quoteComment), display author should be the original
       const isSimpleRepost = post.isRepost && !post.quoteComment;
-      const displayAuthorId = isSimpleRepost && post.originalAuthorId 
-        ? post.originalAuthorId 
-        : post.authorId;
-      
+      const displayAuthorId =
+        isSimpleRepost && post.originalAuthorId ? post.originalAuthorId : post.authorId;
+
       expect(displayAuthorId).toBe('user-original');
     });
   });
@@ -144,7 +143,7 @@ describe('Quote Post Functionality', () => {
     test('should navigate to original post when clicking quoted post card', () => {
       const quotedPostId = 'original-post-123';
       const currentPostId = 'quote-post-456';
-      
+
       // When clicking the quoted post card, should navigate to the original
       expect(quotedPostId).not.toBe(currentPostId);
       expect(quotedPostId).toBe('original-post-123');
@@ -152,7 +151,7 @@ describe('Quote Post Functionality', () => {
 
     test('should navigate to current post when clicking main post card', () => {
       const currentPostId = 'quote-post-456';
-      
+
       // When clicking the main post card (not the quoted card), should navigate to current post
       expect(currentPostId).toBe('quote-post-456');
     });
@@ -161,11 +160,10 @@ describe('Quote Post Functionality', () => {
       const originalAuthorId = 'user-original';
       const originalAuthorUsername = 'original';
       const reposterAuthorId = 'user-reposter';
-      
+
       // Clicking on quoted post author should go to original author profile
       expect(originalAuthorId).not.toBe(reposterAuthorId);
       expect(originalAuthorUsername).toBe('original');
     });
   });
 });
-

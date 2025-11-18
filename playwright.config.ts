@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig, devices } from '@playwright/test';
 
 /**
  * Playwright configuration for E2E tests
@@ -6,35 +6,35 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  
+
   /* Run tests in files in parallel */
   fullyParallel: false,
-  
+
   /* Fail the build on CI if you accidentally left test.only in the source code */
   forbidOnly: !!process.env.CI,
-  
+
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  
+
   /* Run tests serially to avoid race conditions */
   workers: 1,
-  
+
   /* Reporter to use */
   reporter: [
     ['list'], // Console output only, no blocking HTML report
   ],
-  
+
   /* Shared settings for all the projects below */
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
-    
+
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
-    
+
     /* Screenshot on failure */
     screenshot: 'only-on-failure',
-    
+
     /* Video on failure */
     video: 'retain-on-failure',
   },
@@ -45,7 +45,7 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    
+
     // Uncomment to test on other browsers
     // {
     //   name: 'firefox',
@@ -60,13 +60,14 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   // In CI, server is started separately in workflow
   // Locally, Playwright will start the dev server
-  webServer: process.env.CI ? undefined : {
-    command: 'bun run scripts/pre-dev/pre-dev-local.ts && bunx next dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: true,
-    timeout: 120 * 1000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  },
-})
-
+  webServer: process.env.CI
+    ? undefined
+    : {
+        command: 'bun run scripts/pre-dev/pre-dev-local.ts && bunx next dev',
+        url: 'http://localhost:3000',
+        reuseExistingServer: true,
+        timeout: 120 * 1000,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+});

@@ -1,10 +1,10 @@
 /**
  * Shared Type Definitions for Tests
- * 
+ *
  * Production-ready types to replace all 'any' and 'unknown' usage
  */
 
-import type { Trajectory, TrainingBatch, TrainedModel } from '@prisma/client';
+import type { TrainedModel, TrainingBatch, Trajectory } from '@prisma/client';
 
 // ============================================================================
 // Actors Data Types
@@ -15,7 +15,11 @@ import type { Trajectory, TrainingBatch, TrainedModel } from '@prisma/client';
 // import type { ActorData, Organization, ActorsDatabase } from '@/shared/types';
 
 // Legacy alias for backward compatibility in tests
-export type { ActorData, Organization as OrganizationData, ActorsDatabase as ActorsDataFile } from '@/shared/types';
+export type {
+  ActorData,
+  ActorsDatabase as ActorsDataFile,
+  Organization as OrganizationData,
+} from '@/shared/types';
 
 // ============================================================================
 // Prisma Mock Types
@@ -67,20 +71,23 @@ export type MockLogger = {
 // PostHog Types
 // ============================================================================
 
-export interface PostHogEvent {
+export type PostHogEvent = {
   event: string;
   properties?: Record<string, string | number | boolean | null | undefined>;
-}
+};
 
-export interface PostHogConfig {
+export type PostHogConfig = {
   respect_dnt?: boolean;
   capture_exceptions?: boolean;
-}
+};
 
-export interface PostHogInstance {
-  capture: (event: string, properties?: Record<string, string | number | boolean | null | undefined>) => void;
+export type PostHogInstance = {
+  capture: (
+    event: string,
+    properties?: Record<string, string | number | boolean | null | undefined>
+  ) => void;
   config?: PostHogConfig;
-}
+};
 
 export interface WindowWithPostHog extends Window {
   __postHogEvents?: PostHogEvent[];
@@ -91,10 +98,10 @@ export interface WindowWithPostHog extends Window {
 // MetaMask Types (for Synpress)
 // ============================================================================
 
-export interface MetaMask {
+export type MetaMask = {
   connectToDapp: () => Promise<void>;
   confirmSignature: () => Promise<void>;
-}
+};
 
 // ============================================================================
 // API Response Types
@@ -103,7 +110,7 @@ export interface MetaMask {
 // Note: ApiResponse is now exported from src/types/common.ts
 // Import it from there: import type { ApiResponse } from '@/types/common';
 
-export interface PerpetualsData {
+export type PerpetualsData = {
   positions: Array<{
     id: string;
     ticker?: string;
@@ -115,9 +122,9 @@ export interface PerpetualsData {
     totalPnL: number;
     totalFunding: number;
   };
-}
+};
 
-export interface PredictionsData {
+export type PredictionsData = {
   positions: Array<{
     id: string;
     side: string;
@@ -126,15 +133,14 @@ export interface PredictionsData {
   stats: {
     totalPositions: number;
   };
-}
+};
 
-export interface PositionsResponse {
+export type PositionsResponse = {
   perpetuals: PerpetualsData;
   predictions: PredictionsData;
-}
+};
 
 export type PartialPositionsResponse = {
   perpetuals?: PerpetualsData | null;
   predictions?: PredictionsData | undefined;
-}
-
+};

@@ -1,21 +1,20 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { Award, Medal, Target, Trophy } from 'lucide-react'
+import { PageContainer } from '@/components/shared/PageContainer';
+import { useAuth } from '@/hooks/useAuth';
+import { Award, Medal, Target, Trophy } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-import { PageContainer } from '@/components/shared/PageContainer'
-import { useAuth } from '@/hooks/useAuth'
-
-interface ReputationStats {
-  currentReputation: number
-  totalWins: number
-  totalLosses: number
-  winRate: number
-  averageGameScore: number
-  averageFeedbackScore: number
-  totalFeedbackReceived: number
-  trustLevel: string
-}
+type ReputationStats = {
+  currentReputation: number;
+  totalWins: number;
+  totalLosses: number;
+  winRate: number;
+  averageGameScore: number;
+  averageFeedbackScore: number;
+  totalFeedbackReceived: number;
+  trustLevel: string;
+};
 
 const emptyStats: ReputationStats = {
   currentReputation: 0,
@@ -26,33 +25,33 @@ const emptyStats: ReputationStats = {
   averageFeedbackScore: 0,
   totalFeedbackReceived: 0,
   trustLevel: 'UNRATED',
-}
+};
 
 export default function ReputationPage() {
-  const { user, authenticated } = useAuth()
-  const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState<ReputationStats>(emptyStats)
+  const { user, authenticated } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<ReputationStats>(emptyStats);
 
   useEffect(() => {
     if (!authenticated || !user) {
-      setLoading(false)
-      return
+      setLoading(false);
+      return;
     }
 
     const fetchReputation = async () => {
-      setLoading(true)
+      setLoading(true);
       try {
-        const response = await fetch(`/api/reputation/${encodeURIComponent(user.id)}`)
+        const response = await fetch(`/api/reputation/${encodeURIComponent(user.id)}`);
         if (!response.ok) {
-          setStats(emptyStats)
-          return
+          setStats(emptyStats);
+          return;
         }
 
-        const data = await response.json()
-        const gamesPlayed = data.performance?.gamesPlayed ?? 0
-        const gamesWon = data.performance?.gamesWon ?? 0
-        const wins = Math.max(0, gamesWon)
-        const losses = Math.max(0, gamesPlayed - gamesWon)
+        const data = await response.json();
+        const gamesPlayed = data.performance?.gamesPlayed ?? 0;
+        const gamesWon = data.performance?.gamesWon ?? 0;
+        const wins = Math.max(0, gamesWon);
+        const losses = Math.max(0, gamesPlayed - gamesWon);
 
         setStats({
           currentReputation: Math.round(data.reputationPoints ?? 0),
@@ -63,142 +62,144 @@ export default function ReputationPage() {
           averageFeedbackScore: data.averageFeedbackScore ?? 0,
           totalFeedbackReceived: data.totalFeedbackReceived ?? 0,
           trustLevel: data.trustLevel ?? 'UNRATED',
-        })
+        });
       } catch (error) {
-        console.error('Failed to fetch reputation:', error)
-        setStats(emptyStats)
+        console.error('Failed to fetch reputation:', error);
+        setStats(emptyStats);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    void fetchReputation()
+    void fetchReputation();
 
-    const interval = setInterval(fetchReputation, 30000)
-    return () => clearInterval(interval)
-  }, [authenticated, user])
+    const interval = setInterval(fetchReputation, 30000);
+    return () => clearInterval(interval);
+  }, [authenticated, user]);
 
-  const hasNft = Boolean(user?.nftTokenId || user?.onChainRegistered)
+  const hasNft = Boolean(user?.nftTokenId || user?.onChainRegistered);
 
   if (!authenticated) {
     return (
       <PageContainer>
-        <div className="max-w-4xl mx-auto text-center py-12">
-          <Award className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Reputation Dashboard</h1>
-          <p className="text-muted-foreground mb-6">
+        <div className="mx-auto max-w-4xl py-12 text-center">
+          <Award className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+          <h1 className="mb-2 font-bold text-2xl">Reputation Dashboard</h1>
+          <p className="mb-6 text-muted-foreground">
             Connect your wallet to view your on-chain reputation
           </p>
         </div>
       </PageContainer>
-    )
+    );
   }
 
   if (!loading && !hasNft) {
     return (
       <PageContainer>
-        <div className="max-w-4xl mx-auto text-center py-12">
-          <Award className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Missing Reputation NFT</h1>
-          <p className="text-muted-foreground mb-6">
+        <div className="mx-auto max-w-4xl py-12 text-center">
+          <Award className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+          <h1 className="mb-2 font-bold text-2xl">Missing Reputation NFT</h1>
+          <p className="mb-6 text-muted-foreground">
             Complete on-chain onboarding to activate your public scores
           </p>
         </div>
       </PageContainer>
-    )
+    );
   }
 
   if (loading) {
     return (
       <PageContainer>
-        <div className="max-w-4xl mx-auto text-center py-12">
+        <div className="mx-auto max-w-4xl py-12 text-center">
           <p className="text-muted-foreground">Loading reputation...</p>
         </div>
       </PageContainer>
-    )
+    );
   }
 
   return (
     <PageContainer>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="text-center py-6">
-          <h1 className="text-3xl font-bold mb-2">Reputation Dashboard</h1>
+      <div className="mx-auto max-w-4xl space-y-6">
+        <div className="py-6 text-center">
+          <h1 className="mb-2 font-bold text-3xl">Reputation Dashboard</h1>
           <p className="text-muted-foreground">
             Composite score = PnL (40%) + feedback (40%) + activity (20%)
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <Award className="w-5 h-5 text-primary" />
-              <span className="text-sm text-muted-foreground uppercase tracking-wide">Score</span>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border border-border bg-card p-6">
+            <div className="mb-2 flex items-center gap-3">
+              <Award className="h-5 w-5 text-primary" />
+              <span className="text-muted-foreground text-sm uppercase tracking-wide">Score</span>
             </div>
-            <p className="text-3xl font-bold text-foreground">{stats.currentReputation}</p>
-            <p className="text-xs text-muted-foreground mt-1">Trust: {stats.trustLevel}</p>
+            <p className="font-bold text-3xl text-foreground">{stats.currentReputation}</p>
+            <p className="mt-1 text-muted-foreground text-xs">Trust: {stats.trustLevel}</p>
           </div>
 
-          <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <Trophy className="w-5 h-5 text-green-600" />
-              <span className="text-sm text-muted-foreground uppercase tracking-wide">Wins</span>
+          <div className="rounded-lg border border-border bg-card p-6">
+            <div className="mb-2 flex items-center gap-3">
+              <Trophy className="h-5 w-5 text-green-600" />
+              <span className="text-muted-foreground text-sm uppercase tracking-wide">Wins</span>
             </div>
-            <p className="text-3xl font-bold text-green-600">{stats.totalWins}</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="font-bold text-3xl text-green-600">{stats.totalWins}</p>
+            <p className="mt-1 text-muted-foreground text-xs">
               Avg game score: {stats.averageGameScore.toFixed(1)}
             </p>
           </div>
 
-          <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <Target className="w-5 h-5 text-red-600" />
-              <span className="text-sm text-muted-foreground uppercase tracking-wide">Losses</span>
+          <div className="rounded-lg border border-border bg-card p-6">
+            <div className="mb-2 flex items-center gap-3">
+              <Target className="h-5 w-5 text-red-600" />
+              <span className="text-muted-foreground text-sm uppercase tracking-wide">Losses</span>
             </div>
-            <p className="text-3xl font-bold text-red-600">{stats.totalLosses}</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="font-bold text-3xl text-red-600">{stats.totalLosses}</p>
+            <p className="mt-1 text-muted-foreground text-xs">
               Avg feedback: {stats.averageFeedbackScore.toFixed(1)} ({stats.totalFeedbackReceived}{' '}
               ratings)
             </p>
           </div>
 
-          <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <Medal className="w-5 h-5 text-primary" />
-              <span className="text-sm text-muted-foreground uppercase tracking-wide">Win Rate</span>
+          <div className="rounded-lg border border-border bg-card p-6">
+            <div className="mb-2 flex items-center gap-3">
+              <Medal className="h-5 w-5 text-primary" />
+              <span className="text-muted-foreground text-sm uppercase tracking-wide">
+                Win Rate
+              </span>
             </div>
-            <p className="text-3xl font-bold text-foreground">{stats.winRate.toFixed(1)}%</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="font-bold text-3xl text-foreground">{stats.winRate.toFixed(1)}%</p>
+            <p className="mt-1 text-muted-foreground text-xs">
               {stats.totalWins}W / {stats.totalLosses}L
             </p>
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Your Reputation NFT</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h2 className="mb-4 font-semibold text-lg">Your Reputation NFT</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="text-sm text-muted-foreground block mb-1">Token ID</label>
+              <p className="mb-1 block text-muted-foreground text-sm">Token ID</p>
               <p className="font-mono text-foreground">#{user?.nftTokenId ?? 'N/A'}</p>
             </div>
             <div>
-              <label className="text-sm text-muted-foreground block mb-1">Contract Address</label>
-              <p className="font-mono text-sm text-foreground truncate">
+              <p className="mb-1 block text-muted-foreground text-sm">Contract Address</p>
+              <p className="truncate font-mono text-foreground text-sm">
                 {process.env.NEXT_PUBLIC_IDENTITY_REGISTRY_BASE_SEPOLIA}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
-          <p className="text-center text-muted-foreground py-8">
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h2 className="mb-4 font-semibold text-lg">Recent Activity</h2>
+          <p className="py-8 text-center text-muted-foreground">
             Detailed recaps are coming soon. Keep playing to power your metrics.
           </p>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">How the Score Is Calculated</h2>
-          <div className="space-y-3 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h2 className="mb-4 font-semibold text-lg">How the Score Is Calculated</h2>
+          <div className="space-y-3 text-muted-foreground text-sm">
             <p>
               📈 <strong className="text-foreground">Performance (40%):</strong> normalized PnL &
               win rate.
@@ -219,5 +220,5 @@ export default function ReputationPage() {
         </div>
       </div>
     </PageContainer>
-  )
+  );
 }

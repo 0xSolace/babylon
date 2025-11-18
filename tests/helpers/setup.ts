@@ -21,7 +21,7 @@ export async function ensureDatabaseReady(): Promise<boolean> {
     // Simple connection test using prisma.$queryRaw
     await prisma.$queryRaw`SELECT 1`;
     return true;
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }
@@ -29,7 +29,7 @@ export async function ensureDatabaseReady(): Promise<boolean> {
 /**
  * Setup test environment
  * Call this in beforeAll() hooks for tests that need database
- * 
+ *
  * @param options.skipDatabase - If true, skip database connection (for unit tests)
  */
 export async function setupTestEnvironment(options?: { skipDatabase?: boolean }) {
@@ -67,7 +67,7 @@ export async function setupTestEnvironment(options?: { skipDatabase?: boolean })
 export async function cleanupTestEnvironment() {
   try {
     await prisma.$disconnect();
-  } catch (error) {
+  } catch (_error) {
     // Ignore disconnection errors in tests
   }
 }

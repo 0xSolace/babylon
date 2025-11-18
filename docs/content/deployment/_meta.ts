@@ -1,3 +1,3 @@
 export default {
-  vercel: 'Vercel Deployment'
-}
+  vercel: 'Vercel Deployment',
+};

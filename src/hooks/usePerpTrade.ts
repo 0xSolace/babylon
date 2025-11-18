@@ -10,15 +10,15 @@ type TradeSide = 'long' | 'short';
 /**
  * Options for configuring the usePerpTrade hook.
  */
-interface UsePerpTradeOptions {
+type UsePerpTradeOptions = {
   /** Optional function to get the access token. Falls back to window.__privyAccessToken */
   getAccessToken?: () => Promise<string | null> | string | null;
-}
+};
 
 /**
  * Payload for opening a perpetual position.
  */
-interface OpenPerpPayload {
+type OpenPerpPayload = {
   /** Ticker symbol (e.g., 'AAPL', 'TSLA') */
   ticker: string;
   /** Trade side: 'long' or 'short' */
@@ -27,9 +27,9 @@ interface OpenPerpPayload {
   size: number;
   /** Leverage multiplier */
   leverage: number;
-}
+};
 
-interface ApiPerpPosition {
+type ApiPerpPosition = {
   id: string;
   ticker: string;
   side: TradeSide;
@@ -42,9 +42,9 @@ interface ApiPerpPosition {
   fundingPaid: number;
   openedAt?: string;
   exitPrice?: number;
-}
+};
 
-interface OpenPerpResponse {
+type OpenPerpResponse = {
   position: ApiPerpPosition;
   marginPaid: number;
   fee: {
@@ -52,9 +52,9 @@ interface OpenPerpResponse {
     referrerPaid: number;
   };
   newBalance: number;
-}
+};
 
-interface ClosePerpResponse {
+type ClosePerpResponse = {
   position: ApiPerpPosition;
   grossSettlement: number;
   netSettlement: number;
@@ -67,7 +67,7 @@ interface ClosePerpResponse {
   };
   wasLiquidated: boolean;
   newBalance: number;
-}
+};
 
 async function resolveToken(
   resolver?: () => Promise<string | null> | string | null
@@ -85,12 +85,7 @@ async function resolveToken(
 }
 
 function extractErrorMessage(payload: Record<string, unknown> | null, status: number): string {
-  if (
-    payload &&
-    typeof payload === 'object' &&
-    'error' in payload &&
-    payload.error !== undefined
-  ) {
+  if (payload && typeof payload === 'object' && 'error' in payload && payload.error !== undefined) {
     const errorPayload = payload.error;
 
     if (typeof errorPayload === 'string') {
@@ -114,21 +109,21 @@ function extractErrorMessage(payload: Record<string, unknown> | null, status: nu
 
 /**
  * Hook for executing perpetual market trades.
- * 
+ *
  * Provides functions to open and close perpetual positions. Handles authentication
  * automatically using the access token. All API calls include proper error handling
  * and type-safe responses.
- * 
+ *
  * @param options - Optional configuration including custom access token resolver
- * 
+ *
  * @returns An object containing:
  * - `openPosition`: Function to open a new perpetual position
  * - `closePosition`: Function to close an existing position by ID
- * 
+ *
  * @example
  * ```tsx
  * const { openPosition, closePosition } = usePerpTrade();
- * 
+ *
  * const handleOpen = async () => {
  *   const result = await openPosition({
  *     ticker: 'AAPL',
@@ -158,9 +153,11 @@ export function usePerpTrade(options: UsePerpTradeOptions = {}) {
 
       let data: Record<string, unknown>;
       try {
-        data = await response.json() as Record<string, unknown>;
+        data = (await response.json()) as Record<string, unknown>;
       } catch (error) {
-        throw new Error(`Failed to parse response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        throw new Error(
+          `Failed to parse response: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
       }
 
       if (!response.ok) {

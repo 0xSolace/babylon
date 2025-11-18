@@ -1,6 +1,6 @@
 /**
  * Profile Type Definitions
- * 
+ *
  * Types for user and actor profiles used throughout the application
  */
 
@@ -9,7 +9,7 @@ import type { Actor } from '@/shared/types';
 /**
  * User profile information
  */
-export interface UserProfile {
+export type UserProfile = {
   id: string;
   username?: string;
   bio?: string;
@@ -21,7 +21,7 @@ export interface UserProfile {
   virtualBalance?: number;
   createdAt?: Date | string;
   updatedAt?: Date | string;
-}
+};
 
 /**
  * Actor profile information (extended from Actor)
@@ -78,4 +78,3 @@ export function isUserProfile(profile: ProfileInfo): profile is UserProfile {
 export function isActorProfile(profile: ProfileInfo): profile is ActorProfile {
   return 'description' in profile && 'domain' in profile;
 }
-

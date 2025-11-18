@@ -3,24 +3,24 @@
 import { CommentCard } from '@/components/interactions/CommentCard';
 import { CommentInput } from '@/components/interactions/CommentInput';
 import { PostCard } from '@/components/posts/PostCard';
-import { Skeleton } from '@/components/shared/Skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { Skeleton } from '@/components/shared/Skeleton';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 import { useInteractionStore } from '@/stores/interactionStore';
 import type { CommentData, CommentWithReplies } from '@/types/interactions';
 import { MessageCircle, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
  * Feed comment section component for displaying post comments.
- * 
+ *
  * Displays a post with its comments in a modal or inline view. Supports
  * nested replies, comment sorting (newest, oldest, popular), and comment
  * management (edit, delete). Handles body scroll lock and escape key when
  * used as a modal.
- * 
+ *
  * Features:
  * - Post display with interactions
  * - Comment list with nested replies
@@ -28,10 +28,10 @@ import { useRouter } from 'next/navigation';
  * - Comment sorting options
  * - Edit and delete functionality
  * - Loading states
- * 
+ *
  * @param props - FeedCommentSection component props
  * @returns Feed comment section element
- * 
+ *
  * @example
  * ```tsx
  * <FeedCommentSection
@@ -41,7 +41,7 @@ import { useRouter } from 'next/navigation';
  * />
  * ```
  */
-interface FeedCommentSectionProps {
+type FeedCommentSectionProps = {
   postId: string | null;
   postData?: {
     id: string;
@@ -58,13 +58,9 @@ interface FeedCommentSectionProps {
     isShared: boolean;
   };
   onClose?: () => void;
-}
+};
 
-export function FeedCommentSection({
-  postId,
-  postData,
-  onClose,
-}: FeedCommentSectionProps) {
+export function FeedCommentSection({ postId, postData, onClose }: FeedCommentSectionProps) {
   const { user } = useAuth();
   const router = useRouter();
   const [comments, setComments] = useState<CommentWithReplies[]>([]);
@@ -91,7 +87,7 @@ export function FeedCommentSection({
   // Handle escape key and body scroll lock for modal
   useEffect(() => {
     if (!onClose) return; // Only for modal mode
-    
+
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
@@ -110,7 +106,7 @@ export function FeedCommentSection({
   // Load comments data function - defined before useEffect that uses it
   const loadCommentsData = useCallback(async () => {
     if (!postId) return;
-    
+
     setIsLoading(true);
     const loadedComments = await loadComments(postId);
     setComments(loadedComments);
@@ -229,14 +225,20 @@ export function FeedCommentSection({
 
   const handleReplySubmit = async (replyComment: CommentData, parentCommentId: string) => {
     if (!postId) return;
-    
+
     const parentAuthorName = findParentAuthorName(comments, parentCommentId);
-    
+
     const optimisticReply: CommentWithReplies = {
       id: replyComment.id,
       content: replyComment.content,
-      createdAt: replyComment.createdAt instanceof Date ? replyComment.createdAt : new Date(replyComment.createdAt),
-      updatedAt: replyComment.updatedAt instanceof Date ? replyComment.updatedAt : new Date(replyComment.updatedAt),
+      createdAt:
+        replyComment.createdAt instanceof Date
+          ? replyComment.createdAt
+          : new Date(replyComment.createdAt),
+      updatedAt:
+        replyComment.updatedAt instanceof Date
+          ? replyComment.updatedAt
+          : new Date(replyComment.updatedAt),
       userId: replyComment.authorId,
       userName: replyComment.author?.displayName || replyComment.author?.username || 'Unknown',
       userUsername: replyComment.author?.username || null,
@@ -249,18 +251,24 @@ export function FeedCommentSection({
     };
 
     setComments((prev) => addReplyToComment(prev, parentCommentId, optimisticReply));
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     await loadCommentsData();
   };
 
   const handleTopLevelCommentSubmit = async (commentData: CommentData) => {
     if (!postId) return;
-    
+
     const optimisticComment: CommentWithReplies = {
       id: commentData.id,
       content: commentData.content,
-      createdAt: commentData.createdAt instanceof Date ? commentData.createdAt : new Date(commentData.createdAt),
-      updatedAt: commentData.updatedAt instanceof Date ? commentData.updatedAt : new Date(commentData.updatedAt),
+      createdAt:
+        commentData.createdAt instanceof Date
+          ? commentData.createdAt
+          : new Date(commentData.createdAt),
+      updatedAt:
+        commentData.updatedAt instanceof Date
+          ? commentData.updatedAt
+          : new Date(commentData.updatedAt),
       userId: commentData.authorId,
       userName: commentData.author?.displayName || commentData.author?.username || 'Unknown',
       userUsername: commentData.author?.username || null,
@@ -273,7 +281,7 @@ export function FeedCommentSection({
     };
 
     setComments((prev) => [optimisticComment, ...prev]);
-    
+
     // If it's a modal, close it and navigate to post page
     if (onClose) {
       // Close modal and navigate - the post page will load fresh data
@@ -290,10 +298,10 @@ export function FeedCommentSection({
       // Always prioritize current user's comments at the top
       const aIsCurrentUser = user && a.userId === user.id;
       const bIsCurrentUser = user && b.userId === user.id;
-      
+
       if (aIsCurrentUser && !bIsCurrentUser) return -1;
       if (!aIsCurrentUser && bIsCurrentUser) return 1;
-      
+
       // For non-user comments (or both are user comments), apply the selected sort
       switch (sortBy) {
         case 'newest':
@@ -314,8 +322,8 @@ export function FeedCommentSection({
 
   if (isLoadingPost) {
     return (
-      <div className="flex flex-col h-full w-full overflow-hidden bg-background items-center justify-center">
-        <div className="space-y-3 w-full max-w-md p-4">
+      <div className="flex h-full w-full flex-col items-center justify-center overflow-hidden bg-background">
+        <div className="w-full max-w-md space-y-3 p-4">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-4 w-3/4" />
         </div>
@@ -334,35 +342,36 @@ export function FeedCommentSection({
     <>
       {/* Backdrop for modal only */}
       {isModal && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+        <button
+          type="button"
           onClick={onClose}
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm focus:outline-none"
+          aria-label="Close comment modal"
         />
       )}
-      
+
       {/* Modal Container - centered on desktop */}
       {isModal ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4 pointer-events-none">
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-center px-4 pt-[10vh]">
           <div
             className={cn(
-              "relative w-full max-w-[700px] bg-background rounded-2xl shadow-2xl pointer-events-auto",
-              "animate-in fade-in-0 zoom-in-95 duration-200",
-              "max-h-[85vh] flex flex-col"
+              'pointer-events-auto relative w-full max-w-[700px] rounded-2xl bg-background shadow-2xl',
+              'fade-in-0 zoom-in-95 animate-in duration-200',
+              'flex max-h-[85vh] flex-col'
             )}
-            onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-border shrink-0">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-border border-b px-4 py-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors"
+                className="-ml-2 rounded-full p-2 transition-colors hover:bg-muted"
                 aria-label="Close"
               >
                 <X size={20} />
               </button>
               <div className="flex items-center gap-2">
-                <MessageCircle className="w-5 h-5 text-[#0066FF]" />
+                <MessageCircle className="h-5 w-5 text-[#0066FF]" />
                 <h2 className="font-semibold text-base">Reply</h2>
               </div>
               <div className="w-10" /> {/* Spacer for centering */}
@@ -394,7 +403,7 @@ export function FeedCommentSection({
 
               {/* Visual thread connector */}
               <div className="px-4">
-                <div className="ml-6 border-l-2 border-border h-4" />
+                <div className="ml-6 h-4 border-border border-l-2" />
               </div>
 
               {/* Comment Input */}
@@ -412,11 +421,11 @@ export function FeedCommentSection({
         </div>
       ) : (
         /* Non-modal inline view (for post detail page) */
-        <div className="flex flex-col w-full overflow-hidden bg-background relative">
+        <div className="relative flex w-full flex-col overflow-hidden bg-background">
           {/* Sort options */}
           {comments.length > 1 && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-background shrink-0">
-              <span className="text-xs text-muted-foreground">Sort:</span>
+            <div className="flex shrink-0 items-center gap-2 bg-background px-4 py-2">
+              <span className="text-muted-foreground text-xs">Sort:</span>
               <div className="flex gap-1">
                 {(['newest', 'oldest', 'popular'] as const).map((option) => (
                   <button
@@ -424,10 +433,10 @@ export function FeedCommentSection({
                     type="button"
                     onClick={() => setSortBy(option)}
                     className={cn(
-                      'px-2 py-0.5 rounded text-xs capitalize transition-colors',
+                      'rounded px-2 py-0.5 text-xs capitalize transition-colors',
                       sortBy === option
                         ? 'bg-[#0066FF] text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
                     {option}
@@ -441,7 +450,7 @@ export function FeedCommentSection({
           <div className="flex-1 overflow-y-auto px-4 py-3">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
-                <div className="space-y-3 w-full">
+                <div className="w-full space-y-3">
                   <Skeleton className="h-20 w-full" />
                   <Skeleton className="h-20 w-full" />
                 </div>
@@ -476,4 +485,3 @@ export function FeedCommentSection({
     </>
   );
 }
-

@@ -1,13 +1,13 @@
 /**
  * Admin Training Rollback API
- * 
+ *
  * @route POST /api/admin/training/rollback - Rollback model version
  * @access Admin
- * 
+ *
  * @description
  * Rolls back to a previous model version. Useful for reverting problematic
  * deployments. Updates all agents to use the specified version.
- * 
+ *
  * @openapi
  * /api/admin/training/rollback:
  *   post:
@@ -38,7 +38,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/training/rollback', {
@@ -49,10 +49,10 @@
  * ```
  */
 
+import { prisma } from '@/lib/prisma';
+import { modelDeployer } from '@/lib/training/ModelDeployer';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { modelDeployer } from '@/lib/training/ModelDeployer';
-import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -60,40 +60,29 @@ export async function POST(request: NextRequest) {
     const { targetVersion } = body;
 
     if (!targetVersion) {
-      return NextResponse.json(
-        { error: 'Target version required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Target version required' }, { status: 400 });
     }
 
     // Get current deployed version
     const currentModel = await prisma.trainedModel.findFirst({
       where: { status: 'deployed' },
-      orderBy: { deployedAt: 'desc' }
+      orderBy: { deployedAt: 'desc' },
     });
 
     if (!currentModel) {
-      return NextResponse.json(
-        { error: 'No currently deployed model' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'No currently deployed model' }, { status: 400 });
     }
 
-    const result = await modelDeployer.rollback(
-      currentModel.version,
-      targetVersion
-    );
+    const result = await modelDeployer.rollback(currentModel.version, targetVersion);
 
     return NextResponse.json(result);
-
   } catch (error) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Rollback failed'
+        error: error instanceof Error ? error.message : 'Rollback failed',
       },
       { status: 500 }
     );
   }
 }
-

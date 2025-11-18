@@ -1,27 +1,27 @@
 /**
  * Model Deployer Service
- * 
+ *
  * Automatically deploys trained models from Vercel Blob to agents.
  * Handles gradual rollout and rollback if needed.
  */
 
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
 import { agentRuntimeManager } from '@/lib/agents/runtime/AgentRuntimeManager';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 
-export interface DeploymentOptions {
+export type DeploymentOptions = {
   modelVersion: string;
   strategy: 'immediate' | 'gradual' | 'test';
   rolloutPercentage?: number; // For gradual deployment (default: 10%)
   testAgentIds?: string[]; // For test deployment
-}
+};
 
-export interface DeploymentResult {
+export type DeploymentResult = {
   success: boolean;
   agentsUpdated: number;
   deploymentId: string;
   error?: string;
-}
+};
 
 export class ModelDeployer {
   /**
@@ -31,26 +31,26 @@ export class ModelDeployer {
     try {
       logger.info('Starting model deployment', {
         version: options.modelVersion,
-        strategy: options.strategy
+        strategy: options.strategy,
       });
 
-      interface PrismaTrainedModel {
+      type PrismaTrainedModel = {
         id: string;
         modelId: string;
         version: string;
         storagePath: string;
         baseModel: string;
         createdAt: Date;
-      }
+      };
 
-      interface PrismaModelDeployment {
+      type PrismaModelDeployment = {
         id: string;
         modelId: string;
         agentId: string;
         deployedAt: Date;
         isActive: boolean;
         performanceMetrics: Record<string, unknown> | null;
-      }
+      };
 
       const prismaExt = prisma as unknown as {
         trainedModel: {
@@ -76,7 +76,7 @@ export class ModelDeployer {
 
       // Get model
       const model = await prismaExt.trainedModel.findFirst({
-        where: { version: options.modelVersion }
+        where: { version: options.modelVersion },
       });
 
       if (!model) {
@@ -90,7 +90,7 @@ export class ModelDeployer {
 
       // Create deployment records
       const deploymentId = `deploy-${Date.now()}`;
-      
+
       // Only create deployment records if modelDeployment table exists
       if (prismaExt.modelDeployment) {
         for (const agent of targetAgents) {
@@ -101,8 +101,8 @@ export class ModelDeployer {
               agentId: agent.id,
               deployedAt: new Date(),
               isActive: true,
-              performanceMetrics: {}
-            }
+              performanceMetrics: {},
+            },
           });
         }
       } else {
@@ -115,8 +115,8 @@ export class ModelDeployer {
         data: {
           status: 'deployed',
           deployedAt: new Date(),
-          agentsUsing: targetAgents.length
-        }
+          agentsUsing: targetAgents.length,
+        },
       });
 
       // Clear agent runtimes so they pick up the new model
@@ -128,22 +128,21 @@ export class ModelDeployer {
         version: options.modelVersion,
         agentsUpdated: targetAgents.length,
         deploymentId,
-        runtimesCleared: targetAgents.length
+        runtimesCleared: targetAgents.length,
       });
 
       return {
         success: true,
         agentsUpdated: targetAgents.length,
-        deploymentId
+        deploymentId,
       };
-
     } catch (error) {
       logger.error('Model deployment failed', error);
       return {
         success: false,
         agentsUpdated: 0,
         deploymentId: '',
-        error: error instanceof Error ? error.message : 'Deployment failed'
+        error: error instanceof Error ? error.message : 'Deployment failed',
       };
     }
   }
@@ -154,21 +153,22 @@ export class ModelDeployer {
   private async getTargetAgents(options: DeploymentOptions) {
     const agents = await prisma.user.findMany({
       where: { isAgent: true },
-      select: { id: true, displayName: true }
+      select: { id: true, displayName: true },
     });
 
     switch (options.strategy) {
       case 'immediate':
         return agents;
 
-      case 'gradual':
+      case 'gradual': {
         const percentage = options.rolloutPercentage || 10;
         const count = Math.ceil(agents.length * (percentage / 100));
         return agents.slice(0, count);
+      }
 
       case 'test':
         if (options.testAgentIds) {
-          return agents.filter(a => options.testAgentIds!.includes(a.id));
+          return agents.filter((a) => options.testAgentIds?.includes(a.id));
         }
         return agents.slice(0, 1); // Just first agent
 
@@ -184,17 +184,17 @@ export class ModelDeployer {
     try {
       logger.info('Rolling back model', {
         from: currentVersion,
-        to: targetVersion
+        to: targetVersion,
       });
 
-      interface PrismaModelDeployment {
+      type PrismaModelDeployment = {
         id: string;
         modelId: string;
         agentId: string;
         isActive: boolean;
         deployedAt: Date;
         undeployedAt: Date | null;
-      }
+      };
 
       const prismaExt = prisma as unknown as {
         modelDeployment?: {
@@ -216,17 +216,17 @@ export class ModelDeployer {
         logger.warn('ModelDeployment table not available, skipping rollback');
         return await this.deploy({
           modelVersion: targetVersion,
-          strategy: 'immediate'
+          strategy: 'immediate',
         });
       }
 
       const deployments = await prismaExt.modelDeployment.findMany({
         where: {
           model: {
-            version: currentVersion
+            version: currentVersion,
           },
-          isActive: true
-        }
+          isActive: true,
+        },
       });
 
       // Deactivate current deployments
@@ -235,24 +235,23 @@ export class ModelDeployer {
           where: { id: deployment.id },
           data: {
             isActive: false,
-            undeployedAt: new Date()
-          }
+            undeployedAt: new Date(),
+          },
         });
       }
 
       // Deploy target version
       return await this.deploy({
         modelVersion: targetVersion,
-        strategy: 'immediate'
+        strategy: 'immediate',
       });
-
     } catch (error) {
       logger.error('Rollback failed', error);
       return {
         success: false,
         agentsUpdated: 0,
         deploymentId: '',
-        error: error instanceof Error ? error.message : 'Rollback failed'
+        error: error instanceof Error ? error.message : 'Rollback failed',
       };
     }
   }
@@ -266,12 +265,12 @@ export class ModelDeployer {
     agentsFailed: number;
     performance: Record<string, number>;
   } | null> {
-    interface PrismaModelDeployment {
+    type PrismaModelDeployment = {
       id: string;
       agentId: string;
       isActive: boolean;
       deployedAt: Date;
-    }
+    };
 
     const prismaExt = prisma as unknown as {
       modelDeployment?: {
@@ -295,9 +294,9 @@ export class ModelDeployer {
     const deployments = await prismaExt.modelDeployment.findMany({
       where: {
         id: {
-          contains: timestampPart // Match timestamp
-        }
-      }
+          contains: timestampPart, // Match timestamp
+        },
+      },
     });
 
     if (deployments.length === 0) {
@@ -308,11 +307,10 @@ export class ModelDeployer {
       status: 'deployed',
       agentsUpdated: deployments.length,
       agentsFailed: 0,
-      performance: {}
+      performance: {},
     };
   }
 }
 
 // Singleton
 export const modelDeployer = new ModelDeployer();
-

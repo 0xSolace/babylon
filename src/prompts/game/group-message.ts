@@ -2,18 +2,19 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating individual private group chat messages with insider info.
- * 
+ *
  * Creates a single private group chat message containing insider trading
  * information, strategic revelations, or confidential discussions. Messages
  * provide exclusive information to group members.
- * 
+ *
  * Returns XML with group message content.
  */
 export const groupMessage = definePrompt({
   id: 'group-message',
   version: '2.0.0',
   category: 'game',
-  description: 'Generates private group chat messages with insider trading info and strategic revelations',
+  description:
+    'Generates private group chat messages with insider trading info and strategic revelations',
   temperature: 1,
   maxTokens: 200,
   template: `
@@ -57,5 +58,5 @@ Write a private message (max 200 chars) with ACTIONABLE insider info.
 - NO hashtags (but emojis OK: 🤫, 👀, 🔥)
 
 Write ONLY the message text (plain text, no XML needed for this prompt):
-`.trim()
+`.trim(),
 });

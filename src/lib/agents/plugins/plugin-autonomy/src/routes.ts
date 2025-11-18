@@ -1,18 +1,18 @@
-import type { Route, IAgentRuntime } from '@elizaos/core';
+import type { IAgentRuntime, Route } from '@elizaos/core';
 import { AutonomousServiceType } from './types';
 
-interface RouteRequest {
+type RouteRequest = {
   body?: Record<string, unknown>;
   params?: Record<string, string>;
   query?: Record<string, string>;
-}
+};
 
-interface RouteResponse {
+type RouteResponse = {
   status: (code: number) => RouteResponse;
   json: (data: unknown) => unknown;
-}
+};
 
-interface AutonomyService {
+type AutonomyService = {
   getStatus: () => {
     enabled: boolean;
     running: boolean;
@@ -22,7 +22,7 @@ interface AutonomyService {
   enableAutonomy: () => Promise<void>;
   disableAutonomy: () => Promise<void>;
   setLoopInterval: (interval: number) => void;
-}
+};
 
 /**
  * Simple API routes for controlling autonomy via settings

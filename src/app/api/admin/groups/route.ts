@@ -1,13 +1,13 @@
 /**
  * Admin Groups API
- * 
+ *
  * @route GET /api/admin/groups - Get all group chats
  * @access Admin
- * 
+ *
  * @description
  * Returns all group chats in the system for verification and debugging.
  * Supports filtering by creator and sorting by various fields. Admin only.
- * 
+ *
  * @openapi
  * /api/admin/groups:
  *   get:
@@ -51,7 +51,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const { groups } = await fetch('/api/admin/groups?sortBy=memberCount', {
@@ -61,8 +61,8 @@
  */
 
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { withErrorHandling } from '@/lib/errors/error-handler';
 import { asSystem } from '@/lib/db/context';
+import { withErrorHandling } from '@/lib/errors/error-handler';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -118,11 +118,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     });
 
     // Get all unique participant IDs across all chats
-    type ChatType = typeof chats[0];
-    type ChatParticipantType = typeof chats[0]['ChatParticipant'][0];
-    type MessageType = typeof chats[0]['Message'][0];
-    const allParticipantIds = [...new Set(chats.flatMap((c: ChatType) => c.ChatParticipant.map((p: ChatParticipantType) => p.userId)))];
-    const allMessageSenderIds = [...new Set(chats.flatMap((c: ChatType) => c.Message.map((m: MessageType) => m.senderId)))];
+    type ChatType = (typeof chats)[0];
+    type ChatParticipantType = (typeof chats)[0]['ChatParticipant'][0];
+    type MessageType = (typeof chats)[0]['Message'][0];
+    const allParticipantIds = [
+      ...new Set(
+        chats.flatMap((c: ChatType) => c.ChatParticipant.map((p: ChatParticipantType) => p.userId))
+      ),
+    ];
+    const allMessageSenderIds = [
+      ...new Set(chats.flatMap((c: ChatType) => c.Message.map((m: MessageType) => m.senderId))),
+    ];
     const allUserIds = [...new Set([...allParticipantIds, ...allMessageSenderIds])];
 
     // Get all users and actors at once
@@ -136,7 +142,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         profileImageUrl: true,
       },
     });
-    
+
     const allActors = await db.actor.findMany({
       where: { id: { in: allUserIds } },
       select: {
@@ -145,7 +151,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         profileImageUrl: true,
       },
     });
-    
+
     // Query UserGroup without type issues
     const allUserGroups = await db.$queryRaw<Array<{ name: string | null; createdById: string }>>`
       SELECT name, "createdById" FROM "UserGroup"
@@ -154,37 +160,43 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     return { chats, allUsers, allActors, allUserGroups };
   });
 
-  // Create maps for quick lookup  
-  type UserType = typeof allUsers[number];
-  type ActorType = typeof allActors[number];
+  // Create maps for quick lookup
+  type UserType = (typeof allUsers)[number];
+  type ActorType = (typeof allActors)[number];
   type UserGroupType = { name: string | null; createdById: string };
-  
+
   const usersMap = new Map<string, UserType>(allUsers.map((u: UserType) => [u.id, u]));
   const actorsMap = new Map<string, ActorType>(allActors.map((a: ActorType) => [a.id, a]));
   const userGroupsMap = new Map<string, UserGroupType>(
-    allUserGroups.filter((g: UserGroupType) => g.name).map((g: UserGroupType) => [g.name as string, g])
+    allUserGroups
+      .filter((g: UserGroupType) => g.name)
+      .map((g: UserGroupType) => [g.name as string, g])
   );
 
   // Enrich with creator and participant details
-  type ChatWithRelations = typeof chats[0];
-  type ChatParticipantInner = typeof chats[0]['ChatParticipant'][0];
+  type ChatWithRelations = (typeof chats)[0];
+  type ChatParticipantInner = (typeof chats)[0]['ChatParticipant'][0];
   const enrichedChats = await Promise.all(
     chats.map(async (chat: ChatWithRelations) => {
       const participantIds = chat.ChatParticipant.map((p: ChatParticipantInner) => p.userId);
-      
+
       // Get participants from maps
-      const users = participantIds.map((id: string) => usersMap.get(id)).filter((u: UserType | undefined): u is UserType => u !== undefined);
-      const actors = participantIds.map((id: string) => actorsMap.get(id)).filter((a: ActorType | undefined): a is ActorType => a !== undefined);
+      const users = participantIds
+        .map((id: string) => usersMap.get(id))
+        .filter((u: UserType | undefined): u is UserType => u !== undefined);
+      const actors = participantIds
+        .map((id: string) => actorsMap.get(id))
+        .filter((a: ActorType | undefined): a is ActorType => a !== undefined);
 
       // Determine group type and creator
       const actorParticipants = actors.map((a: ActorType) => a.id);
       const hasNPCs = actorParticipants.length > 0;
       const hasUsers = users.filter((u: UserType) => !u.isActor).length > 0;
-      
+
       let groupType = 'unknown';
       let creatorName = 'Unknown';
       let creatorId = null;
-      
+
       if (hasNPCs && !hasUsers) {
         groupType = 'npc-only';
         // Find creator from chat name or first NPC
@@ -205,7 +217,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         groupType = 'user';
         // Check UserGroup table from map
         const userGroup = chat.name ? userGroupsMap.get(chat.name) : null;
-        
+
         if (userGroup) {
           const creator = users.find((u: UserType) => u.id === userGroup.createdById);
           if (creator) {
@@ -226,11 +238,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       }
 
       // Combine user and actor info
-      type ParticipantType = typeof chat.ChatParticipant[0];
+      type ParticipantType = (typeof chat.ChatParticipant)[0];
       const participants = chat.ChatParticipant.map((p: ParticipantType) => {
         const user = users.find((u: UserType) => u.id === p.userId);
         const actor = actors.find((a: ActorType) => a.id === p.userId);
-        
+
         return {
           id: p.userId,
           name: user?.displayName || user?.username || actor?.name || 'Unknown',
@@ -242,11 +254,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       });
 
       // Get message senders from maps
-      type MessageType = typeof chat.Message[0];
+      type MessageType = (typeof chat.Message)[0];
       const messagesWithSenders = chat.Message.map((m: MessageType) => {
         const user = usersMap.get(m.senderId);
         const actor = actorsMap.get(m.senderId);
-        
+
         return {
           id: m.id,
           content: m.content,
@@ -276,18 +288,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   );
 
   // Filter out nulls (from filters)
-  const filteredChats = enrichedChats.filter(c => c !== null);
+  const filteredChats = enrichedChats.filter((c) => c !== null);
 
   // Sort if needed
   if (sortBy === 'memberCount') {
     filteredChats.sort((a, b) => {
       const order = sortOrder === 'asc' ? 1 : -1;
-      return order * (a!.memberCount - b!.memberCount);
+      return order * (a?.memberCount - b?.memberCount);
     });
   } else if (sortBy === 'messageCount') {
     filteredChats.sort((a, b) => {
       const order = sortOrder === 'asc' ? 1 : -1;
-      return order * (a!.messageCount - b!.messageCount);
+      return order * (a?.messageCount - b?.messageCount);
     });
   }
 
@@ -299,4 +311,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-

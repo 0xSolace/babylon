@@ -2,11 +2,11 @@
  * Service for creating and managing prediction markets on-chain
  */
 
-import { createPublicClient, createWalletClient, http, type Address } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
-import { baseSepolia } from 'viem/chains'
-import { logger } from '../logger'
-import { prisma } from '../prisma'
+import { type Address, createPublicClient, createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
+import { logger } from '../logger';
+import { prisma } from '../prisma';
 
 /**
  * Create a prediction market on-chain
@@ -20,54 +20,72 @@ export async function createMarketOnChain(
   endDate: Date,
   oracleAddress?: Address
 ): Promise<`0x${string}` | null> {
-  const diamondAddress = process.env.NEXT_PUBLIC_DIAMOND_ADDRESS as Address
-  const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`
-  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL
+  const diamondAddress = process.env.NEXT_PUBLIC_DIAMOND_ADDRESS as Address;
+  const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`;
+  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL;
 
   if (!diamondAddress || !deployerPrivateKey || !rpcUrl) {
     logger.debug(
       'Skipping on-chain market creation - missing configuration',
-      { hasDiamond: !!diamondAddress, hasKey: !!deployerPrivateKey, hasRpc: !!rpcUrl },
+      {
+        hasDiamond: !!diamondAddress,
+        hasKey: !!deployerPrivateKey,
+        hasRpc: !!rpcUrl,
+      },
       'OnChainMarketService'
-    )
-    return null
+    );
+    return null;
   }
 
   try {
     const publicClient = createPublicClient({
       chain: rpcUrl.includes('localhost')
-        ? { id: 31337, name: 'Local', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpcUrl] } } }
+        ? {
+            id: 31337,
+            name: 'Local',
+            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: { default: { http: [rpcUrl] } },
+          }
         : baseSepolia,
       transport: http(rpcUrl),
-    })
+    });
 
-    const account = privateKeyToAccount(deployerPrivateKey)
+    const account = privateKeyToAccount(deployerPrivateKey);
     const walletClient = createWalletClient({
       account,
       chain: rpcUrl.includes('localhost')
-        ? { id: 31337, name: 'Local', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpcUrl] } } }
+        ? {
+            id: 31337,
+            name: 'Local',
+            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: { default: { http: [rpcUrl] } },
+          }
         : baseSepolia,
       transport: http(rpcUrl),
-    })
+    });
 
     // Use deployer address as oracle if none provided
-    const oracle = oracleAddress || account.address
+    const oracle = oracleAddress || account.address;
 
     // Convert endDate to Unix timestamp
-    const resolveAt = BigInt(Math.floor(endDate.getTime() / 1000))
+    const resolveAt = BigInt(Math.floor(endDate.getTime() / 1000));
 
     // Binary market: Yes/No outcomes
-    const outcomes = ['Yes', 'No']
+    const outcomes = ['Yes', 'No'];
 
     logger.info(
       'Creating market on-chain',
-      { question: question.substring(0, 50), resolveAt: resolveAt.toString(), oracle },
+      {
+        question: question.substring(0, 50),
+        resolveAt: resolveAt.toString(),
+        oracle,
+      },
       'OnChainMarketService'
-    )
+    );
 
     // Get oracle address - use deployer if none provided
     // In production, this should be a proper oracle contract address
-    const oracleAddr = oracleAddress || account.address
+    const oracleAddr = oracleAddress || account.address;
 
     // Use object-based ABI format for viem compatibility
     const createMarketAbi = [
@@ -83,22 +101,22 @@ export async function createMarketOnChain(
         outputs: [{ name: 'marketId', type: 'bytes32' }],
         stateMutability: 'nonpayable',
       },
-    ] as const
+    ] as const;
 
     const txHash = await walletClient.writeContract({
       address: diamondAddress,
       abi: createMarketAbi,
       functionName: 'createMarket',
       args: [question, outcomes, resolveAt, oracleAddr],
-    })
+    });
 
-    logger.info('Market creation transaction sent', { txHash }, 'OnChainMarketService')
+    logger.info('Market creation transaction sent', { txHash }, 'OnChainMarketService');
 
     // Wait for confirmation
     const receipt = await publicClient.waitForTransactionReceipt({
       hash: txHash,
       confirmations: 1,
-    })
+    });
 
     if (receipt.status === 'success') {
       // Extract market ID from events
@@ -106,25 +124,28 @@ export async function createMarketOnChain(
       // Event signature hash: keccak256("MarketCreated(bytes32,string,uint8,uint256)")
       // topics[0] = event signature hash
       // topics[1] = marketId (indexed, first parameter)
-      
+
       // Calculate event signature hash
-      const { keccak256, toBytes } = await import('viem')
-      const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)'
-      const eventSignatureHash = keccak256(toBytes(eventSignature))
-      
+      const { keccak256, toBytes } = await import('viem');
+      const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)';
+      const eventSignatureHash = keccak256(toBytes(eventSignature));
+
       const marketCreatedEvent = receipt.logs.find((log) => {
         // Check if this log matches the MarketCreated event
-        return log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() && log.topics.length >= 2
-      })
+        return (
+          log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() &&
+          log.topics.length >= 2
+        );
+      });
 
-      if (marketCreatedEvent && marketCreatedEvent.topics[1]) {
-        const marketId = marketCreatedEvent.topics[1] as `0x${string}`
+      if (marketCreatedEvent?.topics[1]) {
+        const marketId = marketCreatedEvent.topics[1] as `0x${string}`;
         logger.info(
           'Market created on-chain successfully',
           { marketId, txHash },
           'OnChainMarketService'
-        )
-        return marketId
+        );
+        return marketId;
       } else {
         // Fallback: try to read the return value from the transaction
         // The createMarket function returns bytes32 marketId
@@ -144,37 +165,41 @@ export async function createMarketOnChain(
             },
             fromBlock: receipt.blockNumber,
             toBlock: receipt.blockNumber,
-          })
-          
-          const firstEvent = events[0]
+          });
+
+          const firstEvent = events[0];
           if (firstEvent?.args.marketId) {
-            const marketId = firstEvent.args.marketId as `0x${string}`
+            const marketId = firstEvent.args.marketId as `0x${string}`;
             logger.info(
               'Market created on-chain successfully (from event logs)',
               { marketId, txHash },
               'OnChainMarketService'
-            )
-            return marketId
+            );
+            return marketId;
           }
         } catch (error) {
-          logger.debug('Could not read market ID from events', { error }, 'OnChainMarketService')
+          logger.debug('Could not read market ID from events', { error }, 'OnChainMarketService');
         }
-        
+
         logger.warn(
           'Could not extract market ID from events, will retry later',
           { txHash },
           'OnChainMarketService'
-        )
+        );
         // Return null - caller can retry with getMarketIdFromTx
-        return null
+        return null;
       }
     } else {
-      logger.error('Market creation transaction failed', { txHash }, 'OnChainMarketService')
-      return null
+      logger.error('Market creation transaction failed', { txHash }, 'OnChainMarketService');
+      return null;
     }
   } catch (error) {
-    logger.error('Failed to create market on-chain', { error, question: question.substring(0, 50) }, 'OnChainMarketService')
-    return null
+    logger.error(
+      'Failed to create market on-chain',
+      { error, question: question.substring(0, 50) },
+      'OnChainMarketService'
+    );
+    return null;
   }
 }
 
@@ -183,30 +208,37 @@ export async function createMarketOnChain(
  * This is a fallback if we couldn't extract it from the receipt
  */
 export async function getMarketIdFromTx(txHash: `0x${string}`): Promise<`0x${string}` | null> {
-  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL
-  if (!rpcUrl) return null
+  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL;
+  if (!rpcUrl) return null;
 
   try {
     const publicClient = createPublicClient({
       chain: rpcUrl.includes('localhost')
-        ? { id: 31337, name: 'Local', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpcUrl] } } }
+        ? {
+            id: 31337,
+            name: 'Local',
+            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: { default: { http: [rpcUrl] } },
+          }
         : baseSepolia,
       transport: http(rpcUrl),
-    })
+    });
 
-    const receipt = await publicClient.getTransactionReceipt({ hash: txHash })
-    
+    const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+
     // Look for MarketCreated event using event signature
-    const { keccak256, toBytes } = await import('viem')
-    const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)'
-    const eventSignatureHash = keccak256(toBytes(eventSignature))
-    
-    const marketCreatedEvent = receipt.logs.find((log) => {
-      return log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() && log.topics.length >= 2
-    })
+    const { keccak256, toBytes } = await import('viem');
+    const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)';
+    const eventSignatureHash = keccak256(toBytes(eventSignature));
 
-    if (marketCreatedEvent && marketCreatedEvent.topics[1]) {
-      return marketCreatedEvent.topics[1] as `0x${string}`
+    const marketCreatedEvent = receipt.logs.find((log) => {
+      return (
+        log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() && log.topics.length >= 2
+      );
+    });
+
+    if (marketCreatedEvent?.topics[1]) {
+      return marketCreatedEvent.topics[1] as `0x${string}`;
     }
 
     // Try reading events using getLogs
@@ -225,20 +257,24 @@ export async function getMarketIdFromTx(txHash: `0x${string}`): Promise<`0x${str
         },
         fromBlock: receipt.blockNumber,
         toBlock: receipt.blockNumber,
-      })
-      
-      const firstEvent = events[0]
+      });
+
+      const firstEvent = events[0];
       if (firstEvent?.args.marketId) {
-        return firstEvent.args.marketId as `0x${string}`
+        return firstEvent.args.marketId as `0x${string}`;
       }
     } catch (error) {
-      logger.debug('Could not read events using getLogs', { error }, 'OnChainMarketService')
+      logger.debug('Could not read events using getLogs', { error }, 'OnChainMarketService');
     }
 
-    return null
+    return null;
   } catch (error) {
-    logger.error('Failed to get market ID from transaction', { error, txHash }, 'OnChainMarketService')
-    return null
+    logger.error(
+      'Failed to get market ID from transaction',
+      { error, txHash },
+      'OnChainMarketService'
+    );
+    return null;
   }
 }
 
@@ -250,17 +286,21 @@ export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
   try {
     const market = await prisma.market.findUnique({
       where: { id: marketId },
-    })
+    });
 
     if (!market) {
-      logger.warn('Market not found', { marketId }, 'OnChainMarketService')
-      return false
+      logger.warn('Market not found', { marketId }, 'OnChainMarketService');
+      return false;
     }
 
     // If already has onChainMarketId, skip
     if (market.onChainMarketId) {
-      logger.debug('Market already has onChainMarketId', { marketId, onChainMarketId: market.onChainMarketId }, 'OnChainMarketService')
-      return true
+      logger.debug(
+        'Market already has onChainMarketId',
+        { marketId, onChainMarketId: market.onChainMarketId },
+        'OnChainMarketService'
+      );
+      return true;
     }
 
     // Create market on-chain
@@ -268,15 +308,15 @@ export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
       market.question,
       market.endDate,
       market.oracleAddress as Address | undefined
-    )
+    );
 
     if (onChainMarketId) {
       // Update database with onChainMarketId
       // Get oracle address from deployer private key if not set
-      let oracleAddr: string | null = market.oracleAddress
+      let oracleAddr: string | null = market.oracleAddress;
       if (!oracleAddr && process.env.DEPLOYER_PRIVATE_KEY) {
-        const { privateKeyToAccount } = await import('viem/accounts')
-        oracleAddr = privateKeyToAccount(process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`).address
+        const { privateKeyToAccount } = await import('viem/accounts');
+        oracleAddr = privateKeyToAccount(process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`).address;
       }
 
       await prisma.market.update({
@@ -285,21 +325,20 @@ export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
           onChainMarketId,
           oracleAddress: oracleAddr,
         },
-      })
+      });
 
       logger.info(
         'Market linked to on-chain market',
         { marketId, onChainMarketId },
         'OnChainMarketService'
-      )
-      return true
+      );
+      return true;
     } else {
-      logger.warn('Failed to create market on-chain', { marketId }, 'OnChainMarketService')
-      return false
+      logger.warn('Failed to create market on-chain', { marketId }, 'OnChainMarketService');
+      return false;
     }
   } catch (error) {
-    logger.error('Failed to ensure market on-chain', { error, marketId }, 'OnChainMarketService')
-    return false
+    logger.error('Failed to ensure market on-chain', { error, marketId }, 'OnChainMarketService');
+    return false;
   }
 }
-

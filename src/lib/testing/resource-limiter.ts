@@ -1,18 +1,18 @@
 /**
  * Resource Limiter - Prevents OOM and System Crashes
- * 
+ *
  * Monitors system resources during load tests and automatically
  * backs off or stops if memory/CPU gets too high
  */
 
 import { logger } from '@/lib/logger';
 
-export interface ResourceLimits {
+export type ResourceLimits = {
   maxMemoryMB: number;
   maxMemoryPercent: number;
   maxConcurrentRequests: number;
   checkIntervalMs: number;
-}
+};
 
 export const DEFAULT_LIMITS: ResourceLimits = {
   maxMemoryMB: 2048, // 2GB max
@@ -38,16 +38,20 @@ export class ResourceLimiter {
   start(onStop?: () => void): void {
     this.stopped = false;
     this.onStopCallback = onStop;
-    
+
     this.checkInterval = setInterval(() => {
       this.checkResources();
     }, this.limits.checkIntervalMs);
 
-    logger.info('Resource limiter started', {
-      maxMemoryMB: this.limits.maxMemoryMB,
-      maxMemoryPercent: this.limits.maxMemoryPercent,
-      maxConcurrentRequests: this.limits.maxConcurrentRequests,
-    }, 'ResourceLimiter');
+    logger.info(
+      'Resource limiter started',
+      {
+        maxMemoryMB: this.limits.maxMemoryMB,
+        maxMemoryPercent: this.limits.maxMemoryPercent,
+        maxConcurrentRequests: this.limits.maxConcurrentRequests,
+      },
+      'ResourceLimiter'
+    );
   }
 
   /**
@@ -59,7 +63,7 @@ export class ResourceLimiter {
       this.checkInterval = null;
     }
     this.stopped = false;
-    
+
     logger.info('Resource limiter stopped', undefined, 'ResourceLimiter');
   }
 
@@ -72,10 +76,14 @@ export class ResourceLimiter {
     }
 
     if (this.activeRequests >= this.limits.maxConcurrentRequests) {
-      logger.warn('Max concurrent requests reached', {
-        active: this.activeRequests,
-        max: this.limits.maxConcurrentRequests,
-      }, 'ResourceLimiter');
+      logger.warn(
+        'Max concurrent requests reached',
+        {
+          active: this.activeRequests,
+          max: this.limits.maxConcurrentRequests,
+        },
+        'ResourceLimiter'
+      );
       return false;
     }
 
@@ -110,7 +118,7 @@ export class ResourceLimiter {
     const totalMemoryMB = memUsage.rss / 1024 / 1024;
     const systemMemoryGB = 8; // Assume 8GB system (adjust if needed)
     const systemMemoryMB = systemMemoryGB * 1024;
-    
+
     return {
       memoryMB: totalMemoryMB,
       memoryPercent: (totalMemoryMB / systemMemoryMB) * 100,
@@ -127,29 +135,41 @@ export class ResourceLimiter {
 
     // Check memory usage
     if (usage.memoryMB > this.limits.maxMemoryMB) {
-      logger.error('Memory limit exceeded - stopping test', {
-        currentMB: usage.memoryMB,
-        limitMB: this.limits.maxMemoryMB,
-      }, 'ResourceLimiter');
+      logger.error(
+        'Memory limit exceeded - stopping test',
+        {
+          currentMB: usage.memoryMB,
+          limitMB: this.limits.maxMemoryMB,
+        },
+        'ResourceLimiter'
+      );
       this.emergencyStop('Memory limit exceeded');
       return;
     }
 
     if (usage.memoryPercent > this.limits.maxMemoryPercent) {
-      logger.error('Memory percentage limit exceeded - stopping test', {
-        currentPercent: usage.memoryPercent,
-        limitPercent: this.limits.maxMemoryPercent,
-      }, 'ResourceLimiter');
+      logger.error(
+        'Memory percentage limit exceeded - stopping test',
+        {
+          currentPercent: usage.memoryPercent,
+          limitPercent: this.limits.maxMemoryPercent,
+        },
+        'ResourceLimiter'
+      );
       this.emergencyStop('Memory percentage limit exceeded');
       return;
     }
 
     // Warn if approaching limits
     if (usage.memoryPercent > this.limits.maxMemoryPercent * 0.9) {
-      logger.warn('Approaching memory limit', {
-        currentPercent: usage.memoryPercent,
-        limitPercent: this.limits.maxMemoryPercent,
-      }, 'ResourceLimiter');
+      logger.warn(
+        'Approaching memory limit',
+        {
+          currentPercent: usage.memoryPercent,
+          limitPercent: this.limits.maxMemoryPercent,
+        },
+        'ResourceLimiter'
+      );
     }
   }
 
@@ -158,13 +178,17 @@ export class ResourceLimiter {
    */
   private emergencyStop(reason: string): void {
     if (this.stopped) return;
-    
+
     this.stopped = true;
-    
-    logger.error('EMERGENCY STOP - Test halted to prevent system crash', {
-      reason,
-      usage: this.getUsage(),
-    }, 'ResourceLimiter');
+
+    logger.error(
+      'EMERGENCY STOP - Test halted to prevent system crash',
+      {
+        reason,
+        usage: this.getUsage(),
+      },
+      'ResourceLimiter'
+    );
 
     if (this.onStopCallback) {
       this.onStopCallback();
@@ -180,4 +204,3 @@ export class ResourceLimiter {
     return this.stopped;
   }
 }
-

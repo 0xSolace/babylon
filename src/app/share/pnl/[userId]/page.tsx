@@ -3,22 +3,22 @@
  * Shareable P&L page with OG meta tags
  */
 
-import type { Metadata } from 'next'
-import { prisma } from '@/lib/prisma'
-import { redirect } from 'next/navigation'
+import { prisma } from '@/lib/prisma';
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
-interface PageProps {
+type PageProps = {
   params: Promise<{
-    userId: string
-  }>
-}
+    userId: string;
+  }>;
+};
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { userId } = await params
-  
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://babylon.market'
-  const ogImageUrl = `${appUrl}/api/og/pnl/${userId}`
-  
+  const { userId } = await params;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://babylon.market';
+  const ogImageUrl = `${appUrl}/api/og/pnl/${userId}`;
+
   // Get user data
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -26,10 +26,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       username: true,
       displayName: true,
     },
-  })
+  });
 
-  const displayName = user?.displayName || user?.username || 'Babylon User'
-  
+  const displayName = user?.displayName || user?.username || 'Babylon User';
+
   return {
     title: `${displayName}'s P&L on Babylon`,
     description: `Check out ${displayName}'s trading performance on Babylon. Trading narratives, sharing the upside.`,
@@ -61,12 +61,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       'fc:frame:button:1:action': 'link',
       'fc:frame:button:1:target': `${appUrl}/markets`,
     },
-  }
+  };
 }
 
 export default async function SharePnLPage({ params }: PageProps) {
-  const { userId } = await params
-  
+  const { userId } = await params;
+
   // Verify user exists - if not, redirect to markets anyway
   await prisma.user.findUnique({
     where: { id: userId },
@@ -74,9 +74,8 @@ export default async function SharePnLPage({ params }: PageProps) {
       id: true,
       username: true,
     },
-  })
+  });
 
   // Always redirect to markets (OG crawlers get metadata, users get redirected)
-  redirect('/markets')
+  redirect('/markets');
 }
-

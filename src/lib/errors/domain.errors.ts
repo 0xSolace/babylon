@@ -2,7 +2,7 @@
  * Domain-specific error classes for Babylon business logic
  */
 
-import { BusinessLogicError, BabylonError } from './base.errors';
+import { BabylonError, BusinessLogicError } from './base.errors';
 
 /**
  * Insufficient funds error for balance-related issues
@@ -28,15 +28,15 @@ export class TradingError extends BabylonError {
   constructor(
     message: string,
     public readonly marketId: string,
-    public readonly reason: 'MARKET_CLOSED' | 'INVALID_PRICE' | 'POSITION_LIMIT' | 'RISK_LIMIT' | 'SLIPPAGE_EXCEEDED' | 'ORDER_EXPIRED'
+    public readonly reason:
+      | 'MARKET_CLOSED'
+      | 'INVALID_PRICE'
+      | 'POSITION_LIMIT'
+      | 'RISK_LIMIT'
+      | 'SLIPPAGE_EXCEEDED'
+      | 'ORDER_EXPIRED'
   ) {
-    super(
-      message,
-      `TRADING_${reason}`,
-      400,
-      true,
-      { marketId, reason }
-    );
+    super(message, `TRADING_${reason}`, 400, true, { marketId, reason });
   }
 }
 
@@ -50,14 +50,9 @@ export class PositionError extends BusinessLogicError {
     public readonly poolId: string,
     public readonly reason: 'NOT_FOUND' | 'ALREADY_CLOSED' | 'INSUFFICIENT_MARGIN' | 'MAX_LEVERAGE'
   ) {
-    super(
-      message,
-      `POSITION_${reason}`,
-      { positionId, poolId, reason }
-    );
+    super(message, `POSITION_${reason}`, { positionId, poolId, reason });
   }
 }
-
 
 /**
  * Agent error for A2A operations
@@ -69,13 +64,7 @@ export class AgentError extends BabylonError {
     public readonly operation: string,
     public readonly reason?: string
   ) {
-    super(
-      message,
-      'AGENT_ERROR',
-      400,
-      true,
-      { agentId, operation, reason }
-    );
+    super(message, 'AGENT_ERROR', 400, true, { agentId, operation, reason });
   }
 }
 
@@ -87,13 +76,10 @@ export class AgentAuthenticationError extends BabylonError {
     public readonly agentId: string,
     public readonly reason: 'NOT_REGISTERED' | 'INVALID_SIGNATURE' | 'EXPIRED_NONCE' | 'BANNED'
   ) {
-    super(
-      `Agent authentication failed: ${reason}`,
-      `AGENT_AUTH_${reason}`,
-      401,
-      true,
-      { agentId, reason }
-    );
+    super(`Agent authentication failed: ${reason}`, `AGENT_AUTH_${reason}`, 401, true, {
+      agentId,
+      reason,
+    });
   }
 }
 
@@ -106,11 +92,7 @@ export class CoalitionError extends BusinessLogicError {
     public readonly coalitionId: string,
     public readonly reason: 'NOT_FOUND' | 'NOT_MEMBER' | 'ALREADY_MEMBER' | 'FULL' | 'DISBANDED'
   ) {
-    super(
-      message,
-      `COALITION_${reason}`,
-      { coalitionId, reason }
-    );
+    super(message, `COALITION_${reason}`, { coalitionId, reason });
   }
 }
 
@@ -124,18 +106,12 @@ export class BlockchainError extends BabylonError {
     public readonly blockNumber?: number,
     public readonly gasUsed?: string
   ) {
-    super(
-      `Blockchain: ${message}`,
-      'BLOCKCHAIN_ERROR',
-      502,
-      true,
-      {
-        service: 'Blockchain',
-        txHash,
-        blockNumber,
-        gasUsed
-      }
-    );
+    super(`Blockchain: ${message}`, 'BLOCKCHAIN_ERROR', 502, true, {
+      service: 'Blockchain',
+      txHash,
+      blockNumber,
+      gasUsed,
+    });
   }
 }
 
@@ -152,21 +128,15 @@ export class SmartContractError extends BabylonError {
     public readonly blockNumber?: number,
     public readonly gasUsed?: string
   ) {
-    super(
-      `Smart Contract: ${message}`,
-      'SMART_CONTRACT_ERROR',
-      502,
-      true,
-      {
-        service: 'Blockchain',
-        contractAddress,
-        method,
-        revertReason,
-        txHash,
-        blockNumber,
-        gasUsed
-      }
-    );
+    super(`Smart Contract: ${message}`, 'SMART_CONTRACT_ERROR', 502, true, {
+      service: 'Blockchain',
+      contractAddress,
+      method,
+      revertReason,
+      txHash,
+      blockNumber,
+      gasUsed,
+    });
   }
 }
 
@@ -177,13 +147,14 @@ export class WalletError extends BusinessLogicError {
   constructor(
     message: string,
     public readonly walletAddress: string,
-    public readonly reason: 'INVALID_ADDRESS' | 'NOT_CONNECTED' | 'WRONG_NETWORK' | 'INSUFFICIENT_GAS' | 'USER_REJECTED'
+    public readonly reason:
+      | 'INVALID_ADDRESS'
+      | 'NOT_CONNECTED'
+      | 'WRONG_NETWORK'
+      | 'INSUFFICIENT_GAS'
+      | 'USER_REJECTED'
   ) {
-    super(
-      message,
-      `WALLET_${reason}`,
-      { walletAddress, reason }
-    );
+    super(message, `WALLET_${reason}`, { walletAddress, reason });
   }
 }
 
@@ -196,11 +167,7 @@ export class DepositError extends BusinessLogicError {
     public readonly depositId: string,
     public readonly reason: 'MIN_AMOUNT' | 'MAX_AMOUNT' | 'ALREADY_WITHDRAWN' | 'LOCKED' | 'EXPIRED'
   ) {
-    super(
-      message,
-      `DEPOSIT_${reason}`,
-      { depositId, reason }
-    );
+    super(message, `DEPOSIT_${reason}`, { depositId, reason });
   }
 }
 
@@ -211,13 +178,14 @@ export class WithdrawalError extends BusinessLogicError {
   constructor(
     message: string,
     public readonly withdrawalId: string,
-    public readonly reason: 'INSUFFICIENT_BALANCE' | 'PENDING_TRADES' | 'COOLDOWN' | 'ALREADY_PROCESSED' | 'INVALID_AMOUNT'
+    public readonly reason:
+      | 'INSUFFICIENT_BALANCE'
+      | 'PENDING_TRADES'
+      | 'COOLDOWN'
+      | 'ALREADY_PROCESSED'
+      | 'INVALID_AMOUNT'
   ) {
-    super(
-      message,
-      `WITHDRAWAL_${reason}`,
-      { withdrawalId, reason }
-    );
+    super(message, `WITHDRAWAL_${reason}`, { withdrawalId, reason });
   }
 }
 
@@ -228,13 +196,14 @@ export class GameError extends BusinessLogicError {
   constructor(
     message: string,
     public readonly gameId: string,
-    public readonly reason: 'NOT_STARTED' | 'ALREADY_ENDED' | 'INVALID_STATE' | 'MAX_PLAYERS' | 'NOT_PLAYER'
+    public readonly reason:
+      | 'NOT_STARTED'
+      | 'ALREADY_ENDED'
+      | 'INVALID_STATE'
+      | 'MAX_PLAYERS'
+      | 'NOT_PLAYER'
   ) {
-    super(
-      message,
-      `GAME_${reason}`,
-      { gameId, reason }
-    );
+    super(message, `GAME_${reason}`, { gameId, reason });
   }
 }
 
@@ -245,13 +214,13 @@ export class FeedError extends BusinessLogicError {
   constructor(
     message: string,
     public readonly feedId: string,
-    public readonly reason: 'GENERATION_FAILED' | 'RATE_LIMITED' | 'INVALID_CONTENT' | 'MODERATION_FAILED'
+    public readonly reason:
+      | 'GENERATION_FAILED'
+      | 'RATE_LIMITED'
+      | 'INVALID_CONTENT'
+      | 'MODERATION_FAILED'
   ) {
-    super(
-      message,
-      `FEED_${reason}`,
-      { feedId, reason }
-    );
+    super(message, `FEED_${reason}`, { feedId, reason });
   }
 }
 
@@ -265,18 +234,12 @@ export class LLMError extends BabylonError {
     public readonly tokensUsed?: number,
     public readonly reason?: 'RATE_LIMIT' | 'CONTEXT_LENGTH' | 'INVALID_RESPONSE' | 'TIMEOUT'
   ) {
-    super(
-      `LLM: ${message}`,
-      'LLM_ERROR',
-      503,
-      true,
-      {
-        service: 'LLM',
-        model,
-        tokensUsed,
-        reason
-      }
-    );
+    super(`LLM: ${message}`, 'LLM_ERROR', 503, true, {
+      service: 'LLM',
+      model,
+      tokensUsed,
+      reason,
+    });
   }
 }
 
@@ -287,12 +250,13 @@ export class PaymentError extends BusinessLogicError {
   constructor(
     message: string,
     public readonly paymentId: string,
-    public readonly reason: 'DECLINED' | 'EXPIRED' | 'INVALID_CARD' | 'INSUFFICIENT_FUNDS' | 'FRAUD_DETECTED'
+    public readonly reason:
+      | 'DECLINED'
+      | 'EXPIRED'
+      | 'INVALID_CARD'
+      | 'INSUFFICIENT_FUNDS'
+      | 'FRAUD_DETECTED'
   ) {
-    super(
-      message,
-      `PAYMENT_${reason}`,
-      { paymentId, reason }
-    );
+    super(message, `PAYMENT_${reason}`, { paymentId, reason });
   }
 }

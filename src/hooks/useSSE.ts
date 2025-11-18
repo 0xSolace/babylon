@@ -1,31 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-
-import { usePrivy } from '@privy-io/react-auth';
-
 import { logger } from '@/lib/logger';
+import { usePrivy } from '@privy-io/react-auth';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * SSE channel names for different event types.
- * 
+ *
  * Standard channels include:
  * - 'feed': General feed updates
  * - 'markets': Market price and trade updates
  * - 'breaking-news': Breaking news events
  * - 'upcoming-events': Upcoming event notifications
- * 
+ *
  * Custom channel names (strings) are also supported.
  */
-export type Channel =
-  | 'feed'
-  | 'markets'
-  | 'breaking-news'
-  | 'upcoming-events'
-  | string;
+export type Channel = 'feed' | 'markets' | 'breaking-news' | 'upcoming-events' | string;
 
 /**
  * Represents a message received via SSE.
  */
-export interface SSEMessage {
+export type SSEMessage = {
   /** The channel this message was received on */
   channel: Channel;
   /** Message type identifier */
@@ -34,12 +27,12 @@ export interface SSEMessage {
   data: Record<string, unknown>;
   /** Timestamp when the message was received */
   timestamp: number;
-}
+};
 
 /**
  * Options for configuring the SSE hook.
  */
-interface SSEHookOptions {
+type SSEHookOptions = {
   /** Initial channels to subscribe to */
   channels?: Channel[];
   /** Whether to automatically reconnect on connection loss (default: true) */
@@ -48,26 +41,23 @@ interface SSEHookOptions {
   reconnectDelay?: number;
   /** Maximum number of reconnection attempts (default: 5) */
   maxReconnectAttempts?: number;
-}
+};
 
 /**
  * Return type for the useSSE hook.
  */
-interface SSEHookReturn {
+type SSEHookReturn = {
   /** Whether currently connected to SSE endpoint */
   isConnected: boolean;
   /** Any connection error message */
   error: string | null;
   /** Function to subscribe to a channel */
-  subscribe: (
-    channel: Channel,
-    callback: (message: SSEMessage) => void
-  ) => void;
+  subscribe: (channel: Channel, callback: (message: SSEMessage) => void) => void;
   /** Function to unsubscribe from a channel */
   unsubscribe: (channel: Channel) => void;
   /** Function to manually trigger reconnection */
   reconnect: () => void;
-}
+};
 
 type SSECallback = (message: SSEMessage) => void;
 type ConnectionListener = (connected: boolean, error: string | null) => void;
@@ -88,8 +78,7 @@ let autoReconnectRef = true;
 let reconnectDelayRef = 3000;
 let maxReconnectAttemptsRef = 5;
 
-const hasBrowserEnv = () =>
-  typeof window !== 'undefined' && typeof EventSource !== 'undefined';
+const hasBrowserEnv = () => typeof window !== 'undefined' && typeof EventSource !== 'undefined';
 
 const notifyConnectionStatus = (connected: boolean, error: string | null) => {
   lastConnectionError = error;
@@ -190,11 +179,7 @@ async function ensureConnection(forceReconnect = false) {
   const channelsList = Array.from(requestedChannels);
   const url = `${window.location.origin}/api/sse/events?channels=${encodeURIComponent(channelsList.join(','))}&token=${encodeURIComponent(token)}`;
 
-  logger.debug(
-    'Connecting to SSE endpoint...',
-    { channels: channelsList.join(',') },
-    'useSSE'
-  );
+  logger.debug('Connecting to SSE endpoint...', { channels: channelsList.join(',') }, 'useSSE');
 
   const eventSource = new EventSource(url);
 
@@ -224,11 +209,7 @@ async function ensureConnection(forceReconnect = false) {
   eventSource.onerror = () => {
     connecting = false;
     notifyConnectionStatus(false, 'SSE connection error');
-    logger.warn(
-      'SSE connection lost, scheduling reconnect',
-      undefined,
-      'useSSE'
-    );
+    logger.warn('SSE connection lost, scheduling reconnect', undefined, 'useSSE');
     closeEventSource();
 
     if (!autoReconnectRef) {
@@ -240,15 +221,11 @@ async function ensureConnection(forceReconnect = false) {
         false,
         'Unable to connect to real-time updates. Please refresh the page.'
       );
-      logger.error(
-        'SSE: Max reconnection attempts reached',
-        undefined,
-        'useSSE'
-      );
+      logger.error('SSE: Max reconnection attempts reached', undefined, 'useSSE');
       return;
     }
 
-    const baseDelay = reconnectDelayRef * Math.pow(2, reconnectAttempts);
+    const baseDelay = reconnectDelayRef * 2 ** reconnectAttempts;
     const jitter = baseDelay * 0.25 * (Math.random() * 2 - 1);
     const delay = Math.min(baseDelay + jitter, 30000);
 
@@ -264,32 +241,32 @@ async function ensureConnection(forceReconnect = false) {
 
 /**
  * Main hook for Server-Sent Events (SSE) connection management.
- * 
+ *
  * Replaces WebSocket for real-time updates, providing better compatibility
  * with Vercel's serverless architecture. Manages a single global SSE
  * connection shared across all hook instances, with automatic channel
  * subscription and reconnection handling.
- * 
+ *
  * Features:
  * - Automatic reconnection with exponential backoff
  * - Shared connection across components (efficient)
  * - Channel-based subscription model
  * - Authentication token management
  * - Connection state tracking
- * 
+ *
  * @param options - Configuration options for connection behavior
- * 
+ *
  * @returns SSE connection state and subscription management functions.
- * 
+ *
  * @example
  * ```tsx
  * const { isConnected, subscribe, unsubscribe } = useSSE();
- * 
+ *
  * useEffect(() => {
  *   const handleMessage = (msg) => {
  *     console.log('Received:', msg);
  *   };
- *   
+ *
  *   subscribe('markets', handleMessage);
  *   return () => unsubscribe('markets');
  * }, []);
@@ -305,15 +282,11 @@ export function useSSE(options: SSEHookOptions = {}): SSEHookReturn {
 
   const { getAccessToken, authenticated } = usePrivy();
   const [isConnected, setIsConnected] = useState(() =>
-    Boolean(
-      globalEventSource && globalEventSource.readyState === EventSource.OPEN
-    )
+    Boolean(globalEventSource && globalEventSource.readyState === EventSource.OPEN)
   );
   const [error, setError] = useState<string | null>(lastConnectionError);
 
-  const subscriptionsRef = useRef<
-    Map<Channel, Set<(message: SSEMessage) => void>>
-  >(new Map());
+  const subscriptionsRef = useRef<Map<Channel, Set<(message: SSEMessage) => void>>>(new Map());
 
   useEffect(() => {
     getAccessTokenRef = getAccessToken;
@@ -348,39 +321,36 @@ export function useSSE(options: SSEHookOptions = {}): SSEHookReturn {
     };
   }, []);
 
-  const subscribe = useCallback(
-    (channel: Channel, callback: (message: SSEMessage) => void) => {
-      if (!channel) return;
+  const subscribe = useCallback((channel: Channel, callback: (message: SSEMessage) => void) => {
+    if (!channel) return;
 
-      if (!subscriptionsRef.current.has(channel)) {
-        subscriptionsRef.current.set(channel, new Set());
-      }
-      const refSubs = subscriptionsRef.current.get(channel);
-      if (refSubs) {
-        refSubs.add(callback);
-      }
+    if (!subscriptionsRef.current.has(channel)) {
+      subscriptionsRef.current.set(channel, new Set());
+    }
+    const refSubs = subscriptionsRef.current.get(channel);
+    if (refSubs) {
+      refSubs.add(callback);
+    }
 
-      if (!channelSubscribers.has(channel)) {
-        channelSubscribers.set(channel, new Set());
-      }
-      const globalSubs = channelSubscribers.get(channel);
-      if (globalSubs) {
-        globalSubs.add(callback);
-      }
+    if (!channelSubscribers.has(channel)) {
+      channelSubscribers.set(channel, new Set());
+    }
+    const globalSubs = channelSubscribers.get(channel);
+    if (globalSubs) {
+      globalSubs.add(callback);
+    }
 
-      const previousSize = requestedChannels.size;
-      requestedChannels.add(channel);
+    const previousSize = requestedChannels.size;
+    requestedChannels.add(channel);
 
-      logger.debug(`Subscribed to channel: ${channel}`, { channel }, 'useSSE');
+    logger.debug(`Subscribed to channel: ${channel}`, { channel }, 'useSSE');
 
-      if (!globalEventSource || previousSize !== requestedChannels.size) {
-        void ensureConnection();
-      } else if (!connectedChannels.has(channel)) {
-        void ensureConnection(true);
-      }
-    },
-    []
-  );
+    if (!globalEventSource || previousSize !== requestedChannels.size) {
+      void ensureConnection();
+    } else if (!connectedChannels.has(channel)) {
+      void ensureConnection(true);
+    }
+  }, []);
 
   const unsubscribe = useCallback((channel: Channel) => {
     const hookSubscribers = subscriptionsRef.current.get(channel);
@@ -401,11 +371,7 @@ export function useSSE(options: SSEHookOptions = {}): SSEHookReturn {
     hookSubscribers.clear();
     subscriptionsRef.current.delete(channel);
 
-    logger.debug(
-      `Unsubscribed from channel: ${channel}`,
-      { channel },
-      'useSSE'
-    );
+    logger.debug(`Unsubscribed from channel: ${channel}`, { channel }, 'useSSE');
 
     if (requestedChannels.size === 0) {
       closeEventSource();
@@ -441,17 +407,17 @@ export function useSSE(options: SSEHookOptions = {}): SSEHookReturn {
 
 /**
  * Simplified hook for subscribing to a single SSE channel.
- * 
+ *
  * Wrapper around useSSE that provides a simpler API for single-channel
  * subscriptions. Automatically handles subscription lifecycle and ensures
  * the callback always receives the latest version.
- * 
+ *
  * @param channel - The channel name to subscribe to, or null to unsubscribe
  * @param onMessage - Callback function called when messages are received.
  * Receives the message data as a record of key-value pairs.
- * 
+ *
  * @returns An object with `isConnected` boolean indicating connection status.
- * 
+ *
  * @example
  * ```tsx
  * const { isConnected } = useSSEChannel('markets', (data) => {

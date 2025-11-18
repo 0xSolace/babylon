@@ -15,7 +15,6 @@ export const NETWORK: 'mainnet' | 'testnet' =
   CHAIN_ID === base.id || CHAIN_ID === mainnet.id ? 'mainnet' : 'testnet';
 const DEFAULT_RPC = CHAIN.rpcUrls?.default?.http?.[0] ?? '';
 export const RPC_URL =
-  process.env.NEXT_PUBLIC_RPC_URL &&
-  process.env.NEXT_PUBLIC_RPC_URL.trim() !== ''
+  process.env.NEXT_PUBLIC_RPC_URL && process.env.NEXT_PUBLIC_RPC_URL.trim() !== ''
     ? process.env.NEXT_PUBLIC_RPC_URL
     : DEFAULT_RPC;

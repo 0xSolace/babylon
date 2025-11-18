@@ -7,7 +7,7 @@
  * Check if a URL is already absolute (CDN URL, external URL, or data URL)
  */
 function isAbsoluteUrl(url: string): boolean {
-  return /^(https?:|data:|blob:)/i.test(url)
+  return /^(https?:|data:|blob:)/i.test(url);
 }
 
 /**
@@ -20,20 +20,20 @@ function isAbsoluteUrl(url: string): boolean {
 export function getStaticAssetUrl(path: string): string {
   // If already an absolute URL (CDN, external, or data), return as-is
   if (isAbsoluteUrl(path)) {
-    return path
+    return path;
   }
-  
+
   // Ensure path starts with /
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
   // In production with CDN configured, use CDN URL
   if (process.env.NEXT_PUBLIC_STATIC_ASSETS_URL) {
-    return `${process.env.NEXT_PUBLIC_STATIC_ASSETS_URL}${normalizedPath}`
+    return `${process.env.NEXT_PUBLIC_STATIC_ASSETS_URL}${normalizedPath}`;
   }
-  
+
   // For local development with MinIO, CDN assets will already be absolute URLs
   // from the storage client, so this mainly handles public folder fallbacks
-  return normalizedPath
+  return normalizedPath;
 }
 
 /**
@@ -42,9 +42,9 @@ export function getStaticAssetUrl(path: string): string {
  */
 export function getFallbackProfileImageUrl(id: string): string {
   // Hash the id to get a number between 1-100
-  const hash = Array.from(id).reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  const profileNum = (hash % 100) + 1
-  return getStaticAssetUrl(`/assets/user-profiles/profile-${profileNum}.jpg`)
+  const hash = Array.from(id).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const profileNum = (hash % 100) + 1;
+  return getStaticAssetUrl(`/assets/user-profiles/profile-${profileNum}.jpg`);
 }
 
 /**
@@ -63,20 +63,20 @@ export function getProfileImageUrl(
   if (profileImageUrl) {
     // If it's already a CDN URL, return as-is
     if (isAbsoluteUrl(profileImageUrl)) {
-      return profileImageUrl
+      return profileImageUrl;
     }
     // Otherwise, normalize it through getStaticAssetUrl
-    return getStaticAssetUrl(profileImageUrl)
+    return getStaticAssetUrl(profileImageUrl);
   }
-  
+
   // For actors, try to use static image
   // This could be from CDN (after migration) or public folder (legacy)
   if (userId && isActor) {
-    return getStaticAssetUrl(`/images/actors/${userId}.jpg`)
+    return getStaticAssetUrl(`/images/actors/${userId}.jpg`);
   }
-  
+
   // No image available - Avatar component will handle fallback
-  return null
+  return null;
 }
 
 /**
@@ -91,18 +91,18 @@ export function getOrganizationImageUrl(
   if (imageUrl) {
     // If it's already a CDN URL, return as-is
     if (isAbsoluteUrl(imageUrl)) {
-      return imageUrl
+      return imageUrl;
     }
     // Otherwise, normalize it
-    return getStaticAssetUrl(imageUrl)
+    return getStaticAssetUrl(imageUrl);
   }
-  
+
   // For organizations, try to use static image
   if (orgId) {
-    return getStaticAssetUrl(`/images/organizations/${orgId}.jpg`)
+    return getStaticAssetUrl(`/images/organizations/${orgId}.jpg`);
   }
-  
-  return null
+
+  return null;
 }
 
 /**
@@ -118,20 +118,20 @@ export function getBannerImageUrl(
   if (bannerUrl) {
     // If it's already a CDN URL, return as-is
     if (isAbsoluteUrl(bannerUrl)) {
-      return bannerUrl
+      return bannerUrl;
     }
     // Otherwise, normalize it
-    return getStaticAssetUrl(bannerUrl)
+    return getStaticAssetUrl(bannerUrl);
   }
-  
+
   // For actors/organizations, try to use static banner image
   if (entityId) {
     if (entityType === 'actor') {
-      return getStaticAssetUrl(`/images/actor-banners/${entityId}.jpg`)
+      return getStaticAssetUrl(`/images/actor-banners/${entityId}.jpg`);
     } else if (entityType === 'organization') {
-      return getStaticAssetUrl(`/images/org-banners/${entityId}.jpg`)
+      return getStaticAssetUrl(`/images/org-banners/${entityId}.jpg`);
     }
   }
-  
-  return null
+
+  return null;
 }

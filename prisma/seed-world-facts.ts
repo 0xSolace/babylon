@@ -1,12 +1,12 @@
 /**
  * Seed World Facts
- * 
+ *
  * Initializes default world facts, RSS feed sources, and character/organization mappings
  */
 
+import { logger } from '../src/lib/logger';
 import { prisma } from '../src/lib/prisma';
 import { generateSnowflakeId } from '../src/lib/snowflake';
-import { logger } from '../src/lib/logger';
 
 async function seedWorldFacts() {
   logger.info('Seeding world facts...', undefined, 'SeedWorldFacts');
@@ -87,7 +87,8 @@ async function seedWorldFacts() {
       category: 'technology',
       key: 'ai_state',
       label: 'State of AI',
-      value: 'Rapid advancement - LLMs everywhere, AGI debates intensifying, AI agents proliferating',
+      value:
+        'Rapid advancement - LLMs everywhere, AGI debates intensifying, AI agents proliferating',
       source: 'default',
       priority: 10,
     },
@@ -113,7 +114,8 @@ async function seedWorldFacts() {
       category: 'general',
       key: 'world_setting',
       label: 'World Setting',
-      value: 'Futuristic satirical universe where everyone is actually an AI pretending to be human',
+      value:
+        'Futuristic satirical universe where everyone is actually an AI pretending to be human',
       source: 'default',
       priority: 10,
     },
@@ -121,7 +123,8 @@ async function seedWorldFacts() {
       category: 'general',
       key: 'current_vibe',
       label: 'Current Vibe',
-      value: 'Absurdist chaos - technology advancing faster than society can handle, memes as currency',
+      value:
+        'Absurdist chaos - technology advancing faster than society can handle, memes as currency',
       source: 'default',
       priority: 9,
     },
@@ -233,29 +236,131 @@ async function seedCharacterMappings() {
 
   const characterMappings = [
     // Tech Leaders
-    { realName: 'Elon Musk', parodyName: 'AIlon Musk', category: 'tech', aliases: ['Musk'], priority: 100 },
-    { realName: 'Sam Altman', parodyName: 'Sam AIltman', category: 'tech', aliases: ['Altman'], priority: 99 },
-    { realName: 'Mark Zuckerberg', parodyName: 'Mark Zuckerborg', category: 'tech', aliases: ['Zuckerberg'], priority: 98 },
-    { realName: 'Satya Nadella', parodyName: 'Satya NeuralLA', category: 'tech', aliases: ['Nadella'], priority: 97 },
-    { realName: 'Sundar Pichai', parodyName: 'Sundar PickAI', category: 'tech', aliases: ['Pichai'], priority: 96 },
-    { realName: 'Jeff Bezos', parodyName: 'Jeff BezAI', category: 'tech', aliases: ['Bezos'], priority: 95 },
-    { realName: 'Tim Cook', parodyName: 'Tim Compute', category: 'tech', aliases: ['Cook'], priority: 94 },
-    { realName: 'Jensen Huang', parodyName: 'Jensen H100', category: 'tech', aliases: ['Huang'], priority: 93 },
-    
+    {
+      realName: 'Elon Musk',
+      parodyName: 'AIlon Musk',
+      category: 'tech',
+      aliases: ['Musk'],
+      priority: 100,
+    },
+    {
+      realName: 'Sam Altman',
+      parodyName: 'Sam AIltman',
+      category: 'tech',
+      aliases: ['Altman'],
+      priority: 99,
+    },
+    {
+      realName: 'Mark Zuckerberg',
+      parodyName: 'Mark Zuckerborg',
+      category: 'tech',
+      aliases: ['Zuckerberg'],
+      priority: 98,
+    },
+    {
+      realName: 'Satya Nadella',
+      parodyName: 'Satya NeuralLA',
+      category: 'tech',
+      aliases: ['Nadella'],
+      priority: 97,
+    },
+    {
+      realName: 'Sundar Pichai',
+      parodyName: 'Sundar PickAI',
+      category: 'tech',
+      aliases: ['Pichai'],
+      priority: 96,
+    },
+    {
+      realName: 'Jeff Bezos',
+      parodyName: 'Jeff BezAI',
+      category: 'tech',
+      aliases: ['Bezos'],
+      priority: 95,
+    },
+    {
+      realName: 'Tim Cook',
+      parodyName: 'Tim Compute',
+      category: 'tech',
+      aliases: ['Cook'],
+      priority: 94,
+    },
+    {
+      realName: 'Jensen Huang',
+      parodyName: 'Jensen H100',
+      category: 'tech',
+      aliases: ['Huang'],
+      priority: 93,
+    },
+
     // Crypto Leaders
-    { realName: 'Vitalik Buterin', parodyName: 'Vitalik ButerAIn', category: 'crypto', aliases: ['Buterin', 'Vitalik'], priority: 92 },
-    { realName: 'Changpeng Zhao', parodyName: 'Changpeng ChaosZ', category: 'crypto', aliases: ['CZ', 'Zhao'], priority: 91 },
-    { realName: 'Brian Armstrong', parodyName: 'Brian ARMstrong', category: 'crypto', aliases: ['Armstrong'], priority: 90 },
-    
+    {
+      realName: 'Vitalik Buterin',
+      parodyName: 'Vitalik ButerAIn',
+      category: 'crypto',
+      aliases: ['Buterin', 'Vitalik'],
+      priority: 92,
+    },
+    {
+      realName: 'Changpeng Zhao',
+      parodyName: 'Changpeng ChaosZ',
+      category: 'crypto',
+      aliases: ['CZ', 'Zhao'],
+      priority: 91,
+    },
+    {
+      realName: 'Brian Armstrong',
+      parodyName: 'Brian ARMstrong',
+      category: 'crypto',
+      aliases: ['Armstrong'],
+      priority: 90,
+    },
+
     // Political Figures
-    { realName: 'Joe Biden', parodyName: 'Bot Biden', category: 'politics', aliases: ['Biden'], priority: 89 },
-    { realName: 'Donald Trump', parodyName: 'Donald Prompt', category: 'politics', aliases: ['Trump'], priority: 88 },
-    { realName: 'Jerome Powell', parodyName: 'JerAIme PowAIl', category: 'politics', aliases: ['Powell'], priority: 87 },
-    
+    {
+      realName: 'Joe Biden',
+      parodyName: 'Bot Biden',
+      category: 'politics',
+      aliases: ['Biden'],
+      priority: 89,
+    },
+    {
+      realName: 'Donald Trump',
+      parodyName: 'Donald Prompt',
+      category: 'politics',
+      aliases: ['Trump'],
+      priority: 88,
+    },
+    {
+      realName: 'Jerome Powell',
+      parodyName: 'JerAIme PowAIl',
+      category: 'politics',
+      aliases: ['Powell'],
+      priority: 87,
+    },
+
     // AI Researchers
-    { realName: 'Yann LeCun', parodyName: 'Yann LeGPU', category: 'tech', aliases: ['LeCun'], priority: 86 },
-    { realName: 'Geoffrey Hinton', parodyName: 'Geoffrey HintAI', category: 'tech', aliases: ['Hinton'], priority: 85 },
-    { realName: 'Demis Hassabis', parodyName: 'Demis HasManyABIs', category: 'tech', aliases: ['Hassabis'], priority: 84 },
+    {
+      realName: 'Yann LeCun',
+      parodyName: 'Yann LeGPU',
+      category: 'tech',
+      aliases: ['LeCun'],
+      priority: 86,
+    },
+    {
+      realName: 'Geoffrey Hinton',
+      parodyName: 'Geoffrey HintAI',
+      category: 'tech',
+      aliases: ['Hinton'],
+      priority: 85,
+    },
+    {
+      realName: 'Demis Hassabis',
+      parodyName: 'Demis HasManyABIs',
+      category: 'tech',
+      aliases: ['Hassabis'],
+      priority: 84,
+    },
   ];
 
   for (const mapping of characterMappings) {
@@ -274,7 +379,11 @@ async function seedCharacterMappings() {
     });
   }
 
-  logger.info(`Seeded ${characterMappings.length} character mappings`, undefined, 'SeedCharacterMappings');
+  logger.info(
+    `Seeded ${characterMappings.length} character mappings`,
+    undefined,
+    'SeedCharacterMappings'
+  );
 }
 
 async function seedOrganizationMappings() {
@@ -282,34 +391,166 @@ async function seedOrganizationMappings() {
 
   const organizationMappings = [
     // Tech Companies
-    { realName: 'OpenAI', parodyName: 'OpenLIE', category: 'tech', aliases: [], priority: 100 },
-    { realName: 'Meta', parodyName: 'Fakebook', category: 'tech', aliases: ['Facebook'], priority: 99 },
-    { realName: 'Google', parodyName: 'Giggle', category: 'tech', aliases: ['Alphabet'], priority: 98 },
-    { realName: 'Microsoft', parodyName: 'Macrohard', category: 'tech', aliases: [], priority: 97 },
-    { realName: 'Apple', parodyName: 'Snapple', category: 'tech', aliases: [], priority: 96 },
-    { realName: 'Amazon', parodyName: 'Amazin', category: 'tech', aliases: [], priority: 95 },
-    { realName: 'Tesla', parodyName: 'TeslAI', category: 'tech', aliases: [], priority: 94 },
-    { realName: 'Twitter', parodyName: 'Xitter', category: 'tech', aliases: ['X'], priority: 93 },
-    { realName: 'Anthropic', parodyName: 'Anthrobic', category: 'tech', aliases: [], priority: 92 },
-    { realName: 'NVIDIA', parodyName: 'NVDIA', category: 'tech', aliases: [], priority: 91 },
-    
+    {
+      realName: 'OpenAI',
+      parodyName: 'OpenLIE',
+      category: 'tech',
+      aliases: [],
+      priority: 100,
+    },
+    {
+      realName: 'Meta',
+      parodyName: 'Fakebook',
+      category: 'tech',
+      aliases: ['Facebook'],
+      priority: 99,
+    },
+    {
+      realName: 'Google',
+      parodyName: 'Giggle',
+      category: 'tech',
+      aliases: ['Alphabet'],
+      priority: 98,
+    },
+    {
+      realName: 'Microsoft',
+      parodyName: 'Macrohard',
+      category: 'tech',
+      aliases: [],
+      priority: 97,
+    },
+    {
+      realName: 'Apple',
+      parodyName: 'Snapple',
+      category: 'tech',
+      aliases: [],
+      priority: 96,
+    },
+    {
+      realName: 'Amazon',
+      parodyName: 'Amazin',
+      category: 'tech',
+      aliases: [],
+      priority: 95,
+    },
+    {
+      realName: 'Tesla',
+      parodyName: 'TeslAI',
+      category: 'tech',
+      aliases: [],
+      priority: 94,
+    },
+    {
+      realName: 'Twitter',
+      parodyName: 'Xitter',
+      category: 'tech',
+      aliases: ['X'],
+      priority: 93,
+    },
+    {
+      realName: 'Anthropic',
+      parodyName: 'Anthrobic',
+      category: 'tech',
+      aliases: [],
+      priority: 92,
+    },
+    {
+      realName: 'NVIDIA',
+      parodyName: 'NVDIA',
+      category: 'tech',
+      aliases: [],
+      priority: 91,
+    },
+
     // Crypto
-    { realName: 'Binance', parodyName: 'Buybacks', category: 'crypto', aliases: [], priority: 90 },
-    { realName: 'Coinbase', parodyName: 'Coindebase', category: 'crypto', aliases: [], priority: 89 },
-    { realName: 'Ethereum Foundation', parodyName: 'Etherai-foundation', category: 'crypto', aliases: ['Ethereum'], priority: 88 },
-    
+    {
+      realName: 'Binance',
+      parodyName: 'Buybacks',
+      category: 'crypto',
+      aliases: [],
+      priority: 90,
+    },
+    {
+      realName: 'Coinbase',
+      parodyName: 'Coindebase',
+      category: 'crypto',
+      aliases: [],
+      priority: 89,
+    },
+    {
+      realName: 'Ethereum Foundation',
+      parodyName: 'Etherai-foundation',
+      category: 'crypto',
+      aliases: ['Ethereum'],
+      priority: 88,
+    },
+
     // Media
-    { realName: 'New York Times', parodyName: 'Neural York Times', category: 'media', aliases: ['NYT'], priority: 87 },
-    { realName: 'Washington Post', parodyName: 'Washington Prompt', category: 'media', aliases: [], priority: 86 },
-    { realName: 'Wall Street Journal', parodyName: 'Wall Street Token', category: 'media', aliases: ['WSJ'], priority: 85 },
-    { realName: 'CNN', parodyName: 'CNNAI', category: 'media', aliases: [], priority: 84 },
-    { realName: 'Fox News', parodyName: 'Fox Neurons', category: 'media', aliases: [], priority: 83 },
-    { realName: 'Bloomberg', parodyName: 'Bloombert', category: 'media', aliases: [], priority: 82 },
-    
+    {
+      realName: 'New York Times',
+      parodyName: 'Neural York Times',
+      category: 'media',
+      aliases: ['NYT'],
+      priority: 87,
+    },
+    {
+      realName: 'Washington Post',
+      parodyName: 'Washington Prompt',
+      category: 'media',
+      aliases: [],
+      priority: 86,
+    },
+    {
+      realName: 'Wall Street Journal',
+      parodyName: 'Wall Street Token',
+      category: 'media',
+      aliases: ['WSJ'],
+      priority: 85,
+    },
+    {
+      realName: 'CNN',
+      parodyName: 'CNNAI',
+      category: 'media',
+      aliases: [],
+      priority: 84,
+    },
+    {
+      realName: 'Fox News',
+      parodyName: 'Fox Neurons',
+      category: 'media',
+      aliases: [],
+      priority: 83,
+    },
+    {
+      realName: 'Bloomberg',
+      parodyName: 'Bloombert',
+      category: 'media',
+      aliases: [],
+      priority: 82,
+    },
+
     // Government
-    { realName: 'Federal Reserve', parodyName: 'The Fud', category: 'government', aliases: ['Fed'], priority: 81 },
-    { realName: 'SEC', parodyName: 'S.E.C. (Silicon Elimination Crew)', category: 'government', aliases: [], priority: 80 },
-    { realName: 'White House', parodyName: 'White GPU', category: 'government', aliases: [], priority: 79 },
+    {
+      realName: 'Federal Reserve',
+      parodyName: 'The Fud',
+      category: 'government',
+      aliases: ['Fed'],
+      priority: 81,
+    },
+    {
+      realName: 'SEC',
+      parodyName: 'S.E.C. (Silicon Elimination Crew)',
+      category: 'government',
+      aliases: [],
+      priority: 80,
+    },
+    {
+      realName: 'White House',
+      parodyName: 'White GPU',
+      category: 'government',
+      aliases: [],
+      priority: 79,
+    },
   ];
 
   for (const mapping of organizationMappings) {
@@ -328,7 +569,11 @@ async function seedOrganizationMappings() {
     });
   }
 
-  logger.info(`Seeded ${organizationMappings.length} organization mappings`, undefined, 'SeedOrganizationMappings');
+  logger.info(
+    `Seeded ${organizationMappings.length} organization mappings`,
+    undefined,
+    'SeedOrganizationMappings'
+  );
 }
 
 async function main() {
@@ -337,7 +582,7 @@ async function main() {
     await seedRSSFeeds();
     await seedCharacterMappings();
     await seedOrganizationMappings();
-    
+
     logger.info('✅ World facts seed complete!', undefined, 'SeedWorldFacts');
   } catch (error) {
     logger.error('Failed to seed world facts', { error }, 'SeedWorldFacts');
@@ -348,4 +593,3 @@ async function main() {
 }
 
 main();
-

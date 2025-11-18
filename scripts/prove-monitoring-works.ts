@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Prove Monitoring Actually Works
- * 
+ *
  * No LARP - Real validation that monitoring captures real data
  */
 
@@ -60,7 +60,9 @@ console.log(`  P99 duration: ${queryStats.p99Duration.toFixed(2)}ms`);
 
 console.log(`\n  Slow query patterns found: ${Object.keys(slowQueries).length}`);
 for (const [pattern, stats] of Object.entries(slowQueries)) {
-  console.log(`    - ${pattern}: ${stats.count} queries, ${stats.avgDuration.toFixed(0)}ms avg, ${stats.maxDuration.toFixed(0)}ms max`);
+  console.log(
+    `    - ${pattern}: ${stats.count} queries, ${stats.avgDuration.toFixed(0)}ms avg, ${stats.maxDuration.toFixed(0)}ms max`
+  );
 }
 
 const test1Pass = queryStats.totalQueries === 4 && queryStats.slowQueries === 2;
@@ -80,9 +82,9 @@ for (let i = 0; i < 30; i++) {
 }
 
 // Simulate cache operations
-performanceMonitor.recordCacheOperation('get', true, 5, 1024);  // hit
-performanceMonitor.recordCacheOperation('get', true, 3, 2048);  // hit
-performanceMonitor.recordCacheOperation('get', false, 8, 0);    // miss
+performanceMonitor.recordCacheOperation('get', true, 5, 1024); // hit
+performanceMonitor.recordCacheOperation('get', true, 3, 2048); // hit
+performanceMonitor.recordCacheOperation('get', false, 8, 0); // miss
 performanceMonitor.recordCacheOperation('set', true, 10, 2048); // set
 
 // Simulate database operations
@@ -100,7 +102,9 @@ const snapshot = performanceMonitor.getStats();
 const cacheHitRate = performanceMonitor.getCacheHitRate();
 
 console.log(`  Cache Operations:`);
-console.log(`    Hit rate: ${(cacheHitRate * 100).toFixed(1)}% (${snapshot.cache.hits} hits, ${snapshot.cache.misses} misses)`);
+console.log(
+  `    Hit rate: ${(cacheHitRate * 100).toFixed(1)}% (${snapshot.cache.hits} hits, ${snapshot.cache.misses} misses)`
+);
 console.log(`    Average latency: ${snapshot.cache.avgLatencyMs.toFixed(2)}ms`);
 console.log(`    Bytes read: ${snapshot.cache.bytesRead.toLocaleString()}`);
 console.log(`    Bytes written: ${snapshot.cache.bytesWritten.toLocaleString()}`);
@@ -110,7 +114,9 @@ console.log(`    Total queries: ${snapshot.database.queries}`);
 console.log(`    Slow queries: ${snapshot.database.slowQueries}`);
 console.log(`    Average duration: ${snapshot.database.avgDurationMs.toFixed(2)}ms`);
 console.log(`    P95 duration: ${snapshot.database.p95DurationMs.toFixed(2)}ms`);
-console.log(`    CPU-intensive ops: ${Object.values(snapshot.database.operationBreakdown).filter(op => op.cpuIntensive).length}`);
+console.log(
+  `    CPU-intensive ops: ${Object.values(snapshot.database.operationBreakdown).filter((op) => op.cpuIntensive).length}`
+);
 
 console.log(`\n  Storage Operations:`);
 console.log(`    Uploads: ${snapshot.storage.uploads}`);
@@ -123,11 +129,14 @@ console.log(`    Memory usage: ${snapshot.system.memoryUsageMB.toFixed(2)} MB`);
 console.log(`    Active requests: ${snapshot.system.activeRequests}`);
 console.log(`    Requests per second: ${snapshot.system.requestsPerSecond.toFixed(2)}`);
 
-const test2Pass = snapshot.cache.hits === 2 && 
-                  snapshot.cache.misses === 1 && 
-                  snapshot.database.queries === 4 &&
-                  snapshot.storage.uploads === 2;
-console.log(`\n  ${test2Pass ? '✅' : '❌'} Performance monitoring ${test2Pass ? 'WORKS' : 'FAILED'}`);
+const test2Pass =
+  snapshot.cache.hits === 2 &&
+  snapshot.cache.misses === 1 &&
+  snapshot.database.queries === 4 &&
+  snapshot.storage.uploads === 2;
+console.log(
+  `\n  ${test2Pass ? '✅' : '❌'} Performance monitoring ${test2Pass ? 'WORKS' : 'FAILED'}`
+);
 
 // Test 3: Bottleneck Detection Identifies Real Issues
 console.log('\n✓ Test 3: Bottleneck Detection Identifies Issues\n');
@@ -147,7 +156,9 @@ for (const rec of recommendations.slice(0, 3)) {
 }
 
 const test3Pass = bottlenecks.length > 0 && recommendations.length > 0;
-console.log(`\n  ${test3Pass ? '✅' : '❌'} Bottleneck detection ${test3Pass ? 'WORKS' : 'FAILED'}`);
+console.log(
+  `\n  ${test3Pass ? '✅' : '❌'} Bottleneck detection ${test3Pass ? 'WORKS' : 'FAILED'}`
+);
 
 // Test 4: Slow Query Analysis
 console.log('\n✓ Test 4: Slow Query Analysis\n');
@@ -165,7 +176,7 @@ for (const [name, stats] of topSlow) {
   console.log(`      Max duration: ${stats.maxDuration.toFixed(2)}ms`);
 }
 
-const test4Pass = topSlow.length > 0 && topSlow[0]![1].avgDuration > 100;
+const test4Pass = topSlow.length > 0 && (topSlow[0]?.[1]?.avgDuration ?? 0) > 100;
 console.log(`\n  ${test4Pass ? '✅' : '❌'} Slow query analysis ${test4Pass ? 'WORKS' : 'FAILED'}`);
 
 // Test 5: Performance Degradation Detection
@@ -173,7 +184,7 @@ console.log('\n✓ Test 5: Performance Degradation Detection\n');
 
 // Simulate degrading performance over time
 for (let i = 0; i < 10; i++) {
-  const degradingLatency = 50 + (i * 20); // Getting worse over time
+  const degradingLatency = 50 + i * 20; // Getting worse over time
   performanceMonitor.recordDatabaseOperation('Post', 'findMany', degradingLatency, false);
 }
 
@@ -185,14 +196,16 @@ console.log(`  Average latency after degradation: ${avgAfterDegradation.toFixed(
 console.log(`  P95 latency after degradation: ${p95AfterDegradation.toFixed(2)}ms`);
 
 const bottlenecksAfter = performanceMonitor.identifyBottlenecks();
-const hasPerformanceWarning = bottlenecksAfter.some(b => 
-  b.type === 'database' || b.description.includes('query')
+const hasPerformanceWarning = bottlenecksAfter.some(
+  (b) => b.type === 'database' || b.description.includes('query')
 );
 
 console.log(`  Performance warnings detected: ${hasPerformanceWarning ? 'YES' : 'NO'}`);
 
 const test5Pass = avgAfterDegradation > 50;
-console.log(`\n  ${test5Pass ? '✅' : '❌'} Degradation detection ${test5Pass ? 'WORKS' : 'FAILED'}`);
+console.log(
+  `\n  ${test5Pass ? '✅' : '❌'} Degradation detection ${test5Pass ? 'WORKS' : 'FAILED'}`
+);
 
 // Final Summary
 console.log('\n╔══════════════════════════════════════════════════════════╗');
@@ -252,5 +265,3 @@ console.log('  4. Watch for slow query warnings in logs');
 console.log('  5. Use /api/admin/performance to see live metrics\n');
 
 process.exit(allPassed ? 0 : 1);
-
-

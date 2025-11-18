@@ -1,6 +1,6 @@
 /**
  * Integration Tests: End-to-End Moderation Feature Verification
- * 
+ *
  * Tests all moderation features implemented:
  * 1. Feed filtering for blocked/muted users
  * 2. Notification filtering for blocked/muted users
@@ -11,17 +11,17 @@
  * 7. NPC-specific handling (can block/mute but not report)
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { prisma } from '@/lib/prisma';
-import type { User } from '@prisma/client';
-import { nanoid } from 'nanoid';
 import {
+  getBlockedByUserIds,
   getBlockedUserIds,
   getMutedUserIds,
-  getBlockedByUserIds,
   hasBlocked,
   hasMuted,
 } from '@/lib/moderation/filters';
+import { prisma } from '@/lib/prisma';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import type { User } from '@prisma/client';
+import { nanoid } from 'nanoid';
 
 let testUser1: User;
 let testUser2: User;
@@ -124,7 +124,9 @@ afterAll(async () => {
 
   // Clean up all moderation actions
   await prisma.report.deleteMany({ where: { reporterId: { in: userIds } } });
-  await prisma.report.deleteMany({ where: { reportedUserId: { in: userIds } } });
+  await prisma.report.deleteMany({
+    where: { reportedUserId: { in: userIds } },
+  });
   await prisma.userBlock.deleteMany({ where: { blockerId: { in: userIds } } });
   await prisma.userBlock.deleteMany({ where: { blockedId: { in: userIds } } });
   await prisma.userMute.deleteMany({ where: { muterId: { in: userIds } } });
@@ -241,7 +243,7 @@ describe('NPC Moderation - Special Handling', () => {
         id: nanoid(),
         blockerId: testUser1.id,
         blockedId: testNPC.id,
-        reason: 'Don\'t want to be added to group chats',
+        reason: "Don't want to be added to group chats",
       },
     });
 
@@ -291,10 +293,10 @@ describe('NPC Moderation - Special Handling', () => {
 
     // User1 has muted the NPC (from previous test)
     const mutedIds = await getMutedUserIds(testUser1.id);
-    
+
     // Simulate feed filtering
     const shouldBeFiltered = mutedIds.includes(testNPC.id);
-    
+
     expect(shouldBeFiltered).toBe(true);
 
     console.log('✅ Muted NPCs are filtered from feed');
@@ -336,9 +338,7 @@ describe('Feed Filtering - Integration', () => {
       { id: post2.id, authorId: testUser3.id },
     ];
 
-    const filteredPosts = allPosts.filter(
-      post => !allExcludedIds.includes(post.authorId)
-    );
+    const filteredPosts = allPosts.filter((post) => !allExcludedIds.includes(post.authorId));
 
     // Both should be filtered out
     expect(filteredPosts.length).toBe(0);
@@ -418,7 +418,7 @@ describe('Search Filtering - Verification', () => {
     // Simulate search results
     const allUsers = [testUser1, testUser2, testUser3];
     const filteredUsers = allUsers.filter(
-      user => !excludedIds.includes(user.id) && user.id !== testUser1.id
+      (user) => !excludedIds.includes(user.id) && user.id !== testUser1.id
     );
 
     // Should not include user2 (blocked and muted) or user3 (blocked user1)
@@ -494,4 +494,3 @@ console.log('  ✓ Message blocking');
 console.log('  ✓ Share blocking');
 console.log('  ✓ Search filtering');
 console.log('  ✓ NPC handling (can block/mute, not report)');
-

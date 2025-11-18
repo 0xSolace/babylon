@@ -2,11 +2,11 @@
  * Perpetuals Trading Engine
  *
  * @module engine/PerpetualsEngine
- * 
+ *
  * @description
  * Manages perpetual futures contracts trading system for Babylon. Handles position
  * lifecycle, funding rate calculations, liquidations, PnL tracking, and market data.
- * 
+ *
  * **Core Functionality:**
  * - Open/close leveraged long/short positions
  * - Calculate funding payments every 8 hours
@@ -14,38 +14,38 @@
  * - Track unrealized and realized PnL
  * - Record daily price snapshots
  * - Sync position state to database
- * 
+ *
  * **Key Concepts:**
- * 
+ *
  * **Perpetual Futures:**
  * - Derivative contracts with no expiry date
  * - Track underlying company stock prices
  * - Leverage: 1-100x (configurable per market)
  * - Two sides: Long (bet price up) or Short (bet price down)
- * 
+ *
  * **Funding Rates:**
  * - Periodic payments between longs and shorts (every 8 hours)
  * - Keeps perpetual price aligned with spot price
  * - Longs pay shorts when funding positive
  * - Shorts pay longs when funding negative
- * 
+ *
  * **Liquidations:**
  * - Triggered when position reaches liquidation price
  * - Trader loses entire margin (collateral)
  * - Position automatically closed
  * - Liquidation price depends on leverage and side
- * 
+ *
  * **Position Sizing:**
  * - Size measured in USD notional value
  * - Margin = Size / Leverage
  * - Example: $1000 position at 10x = $100 margin
- * 
+ *
  * **Database Sync:**
  * - Periodic sync of dirty positions (every 10 seconds)
  * - Tracks which positions changed since last sync
  * - Batch updates for efficiency
  * - Final sync on engine stop
- * 
+ *
  * **Events Emitted:**
  * - `position:opened` - New position created
  * - `position:closed` - Position closed manually
@@ -54,18 +54,18 @@
  * - `funding:rate:updated` - Funding rate updated
  * - `market:updated` - Market price updated
  * - `daily:snapshot` - Daily snapshot recorded
- * 
+ *
  * @see {@link /shared/perps-types.ts} - Core perpetuals types and calculations
  * @see {@link TradeExecutionService} - Executes NPC perp trades
  * @see {@link GameEngine} - Uses PerpetualsEngine for price updates
- * 
+ *
  * @example
  * ```typescript
  * const perps = new PerpetualsEngine();
- * 
+ *
  * // Initialize markets
  * perps.initializeMarkets(organizations);
- * 
+ *
  * // Open position
  * const position = perps.openPosition('user-1', {
  *   ticker: 'TECH',
@@ -74,23 +74,20 @@
  *   leverage: 10,
  *   orderType: 'market'
  * });
- * 
+ *
  * // Update prices
  * perps.updatePositions(new Map([['org-tech', 105]]));
- * 
+ *
  * // Process funding
  * perps.processFunding();
- * 
+ *
  * // Close position
  * const { realizedPnL } = perps.closePosition(position.id);
  * ```
  */
-import { EventEmitter } from 'events';
-import type { PerpPosition as PrismaPerpPosition } from '@prisma/client';
 
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
-
 import type {
   DailyPriceSnapshot,
   FundingRate,
@@ -108,8 +105,16 @@ import {
   shouldLiquidate,
 } from '@/shared/perps-types';
 import type { Organization } from '@/shared/types';
+import { EventEmitter } from 'node:events';
+import type { PerpPosition as PrismaPerpPosition } from '@prisma/client';
 
-interface ClosedPosition {
+const getISODateString = (): string => {
+  const isoString = new Date().toISOString();
+  const [datePart] = isoString.split('T');
+  return datePart || isoString;
+};
+
+type ClosedPosition = {
   userId: string;
   ticker: string;
   side: 'long' | 'short';
@@ -121,9 +126,9 @@ interface ClosedPosition {
   fundingPaid: number;
   timestamp: string;
   reason: 'manual' | 'liquidation';
-}
+};
 
-interface TradeRecord {
+type TradeRecord = {
   userId: string;
   ticker: string;
   type: 'open' | 'close' | 'liquidation';
@@ -131,9 +136,9 @@ interface TradeRecord {
   price: number;
   volume: number;
   timestamp: string;
-}
+};
 
-interface HydratablePerpPosition {
+type HydratablePerpPosition = {
   id: string;
   userId: string;
   ticker: string;
@@ -149,45 +154,45 @@ interface HydratablePerpPosition {
   fundingPaid: number;
   openedAt: Date | string;
   lastUpdated: Date | string;
-}
+};
 
 type PriceUpdateMap = Map<string, number>;
 
 /**
  * Perpetuals Trading Engine
- * 
+ *
  * @class PerpetualsEngine
  * @extends EventEmitter
- * 
+ *
  * @description
  * Complete perpetual futures trading system with position management, funding
  * rates, liquidation engine, and database persistence. Handles all aspects of
  * leveraged trading for both players and NPCs.
- * 
+ *
  * **State Management:**
  * - In-memory state for fast operations
  * - Periodic database sync (every 10 seconds)
  * - Dirty tracking for efficient updates
  * - Hydration from database on startup
- * 
+ *
  * **Position Lifecycle:**
  * 1. Open: Create position with entry price and leverage
  * 2. Update: Price changes update unrealized PnL
  * 3. Funding: Periodic payments every 8 hours
  * 4. Close/Liquidate: Realize PnL and settle position
- * 
+ *
  * **Risk Management:**
  * - Automatic liquidation monitoring on price updates
  * - Liquidation price calculated on open
  * - Margin loss on liquidation (full collateral)
  * - Position limits via min order size
- * 
+ *
  * **Market Data:**
  * - Current price, 24h change, high/low
  * - Volume and open interest tracking
  * - Funding rate and next funding time
  * - Mark price vs index price
- * 
+ *
  * @usage
  * Instantiated once by GameEngine and persists for entire game lifecycle.
  */
@@ -200,22 +205,22 @@ export class PerpetualsEngine extends EventEmitter {
   private closedPositions: ClosedPosition[] = [];
   private tradeHistory: TradeRecord[] = [];
   private lastFundingTime: string = new Date().toISOString();
-  private currentDate: string = new Date().toISOString().split('T')[0]!;
-  private syncInterval: number = 10000;
+  private currentDate: string = getISODateString();
   private syncTimer: NodeJS.Timeout | null = null;
+  private readonly syncInterval = 10_000;
   private dirtyPositions: Set<string> = new Set();
 
   /**
    * Create a new PerpetualsEngine
-   * 
+   *
    * @description
    * Initializes the engine and starts periodic database synchronization.
-   * 
+   *
    * **Automatic Processes:**
    * - Starts 10-second sync timer for position updates
    * - Initializes all state maps
    * - Sets up event emitter
-   * 
+   *
    * @example
    * ```typescript
    * const perps = new PerpetualsEngine();
@@ -231,13 +236,13 @@ export class PerpetualsEngine extends EventEmitter {
 
   /**
    * Initialize perpetual futures markets from organizations
-   * 
+   *
    * @param organizations - Array of organizations (filters to companies with prices)
-   * 
+   *
    * @description
    * Creates perpetual futures markets for all companies with initial prices.
    * Sets up market data, funding rates, and initial state.
-   * 
+   *
    * **Market Initialization:**
    * - Filters to organizations with type='company' and initialPrice
    * - Generates ticker symbols (max 12 chars, uppercase, no dashes)
@@ -245,38 +250,35 @@ export class PerpetualsEngine extends EventEmitter {
    * - Initializes 24h stats (change, high, low, volume)
    * - Sets default funding rate (1% annual)
    * - Configures max leverage (100x) and min order size
-   * 
+   *
    * **Funding Schedule:**
    * - Every 8 hours: 00:00, 08:00, 16:00 UTC
    * - Next funding time calculated and set
-   * 
+   *
    * @usage
    * Called once by GameEngine during initialization.
-   * 
+   *
    * @example
    * ```typescript
    * const orgs = [
    *   { id: 'tech-corp', type: 'company', initialPrice: 100, ... },
    *   { id: 'mega-inc', type: 'company', currentPrice: 250, ... }
    * ];
-   * 
+   *
    * perps.initializeMarkets(orgs);
    * // Creates markets: TECHCORP, MEGAINC
-   * 
+   *
    * const markets = perps.getMarkets();
    * console.log(`Initialized ${markets.length} markets`);
    * ```
    */
   initializeMarkets(organizations: Organization[]): void {
-    const companies = organizations.filter(
-      (o) => o.type === 'company' && o.initialPrice
-    );
+    const companies = organizations.filter((o) => o.type === 'company' && o.initialPrice);
 
     for (const company of companies) {
       // Use ticker from organization if available, otherwise generate from ID
-      const ticker = ('ticker' in company && company.ticker) 
-        ? company.ticker 
-        : this.generateTicker(company.id);
+      const ticker =
+        'ticker' in company && company.ticker ? company.ticker : this.generateTicker(company.id);
 
       const market: PerpMarket = {
         ticker,
@@ -330,12 +332,15 @@ export class PerpetualsEngine extends EventEmitter {
     }
 
     const entryPrice =
-      order.orderType === 'market' ? market.currentPrice : order.limitPrice!;
-    const liquidationPrice = calculateLiquidationPrice(
-      entryPrice,
-      order.side,
-      order.leverage
-    );
+      order.orderType === 'market'
+        ? market.currentPrice
+        : (() => {
+            if (order.limitPrice === undefined) {
+              throw new Error('Limit orders require a limitPrice');
+            }
+            return order.limitPrice;
+          })();
+    const liquidationPrice = calculateLiquidationPrice(entryPrice, order.side, order.leverage);
 
     const timestamp = new Date().toISOString();
     const position: PerpPosition = {
@@ -484,9 +489,7 @@ export class PerpetualsEngine extends EventEmitter {
         this.dirtyPositions.add(positionId);
 
         // Check for liquidation
-        if (
-          shouldLiquidate(newPrice, position.liquidationPrice, position.side)
-        ) {
+        if (shouldLiquidate(newPrice, position.liquidationPrice, position.side)) {
           this.liquidatePosition(positionId, newPrice);
         }
       }
@@ -497,16 +500,11 @@ export class PerpetualsEngine extends EventEmitter {
       const newPrice = priceUpdates.get(market.organizationId);
       if (newPrice !== undefined) {
         market.change24h = newPrice - market.currentPrice;
-        market.changePercent24h =
-          (market.change24h / market.currentPrice) * 100;
+        market.changePercent24h = (market.change24h / market.currentPrice) * 100;
         market.currentPrice = newPrice;
         market.high24h = Math.max(market.high24h, newPrice);
         market.low24h = Math.min(market.low24h, newPrice);
-        market.markPrice = calculateMarkPrice(
-          market.indexPrice,
-          newPrice,
-          market.fundingRate.rate
-        );
+        market.markPrice = calculateMarkPrice(market.indexPrice, newPrice, market.fundingRate.rate);
 
         // Emit market update event for ticker
         this.emit('market:updated', { ticker, market, newPrice });
@@ -520,9 +518,7 @@ export class PerpetualsEngine extends EventEmitter {
   hydrateOpenPositions(positions: HydratablePerpPosition[]): void {
     for (const position of positions) {
       const openedAt =
-        typeof position.openedAt === 'string'
-          ? position.openedAt
-          : position.openedAt.toISOString();
+        typeof position.openedAt === 'string' ? position.openedAt : position.openedAt.toISOString();
       const lastUpdated =
         typeof position.lastUpdated === 'string'
           ? position.lastUpdated
@@ -572,8 +568,7 @@ export class PerpetualsEngine extends EventEmitter {
   processFunding(): void {
     const now = new Date();
     const hoursSinceLastFunding =
-      (now.getTime() - new Date(this.lastFundingTime).getTime()) /
-      (1000 * 60 * 60);
+      (now.getTime() - new Date(this.lastFundingTime).getTime()) / (1000 * 60 * 60);
 
     if (hoursSinceLastFunding < 8) {
       return; // Not time yet
@@ -587,15 +582,11 @@ export class PerpetualsEngine extends EventEmitter {
       if (!fundingRate) continue;
 
       // Calculate funding for ONE 8-hour period only
-      const fundingPayment = calculateFundingPayment(
-        position.size,
-        fundingRate.rate
-      );
+      const fundingPayment = calculateFundingPayment(position.size, fundingRate.rate);
 
       // Longs pay shorts when funding is positive
       // Shorts pay longs when funding is negative
-      const payment =
-        position.side === 'long' ? fundingPayment : -fundingPayment;
+      const payment = position.side === 'long' ? fundingPayment : -fundingPayment;
 
       position.fundingPaid += payment;
       position.lastUpdated = now.toISOString();
@@ -698,7 +689,7 @@ export class PerpetualsEngine extends EventEmitter {
    * Record end-of-day price snapshot
    */
   recordDailySnapshot(date?: string): void {
-    const snapshotDate = date || new Date().toISOString().split('T')[0]!;
+    const snapshotDate = date || getISODateString();
 
     for (const [ticker, market] of this.markets) {
       const snapshot: DailyPriceSnapshot = {
@@ -717,7 +708,7 @@ export class PerpetualsEngine extends EventEmitter {
         this.dailySnapshots.set(ticker, []);
       }
 
-      this.dailySnapshots.get(ticker)!.push(snapshot);
+      this.dailySnapshots.get(ticker)?.push(snapshot);
 
       // Reset 24h stats
       market.high24h = market.currentPrice;
@@ -751,9 +742,7 @@ export class PerpetualsEngine extends EventEmitter {
    * Get user positions
    */
   getUserPositions(userId: string): PerpPosition[] {
-    return Array.from(this.positions.values()).filter(
-      (p) => p.userId === userId
-    );
+    return Array.from(this.positions.values()).filter((p) => p.userId === userId);
   }
 
   getPosition(positionId: string): PerpPosition | undefined {
@@ -769,25 +758,17 @@ export class PerpetualsEngine extends EventEmitter {
    */
   getTradingStats(userId: string): TradingStats {
     const userPositions = this.getUserPositions(userId);
-    const userClosedPositions = this.closedPositions.filter(
-      (p) => p.userId === userId
-    );
+    const userClosedPositions = this.closedPositions.filter((p) => p.userId === userId);
     const userTrades = this.tradeHistory.filter((t) => t.userId === userId);
 
     // Calculate total volume from trade history
     const totalVolume = userTrades.reduce((sum, t) => sum + t.volume, 0);
 
     // Calculate current unrealized PnL from open positions
-    const unrealizedPnL = userPositions.reduce(
-      (sum, p) => sum + p.unrealizedPnL,
-      0
-    );
+    const unrealizedPnL = userPositions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
 
     // Calculate realized PnL from closed positions
-    const realizedPnL = userClosedPositions.reduce(
-      (sum, p) => sum + p.realizedPnL,
-      0
-    );
+    const realizedPnL = userClosedPositions.reduce((sum, p) => sum + p.realizedPnL, 0);
 
     // Total PnL = realized + unrealized
     const totalPnL = realizedPnL + unrealizedPnL;
@@ -803,25 +784,19 @@ export class PerpetualsEngine extends EventEmitter {
 
     const avgWin =
       winningTrades.length > 0
-        ? winningTrades.reduce((sum, p) => sum + p.realizedPnL, 0) /
-          winningTrades.length
+        ? winningTrades.reduce((sum, p) => sum + p.realizedPnL, 0) / winningTrades.length
         : 0;
 
     const avgLoss =
       losingTrades.length > 0
-        ? losingTrades.reduce((sum, p) => sum + p.realizedPnL, 0) /
-          losingTrades.length
+        ? losingTrades.reduce((sum, p) => sum + p.realizedPnL, 0) / losingTrades.length
         : 0;
 
     const largestWin =
-      winningTrades.length > 0
-        ? Math.max(...winningTrades.map((p) => p.realizedPnL))
-        : 0;
+      winningTrades.length > 0 ? Math.max(...winningTrades.map((p) => p.realizedPnL)) : 0;
 
     const largestLoss =
-      losingTrades.length > 0
-        ? Math.min(...losingTrades.map((p) => p.realizedPnL))
-        : 0;
+      losingTrades.length > 0 ? Math.min(...losingTrades.map((p) => p.realizedPnL)) : 0;
 
     // Calculate total funding paid
     const totalFundingPaid =
@@ -829,9 +804,7 @@ export class PerpetualsEngine extends EventEmitter {
       userClosedPositions.reduce((sum, p) => sum + p.fundingPaid, 0);
 
     // Count liquidations
-    const totalLiquidations = userClosedPositions.filter(
-      (p) => p.reason === 'liquidation'
-    ).length;
+    const totalLiquidations = userClosedPositions.filter((p) => p.reason === 'liquidation').length;
 
     return {
       totalVolume,
@@ -848,16 +821,12 @@ export class PerpetualsEngine extends EventEmitter {
   }
 
   /**
-   * Start periodic database sync
+   * Sync dirty positions to database
    */
   private startPeriodicSync(): void {
     this.syncTimer = setInterval(() => {
       this.syncDirtyPositions().catch((error: unknown) => {
-        logger.error(
-          'Error syncing positions to database:',
-          error,
-          'PerpetualsEngine'
-        );
+        logger.error('Error syncing positions to database', { error }, 'PerpetualsEngine');
       });
     }, this.syncInterval);
   }
@@ -891,7 +860,12 @@ export class PerpetualsEngine extends EventEmitter {
           .catch((error: unknown) => {
             // Handle case where position doesn't exist in database
             // This can happen if position was deleted or never persisted
-            if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P2025') {
+            if (
+              error &&
+              typeof error === 'object' &&
+              'code' in error &&
+              (error as { code?: string }).code === 'P2025'
+            ) {
               // Position doesn't exist - remove from memory
               this.positions.delete(positionId);
               logger.debug(
@@ -905,9 +879,7 @@ export class PerpetualsEngine extends EventEmitter {
             throw error;
           });
       })
-      .filter(
-        (update): update is Promise<PrismaPerpPosition | null> => Boolean(update)
-      );
+      .filter((update): update is Promise<PrismaPerpPosition | null> => Boolean(update));
 
     if (updates.length === 0) {
       return;
@@ -917,11 +889,7 @@ export class PerpetualsEngine extends EventEmitter {
     const successful = results.filter((r) => r.status === 'fulfilled' && r.value !== null).length;
 
     if (successful > 0) {
-      logger.debug(
-        `Synced ${successful} positions to database`,
-        undefined,
-        'PerpetualsEngine'
-      );
+      logger.debug(`Synced ${successful} positions to database`, undefined, 'PerpetualsEngine');
     }
   }
 
@@ -1004,13 +972,9 @@ export class PerpetualsEngine extends EventEmitter {
     lastFundingTime: number | string;
     currentDate: string;
   }) {
-    this.positions = new Map(
-      state.positions.map((p: PerpPosition) => [p.id, p])
-    );
+    this.positions = new Map(state.positions.map((p: PerpPosition) => [p.id, p]));
     this.markets = new Map(state.markets.map((m: PerpMarket) => [m.ticker, m]));
-    this.fundingRates = new Map(
-      state.fundingRates.map((f: FundingRate) => [f.ticker, f])
-    );
+    this.fundingRates = new Map(state.fundingRates.map((f: FundingRate) => [f.ticker, f]));
     this.dailySnapshots = new Map(
       Object.entries(state.dailySnapshots || {}).map(([ticker, snapshots]) => [
         ticker,

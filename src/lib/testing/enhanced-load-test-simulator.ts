@@ -1,6 +1,6 @@
 /**
  * Enhanced Load Test Simulator
- * 
+ *
  * Features:
  * - Single-route DDOS testing
  * - All-routes DDOS testing
@@ -12,22 +12,22 @@
 
 import { logger } from '@/lib/logger';
 import { performanceMonitor } from '@/lib/monitoring/performance-monitor';
-import { ResourceLimiter, type ResourceLimits } from './resource-limiter';
 import type { LoadTestConfig, LoadTestResult } from './load-test-simulator';
+import { ResourceLimiter, type ResourceLimits } from './resource-limiter';
 
 export interface EnhancedLoadTestConfig extends LoadTestConfig {
   /** Test type */
   testType: 'mixed' | 'single-route' | 'all-routes-ddos';
-  
+
   /** For single-route DDOS, which route to target */
   targetRoute?: string;
-  
+
   /** Enable detailed performance monitoring */
   enableMonitoring?: boolean;
-  
+
   /** Track individual request traces */
   enableTracing?: boolean;
-  
+
   /** Resource limits to prevent OOM */
   resourceLimits?: Partial<ResourceLimits>;
 }
@@ -67,19 +67,19 @@ export interface EnhancedLoadTestResult extends LoadTestResult {
       avgRequestsPerSecond: number;
     };
   };
-  
+
   /** Identified bottlenecks */
   bottlenecks?: Array<{
     type: string;
     severity: string;
     description: string;
   }>;
-  
+
   /** Optimization recommendations */
   recommendations?: string[];
 }
 
-interface RequestTrace {
+type RequestTrace = {
   endpoint: string;
   startTime: number;
   endTime: number;
@@ -88,7 +88,7 @@ interface RequestTrace {
   cacheHit?: boolean;
   dbQueries?: number;
   storageOps?: number;
-}
+};
 
 export class EnhancedLoadTestSimulator {
   private baseUrl: string;
@@ -116,7 +116,11 @@ export class EnhancedLoadTestSimulator {
     // Initialize resource limiter to prevent OOM
     this.resourceLimiter = new ResourceLimiter(config.resourceLimits);
     this.resourceLimiter.start(() => {
-      logger.error('Resource limiter triggered emergency stop', undefined, 'EnhancedLoadTestSimulator');
+      logger.error(
+        'Resource limiter triggered emergency stop',
+        undefined,
+        'EnhancedLoadTestSimulator'
+      );
       this.stop();
     });
 
@@ -125,28 +129,28 @@ export class EnhancedLoadTestSimulator {
       performanceMonitor.reset();
     }
 
-    logger.info('Starting enhanced load test', {
-      testType: config.testType,
-      concurrentUsers: config.concurrentUsers,
-      duration: `${config.durationSeconds}s`,
-      endpoints: config.endpoints.length,
-      targetRoute: config.targetRoute,
-      monitoring: this.enableMonitoring,
-    }, 'EnhancedLoadTestSimulator');
+    logger.info(
+      'Starting enhanced load test',
+      {
+        testType: config.testType,
+        concurrentUsers: config.concurrentUsers,
+        duration: `${config.durationSeconds}s`,
+        endpoints: config.endpoints.length,
+        targetRoute: config.targetRoute,
+        monitoring: this.enableMonitoring,
+      },
+      'EnhancedLoadTestSimulator'
+    );
 
     // Adjust endpoints based on test type
     const testEndpoints = this.prepareEndpoints(config);
 
-    const endTime = Date.now() + (config.durationSeconds * 1000);
+    const endTime = Date.now() + config.durationSeconds * 1000;
     const workers: Promise<void>[] = [];
 
     // Create worker promises for each concurrent user
     for (let i = 0; i < config.concurrentUsers; i++) {
-      const worker = this.simulateUser(
-        { ...config, endpoints: testEndpoints },
-        endTime,
-        i
-      );
+      const worker = this.simulateUser({ ...config, endpoints: testEndpoints }, endTime, i);
       workers.push(worker);
 
       // Ramp-up: stagger worker starts
@@ -161,7 +165,7 @@ export class EnhancedLoadTestSimulator {
 
     this.isRunning = false;
     const testEndTime = new Date();
-    
+
     // Stop resource monitoring
     if (this.resourceLimiter) {
       this.resourceLimiter.stop();
@@ -170,13 +174,17 @@ export class EnhancedLoadTestSimulator {
     // Analyze results with performance metrics
     const result = this.analyzeResults(config, testEndTime);
 
-    logger.info('Enhanced load test completed', {
-      totalRequests: result.totalRequests,
-      successRate: `${(result.throughput.successRate * 100).toFixed(2)}%`,
-      avgResponseTime: `${result.responseTime.mean.toFixed(2)}ms`,
-      p95ResponseTime: `${result.responseTime.p95.toFixed(2)}ms`,
-      bottlenecks: result.bottlenecks?.length || 0,
-    }, 'EnhancedLoadTestSimulator');
+    logger.info(
+      'Enhanced load test completed',
+      {
+        totalRequests: result.totalRequests,
+        successRate: `${(result.throughput.successRate * 100).toFixed(2)}%`,
+        avgResponseTime: `${result.responseTime.mean.toFixed(2)}ms`,
+        p95ResponseTime: `${result.responseTime.p95.toFixed(2)}ms`,
+        bottlenecks: result.bottlenecks?.length || 0,
+      },
+      'EnhancedLoadTestSimulator'
+    );
 
     return result;
   }
@@ -184,30 +192,29 @@ export class EnhancedLoadTestSimulator {
   /**
    * Prepare endpoints based on test type
    */
-  private prepareEndpoints(
-    config: EnhancedLoadTestConfig
-  ): LoadTestConfig['endpoints'] {
+  private prepareEndpoints(config: EnhancedLoadTestConfig): LoadTestConfig['endpoints'] {
     switch (config.testType) {
       case 'single-route':
         // DDOS a single route
         if (!config.targetRoute) {
           throw new Error('targetRoute required for single-route DDOS test');
         }
-        return [{
-          path: config.targetRoute,
-          method: 'GET',
-          weight: 1.0,
-        }];
+        return [
+          {
+            path: config.targetRoute,
+            method: 'GET',
+            weight: 1.0,
+          },
+        ];
 
-      case 'all-routes-ddos':
+      case 'all-routes-ddos': {
         // DDOS all routes equally
         const equalWeight = 1.0 / config.endpoints.length;
-        return config.endpoints.map(ep => ({
+        return config.endpoints.map((ep) => ({
           ...ep,
           weight: equalWeight,
         }));
-
-      case 'mixed':
+      }
       default:
         // Use provided weights
         return config.endpoints;
@@ -230,7 +237,7 @@ export class EnhancedLoadTestSimulator {
         await this.sleep(100); // Back off if resources constrained
         continue;
       }
-      
+
       if (this.resourceLimiter?.isStopped()) {
         logger.warn('Resource limiter stopped test', undefined, 'EnhancedLoadTestSimulator');
         break;
@@ -263,9 +270,7 @@ export class EnhancedLoadTestSimulator {
   /**
    * Select an endpoint based on weights
    */
-  private selectEndpoint(
-    endpoints: LoadTestConfig['endpoints']
-  ): LoadTestConfig['endpoints'][0] {
+  private selectEndpoint(endpoints: LoadTestConfig['endpoints']): LoadTestConfig['endpoints'][0] {
     if (endpoints.length === 0) {
       throw new Error('No endpoints provided for load testing');
     }
@@ -280,22 +285,20 @@ export class EnhancedLoadTestSimulator {
       }
     }
 
-    return endpoints[endpoints.length - 1]!;
+    return endpoints[endpoints.length - 1];
   }
 
   /**
    * Make a request to an endpoint
    */
-  private async makeRequest(
-    endpoint: LoadTestConfig['endpoints'][0]
-  ): Promise<void> {
+  private async makeRequest(endpoint: LoadTestConfig['endpoints'][0]): Promise<void> {
     const startTime = Date.now();
     const url = `${this.baseUrl}${endpoint.path}`;
 
     if (this.enableMonitoring) {
       performanceMonitor.startRequest();
     }
-    
+
     if (this.resourceLimiter) {
       this.resourceLimiter.requestStarted();
     }
@@ -328,7 +331,7 @@ export class EnhancedLoadTestSimulator {
       if (this.enableMonitoring) {
         performanceMonitor.endRequest();
       }
-      
+
       if (this.resourceLimiter) {
         this.resourceLimiter.requestEnded();
       }
@@ -348,12 +351,9 @@ export class EnhancedLoadTestSimulator {
   /**
    * Analyze test results with performance metrics
    */
-  private analyzeResults(
-    config: EnhancedLoadTestConfig,
-    endTime: Date
-  ): EnhancedLoadTestResult {
-    const successfulResults = this.results.filter(r => r.statusCode >= 200 && r.statusCode < 300);
-    const responseTimes = successfulResults.map(r => r.responseTime).sort((a, b) => a - b);
+  private analyzeResults(config: EnhancedLoadTestConfig, endTime: Date): EnhancedLoadTestResult {
+    const successfulResults = this.results.filter((r) => r.statusCode >= 200 && r.statusCode < 300);
+    const responseTimes = successfulResults.map((r) => r.responseTime).sort((a, b) => a - b);
     const durationMs = endTime.getTime() - this.startTime.getTime();
 
     // Calculate percentiles
@@ -362,12 +362,15 @@ export class EnhancedLoadTestSimulator {
     const medianIndex = Math.floor(responseTimes.length * 0.5);
 
     // Aggregate endpoint stats
-    const endpointStats: Record<string, {
-      count: number;
-      successCount: number;
-      avgResponseTime: number;
-      errorCount: number;
-    }> = {};
+    const endpointStats: Record<
+      string,
+      {
+        count: number;
+        successCount: number;
+        avgResponseTime: number;
+        errorCount: number;
+      }
+    > = {};
 
     for (const result of this.results) {
       if (!endpointStats[result.endpoint]) {
@@ -379,14 +382,18 @@ export class EnhancedLoadTestSimulator {
         };
       }
 
-      const stats = endpointStats[result.endpoint]!;
+      const stats = endpointStats[result.endpoint];
+      if (!stats) {
+        continue;
+      }
       stats.count++;
 
       const success = result.statusCode >= 200 && result.statusCode < 300;
       if (success) {
         stats.successCount++;
         stats.avgResponseTime =
-          (stats.avgResponseTime * (stats.successCount - 1) + result.responseTime) / stats.successCount;
+          (stats.avgResponseTime * (stats.successCount - 1) + result.responseTime) /
+          stats.successCount;
       } else {
         stats.errorCount++;
       }
@@ -399,13 +406,13 @@ export class EnhancedLoadTestSimulator {
         throw new Error(`Invalid error key format: ${key}`);
       }
       const [endpoint, ...errorParts] = parts;
-      return { endpoint: endpoint!, error: errorParts.join(':'), count };
+      return { endpoint, error: errorParts.join(':'), count };
     });
 
     // Get performance metrics if monitoring enabled
-    let performanceMetrics;
-    let bottlenecks;
-    let recommendations;
+    let performanceMetrics: EnhancedLoadTestResult['performanceMetrics'];
+    let bottlenecks: EnhancedLoadTestResult['bottlenecks'];
+    let recommendations: EnhancedLoadTestResult['recommendations'];
 
     if (this.enableMonitoring) {
       const perfSnapshot = performanceMonitor.getStats();
@@ -429,9 +436,9 @@ export class EnhancedLoadTestSimulator {
 
       // Calculate memory stats across all snapshots
       const snapshots = performanceMonitor.getSnapshots();
-      const memoryUsages = snapshots.map(s => s.system.memoryUsageMB);
-      const activeRequestCounts = snapshots.map(s => s.system.activeRequests);
-      const rpsValues = snapshots.map(s => s.system.requestsPerSecond);
+      const memoryUsages = snapshots.map((s) => s.system.memoryUsageMB);
+      const activeRequestCounts = snapshots.map((s) => s.system.activeRequests);
+      const rpsValues = snapshots.map((s) => s.system.requestsPerSecond);
 
       performanceMetrics = {
         cache: {
@@ -440,9 +447,10 @@ export class EnhancedLoadTestSimulator {
           operations: perfSnapshot.cache.operations,
         },
         database: {
-          slowQueryRate: perfSnapshot.database.queries > 0
-            ? perfSnapshot.database.slowQueries / perfSnapshot.database.queries
-            : 0,
+          slowQueryRate:
+            perfSnapshot.database.queries > 0
+              ? perfSnapshot.database.slowQueries / perfSnapshot.database.queries
+              : 0,
           cpuIntensiveOps,
           slowestOperations: slowestOps,
         },
@@ -455,17 +463,17 @@ export class EnhancedLoadTestSimulator {
         },
         system: {
           peakMemoryMB: Math.max(...memoryUsages, 0),
-          avgMemoryMB: memoryUsages.length > 0
-            ? memoryUsages.reduce((a, b) => a + b, 0) / memoryUsages.length
-            : 0,
+          avgMemoryMB:
+            memoryUsages.length > 0
+              ? memoryUsages.reduce((a, b) => a + b, 0) / memoryUsages.length
+              : 0,
           peakActiveRequests: Math.max(...activeRequestCounts, 0),
-          avgRequestsPerSecond: rpsValues.length > 0
-            ? rpsValues.reduce((a, b) => a + b, 0) / rpsValues.length
-            : 0,
+          avgRequestsPerSecond:
+            rpsValues.length > 0 ? rpsValues.reduce((a, b) => a + b, 0) / rpsValues.length : 0,
         },
       };
 
-      bottlenecks = perfBottlenecks.map(b => ({
+      bottlenecks = perfBottlenecks.map((b) => ({
         type: b.type,
         severity: b.severity,
         description: b.description,
@@ -485,18 +493,17 @@ export class EnhancedLoadTestSimulator {
       responseTime: {
         min: responseTimes[0] || 0,
         max: responseTimes[responseTimes.length - 1] || 0,
-        mean: responseTimes.length > 0
-          ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
-          : 0,
+        mean:
+          responseTimes.length > 0
+            ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
+            : 0,
         median: responseTimes[medianIndex] || 0,
         p95: responseTimes[p95Index] || 0,
         p99: responseTimes[p99Index] || 0,
       },
       throughput: {
         requestsPerSecond: this.results.length / (durationMs / 1000),
-        successRate: this.results.length > 0
-          ? successfulResults.length / this.results.length
-          : 0,
+        successRate: this.results.length > 0 ? successfulResults.length / this.results.length : 0,
       },
       errors,
       endpointStats,
@@ -519,7 +526,7 @@ export class EnhancedLoadTestSimulator {
    * Sleep for a given duration
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
@@ -532,10 +539,12 @@ export async function generateAllRoutesScenario(
   // Fetch OpenAPI spec to discover all routes
   try {
     const response = await fetch(`${baseUrl}/api/docs`);
-    const spec = await response.json() as { paths?: Record<string, Record<string, unknown>> };
-    
+    const spec = (await response.json()) as {
+      paths?: Record<string, Record<string, unknown>>;
+    };
+
     const endpoints: EnhancedLoadTestConfig['endpoints'] = [];
-    
+
     if (spec.paths) {
       for (const [path, methods] of Object.entries(spec.paths)) {
         for (const method of Object.keys(methods)) {
@@ -549,7 +558,7 @@ export async function generateAllRoutesScenario(
         }
       }
     }
-    
+
     return endpoints;
   } catch (error) {
     logger.error('Failed to fetch API routes', error, 'generateAllRoutesScenario');
@@ -613,4 +622,3 @@ export const ENHANCED_TEST_SCENARIOS = {
     enableTracing: false,
   }),
 };
-

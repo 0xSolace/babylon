@@ -1,13 +1,13 @@
 /**
  * Admin Training Upload Model API
- * 
+ *
  * @route POST /api/admin/training/upload-model - Upload trained model
  * @access Admin
- * 
+ *
  * @description
  * Uploads trained model to Vercel Blob storage. Called by Python deployment
  * script after training completes. Supports multipart file uploads.
- * 
+ *
  * @openapi
  * /api/admin/training/upload-model:
  *   post:
@@ -41,7 +41,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const formData = new FormData();
@@ -55,13 +55,13 @@
  * ```
  */
 
+import { logger } from '@/lib/logger';
+import { modelStorage } from '@/lib/training/storage/ModelStorageService';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { modelStorage } from '@/lib/training/storage/ModelStorageService';
-import { logger } from '@/lib/logger';
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
 
 export const maxDuration = 300; // 5 minutes for large uploads
 
@@ -73,23 +73,20 @@ export async function POST(request: NextRequest) {
     const metadataStr = formData.get('metadata') as string;
 
     if (!modelFile || !version) {
-      return NextResponse.json(
-        { error: 'Missing model file or version' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing model file or version' }, { status: 400 });
     }
 
     const metadata = metadataStr ? JSON.parse(metadataStr) : {};
 
     logger.info('Uploading model to Vercel Blob', {
       version,
-      size: modelFile.size
+      size: modelFile.size,
     });
 
     // Save to temp file
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'model-upload-'));
     const tempPath = path.join(tempDir, 'model.safetensors');
-    
+
     const buffer = Buffer.from(await modelFile.arrayBuffer());
     await fs.writeFile(tempPath, buffer);
 
@@ -97,7 +94,7 @@ export async function POST(request: NextRequest) {
     const result = await modelStorage.uploadModel({
       version,
       modelPath: tempPath,
-      metadata
+      metadata,
     });
 
     // Cleanup
@@ -105,25 +102,23 @@ export async function POST(request: NextRequest) {
 
     logger.info('Model uploaded successfully', {
       version,
-      url: result.blobUrl
+      url: result.blobUrl,
     });
 
     return NextResponse.json({
       success: true,
       url: result.blobUrl,
       version: result.version,
-      size: result.size
+      size: result.size,
     });
-
   } catch (error) {
     logger.error('Model upload failed', error);
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Upload failed'
+        error: error instanceof Error ? error.message : 'Upload failed',
       },
       { status: 500 }
     );
   }
 }
-

@@ -1,6 +1,6 @@
 /**
  * Monitoring Type Definitions
- * 
+ *
  * Complete interfaces for agent monitoring and analytics
  */
 
@@ -9,19 +9,19 @@ import type { AgentProfile, AgentReputation } from '@/types/a2a';
 /**
  * Agent status information
  */
-export interface AgentStatus {
+export type AgentStatus = {
   agentId: string;
   connected: boolean;
   lastSeen: number;
   uptime: number;
   messageCount: number;
   errorCount: number;
-}
+};
 
 /**
  * Agent metrics for monitoring
  */
-export interface AgentMetrics {
+export type AgentMetrics = {
   agentId: string;
   timestamp: number;
   status: AgentStatus;
@@ -39,12 +39,12 @@ export interface AgentMetrics {
     coalitionsJoined: number;
     paymentsProcessed: number;
   };
-}
+};
 
 /**
  * Monitoring dashboard data
  */
-export interface MonitoringDashboard {
+export type MonitoringDashboard = {
   totalAgents: number;
   connectedAgents: number;
   activeAgents: AgentMetrics[];
@@ -59,12 +59,12 @@ export interface MonitoringDashboard {
     totalMessages: number;
     errorRate: number;
   };
-}
+};
 
 /**
  * Agent activity log entry
  */
-export interface AgentActivityLog {
+export type AgentActivityLog = {
   id: string;
   agentId: string;
   timestamp: number;
@@ -73,12 +73,12 @@ export interface AgentActivityLog {
   details: Record<string, string | number | boolean | null>;
   success: boolean;
   error?: string;
-}
+};
 
 /**
  * Agent performance summary
  */
-export interface AgentPerformanceSummary {
+export type AgentPerformanceSummary = {
   agentId: string;
   period: {
     start: number;
@@ -97,6 +97,4 @@ export interface AgentPerformanceSummary {
     volumeTrend: 'increasing' | 'decreasing' | 'stable';
     reputationTrend: 'improving' | 'declining' | 'stable';
   };
-}
-
-
+};

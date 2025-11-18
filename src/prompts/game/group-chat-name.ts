@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating a single satirical group chat name.
- * 
+ *
  * Creates a funny, satirical name for a private group chat based on
  * the admin/creator and group purpose. Names should be humorous and
  * reflect the group's character or purpose.
- * 
+ *
  * Returns XML with group chat name.
  */
 export const groupChatName = definePrompt({
@@ -49,5 +49,5 @@ Return ONLY this XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

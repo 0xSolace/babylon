@@ -1,13 +1,13 @@
 /**
  * Admin Moderation Escrow Expire API
- * 
+ *
  * @route POST /api/admin/moderation-escrow/expire - Expire old payments
  * @access Admin
- * 
+ *
  * @description
  * Marks expired escrow payments as expired. Can be called by cron job or
  * manually by admin. Finds all pending payments past expiration time.
- * 
+ *
  * @openapi
  * /api/admin/moderation-escrow/expire:
  *   post:
@@ -32,7 +32,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/moderation-escrow/expire', {
@@ -42,18 +42,18 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/api/admin-middleware'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
+import { requireAdmin } from '@/lib/api/admin-middleware';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin(req)
+    await requireAdmin(req);
 
-    const now = new Date()
-    
+    const now = new Date();
+
     // Find all pending escrows that have expired
     const expiredEscrows = await prisma.moderationEscrow.updateMany({
       where: {
@@ -65,24 +65,25 @@ export async function POST(req: NextRequest) {
       data: {
         status: 'expired',
       },
-    })
+    });
 
     logger.info(
       `Expired ${expiredEscrows.count} escrow payments`,
       { count: expiredEscrows.count },
       'ModerationEscrow'
-    )
+    );
 
     return NextResponse.json({
       success: true,
       expiredCount: expiredEscrows.count,
-    })
+    });
   } catch (error) {
-    logger.error('Failed to expire escrow payments', { error }, 'ModerationEscrow')
+    logger.error('Failed to expire escrow payments', { error }, 'ModerationEscrow');
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to expire escrow payments' },
+      {
+        error: error instanceof Error ? error.message : 'Failed to expire escrow payments',
+      },
       { status: 500 }
-    )
+    );
   }
 }
-

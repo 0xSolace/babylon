@@ -1,13 +1,13 @@
 /**
  * Points Purchase Create Payment API
- * 
+ *
  * @route POST /api/points/purchase/create-payment - Create payment request
  * @access Authenticated
- * 
+ *
  * @description
  * Creates an x402 payment request for purchasing points. Returns payment
  * request details for on-chain completion. Uses X402 escrow system.
- * 
+ *
  * @openapi
  * /api/points/purchase/create-payment:
  *   post:
@@ -50,7 +50,7 @@
  *         description: Invalid input
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/points/purchase/create-payment', {
@@ -64,38 +64,44 @@
  * ```
  */
 
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { X402Manager } from '@/lib/a2a/payments/x402-manager'
-import { logger } from '@/lib/logger'
-import { trackServerEvent } from '@/lib/posthog/server'
+import { X402Manager } from '@/lib/a2a/payments/x402-manager';
+import { authenticate } from '@/lib/api/auth-middleware';
+import { logger } from '@/lib/logger';
+import { trackServerEvent } from '@/lib/posthog/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // Initialize x402 manager (you'll need to configure RPC URL)
 const x402Manager = new X402Manager({
   rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
   paymentTimeout: 15 * 60 * 1000, // 15 minutes
-})
+});
 
 // Payment receiver address (configure this in your environment)
-const PAYMENT_RECEIVER = process.env.POINTS_PAYMENT_RECEIVER || process.env.NEXT_PUBLIC_TREASURY_ADDRESS || '0x0000000000000000000000000000000000000000'
+const PAYMENT_RECEIVER =
+  process.env.POINTS_PAYMENT_RECEIVER ||
+  process.env.NEXT_PUBLIC_TREASURY_ADDRESS ||
+  '0x0000000000000000000000000000000000000000';
 
-interface CreatePaymentBody {
-  amountUSD: number // Amount in USD
-  fromAddress: string // User's wallet address
-}
+type CreatePaymentBody = {
+  amountUSD: number; // Amount in USD
+  fromAddress: string; // User's wallet address
+};
 
 export async function POST(req: NextRequest) {
-  const authUser = await authenticate(req)
-  const userId = authUser.dbUserId!
+  const authUser = await authenticate(req);
+  const userId = authUser.dbUserId;
+  if (!userId) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
 
-  const body: CreatePaymentBody = await req.json()
-  const { amountUSD, fromAddress } = body
+  const body: CreatePaymentBody = await req.json();
+  const { amountUSD, fromAddress } = body;
 
-  const pointsAmount = Math.floor(amountUSD * 100)
+  const pointsAmount = Math.floor(amountUSD * 100);
 
-  const ethEquivalent = amountUSD * 0.001
-  const amountInWei = (ethEquivalent * 1_000_000_000_000_000_000).toString()
+  const ethEquivalent = amountUSD * 0.001;
+  const amountInWei = (ethEquivalent * 1_000_000_000_000_000_000).toString();
 
   const paymentRequest = await x402Manager.createPaymentRequest(
     fromAddress,
@@ -107,24 +113,24 @@ export async function POST(req: NextRequest) {
       amountUSD,
       pointsAmount,
     }
-  )
+  );
 
   logger.info(
     `Created payment request for ${pointsAmount} points ($${amountUSD})`,
-    { 
-      userId, 
+    {
+      userId,
       requestId: paymentRequest.requestId,
       amountUSD,
-      pointsAmount 
+      pointsAmount,
     },
     'PointsPurchase'
-  )
+  );
 
   trackServerEvent(userId, 'points_purchase_initiated', {
     amountUSD,
     pointsAmount,
     requestId: paymentRequest.requestId,
-  })
+  });
 
   return NextResponse.json({
     success: true,
@@ -137,6 +143,5 @@ export async function POST(req: NextRequest) {
       pointsAmount,
       amountUSD,
     },
-  })
+  });
 }
-

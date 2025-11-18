@@ -1,6 +1,6 @@
-import { type Provider, type IAgentRuntime, type Memory, type State, logger } from '@elizaos/core';
-import type { ExperienceService } from '../service';
 import type { JsonValue } from '@/types/common';
+import { type IAgentRuntime, type Memory, type Provider, type State, logger } from '@elizaos/core';
+import type { ExperienceService } from '../service';
 
 /**
  * Simple experience provider that injects relevant experiences into context

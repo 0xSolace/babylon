@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating humorous profile pictures for new users.
- * 
+ *
  * Creates memetic, internet-culture-inspired profile pictures with various
  * styles including internet-famous animals, surreal humor, pop culture
  * mashups, retro aesthetics, and glitch art. Designed to be funny and relatable.
- * 
+ *
  * Returns image generation prompt for user profile picture.
  */
 export const userProfilePicture = definePrompt({
@@ -47,5 +47,5 @@ IMPORTANT:
 - Make it recognizable as a profile picture at small sizes
 - Avoid specific people or copyrighted characters
 - Focus on being memorable and conversation-starting
-`.trim()
+`.trim(),
 });

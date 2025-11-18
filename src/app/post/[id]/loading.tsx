@@ -1,26 +1,29 @@
-import { PageContainer } from '@/components/shared/PageContainer'
-import { PostCardSkeleton, Skeleton } from '@/components/shared/Skeleton'
+import { PageContainer } from '@/components/shared/PageContainer';
+import { PostCardSkeleton, Skeleton } from '@/components/shared/Skeleton';
+
+const desktopCommentKeys = ['desktop-comment-1', 'desktop-comment-2', 'desktop-comment-3'];
+const mobileCommentKeys = ['mobile-comment-1', 'mobile-comment-2'];
 
 export default function PostDetailLoading() {
   return (
-    <PageContainer noPadding className="flex flex-col min-h-screen">
+    <PageContainer noPadding className="flex min-h-screen flex-col">
       {/* Desktop */}
-      <div className="hidden lg:flex flex-1">
+      <div className="hidden flex-1 lg:flex">
         {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0 border-l border-r border-[rgba(120,120,120,0.5)]">
+        <div className="flex min-w-0 flex-1 flex-col border-[rgba(120,120,120,0.5)] border-r border-l">
           <div className="flex-1 overflow-y-auto">
-            <div className="w-full max-w-[700px] mx-auto">
+            <div className="mx-auto w-full max-w-[700px]">
               {/* Post Detail */}
               <PostCardSkeleton />
-              
+
               {/* Comments Section */}
-              <div className="p-4 sm:p-6 space-y-4">
-                <Skeleton className="h-6 w-32 max-w-full mb-4" />
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex gap-3 pb-4 border-b border-border/5">
-                    <Skeleton className="w-10 h-10 rounded-full shrink-0" />
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
+              <div className="space-y-4 p-4 sm:p-6">
+                <Skeleton className="mb-4 h-6 w-32 max-w-full" />
+                {desktopCommentKeys.map((key) => (
+                  <div key={key} className="flex gap-3 border-border/5 border-b pb-4">
+                    <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Skeleton className="h-4 w-24 max-w-full" />
                         <Skeleton className="h-3 w-16" />
                       </div>
@@ -35,23 +38,23 @@ export default function PostDetailLoading() {
         </div>
 
         {/* Right: Widget placeholder */}
-        <div className="w-80 xl:w-96 shrink-0 border-l border-border/5 bg-background" />
+        <div className="w-80 shrink-0 border-border/5 border-l bg-background xl:w-96" />
       </div>
 
       {/* Mobile/Tablet */}
-      <div className="flex lg:hidden flex-1 overflow-y-auto">
+      <div className="flex flex-1 overflow-y-auto lg:hidden">
         <div className="w-full">
           {/* Post Detail */}
           <PostCardSkeleton />
-          
+
           {/* Comments Section */}
-          <div className="p-4 space-y-4">
-            <Skeleton className="h-5 w-24 max-w-full mb-4" />
-            {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="flex gap-3 pb-4 border-b border-border/5">
-                <Skeleton className="w-10 h-10 rounded-full shrink-0" />
-                <div className="flex-1 min-w-0 space-y-2">
-                  <div className="flex items-center gap-2 flex-wrap">
+          <div className="space-y-4 p-4">
+            <Skeleton className="mb-4 h-5 w-24 max-w-full" />
+            {mobileCommentKeys.map((key) => (
+              <div key={key} className="flex gap-3 border-border/5 border-b pb-4">
+                <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Skeleton className="h-4 w-20 max-w-full" />
                     <Skeleton className="h-3 w-12" />
                   </div>
@@ -64,6 +67,5 @@ export default function PostDetailLoading() {
         </div>
       </div>
     </PageContainer>
-  )
+  );
 }
-

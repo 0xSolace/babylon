@@ -3,66 +3,84 @@
  * Uses MinIO for local development and Vercel Blob for production deployments
  */
 
-import { S3Client, DeleteObjectCommand, CreateBucketCommand, PutBucketPolicyCommand } from '@aws-sdk/client-s3'
-import { Upload } from '@aws-sdk/lib-storage'
-import { put as vercelBlobPut, del as vercelBlobDel } from '@vercel/blob'
-import sharp from 'sharp'
-import { logger } from '@/lib/logger'
+import { logger } from '@/lib/logger';
+import {
+  CreateBucketCommand,
+  DeleteObjectCommand,
+  PutBucketPolicyCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
+import { del as vercelBlobDel, put as vercelBlobPut } from '@vercel/blob';
+import sharp from 'sharp';
 
 // Storage configuration
-const isProduction = process.env.NODE_ENV === 'production'
-const useVercelBlob = process.env.USE_VERCEL_BLOB === 'true' || (isProduction && process.env.BLOB_READ_WRITE_TOKEN)
+const isProduction = process.env.NODE_ENV === 'production';
+const useVercelBlob =
+  process.env.USE_VERCEL_BLOB === 'true' || (isProduction && process.env.BLOB_READ_WRITE_TOKEN);
 
 // MinIO configuration (local development)
-const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || 'http://localhost:9000'
-const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY || 'babylon'
-const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY || 'babylon_dev_password'
-const MINIO_BUCKET = process.env.MINIO_BUCKET || 'babylon-uploads'
+const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || 'http://localhost:9000';
+const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY || 'babylon';
+const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY || 'babylon_dev_password';
+const MINIO_BUCKET = process.env.MINIO_BUCKET || 'babylon-uploads';
 
 // Vercel Blob configuration (production)
 // Token is automatically available in Vercel environment as BLOB_READ_WRITE_TOKEN
-const VERCEL_BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN
+const VERCEL_BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 
 // Image processing configuration
-const MAX_WIDTH = 2048
-const MAX_HEIGHT = 2048
-const QUALITY = 85
+const MAX_WIDTH = 2048;
+const MAX_HEIGHT = 2048;
+const QUALITY = 85;
 
-interface UploadOptions {
-  file: Buffer
-  filename: string
-  contentType: string
-  folder?: 'profiles' | 'covers' | 'posts' | 'user-profiles' | 'user-banners' | 'actors' | 'actor-banners' | 'organizations' | 'org-banners' | 'logos' | 'icons' | 'static'
-  optimize?: boolean
-}
+type UploadOptions = {
+  file: Buffer;
+  filename: string;
+  contentType: string;
+  folder?:
+    | 'profiles'
+    | 'covers'
+    | 'posts'
+    | 'user-profiles'
+    | 'user-banners'
+    | 'actors'
+    | 'actor-banners'
+    | 'organizations'
+    | 'org-banners'
+    | 'logos'
+    | 'icons'
+    | 'static';
+  optimize?: boolean;
+};
 
-interface UploadResult {
-  url: string
-  key: string
-  size: number
-}
+type UploadResult = {
+  url: string;
+  key: string;
+  size: number;
+};
 
 class S3StorageClient {
-  private client: S3Client | null = null
-  private bucket!: string
-  private publicUrl!: string | null
-  private useVercel!: boolean
+  private client: S3Client | null = null;
+  private bucket!: string;
+  private publicUrl!: string | null;
+  private useVercel!: boolean;
 
   constructor() {
-    this.useVercel = !!useVercelBlob
+    this.useVercel = !!useVercelBlob;
 
     if (this.useVercel) {
       // Vercel Blob configuration
       if (!VERCEL_BLOB_TOKEN) {
-        logger.warn('Vercel Blob token not found, falling back to MinIO')
-        this.useVercel = false
+        logger.warn('Vercel Blob token not found, falling back to MinIO');
+        this.useVercel = false;
       } else {
-        this.bucket = 'babylon-uploads'
-        this.publicUrl = null // Vercel Blob provides its own URLs
-        logger.info('Storage: Using Vercel Blob (production)')
+        this.bucket = 'babylon-uploads';
+        this.publicUrl = null; // Vercel Blob provides its own URLs
+        logger.info('Storage: Using Vercel Blob (production)');
       }
     }
-    
+
     if (!this.useVercel) {
       // MinIO configuration (local dev or fallback)
       this.client = new S3Client({
@@ -73,11 +91,11 @@ class S3StorageClient {
           secretAccessKey: MINIO_SECRET_KEY,
         },
         forcePathStyle: true, // Required for MinIO
-      })
-      this.bucket = MINIO_BUCKET
-      this.publicUrl = MINIO_ENDPOINT
+      });
+      this.bucket = MINIO_BUCKET;
+      this.publicUrl = MINIO_ENDPOINT;
 
-      logger.info('Storage: Using MinIO (local)')
+      logger.info('Storage: Using MinIO (local)');
     }
   }
 
@@ -85,16 +103,16 @@ class S3StorageClient {
    * Upload an image file
    */
   async uploadImage(options: UploadOptions): Promise<UploadResult> {
-    let buffer = options.file
+    let buffer = options.file;
 
     // Optimize image if requested
     if (options.optimize !== false) {
-      buffer = await this.optimizeImage(buffer)
+      buffer = await this.optimizeImage(buffer);
     }
 
     // Generate path/key
-    const folder = options.folder || 'uploads'
-    const pathname = `${folder}/${options.filename}`
+    const folder = options.folder || 'uploads';
+    const pathname = `${folder}/${options.filename}`;
 
     if (this.useVercel) {
       // Upload to Vercel Blob
@@ -102,24 +120,24 @@ class S3StorageClient {
         access: 'public',
         contentType: options.contentType,
         addRandomSuffix: false, // We already have unique filenames
-      })
+      });
 
       logger.info('Image uploaded successfully to Vercel Blob', {
         pathname: blob.pathname,
         size: buffer.length,
         url: blob.url,
-      })
+      });
 
       return {
         url: blob.url,
         key: blob.pathname,
         size: buffer.length,
-      }
+      };
     }
-    
+
     // Upload to MinIO/S3
     if (!this.client) {
-      throw new Error('S3 client not initialized')
+      throw new Error('S3 client not initialized');
     }
 
     const upload = new Upload({
@@ -131,26 +149,26 @@ class S3StorageClient {
         ContentType: options.contentType,
         CacheControl: 'public, max-age=31536000, immutable',
       },
-    })
+    });
 
-    await upload.done()
+    await upload.done();
 
     // Generate public URL
-    const url = this.publicUrl 
+    const url = this.publicUrl
       ? `${this.publicUrl}/${this.bucket}/${pathname}`
-      : `http://localhost:9000/${this.bucket}/${pathname}`
+      : `http://localhost:9000/${this.bucket}/${pathname}`;
 
     logger.info('Image uploaded successfully to MinIO', {
       key: pathname,
       size: buffer.length,
       bucket: this.bucket,
-    })
+    });
 
     return {
       url,
       key: pathname,
       size: buffer.length,
-    }
+    };
   }
 
   /**
@@ -159,30 +177,30 @@ class S3StorageClient {
   async deleteImage(url: string): Promise<void> {
     if (this.useVercel) {
       // Delete from Vercel Blob
-      await vercelBlobDel(url)
-      logger.info('Image deleted successfully from Vercel Blob', { url })
+      await vercelBlobDel(url);
+      logger.info('Image deleted successfully from Vercel Blob', { url });
     } else {
       // Delete from MinIO/S3
       if (!this.client) {
-        throw new Error('S3 client not initialized')
+        throw new Error('S3 client not initialized');
       }
 
       // Extract key from URL if full URL is provided
-      let key = url
+      let key = url;
       if (url.startsWith('http')) {
         // URL format: http://localhost:9000/babylon-uploads/folder/file.jpg
         // Extract: folder/file.jpg
-        const urlParts = url.split(`/${this.bucket}/`)
-        key = urlParts.length > 1 ? (urlParts[1] || url) : url
+        const urlParts = url.split(`/${this.bucket}/`);
+        key = urlParts.length > 1 ? urlParts[1] || url : url;
       }
 
       const command = new DeleteObjectCommand({
         Bucket: this.bucket,
         Key: key,
-      })
+      });
 
-      await this.client.send(command)
-      logger.info('Image deleted successfully from MinIO', { key })
+      await this.client.send(command);
+      logger.info('Image deleted successfully from MinIO', { key });
     }
   }
 
@@ -190,34 +208,32 @@ class S3StorageClient {
    * Optimize image using sharp
    */
   private async optimizeImage(buffer: Buffer): Promise<Buffer> {
-    const image = sharp(buffer)
-    const metadata = await image.metadata()
+    const image = sharp(buffer);
+    const metadata = await image.metadata();
 
     if (metadata.width && metadata.width > MAX_WIDTH) {
       image.resize(MAX_WIDTH, null, {
         withoutEnlargement: true,
         fit: 'inside',
-      })
+      });
     }
 
     if (metadata.height && metadata.height > MAX_HEIGHT) {
       image.resize(null, MAX_HEIGHT, {
         withoutEnlargement: true,
         fit: 'inside',
-      })
+      });
     }
 
-    const optimized = await image
-      .webp({ quality: QUALITY })
-      .toBuffer()
+    const optimized = await image.webp({ quality: QUALITY }).toBuffer();
 
     logger.info('Image optimized', {
       originalSize: buffer.length,
       optimizedSize: optimized.length,
       compression: `${((1 - optimized.length / buffer.length) * 100).toFixed(1)}%`,
-    })
+    });
 
-    return optimized
+    return optimized;
   }
 
   /**
@@ -225,12 +241,12 @@ class S3StorageClient {
    */
   async initializeBucket(): Promise<void> {
     if (this.useVercel) {
-      logger.info('Using Vercel Blob - no bucket initialization needed')
-      return
+      logger.info('Using Vercel Blob - no bucket initialization needed');
+      return;
     }
 
-    await this.client!.send(new CreateBucketCommand({ Bucket: this.bucket }))
-    logger.info(`Created bucket: ${this.bucket}`)
+    await this.client?.send(new CreateBucketCommand({ Bucket: this.bucket }));
+    logger.info(`Created bucket: ${this.bucket}`);
 
     const policy = {
       Version: '2012-10-17',
@@ -242,15 +258,15 @@ class S3StorageClient {
           Resource: [`arn:aws:s3:::${this.bucket}/*`],
         },
       ],
-    }
+    };
 
-    await this.client!.send(
+    await this.client?.send(
       new PutBucketPolicyCommand({
         Bucket: this.bucket,
         Policy: JSON.stringify(policy),
       })
-    )
-    logger.info(`Set public policy for bucket: ${this.bucket}`)
+    );
+    logger.info(`Set public policy for bucket: ${this.bucket}`);
   }
 
   /**
@@ -258,17 +274,17 @@ class S3StorageClient {
    */
   async listObjects(prefix: string): Promise<string[]> {
     if (this.useVercel) {
-      const { list } = await import('@vercel/blob')
-      const { blobs } = await list({ prefix })
-      return blobs.map(blob => blob.pathname)
+      const { list } = await import('@vercel/blob');
+      const { blobs } = await list({ prefix });
+      return blobs.map((blob) => blob.pathname);
     } else {
-      const { ListObjectsV2Command } = await import('@aws-sdk/client-s3')
+      const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
       const command = new ListObjectsV2Command({
         Bucket: this.bucket,
         Prefix: prefix,
-      })
-      const response = await this.client!.send(command)
-      return (response.Contents || []).map(obj => obj.Key || '')
+      });
+      const response = await this.client?.send(command);
+      return (response.Contents || []).map((obj) => obj.Key || '');
     }
   }
 
@@ -278,36 +294,37 @@ class S3StorageClient {
   async exists(key: string): Promise<boolean> {
     try {
       if (this.useVercel) {
-        const { head } = await import('@vercel/blob')
-        await head(key)
-        return true
+        const { head } = await import('@vercel/blob');
+        await head(key);
+        return true;
       } else {
-        const { HeadObjectCommand } = await import('@aws-sdk/client-s3')
+        const { HeadObjectCommand } = await import('@aws-sdk/client-s3');
         if (!this.client) {
-          return false
+          return false;
         }
-        await this.client.send(new HeadObjectCommand({
-          Bucket: this.bucket,
-          Key: key,
-        }))
-        return true
+        await this.client.send(
+          new HeadObjectCommand({
+            Bucket: this.bucket,
+            Key: key,
+          })
+        );
+        return true;
       }
     } catch {
       // File doesn't exist if head/headObject fails
-      return false
+      return false;
     }
   }
 }
 
 // Singleton instance
-let storageClient: S3StorageClient | null = null
+let storageClient: S3StorageClient | null = null;
 
 export function getStorageClient(): S3StorageClient {
   if (!storageClient) {
-    storageClient = new S3StorageClient()
+    storageClient = new S3StorageClient();
   }
-  return storageClient
+  return storageClient;
 }
 
-export type { UploadOptions, UploadResult }
-
+export type { UploadOptions, UploadResult };

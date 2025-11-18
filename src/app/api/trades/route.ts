@@ -1,16 +1,16 @@
 /**
  * Trading Activity Feed API
- * 
+ *
  * @route GET /api/trades
  * @access Public
- * 
+ *
  * @description
  * Public trading feed showing recent trading activity across all market types:
  * - Prediction market positions (YES/NO binary predictions)
  * - Perpetual futures positions (long/short leveraged trades)
  * - NPC/agent trades with sentiment and reasoning
  * - Balance transactions (buys, sells, deposits, withdrawals)
- * 
+ *
  * @openapi
  * /api/trades:
  *   get:
@@ -55,13 +55,13 @@
  *                   type: integer
  *                 hasMore:
  *                   type: boolean
- * 
+ *
  * **Trade Types:**
  * - **balance:** User balance transactions (pred_buy, pred_sell, perp operations)
  * - **npc:** Agent/NPC trades with AI reasoning and sentiment
  * - **position:** Prediction market positions with shares and pricing
  * - **perp:** Perpetual futures positions with leverage and PnL
- * 
+ *
  * **Features:**
  * - Combined feed across all market types
  * - User-specific filtering
@@ -69,14 +69,14 @@
  * - Rich trader profiles (users, agents, actors)
  * - Market metadata (questions, tickers, organizations)
  * - Real-time pricing and PnL calculations
- * 
+ *
  * **Query Parameters:**
  * @query {number} limit - Trades per page (1-100, default: 50)
  * @query {number} offset - Pagination offset (default: 0)
  * @query {string} userId - Filter by specific user/agent/actor
- * 
+ *
  * **Trade Object Types:**
- * 
+ *
  * **Balance Transaction:**
  * @property {string} type - 'balance'
  * @property {object} user - Trader profile
@@ -84,7 +84,7 @@
  * @property {string} amount - Transaction amount
  * @property {string} balanceBefore - Balance before transaction
  * @property {string} balanceAfter - Balance after transaction
- * 
+ *
  * **NPC/Agent Trade:**
  * @property {string} type - 'npc'
  * @property {object} user - Agent profile
@@ -94,14 +94,14 @@
  * @property {string} side - Trade side (long/short, YES/NO)
  * @property {string} sentiment - AI sentiment analysis
  * @property {string} reason - AI reasoning for trade
- * 
+ *
  * **Position:**
  * @property {string} type - 'position'
  * @property {object} market - Market details
  * @property {string} side - Position side (YES/NO)
  * @property {string} shares - Number of shares
  * @property {string} avgPrice - Average entry price
- * 
+ *
  * **Perpetual Position:**
  * @property {string} type - 'perp'
  * @property {object} organization - Company being traded
@@ -111,23 +111,23 @@
  * @property {string} currentPrice - Current price
  * @property {string} unrealizedPnL - Unrealized profit/loss
  * @property {string} liquidationPrice - Liquidation price
- * 
+ *
  * @returns {object} Trading feed response
  * @property {array} trades - Array of trade objects (mixed types)
  * @property {number} total - Total trades before limit
  * @property {boolean} hasMore - Whether more trades available
- * 
+ *
  * @throws {500} Internal server error
- * 
+ *
  * @example
  * ```typescript
  * // Get recent trades
  * const feed = await fetch('/api/trades?limit=20');
  * const { trades } = await feed.json();
- * 
+ *
  * // Get user's trades
  * const userTrades = await fetch(`/api/trades?userId=${userId}&limit=50`);
- * 
+ *
  * // Process different trade types
  * trades.forEach(trade => {
  *   switch(trade.type) {
@@ -141,18 +141,18 @@
  *   }
  * });
  * ```
- * 
+ *
  * @see {@link /lib/database-service} Database queries
  * @see {@link /src/app/trades/page.tsx} Trading feed UI
  * @see {@link /src/components/trading} Trading components
  */
 
-import type { NextRequest } from 'next/server';
 import { optionalAuth } from '@/lib/api/auth-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { prisma } from '@/lib/prisma';
-import { z } from 'zod';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 const QuerySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
@@ -185,8 +185,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     where: {
       ...userFilter,
       type: {
-        in: ['pred_buy', 'pred_sell', 'perp_open', 'perp_close', 'perp_liquidation']
-      }
+        in: ['pred_buy', 'pred_sell', 'perp_open', 'perp_close', 'perp_liquidation'],
+      },
     },
   });
 
@@ -198,13 +198,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     where: {
       ...userFilter,
       reason: {
-        in: ['transfer_sent', 'transfer_received']
-      }
+        in: ['transfer_sent', 'transfer_received'],
+      },
     },
   });
 
   // Fetch users for balance transactions
-  const balanceUserIds = [...new Set(balanceTransactions.map(tx => tx.userId))];
+  const balanceUserIds = [...new Set(balanceTransactions.map((tx) => tx.userId))];
   const balanceUsers = await prisma.user.findMany({
     where: { id: { in: balanceUserIds } },
     select: {
@@ -215,7 +215,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       isActor: true,
     },
   });
-  const balanceUsersMap = new Map(balanceUsers.map(u => [u.id, u]));
+  const balanceUsersMap = new Map(balanceUsers.map((u) => [u.id, u]));
 
   // Fetch users for point transfers (both sender and recipient)
   const transferUserIds = new Set<string>();
@@ -223,7 +223,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     transferUserIds.add(transfer.userId);
     // Parse metadata to get the other party's ID
     if (transfer.metadata) {
-      const metadata = JSON.parse(transfer.metadata) as { senderId?: string; recipientId?: string; senderName?: string; recipientName?: string; message?: string };
+      const metadata = JSON.parse(transfer.metadata) as {
+        senderId?: string;
+        recipientId?: string;
+        senderName?: string;
+        recipientName?: string;
+        message?: string;
+      };
       if (metadata.senderId) transferUserIds.add(metadata.senderId);
       if (metadata.recipientId) transferUserIds.add(metadata.recipientId);
     }
@@ -238,7 +244,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       isActor: true,
     },
   });
-  const transferUsersMap = new Map(transferUsers.map(u => [u.id, u]));
+  const transferUsersMap = new Map(transferUsers.map((u) => [u.id, u]));
 
   // Get recent NPC trades (if not filtering by specific user, or if user is an NPC)
   // Note: npcActorId references Actor.id, not User.id
@@ -255,7 +261,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       where: { id: params.userId },
       select: { id: true },
     });
-    
+
     if (actor) {
       npcTrades = await prisma.nPCTrade.findMany({
         take: params.limit,
@@ -268,51 +274,57 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Fetch NPC actors for NPC trades
   // npcActorId references Actor.id, so query Actor table
-  const npcActorIds = [...new Set(npcTrades.map(t => t.npcActorId))];
-  
+  const npcActorIds = [...new Set(npcTrades.map((t) => t.npcActorId))];
+
   // Query both Actor and User tables to get complete profile information
   // Skip queries if no NPC trades to avoid unnecessary database calls
-  const [actors, users] = npcActorIds.length > 0 ? await Promise.all([
-    prisma.actor.findMany({
-      where: { id: { in: npcActorIds } },
-      select: {
-        id: true,
-        name: true,
-        profileImageUrl: true,
-      },
-    }),
-    prisma.user.findMany({
-      where: { 
-        id: { in: npcActorIds },
-        isActor: true, // Only get users that are actors
-      },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        profileImageUrl: true,
-        isActor: true,
-      },
-    }),
-  ]) : [[], []];
-  
+  const [actors, users] =
+    npcActorIds.length > 0
+      ? await Promise.all([
+          prisma.actor.findMany({
+            where: { id: { in: npcActorIds } },
+            select: {
+              id: true,
+              name: true,
+              profileImageUrl: true,
+            },
+          }),
+          prisma.user.findMany({
+            where: {
+              id: { in: npcActorIds },
+              isActor: true, // Only get users that are actors
+            },
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              profileImageUrl: true,
+              isActor: true,
+            },
+          }),
+        ])
+      : [[], []];
+
   // Create maps for both actors and users
-  const actorsDataMap = new Map(actors.map(a => [a.id, a]));
-  const usersDataMap = new Map(users.map(u => [u.id, u]));
-  
+  const actorsDataMap = new Map(actors.map((a) => [a.id, a]));
+  const usersDataMap = new Map(users.map((u) => [u.id, u]));
+
   // Merge Actor and User data, preferring User data when available (more complete)
-  const actorsMap = new Map<string, {
-    id: string;
-    username: string;
-    displayName: string;
-    profileImageUrl: string | null;
-    isActor: boolean;
-  }>();
-  
+  const actorsMap = new Map<
+    string,
+    {
+      id: string;
+      username: string;
+      displayName: string;
+      profileImageUrl: string | null;
+      isActor: boolean;
+    }
+  >();
+
   for (const actorId of npcActorIds) {
     const actor = actorsDataMap.get(actorId);
     const user = usersDataMap.get(actorId);
-    
+
     // Prefer User data if available, otherwise use Actor data
     if (user) {
       actorsMap.set(actorId, {
@@ -357,7 +369,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Fetch users for positions
-  const positionUserIds = [...new Set(positions.map(p => p.userId))];
+  const positionUserIds = [...new Set(positions.map((p) => p.userId))];
   const positionUsers = await prisma.user.findMany({
     where: { id: { in: positionUserIds } },
     select: {
@@ -368,7 +380,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       isActor: true,
     },
   });
-  const positionUsersMap = new Map(positionUsers.map(u => [u.id, u]));
+  const positionUsersMap = new Map(positionUsers.map((u) => [u.id, u]));
 
   // Get perp positions for the user (if filtering)
   let perpPositions: Awaited<ReturnType<typeof prisma.perpPosition.findMany>> = [];
@@ -389,7 +401,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Fetch organizations for perp positions
-  const organizationIds = [...new Set(perpPositions.map(p => p.organizationId))];
+  const organizationIds = [...new Set(perpPositions.map((p) => p.organizationId))];
   const organizations = await prisma.organization.findMany({
     where: { id: { in: organizationIds } },
     select: {
@@ -398,10 +410,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       type: true,
     },
   });
-  const organizationsMap = new Map(organizations.map(o => [o.id, o]));
+  const organizationsMap = new Map(organizations.map((o) => [o.id, o]));
 
   // Fetch users for perp positions
-  const perpUserIds = [...new Set(perpPositions.map(p => p.userId))];
+  const perpUserIds = [...new Set(perpPositions.map((p) => p.userId))];
   const perpUsers = await prisma.user.findMany({
     where: { id: { in: perpUserIds } },
     select: {
@@ -412,11 +424,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       isActor: true,
     },
   });
-  const perpUsersMap = new Map(perpUsers.map(u => [u.id, u]));
+  const perpUsersMap = new Map(perpUsers.map((u) => [u.id, u]));
 
   // Merge and sort by timestamp
   const allTrades = [
-    ...balanceTransactions.map(tx => ({
+    ...balanceTransactions.map((tx) => ({
       type: 'balance' as const,
       id: tx.id,
       timestamp: tx.createdAt,
@@ -428,38 +440,56 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       description: tx.description,
       relatedId: tx.relatedId,
     })),
-    ...pointTransfers.map(tx => {
-      const metadata = tx.metadata ? JSON.parse(tx.metadata) as { senderId?: string; recipientId?: string; senderName?: string; recipientName?: string; message?: string } : {};
+    ...pointTransfers.map((tx) => {
+      const metadata = tx.metadata
+        ? (JSON.parse(tx.metadata) as {
+            senderId?: string;
+            recipientId?: string;
+            senderName?: string;
+            recipientName?: string;
+            message?: string;
+          })
+        : {};
       const isSent = tx.reason === 'transfer_sent';
       const otherPartyId = isSent ? metadata.recipientId : metadata.senderId;
       const otherPartyName = isSent ? metadata.recipientName : metadata.senderName;
-      
+
       return {
         type: 'transfer' as const,
         id: tx.id,
         timestamp: tx.createdAt,
         user: transferUsersMap.get(tx.userId) || null,
-        otherParty: otherPartyId ? transferUsersMap.get(otherPartyId) || { id: otherPartyId, username: otherPartyName, displayName: otherPartyName, profileImageUrl: null, isActor: false } : null,
+        otherParty: otherPartyId
+          ? transferUsersMap.get(otherPartyId) || {
+              id: otherPartyId,
+              username: otherPartyName,
+              displayName: otherPartyName,
+              profileImageUrl: null,
+              isActor: false,
+            }
+          : null,
         amount: tx.amount,
         pointsBefore: tx.pointsBefore,
         pointsAfter: tx.pointsAfter,
-        direction: isSent ? 'sent' as const : 'received' as const,
+        direction: isSent ? ('sent' as const) : ('received' as const),
         message: metadata.message,
       };
     }),
-    ...npcTrades.map(trade => {
+    ...npcTrades.map((trade) => {
       const actor = actorsMap.get(trade.npcActorId);
       return {
         type: 'npc' as const,
         id: trade.id,
         timestamp: trade.executedAt,
-        user: actor ? {
-          id: actor.id,
-          username: actor.username,
-          displayName: actor.displayName,
-          profileImageUrl: actor.profileImageUrl,
-          isActor: true,
-        } : null,
+        user: actor
+          ? {
+              id: actor.id,
+              username: actor.username,
+              displayName: actor.displayName,
+              profileImageUrl: actor.profileImageUrl,
+              isActor: true,
+            }
+          : null,
         marketType: trade.marketType,
         ticker: trade.ticker,
         marketId: trade.marketId,
@@ -471,23 +501,25 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         reason: trade.reason,
       };
     }),
-    ...positions.map(pos => ({
+    ...positions.map((pos) => ({
       type: 'position' as const,
       id: pos.id,
       timestamp: pos.updatedAt,
       user: positionUsersMap.get(pos.userId) || null,
-      market: pos.Market ? {
-        id: pos.Market.id,
-        question: pos.Market.question,
-        resolved: pos.Market.resolved,
-        resolution: pos.Market.resolution,
-      } : null,
+      market: pos.Market
+        ? {
+            id: pos.Market.id,
+            question: pos.Market.question,
+            resolved: pos.Market.resolved,
+            resolution: pos.Market.resolution,
+          }
+        : null,
       side: pos.side ? 'YES' : 'NO',
       shares: pos.shares.toString(),
       avgPrice: pos.avgPrice.toString(),
       createdAt: pos.createdAt,
     })),
-    ...perpPositions.map(pos => {
+    ...perpPositions.map((pos) => {
       const organization = organizationsMap.get(pos.organizationId);
       return {
         type: 'perp' as const,
@@ -495,11 +527,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         timestamp: pos.openedAt,
         user: perpUsersMap.get(pos.userId) || null,
         ticker: pos.ticker,
-        organization: organization ? {
-          id: organization.id,
-          name: organization.name,
-          ticker: pos.ticker, // Use ticker from position since Organization doesn't have it
-        } : null,
+        organization: organization
+          ? {
+              id: organization.id,
+              name: organization.name,
+              ticker: pos.ticker, // Use ticker from position since Organization doesn't have it
+            }
+          : null,
         side: pos.side,
         entryPrice: pos.entryPrice.toString(),
         currentPrice: pos.currentPrice.toString(),
@@ -510,7 +544,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         closedAt: pos.closedAt,
       };
     }),
-  ].filter(trade => trade.user !== null); // Filter out trades with missing users
+  ].filter((trade) => trade.user !== null); // Filter out trades with missing users
 
   // Sort by timestamp
   allTrades.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
@@ -524,4 +558,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     hasMore: allTrades.length > params.limit,
   });
 });
-

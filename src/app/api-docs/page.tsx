@@ -1,8 +1,8 @@
 /**
  * Swagger UI Documentation Page
- * 
+ *
  * @description Interactive API documentation using Swagger UI
- * 
+ *
  * @page /api-docs
  * @access Public
  */
@@ -17,26 +17,26 @@ const SwaggerUI = dynamic(() => import('swagger-ui-react'), { ssr: false });
 
 /**
  * API Documentation Page Component
- * 
+ *
  * @description Renders the Swagger UI with the generated OpenAPI specification
- * 
+ *
  * @returns {JSX.Element} Swagger UI documentation page
  */
 export default function ApiDocsPage() {
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-8 px-4">
+      <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Babylon API Documentation</h1>
-          <p className="text-muted-foreground text-lg mb-4">
+          <h1 className="mb-2 font-bold text-4xl">Babylon API Documentation</h1>
+          <p className="mb-4 text-lg text-muted-foreground">
             Complete interactive API reference for the Babylon social conspiracy game
           </p>
-          <div className="flex gap-4 text-sm text-muted-foreground">
-            <a 
-              href="/api/docs" 
-              target="_blank" 
+          <div className="flex gap-4 text-muted-foreground text-sm">
+            <a
+              href="/api/docs"
+              target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-foreground underline"
+              className="underline hover:text-foreground"
             >
               View JSON Spec
             </a>
@@ -44,10 +44,10 @@ export default function ApiDocsPage() {
             <span>Automatically generated from route documentation</span>
           </div>
         </div>
-        
-        <div className="bg-card rounded-lg shadow-lg overflow-hidden border">
-          <SwaggerUI 
-            url="/api/docs" 
+
+        <div className="overflow-hidden rounded-lg border bg-card shadow-lg">
+          <SwaggerUI
+            url="/api/docs"
             docExpansion="list"
             defaultModelsExpandDepth={2}
             defaultModelExpandDepth={2}
@@ -74,10 +74,3 @@ export default function ApiDocsPage() {
     </div>
   );
 }
-
-
-
-
-
-
-

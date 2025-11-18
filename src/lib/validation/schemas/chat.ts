@@ -3,7 +3,12 @@
  */
 
 import { z } from 'zod';
-import { SnowflakeIdSchema, UserIdSchema, PaginationSchema, createTrimmedStringSchema } from './common';
+import {
+  PaginationSchema,
+  SnowflakeIdSchema,
+  UserIdSchema,
+  createTrimmedStringSchema,
+} from './common';
 
 /**
  * Chat message content schema
@@ -14,36 +19,35 @@ export const ChatMessageContentSchema = createTrimmedStringSchema(1, 5000);
  * Chat message submission schema
  */
 export const ChatMessageCreateSchema = z.object({
-  content: ChatMessageContentSchema
+  content: ChatMessageContentSchema,
 });
 
 /**
  * Chat creation schema
  */
-export const ChatCreateSchema = z.object({
-  name: createTrimmedStringSchema(1, 100).optional(),
-  isGroup: z.boolean().optional().default(false),
-  participantIds: z.array(SnowflakeIdSchema).optional()
-}).refine(
-  (data) => !data.isGroup || data.name !== undefined,
-  {
+export const ChatCreateSchema = z
+  .object({
+    name: createTrimmedStringSchema(1, 100).optional(),
+    isGroup: z.boolean().optional().default(false),
+    participantIds: z.array(SnowflakeIdSchema).optional(),
+  })
+  .refine((data) => !data.isGroup || data.name !== undefined, {
     message: 'Group name is required for group chats',
-    path: ['name']
-  }
-);
+    path: ['name'],
+  });
 
 /**
  * DM chat creation schema
  */
 export const DMChatCreateSchema = z.object({
-  userId: UserIdSchema
+  userId: UserIdSchema,
 });
 
 /**
  * Chat ID parameter schema
  */
 export const ChatIdParamSchema = z.object({
-  id: z.string().min(1)
+  id: z.string().min(1),
 });
 
 /**
@@ -51,14 +55,14 @@ export const ChatIdParamSchema = z.object({
  */
 export const ChatQuerySchema = z.object({
   all: z.enum(['true', 'false']).optional(),
-  debug: z.enum(['true', 'false']).optional()
+  debug: z.enum(['true', 'false']).optional(),
 });
 
 /**
  * Chat message query schema
  */
 export const ChatMessageQuerySchema = PaginationSchema.extend({
-  chatId: z.string().min(1).optional()
+  chatId: z.string().min(1).optional(),
 });
 
 /**
@@ -69,7 +73,7 @@ export const ChatMessageSchema = z.object({
   content: z.string(),
   senderId: SnowflakeIdSchema,
   chatId: z.string(),
-  createdAt: z.date()
+  createdAt: z.date(),
 });
 
 /**
@@ -79,7 +83,7 @@ export const ChatParticipantSchema = z.object({
   id: SnowflakeIdSchema,
   displayName: z.string(),
   username: z.string().optional(),
-  profileImageUrl: z.string().optional()
+  profileImageUrl: z.string().optional(),
 });
 
 /**
@@ -92,5 +96,5 @@ export const ChatSchema = z.object({
   createdAt: z.date(),
   updatedAt: z.date(),
   participants: z.array(ChatParticipantSchema).optional(),
-  lastMessage: ChatMessageSchema.optional()
+  lastMessage: ChatMessageSchema.optional(),
 });

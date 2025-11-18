@@ -1,13 +1,13 @@
 /**
  * Admin Moderation Escrow Refund API
- * 
+ *
  * @route POST /api/admin/moderation-escrow/refund - Refund payment
  * @access Admin
- * 
+ *
  * @description
  * Refunds an escrow payment back to the recipient. Requires refund transaction
  * hash for on-chain verification. Updates payment status to refunded.
- * 
+ *
  * @openapi
  * /api/admin/moderation-escrow/refund:
  *   post:
@@ -44,7 +44,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/moderation-escrow/refund', {
@@ -59,35 +59,37 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/api/admin-middleware'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { z } from 'zod'
+import { requireAdmin } from '@/lib/api/admin-middleware';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const RefundEscrowSchema = z.object({
   escrowId: z.string().min(1, 'Escrow ID is required'),
   refundTxHash: z.string().min(1, 'Refund transaction hash is required'),
   reason: z.string().optional(),
-})
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const _adminUser = await requireAdmin(req)
-    const adminId = _adminUser.userId
+    const _adminUser = await requireAdmin(req);
+    const adminId = _adminUser.userId;
 
-    const body = await req.json()
-    const validation = RefundEscrowSchema.safeParse(body)
+    const body = await req.json();
+    const validation = RefundEscrowSchema.safeParse(body);
 
     if (!validation.success) {
       return NextResponse.json(
-        { error: validation.error.issues[0]?.message || 'Invalid request data' },
+        {
+          error: validation.error.issues[0]?.message || 'Invalid request data',
+        },
         { status: 400 }
-      )
+      );
     }
 
-    const { escrowId, refundTxHash, reason } = validation.data
+    const { escrowId, refundTxHash, reason } = validation.data;
 
     // Get escrow record
     const escrow = await prisma.moderationEscrow.findUnique({
@@ -102,27 +104,26 @@ export async function POST(req: NextRequest) {
           },
         },
       },
-    })
+    });
 
     if (!escrow) {
-      return NextResponse.json(
-        { error: 'Escrow payment not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Escrow payment not found' }, { status: 404 });
     }
 
     if (escrow.status !== 'paid') {
       return NextResponse.json(
-        { error: `Cannot refund escrow payment with status: ${escrow.status}. Only 'paid' escrows can be refunded.` },
+        {
+          error: `Cannot refund escrow payment with status: ${escrow.status}. Only 'paid' escrows can be refunded.`,
+        },
         { status: 400 }
-      )
+      );
     }
 
     if (escrow.refundTxHash) {
       return NextResponse.json(
         { error: 'Escrow payment has already been refunded' },
         { status: 400 }
-      )
+      );
     }
 
     // Verify refund transaction exists and is valid
@@ -131,12 +132,12 @@ export async function POST(req: NextRequest) {
     // 2. Transaction is from treasury to recipient
     // 3. Transaction amount matches escrow amount
     // For now, we trust admin but log the refund
-    const refundTxValid = refundTxHash.startsWith('0x') && refundTxHash.length === 66
+    const refundTxValid = refundTxHash.startsWith('0x') && refundTxHash.length === 66;
     if (!refundTxValid) {
       return NextResponse.json(
         { error: 'Invalid refund transaction hash format' },
         { status: 400 }
-      )
+      );
     }
 
     // Use transaction to prevent race conditions
@@ -144,14 +145,16 @@ export async function POST(req: NextRequest) {
       // Re-fetch to ensure still refundable
       const currentEscrow = await tx.moderationEscrow.findUnique({
         where: { id: escrowId },
-      })
+      });
 
       if (!currentEscrow || currentEscrow.status !== 'paid') {
-        throw new Error(`Cannot refund escrow with status: ${currentEscrow?.status || 'not found'}`)
+        throw new Error(
+          `Cannot refund escrow with status: ${currentEscrow?.status || 'not found'}`
+        );
       }
 
       if (currentEscrow.refundTxHash) {
-        throw new Error('Escrow payment has already been refunded')
+        throw new Error('Escrow payment has already been refunded');
       }
 
       // Update escrow status to refunded
@@ -163,12 +166,12 @@ export async function POST(req: NextRequest) {
           refundedBy: adminId,
           refundedAt: new Date(),
           metadata: {
-            ...(currentEscrow.metadata as Record<string, unknown> || {}),
+            ...((currentEscrow.metadata as Record<string, unknown>) || {}),
             refundReason: reason || null,
           },
         },
-      })
-    })
+      });
+    });
 
     logger.info(
       `Admin ${adminId} refunded escrow payment ${escrowId}`,
@@ -181,7 +184,7 @@ export async function POST(req: NextRequest) {
         reason,
       },
       'ModerationEscrow'
-    )
+    );
 
     return NextResponse.json({
       success: true,
@@ -193,13 +196,14 @@ export async function POST(req: NextRequest) {
         refundTxHash: updatedEscrow.refundTxHash,
         refundedAt: updatedEscrow.refundedAt?.toISOString(),
       },
-    })
+    });
   } catch (error) {
-    logger.error('Failed to refund escrow payment', { error }, 'ModerationEscrow')
+    logger.error('Failed to refund escrow payment', { error }, 'ModerationEscrow');
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to refund escrow payment' },
+      {
+        error: error instanceof Error ? error.message : 'Failed to refund escrow payment',
+      },
       { status: 500 }
-    )
+    );
   }
 }
-

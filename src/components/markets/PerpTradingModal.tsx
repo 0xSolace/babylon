@@ -1,24 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-
-import {
-  AlertTriangle,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-  X,
-} from 'lucide-react';
-import { toast } from 'sonner';
-
 import { FEE_CONFIG } from '@/lib/config/fees';
 import { cn } from '@/lib/utils';
-
 import { useAuth } from '@/hooks/useAuth';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { AlertTriangle, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
-interface PerpMarket {
+type PerpMarket = {
   ticker: string;
   organizationId: string;
   name: string;
@@ -29,21 +20,16 @@ interface PerpMarket {
   };
   maxLeverage: number;
   minOrderSize: number;
-}
+};
 
-interface PerpTradingModalProps {
+type PerpTradingModalProps = {
   market: PerpMarket;
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
-}
+};
 
-export function PerpTradingModal({
-  market,
-  isOpen,
-  onClose,
-  onSuccess,
-}: PerpTradingModalProps) {
+export function PerpTradingModal({ market, isOpen, onClose, onSuccess }: PerpTradingModalProps) {
   const { user, authenticated, login, getAccessToken } = useAuth();
   const [side, setSide] = useState<'long' | 'short'>('long');
   const [size, setSize] = useState('100');
@@ -83,8 +69,6 @@ export function PerpTradingModal({
     };
   }, []);
 
-  if (!isOpen) return null;
-
   const sizeNum = parseFloat(size) || 0;
   const marginRequired = sizeNum > 0 ? sizeNum / leverage : 0;
   const liquidationPrice =
@@ -108,8 +92,9 @@ export function PerpTradingModal({
     return marginRequired + estimatedFee;
   }, [estimatedFee, marginRequired, sizeNum]);
 
-  const showBalanceWarning =
-    authenticated && sizeNum > 0 && balance < totalRequired;
+  const showBalanceWarning = authenticated && sizeNum > 0 && balance < totalRequired;
+
+  if (!isOpen) return null;
 
   const handleSubmit = async () => {
     if (!authenticated) {
@@ -161,42 +146,40 @@ export function PerpTradingModal({
 
   return (
     <>
-      <div
-        className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50"
+      <button
+        type="button"
+        aria-label="Close perp trading modal"
+        className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg">
-        <div className="bg-popover rounded shadow-xl p-4 sm:p-6 m-4 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
+      <div className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-full max-w-lg">
+        <div className="fade-in zoom-in-95 m-4 max-h-[90vh] animate-in overflow-y-auto rounded bg-popover p-4 shadow-xl duration-200 sm:p-6">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-foreground">
-                ${market.ticker}
-              </h2>
-              <p className="text-sm text-muted-foreground">{market.name}</p>
+              <h2 className="font-bold text-2xl text-foreground">${market.ticker}</h2>
+              <p className="text-muted-foreground text-sm">{market.name}</p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors p-2"
+              className="p-2 text-muted-foreground transition-colors hover:text-foreground"
             >
               <X size={20} />
             </button>
           </div>
 
-          <div className="mb-6 p-4 bg-muted rounded">
-            <div className="text-sm text-muted-foreground mb-1">
-              Current Price
-            </div>
-            <div className="text-2xl sm:text-3xl font-bold text-foreground">
+          <div className="mb-6 rounded bg-muted p-4">
+            <div className="mb-1 text-muted-foreground text-sm">Current Price</div>
+            <div className="font-bold text-2xl text-foreground sm:text-3xl">
               {formatPrice(market.currentPrice)}
             </div>
           </div>
 
           {authenticated && (
-            <div className="flex items-center justify-between bg-muted/40 rounded p-3 mb-4 text-sm">
+            <div className="mb-4 flex items-center justify-between rounded bg-muted/40 p-3 text-sm">
               <span className="flex items-center gap-2 text-muted-foreground">
-                <Wallet className="w-4 h-4" /> Balance
+                <Wallet className="h-4 w-4" /> Balance
               </span>
               <span className="font-semibold text-foreground">
                 {balanceLoading ? '...' : formatPrice(balance)}
@@ -204,11 +187,12 @@ export function PerpTradingModal({
             </div>
           )}
 
-          <div className="flex gap-2 mb-6">
+          <div className="mb-6 flex gap-2">
             <button
+              type="button"
               onClick={() => setSide('long')}
               className={cn(
-                'flex-1 py-3 rounded font-bold transition-all flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer',
+                'flex flex-1 cursor-pointer items-center justify-center gap-2 rounded py-3 font-bold text-sm transition-all sm:text-base',
                 side === 'long'
                   ? 'bg-green-600 text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted'
@@ -218,9 +202,10 @@ export function PerpTradingModal({
               LONG
             </button>
             <button
+              type="button"
               onClick={() => setSide('short')}
               className={cn(
-                'flex-1 py-3 rounded font-bold transition-all flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer',
+                'flex flex-1 cursor-pointer items-center justify-center gap-2 rounded py-3 font-bold text-sm transition-all sm:text-base',
                 side === 'short'
                   ? 'bg-red-600 text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted'
@@ -231,71 +216,77 @@ export function PerpTradingModal({
             </button>
           </div>
 
-          <div className="bg-muted rounded p-4 mb-6 space-y-4">
+          <div className="mb-6 space-y-4 rounded bg-muted p-4">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-muted-foreground">
+              <label
+                htmlFor="perp-trade-position-size"
+                className="font-medium text-muted-foreground text-sm"
+              >
                 Position Size (USD)
               </label>
               <input
+                id="perp-trade-position-size"
                 type="number"
                 value={size}
                 onChange={(event) => setSize(event.target.value)}
                 min={market.minOrderSize}
                 step="10"
-                className="w-32 px-3 py-1.5 rounded bg-background/50 text-foreground text-right font-medium focus:outline-none focus:bg-background focus:ring-2 focus:ring-[#0066FF]/30"
+                className="w-32 rounded bg-background/50 px-3 py-1.5 text-right font-medium text-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
                 placeholder={`Min: $${market.minOrderSize}`}
               />
             </div>
             <div>
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-muted-foreground">
+                <label
+                  htmlFor="perp-trade-leverage"
+                  className="font-medium text-muted-foreground text-sm"
+                >
                   Leverage
                 </label>
-                <span className="text-base font-bold text-foreground">
-                  {leverage}x
-                </span>
+                <span className="font-bold text-base text-foreground">{leverage}x</span>
               </div>
               <input
+                id="perp-trade-leverage"
                 type="range"
                 min="1"
                 max={market.maxLeverage}
                 value={leverage}
-                onChange={(event) => setLeverage(parseInt(event.target.value))}
-                className="w-full h-2 mt-2 bg-background rounded appearance-none cursor-pointer"
+                onChange={(event) => setLeverage(parseInt(event.target.value, 10))}
+                className="mt-2 h-2 w-full cursor-pointer appearance-none rounded bg-background"
               />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <div className="mt-1 flex justify-between text-muted-foreground text-xs">
                 <span>1x</span>
                 <span>{market.maxLeverage}x</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-muted/20 p-4 rounded mb-6">
+          <div className="mb-6 rounded bg-muted/20 p-4">
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <span className="text-muted-foreground">Margin Required</span>
-              <span className="font-bold text-foreground text-right">
+              <span className="text-right font-bold text-foreground">
                 {formatPrice(marginRequired)}
               </span>
 
               <span className="text-muted-foreground">Position Value</span>
-              <span className="font-bold text-foreground text-right">
+              <span className="text-right font-bold text-foreground">
                 {formatPrice(positionValue)}
               </span>
 
               <span className="text-muted-foreground">Entry Price</span>
-              <span className="font-medium text-foreground text-right">
+              <span className="text-right font-medium text-foreground">
                 {formatPrice(market.currentPrice)}
               </span>
 
               <span className="text-muted-foreground">Liquidation Price</span>
-              <span className="font-bold text-red-600 text-right">
+              <span className="text-right font-bold text-red-600">
                 {formatPrice(liquidationPrice)}
               </span>
 
               <span className="text-muted-foreground">Distance to Liq</span>
               <span
                 className={cn(
-                  'font-medium text-right',
+                  'text-right font-medium',
                   liquidationDistance > 5
                     ? 'text-green-600'
                     : liquidationDistance > 2
@@ -307,17 +298,16 @@ export function PerpTradingModal({
               </span>
 
               <span className="text-muted-foreground">
-                Est. Trading Fee (
-                {(FEE_CONFIG.TRADING_FEE_RATE * 100).toFixed(2)}%)
+                Est. Trading Fee ({(FEE_CONFIG.TRADING_FEE_RATE * 100).toFixed(2)}%)
               </span>
-              <span className="font-bold text-foreground text-right">
+              <span className="text-right font-bold text-foreground">
                 {formatPrice(estimatedFee)}
               </span>
 
               <span className="text-muted-foreground">Total Required</span>
               <span
                 className={cn(
-                  'font-bold text-right',
+                  'text-right font-bold',
                   showBalanceWarning ? 'text-red-600' : 'text-foreground'
                 )}
               >
@@ -327,10 +317,10 @@ export function PerpTradingModal({
           </div>
 
           {authenticated && sizeNum > 0 && (
-            <div className="text-xs text-muted-foreground mb-4">
+            <div className="mb-4 text-muted-foreground text-xs">
               Required amount includes estimated fees.
               {showBalanceWarning && (
-                <span className="text-red-500 font-semibold ml-1">
+                <span className="ml-1 font-semibold text-red-500">
                   Balance too low for this trade.
                 </span>
               )}
@@ -338,16 +328,13 @@ export function PerpTradingModal({
           )}
 
           {isHighRisk && (
-            <div className="flex items-start gap-2 p-3 bg-yellow-500/15 rounded-lg mb-4">
-              <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+            <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/15 p-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-500" />
               <div className="text-sm">
-                <div className="font-bold text-yellow-600 mb-1">
-                  High Risk Position
-                </div>
+                <div className="mb-1 font-bold text-yellow-600">High Risk Position</div>
                 <p className="text-muted-foreground">
                   {leverage > 50 && 'Leverage above 50x is extremely risky. '}
-                  {marginRequired > 1000 &&
-                    'This position requires significant margin. '}
+                  {marginRequired > 1000 && 'This position requires significant margin. '}
                   Small price movements can lead to liquidation.
                 </p>
               </div>
@@ -355,28 +342,21 @@ export function PerpTradingModal({
           )}
 
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={
-              loading ||
-              sizeNum < market.minOrderSize ||
-              showBalanceWarning ||
-              balanceLoading
+              loading || sizeNum < market.minOrderSize || showBalanceWarning || balanceLoading
             }
             className={cn(
-              'w-full py-3 rounded font-bold text-primary-foreground text-lg transition-all cursor-pointer flex items-center justify-center gap-2',
-              side === 'long'
-                ? 'bg-green-600 hover:bg-green-700'
-                : 'bg-red-600 hover:bg-red-700',
-              (loading ||
-                sizeNum < market.minOrderSize ||
-                showBalanceWarning ||
-                balanceLoading) &&
-                'opacity-50 cursor-not-allowed'
+              'flex w-full cursor-pointer items-center justify-center gap-2 rounded py-3 font-bold text-lg text-primary-foreground transition-all',
+              side === 'long' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700',
+              (loading || sizeNum < market.minOrderSize || showBalanceWarning || balanceLoading) &&
+                'cursor-not-allowed opacity-50'
             )}
           >
             {loading ? (
               <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                 Opening Position...
               </>
             ) : (

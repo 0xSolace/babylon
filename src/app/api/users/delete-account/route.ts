@@ -1,14 +1,14 @@
 /**
  * User Account Deletion API
- * 
+ *
  * @route POST /api/users/delete-account - Delete user account
  * @access Authenticated
- * 
+ *
  * @description
  * Permanently deletes user account and associated data (GDPR right to erasure).
  * Performs cascading deletion of user data while preserving anonymized data for
  * analytics. Includes blockchain data notice for on-chain registered users.
- * 
+ *
  * @openapi
  * /api/users/delete-account:
  *   post:
@@ -61,7 +61,7 @@
  *         description: Unauthorized
  *       404:
  *         description: User not found
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/users/delete-account', {
@@ -73,34 +73,34 @@
  *   })
  * });
  * ```
- * 
+ *
  * @see GDPR Article 17 - Right to erasure
  */
 
-import type { NextRequest } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { z } from 'zod'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 const DeleteAccountSchema = z.object({
   confirmation: z.literal('DELETE MY ACCOUNT'),
   reason: z.string().optional(),
-})
+});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  const authUser = await authenticate(request)
-  const userId = authUser.dbUserId ?? authUser.userId
+  const authUser = await authenticate(request);
+  const userId = authUser.dbUserId ?? authUser.userId;
 
-  const body = await request.json()
-  const { reason } = DeleteAccountSchema.parse(body)
+  const body = await request.json();
+  const { reason } = DeleteAccountSchema.parse(body);
 
   logger.info(
     'User requested account deletion',
     { userId, reason: reason || 'No reason provided' },
     'POST /api/users/delete-account'
-  )
+  );
 
   // Verify user exists
   const user = await prisma.user.findUnique({
@@ -112,10 +112,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       onChainRegistered: true,
       nftTokenId: true,
     },
-  })
+  });
 
   if (!user) {
-    return successResponse({ error: 'User not found' }, 404)
+    return successResponse({ error: 'User not found' }, 404);
   }
 
   // Important notice about blockchain data
@@ -126,73 +126,77 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         wallet_address: user.walletAddress,
         nft_token_id: user.nftTokenId,
       }
-    : null
+    : null;
 
   // Perform cascading deletion in a transaction
   // Note: Many relationships have onDelete: Cascade in schema, so Prisma handles them
   await prisma.$transaction(async (tx) => {
     // Delete related data that doesn't cascade automatically or needs special handling
-    
+
     // Delete referral relationships
     await tx.referral.updateMany({
       where: { referredUserId: userId },
       data: { referredUserId: null }, // Preserve referral record but disconnect user
-    })
+    });
 
     // Delete trading fees where user was referrer (set to null)
     await tx.tradingFee.updateMany({
       where: { referrerId: userId },
       data: { referrerId: null },
-    })
+    });
 
     // Anonymize feedback (preserve for AI training but disconnect from user)
     await tx.feedback.updateMany({
       where: { fromUserId: userId },
       data: { fromUserId: null },
-    })
+    });
 
     await tx.feedback.updateMany({
       where: { toUserId: userId },
       data: { toUserId: null },
-    })
+    });
 
     // Delete user actor follows
     await tx.userActorFollow.deleteMany({
       where: { userId },
-    })
+    });
 
     // Delete user interactions
     await tx.userInteraction.deleteMany({
       where: { userId },
-    })
+    });
 
     // Delete group chat memberships
     await tx.groupChatMembership.deleteMany({
       where: { userId },
-    })
+    });
 
     // Delete follow status
     await tx.followStatus.deleteMany({
       where: { userId },
-    })
+    });
 
     // Delete share actions
     await tx.shareAction.deleteMany({
       where: { userId },
-    })
+    });
 
     // Delete pool deposits
     await tx.poolDeposit.deleteMany({
       where: { userId },
-    })
+    });
 
     // Finally, delete the user (this will cascade to most other tables)
     await tx.user.delete({
       where: { id: userId },
-    })
+    });
 
-    logger.info('User account deleted successfully', { userId, username: user.username }, 'POST /api/users/delete-account')
-  })
+    logger.info(
+      'User account deleted successfully',
+      { userId, username: user.username },
+      'POST /api/users/delete-account'
+    );
+  });
 
   return successResponse({
     success: true,
@@ -209,6 +213,5 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       'Blockchain data (if any) remains permanently on the blockchain and cannot be deleted.',
       'If you registered via email, you may need to contact our authentication provider (Privy) to delete your auth account separately.',
     ],
-  })
-})
-
+  });
+});

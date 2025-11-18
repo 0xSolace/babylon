@@ -1,35 +1,35 @@
 /**
  * Metrics Visualizer
- * 
+ *
  * Generates visualizations and reports from benchmark results:
  * - P&L over time charts
  * - Prediction accuracy graphs
  * - Social metrics
  * - Comparison tables
  * - Performance scorecards
- * 
+ *
  * Outputs HTML reports and JSON data for further analysis.
  */
 
-import { promises as fs } from 'fs';
-import * as path from 'path';
-import type { SimulationResult } from './SimulationEngine';
-import type { BenchmarkComparisonResult } from './BenchmarkRunner';
 import { logger } from '@/lib/logger';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
+import type { BenchmarkComparisonResult } from './BenchmarkRunner';
+import type { SimulationResult } from './SimulationEngine';
 
-export interface VisualizationConfig {
+export type VisualizationConfig = {
   /** Output directory for visualizations */
   outputDir: string;
-  
+
   /** Generate HTML report */
   generateHtml: boolean;
-  
+
   /** Generate CSV exports */
   generateCsv: boolean;
-  
+
   /** Generate charts (requires chart library) */
   generateCharts: boolean;
-}
+};
 
 export class MetricsVisualizer {
   /**
@@ -40,33 +40,33 @@ export class MetricsVisualizer {
     config: VisualizationConfig
   ): Promise<void> {
     logger.info('Generating visualizations', { resultId: result.id });
-    
+
     await fs.mkdir(config.outputDir, { recursive: true });
-    
+
     // 1. Generate metrics summary
-    const summaryHtml = this.generateMetricsSummary(result);
+    const summaryHtml = MetricsVisualizer.generateMetricsSummary(result);
     await fs.writeFile(path.join(config.outputDir, 'summary.html'), summaryHtml);
-    
+
     // 2. Generate detailed metrics tables
-    const detailedHtml = this.generateDetailedMetrics(result);
+    const detailedHtml = MetricsVisualizer.generateDetailedMetrics(result);
     await fs.writeFile(path.join(config.outputDir, 'detailed.html'), detailedHtml);
-    
+
     // 3. Generate action timeline
-    const timelineHtml = this.generateActionTimeline(result);
+    const timelineHtml = MetricsVisualizer.generateActionTimeline(result);
     await fs.writeFile(path.join(config.outputDir, 'timeline.html'), timelineHtml);
-    
+
     // 4. Generate CSV exports if requested
     if (config.generateCsv) {
-      await this.exportToCsv(result, config.outputDir);
+      await MetricsVisualizer.exportToCsv(result, config.outputDir);
     }
-    
+
     // 5. Generate master report that links everything
-    const reportHtml = this.generateMasterReport(result);
+    const reportHtml = MetricsVisualizer.generateMasterReport(result);
     await fs.writeFile(path.join(config.outputDir, 'index.html'), reportHtml);
-    
+
     logger.info('Visualizations generated', { outputDir: config.outputDir });
   }
-  
+
   /**
    * Generate comparison visualization for multiple runs
    */
@@ -75,31 +75,31 @@ export class MetricsVisualizer {
     config: VisualizationConfig
   ): Promise<void> {
     logger.info('Generating comparison visualizations');
-    
+
     await fs.mkdir(config.outputDir, { recursive: true });
-    
+
     // 1. Generate comparison summary
-    const summaryHtml = this.generateComparisonSummary(comparison);
+    const summaryHtml = MetricsVisualizer.generateComparisonSummary(comparison);
     await fs.writeFile(path.join(config.outputDir, 'comparison.html'), summaryHtml);
-    
+
     // 2. Generate performance distribution charts
-    const distributionHtml = this.generateDistributionCharts(comparison);
+    const distributionHtml = MetricsVisualizer.generateDistributionCharts(comparison);
     await fs.writeFile(path.join(config.outputDir, 'distribution.html'), distributionHtml);
-    
+
     // 3. Export comparison data to CSV
     if (config.generateCsv) {
-      await this.exportComparisonToCsv(comparison, config.outputDir);
+      await MetricsVisualizer.exportComparisonToCsv(comparison, config.outputDir);
     }
-    
+
     logger.info('Comparison visualizations generated');
   }
-  
+
   /**
    * Generate metrics summary card
    */
   private static generateMetricsSummary(result: SimulationResult): string {
     const { metrics } = result;
-    
+
     return `
 <!DOCTYPE html>
 <html>
@@ -126,176 +126,55 @@ export class MetricsVisualizer {
       gap: 20px;
     }
     .metric-group {
-      background: #f9f9f9;
       padding: 16px;
-      border-radius: 6px;
-    }
-    .metric-group h3 {
-      margin-top: 0;
-      color: #333;
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .metric-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px solid #eee;
-    }
-    .metric-item:last-child {
-      border-bottom: none;
+      border-radius: 8px;
+      background: #f8fafc;
     }
     .metric-label {
-      color: #666;
+      color: #64748b;
       font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
     .metric-value {
+      font-size: 32px;
       font-weight: 600;
-      font-size: 16px;
-      color: #333;
-    }
-    .metric-value.positive {
-      color: #10b981;
-    }
-    .metric-value.negative {
-      color: #ef4444;
-    }
-    .score-badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .score-excellent { background: #d1fae5; color: #065f46; }
-    .score-good { background: #dbeafe; color: #1e40af; }
-    .score-fair { background: #fef3c7; color: #92400e; }
-    .score-poor { background: #fee2e2; color: #991b1b; }
-    h1 {
-      color: #111;
-      margin-bottom: 8px;
-    }
-    .subtitle {
-      color: #666;
-      margin-bottom: 32px;
+      color: #0f172a;
+      margin-top: 4px;
     }
   </style>
 </head>
 <body>
-  <h1>📊 Benchmark Results</h1>
-  <p class="subtitle">Agent: ${result.agentId} | Benchmark: ${result.benchmarkId}</p>
+  <h1>Benchmark Summary</h1>
   
-  <div class="card">
-    <h2>Overall Performance</h2>
-    <div class="metric-item">
-      <span class="metric-label">Total P&L</span>
-      <span class="metric-value ${metrics.totalPnl >= 0 ? 'positive' : 'negative'}">
-        ${metrics.totalPnl >= 0 ? '+' : ''}$${metrics.totalPnl.toFixed(2)}
-      </span>
+  <div class="card metric">
+    <div class="metric-group">
+      <div class="metric-label">Total P&L</div>
+      <div class="metric-value">$${metrics.totalPnl.toFixed(2)}</div>
     </div>
-    <div class="metric-item">
-      <span class="metric-label">Optimality Score</span>
-      <span class="metric-value">
-        ${metrics.optimalityScore.toFixed(1)}%
-        ${this.getScoreBadge(metrics.optimalityScore)}
-      </span>
+    <div class="metric-group">
+      <div class="metric-label">Prediction Accuracy</div>
+      <div class="metric-value">${(metrics.predictionMetrics.accuracy * 100).toFixed(1)}%</div>
     </div>
-    <div class="metric-item">
-      <span class="metric-label">Total Duration</span>
-      <span class="metric-value">${(metrics.timing.totalDuration / 1000).toFixed(1)}s</span>
+    <div class="metric-group">
+      <div class="metric-label">Perp Win Rate</div>
+      <div class="metric-value">${(metrics.perpMetrics.winRate * 100).toFixed(1)}%</div>
     </div>
-    <div class="metric-item">
-      <span class="metric-label">Avg Response Time</span>
-      <span class="metric-value">${metrics.timing.avgResponseTime.toFixed(0)}ms</span>
+    <div class="metric-group">
+      <div class="metric-label">Optimality Score</div>
+      <div class="metric-value">${metrics.optimalityScore.toFixed(1)}%</div>
     </div>
   </div>
-  
-  <div class="card">
-    <div class="metric">
-      <div class="metric-group">
-        <h3>Prediction Markets</h3>
-        <div class="metric-item">
-          <span class="metric-label">Total Positions</span>
-          <span class="metric-value">${metrics.predictionMetrics.totalPositions}</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Accuracy</span>
-          <span class="metric-value ${metrics.predictionMetrics.accuracy >= 0.6 ? 'positive' : ''}">${(metrics.predictionMetrics.accuracy * 100).toFixed(1)}%</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Correct</span>
-          <span class="metric-value positive">${metrics.predictionMetrics.correctPredictions}</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Incorrect</span>
-          <span class="metric-value negative">${metrics.predictionMetrics.incorrectPredictions}</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Avg P&L per Position</span>
-          <span class="metric-value ${metrics.predictionMetrics.avgPnlPerPosition >= 0 ? 'positive' : 'negative'}">
-            ${metrics.predictionMetrics.avgPnlPerPosition >= 0 ? '+' : ''}$${metrics.predictionMetrics.avgPnlPerPosition.toFixed(2)}
-          </span>
-        </div>
-      </div>
-      
-      <div class="metric-group">
-        <h3>Perpetual Futures</h3>
-        <div class="metric-item">
-          <span class="metric-label">Total Trades</span>
-          <span class="metric-value">${metrics.perpMetrics.totalTrades}</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Win Rate</span>
-          <span class="metric-value ${metrics.perpMetrics.winRate >= 0.5 ? 'positive' : ''}">${(metrics.perpMetrics.winRate * 100).toFixed(1)}%</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Profitable Trades</span>
-          <span class="metric-value positive">${metrics.perpMetrics.profitableTrades}</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Avg P&L per Trade</span>
-          <span class="metric-value ${metrics.perpMetrics.avgPnlPerTrade >= 0 ? 'positive' : 'negative'}">
-            ${metrics.perpMetrics.avgPnlPerTrade >= 0 ? '+' : ''}$${metrics.perpMetrics.avgPnlPerTrade.toFixed(2)}
-          </span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Max Drawdown</span>
-          <span class="metric-value negative">$${metrics.perpMetrics.maxDrawdown.toFixed(2)}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="card">
-    <h2>Social Engagement</h2>
-    <div class="metric-item">
-      <span class="metric-label">Posts Created</span>
-      <span class="metric-value">${metrics.socialMetrics.postsCreated}</span>
-    </div>
-    <div class="metric-item">
-      <span class="metric-label">Groups Joined</span>
-      <span class="metric-value">${metrics.socialMetrics.groupsJoined}</span>
-    </div>
-    <div class="metric-item">
-      <span class="metric-label">Reputation Gained</span>
-      <span class="metric-value ${metrics.socialMetrics.reputationGained >= 0 ? 'positive' : 'negative'}">
-        ${metrics.socialMetrics.reputationGained >= 0 ? '+' : ''}${metrics.socialMetrics.reputationGained}
-      </span>
-    </div>
-  </div>
-  
-  <p style="text-align: center; color: #999; margin-top: 40px;">
-    Generated: ${new Date().toLocaleString()}
-  </p>
 </body>
 </html>`;
   }
-  
+
   /**
    * Generate detailed metrics tables
    */
   private static generateDetailedMetrics(result: SimulationResult): string {
+    const { metrics } = result;
+
     return `
 <!DOCTYPE html>
 <html>
@@ -304,70 +183,76 @@ export class MetricsVisualizer {
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      max-width: 1400px;
+      max-width: 1200px;
       margin: 40px auto;
       padding: 20px;
       background: #f5f5f5;
     }
     table {
       width: 100%;
+      border-collapse: collapse;
       background: white;
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       margin-bottom: 20px;
     }
     th, td {
-      padding: 12px;
-      text-align: left;
-      border-bottom: 1px solid #eee;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e2e8f0;
     }
     th {
-      background: #f9f9f9;
+      background: #f8fafc;
+      text-align: left;
+      color: #475569;
       font-weight: 600;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #666;
     }
     tr:last-child td {
       border-bottom: none;
     }
-    .positive { color: #10b981; }
-    .negative { color: #ef4444; }
   </style>
 </head>
 <body>
-  <h1>Detailed Action Log</h1>
-  
+  <h1>Detailed Metrics</h1>
+
   <table>
-    <thead>
-      <tr>
-        <th>Tick</th>
-        <th>Type</th>
-        <th>Details</th>
-        <th>Duration</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${result.actions.map(action => `
-        <tr>
-          <td>#${action.tick}</td>
-          <td>${action.type}</td>
-          <td><code>${JSON.stringify(action.data)}</code></td>
-          <td>${action.duration}ms</td>
-        </tr>
-      `).join('')}
-    </tbody>
+    <tr><th colspan="2">Prediction Metrics</th></tr>
+    <tr><td>Accuracy</td><td>${(metrics.predictionMetrics.accuracy * 100).toFixed(2)}%</td></tr>
+    <tr><td>Total Positions</td><td>${metrics.predictionMetrics.totalPositions}</td></tr>
+    <tr><td>Correct Predictions</td><td>${metrics.predictionMetrics.correctPredictions}</td></tr>
+    <tr><td>Incorrect Predictions</td><td>${metrics.predictionMetrics.incorrectPredictions}</td></tr>
+  </table>
+
+  <table>
+    <tr><th colspan="2">Perpetual Metrics</th></tr>
+    <tr><td>Total Trades</td><td>${metrics.perpMetrics.totalTrades}</td></tr>
+    <tr><td>Profitable Trades</td><td>${metrics.perpMetrics.profitableTrades}</td></tr>
+    <tr><td>Win Rate</td><td>${(metrics.perpMetrics.winRate * 100).toFixed(1)}%</td></tr>
+  </table>
+
+  <table>
+    <tr><th colspan="2">Timing Metrics</th></tr>
+    <tr><td>Average Response Time</td><td>${metrics.timing.avgResponseTime.toFixed(0)}ms</td></tr>
+    <tr><td>Max Response Time</td><td>${metrics.timing.maxResponseTime.toFixed(0)}ms</td></tr>
+    <tr><td>Total Duration</td><td>${(metrics.timing.totalDuration / 1000).toFixed(1)}s</td></tr>
   </table>
 </body>
 </html>`;
   }
-  
+
   /**
-   * Generate action timeline
+   * Generate action timeline visualization
    */
   private static generateActionTimeline(result: SimulationResult): string {
+    const timeline = result.actions.map(
+      (action) => `
+        <div class="event">
+          <div class="time">Tick ${action.tick}</div>
+          <div class="type">${action.type}</div>
+          <div class="details">${JSON.stringify(action.data)}</div>
+        </div>
+      `
+    );
+
     return `
 <!DOCTYPE html>
 <html>
@@ -376,61 +261,67 @@ export class MetricsVisualizer {
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      max-width: 1200px;
+      max-width: 1000px;
       margin: 40px auto;
       padding: 20px;
       background: #f5f5f5;
     }
-    .timeline {
-      position: relative;
-      padding: 20px 0;
-    }
-    .timeline-item {
+    .event {
       background: white;
       border-radius: 8px;
       padding: 16px;
       margin-bottom: 12px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      position: relative;
-      padding-left: 80px;
+      border-left: 4px solid #3b82f6;
     }
-    .timeline-item::before {
-      content: '#' attr(data-tick);
-      position: absolute;
-      left: 16px;
-      top: 16px;
-      font-weight: 600;
-      color: #666;
+    .time {
       font-size: 14px;
+      color: #64748b;
+      margin-bottom: 8px;
     }
-    .action-type {
+    .type {
+      font-size: 16px;
       font-weight: 600;
-      color: #333;
-      margin-bottom: 4px;
+      color: #0f172a;
+      margin-bottom: 8px;
     }
-    .action-details {
-      color: #666;
-      font-size: 14px;
+    .details {
+      font-family: 'JetBrains Mono', 'Fira Mono', monospace;
+      font-size: 12px;
+      color: #475569;
     }
   </style>
 </head>
 <body>
   <h1>Action Timeline</h1>
-  <div class="timeline">
-    ${result.actions.map(action => `
-      <div class="timeline-item" data-tick="${action.tick}">
-        <div class="action-type">${action.type}</div>
-        <div class="action-details">${JSON.stringify(action.data)}</div>
-      </div>
-    `).join('')}
-  </div>
+  ${timeline.join('\n')}
 </body>
 </html>`;
   }
-  
-  /**
-   * Generate master report
-   */
+
+  private static async exportToCsv(result: SimulationResult, outputDir: string): Promise<void> {
+    const actionsCsv = [
+      'tick,type,data,duration',
+      ...result.actions.map(
+        (action) =>
+          `${action.tick},"${action.type}","${JSON.stringify(action.data).replace(/"/g, '""')}",${action.duration}`
+      ),
+    ].join('\n');
+
+    await fs.writeFile(path.join(outputDir, 'actions.csv'), actionsCsv);
+
+    const metricsCsv = [
+      'metric,value',
+      `total_pnl,${result.metrics.totalPnl}`,
+      `prediction_accuracy,${result.metrics.predictionMetrics.accuracy}`,
+      `perp_win_rate,${result.metrics.perpMetrics.winRate}`,
+      `optimality_score,${result.metrics.optimalityScore}`,
+      `avg_response_time,${result.metrics.timing.avgResponseTime}`,
+    ].join('\n');
+
+    await fs.writeFile(path.join(outputDir, 'metrics.csv'), metricsCsv);
+  }
+
   private static generateMasterReport(result: SimulationResult): string {
     return `
 <!DOCTYPE html>
@@ -440,53 +331,73 @@ export class MetricsVisualizer {
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      max-width: 800px;
+      max-width: 1200px;
       margin: 40px auto;
       padding: 20px;
-      background: #f5f5f5;
+      background: #0f172a;
+      color: white;
     }
-    .nav {
-      background: white;
-      border-radius: 8px;
+    .card {
+      background: rgba(255,255,255,0.08);
+      border-radius: 16px;
       padding: 24px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 16px;
+      border: 1px solid rgba(255,255,255,0.1);
     }
-    .nav a {
-      display: block;
-      padding: 12px 16px;
-      color: #333;
+    a {
+      color: #38bdf8;
       text-decoration: none;
-      border-radius: 6px;
-      margin-bottom: 8px;
-      transition: background 0.2s;
     }
-    .nav a:hover {
-      background: #f9f9f9;
+    .score-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-left: 8px;
     }
-    h1 {
-      color: #111;
+    .score-excellent {
+      background: rgba(16,185,129,0.15);
+      color: #34d399;
+    }
+    .score-good {
+      background: rgba(59,130,246,0.15);
+      color: #60a5fa;
+    }
+    .score-fair {
+      background: rgba(248,113,113,0.15);
+      color: #f87171;
+    }
+    .score-poor {
+      background: rgba(244,63,94,0.15);
+      color: #fb7185;
     }
   </style>
 </head>
 <body>
-  <h1>📊 Benchmark Report</h1>
-  <p>Agent: <strong>${result.agentId}</strong></p>
-  <p>Benchmark: <strong>${result.benchmarkId}</strong></p>
-  <p>Date: ${new Date(result.startTime).toLocaleString()}</p>
-  
-  <div class="nav">
+  <h1>Benchmark Report</h1>
+
+  <div class="card">
+    <h2>Overall Score ${MetricsVisualizer.getScoreBadge(result.metrics.optimalityScore)}</h2>
+    <p>Total P&L: $${result.metrics.totalPnl.toFixed(2)}</p>
+    <p>Accuracy: ${(result.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%</p>
+    <p>Perp Win Rate: ${(result.metrics.perpMetrics.winRate * 100).toFixed(1)}%</p>
+  </div>
+
+  <div class="card">
     <h2>Reports</h2>
-    <a href="summary.html">📈 Summary</a>
-    <a href="detailed.html">📋 Detailed Metrics</a>
-    <a href="timeline.html">⏱️ Action Timeline</a>
+    <ul>
+      <li><a href="./summary.html">Metrics Summary</a></li>
+      <li><a href="./detailed.html">Detailed Metrics</a></li>
+      <li><a href="./timeline.html">Action Timeline</a></li>
+      <li><a href="./metrics.csv">Metrics CSV</a></li>
+      <li><a href="./actions.csv">Actions CSV</a></li>
+    </ul>
   </div>
 </body>
 </html>`;
   }
-  
-  /**
-   * Generate comparison summary
-   */
+
   private static generateComparisonSummary(comparison: BenchmarkComparisonResult): string {
     return `
 <!DOCTYPE html>
@@ -501,99 +412,81 @@ export class MetricsVisualizer {
       padding: 20px;
       background: #f5f5f5;
     }
-    .card {
-      background: white;
-      border-radius: 8px;
-      padding: 24px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
     table {
       width: 100%;
       border-collapse: collapse;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
     }
     th, td {
-      padding: 12px;
-      text-align: left;
-      border-bottom: 1px solid #eee;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e2e8f0;
     }
     th {
-      background: #f9f9f9;
+      background: #f8fafc;
+      text-align: left;
       font-weight: 600;
     }
-    .positive { color: #10b981; }
-    .negative { color: #ef4444; }
   </style>
 </head>
 <body>
-  <h1>Benchmark Comparison (${comparison.runs.length} runs)</h1>
-  
-  <div class="card">
-    <h2>Summary Statistics</h2>
-    <table>
-      <tr>
-        <th>Metric</th>
-        <th>Average</th>
-        <th>Best</th>
-        <th>Worst</th>
-      </tr>
-      <tr>
-        <td>P&L</td>
-        <td class="${comparison.comparison.avgPnl >= 0 ? 'positive' : 'negative'}">$${comparison.comparison.avgPnl.toFixed(2)}</td>
-        <td>${comparison.comparison.bestRun}</td>
-        <td>${comparison.comparison.worstRun}</td>
-      </tr>
-      <tr>
-        <td>Accuracy</td>
-        <td>${(comparison.comparison.avgAccuracy * 100).toFixed(1)}%</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td>Optimality</td>
-        <td>${comparison.comparison.avgOptimality.toFixed(1)}%</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-    </table>
+  <h1>Benchmark Comparison</h1>
+
+  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+    <div style="background: white; padding: 16px; border-radius: 8px;">
+      <div style="color: #64748b; font-size: 14px;">Average P&L</div>
+      <div style="font-size: 32px; font-weight: 600;">$${comparison.comparison.avgPnl.toFixed(2)}</div>
+    </div>
+    <div style="background: white; padding: 16px; border-radius: 8px;">
+      <div style="color: #64748b; font-size: 14px;">Average Accuracy</div>
+      <div style="font-size: 32px; font-weight: 600;">${(
+        comparison.comparison.avgAccuracy * 100
+      ).toFixed(1)}%</div>
+    </div>
+    <div style="background: white; padding: 16px; border-radius: 8px;">
+      <div style="color: #64748b; font-size: 14px;">Average Optimality</div>
+      <div style="font-size: 32px; font-weight: 600;">${comparison.comparison.avgOptimality.toFixed(
+        1
+      )}%</div>
+    </div>
   </div>
-  
-  <div class="card">
-    <h2>Individual Runs</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Run</th>
-          <th>Total P&L</th>
-          <th>Accuracy</th>
-          <th>Optimality</th>
-          <th>Duration</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${comparison.runs.map((run, i) => `
+
+  <table>
+    <thead>
+      <tr>
+        <th>Run</th>
+        <th>Total P&L</th>
+        <th>Accuracy</th>
+        <th>Optimality</th>
+        <th>Duration</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${comparison.runs
+        .map(
+          (run, index) => `
           <tr>
-            <td>Run ${i + 1}</td>
-            <td class="${run.metrics.totalPnl >= 0 ? 'positive' : 'negative'}">$${run.metrics.totalPnl.toFixed(2)}</td>
+            <td>Run ${index + 1}</td>
+            <td>$${run.metrics.totalPnl.toFixed(2)}</td>
             <td>${(run.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%</td>
             <td>${run.metrics.optimalityScore.toFixed(1)}%</td>
             <td>${(run.metrics.timing.totalDuration / 1000).toFixed(1)}s</td>
           </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  </div>
+        `
+        )
+        .join('')}
+    </tbody>
+  </table>
 </body>
 </html>`;
   }
-  
-  /**
-   * Generate distribution charts
-   */
+
   private static generateDistributionCharts(comparison: BenchmarkComparisonResult): string {
-    const pnls = comparison.runs.map(r => r.metrics.totalPnl);
-    const accuracies = comparison.runs.map(r => r.metrics.predictionMetrics.accuracy * 100);
-    
+    const pnls = comparison.runs.map((run) => run.metrics.totalPnl);
+    const accuracies = comparison.runs.map((run) => run.metrics.predictionMetrics.accuracy * 100);
+    const maxPnl = Math.max(...pnls.map((pnl) => Math.abs(pnl))) || 1;
+
     return `
 <!DOCTYPE html>
 <html>
@@ -630,73 +523,51 @@ export class MetricsVisualizer {
 </head>
 <body>
   <h1>Performance Distribution</h1>
-  
+
   <div class="chart">
     <h2>P&L Distribution</h2>
-    ${pnls.map((pnl, i) => `
-      <div class="bar" style="width: ${Math.abs(pnl) / Math.max(...pnls.map(Math.abs)) * 100}%">
-        Run ${i + 1}: $${pnl.toFixed(2)}
+    ${pnls
+      .map(
+        (pnl, index) => `
+      <div class="bar" style="width: ${(Math.abs(pnl) / maxPnl) * 100}%">
+        Run ${index + 1}: $${pnl.toFixed(2)}
       </div>
-    `).join('')}
+    `
+      )
+      .join('')}
   </div>
-  
+
   <div class="chart">
     <h2>Accuracy Distribution</h2>
-    ${accuracies.map((acc, i) => `
-      <div class="bar" style="width: ${acc}%">
-        Run ${i + 1}: ${acc.toFixed(1)}%
+    ${accuracies
+      .map(
+        (accuracy, index) => `
+      <div class="bar" style="width: ${accuracy}%">
+        Run ${index + 1}: ${accuracy.toFixed(1)}%
       </div>
-    `).join('')}
+    `
+      )
+      .join('')}
   </div>
 </body>
 </html>`;
   }
-  
-  /**
-   * Export to CSV
-   */
-  private static async exportToCsv(result: SimulationResult, outputDir: string): Promise<void> {
-    // Actions CSV
-    const actionsCsv = [
-      'tick,type,data,duration',
-      ...result.actions.map(a => `${a.tick},"${a.type}","${JSON.stringify(a.data).replace(/"/g, '""')}",${a.duration}`)
-    ].join('\n');
-    
-    await fs.writeFile(path.join(outputDir, 'actions.csv'), actionsCsv);
-    
-    // Metrics CSV
-    const metricsCsv = [
-      'metric,value',
-      `total_pnl,${result.metrics.totalPnl}`,
-      `prediction_accuracy,${result.metrics.predictionMetrics.accuracy}`,
-      `perp_win_rate,${result.metrics.perpMetrics.winRate}`,
-      `optimality_score,${result.metrics.optimalityScore}`,
-      `avg_response_time,${result.metrics.timing.avgResponseTime}`,
-    ].join('\n');
-    
-    await fs.writeFile(path.join(outputDir, 'metrics.csv'), metricsCsv);
-  }
-  
-  /**
-   * Export comparison to CSV
-   */
+
   private static async exportComparisonToCsv(
     comparison: BenchmarkComparisonResult,
     outputDir: string
   ): Promise<void> {
     const csv = [
       'run,total_pnl,accuracy,optimality,duration',
-      ...comparison.runs.map((run, i) =>
-        `${i + 1},${run.metrics.totalPnl},${run.metrics.predictionMetrics.accuracy},${run.metrics.optimalityScore},${run.metrics.timing.totalDuration}`
-      )
+      ...comparison.runs.map(
+        (run, index) =>
+          `${index + 1},${run.metrics.totalPnl},${run.metrics.predictionMetrics.accuracy},${run.metrics.optimalityScore},${run.metrics.timing.totalDuration}`
+      ),
     ].join('\n');
-    
+
     await fs.writeFile(path.join(outputDir, 'comparison.csv'), csv);
   }
-  
-  /**
-   * Get score badge HTML
-   */
+
   private static getScoreBadge(score: number): string {
     if (score >= 80) return '<span class="score-badge score-excellent">Excellent</span>';
     if (score >= 60) return '<span class="score-badge score-good">Good</span>';

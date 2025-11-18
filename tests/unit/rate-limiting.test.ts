@@ -1,21 +1,21 @@
 /**
  * Rate Limiting Unit Tests
- * 
+ *
  * Tests for user-level rate limiting and duplicate detection
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
 import {
-  checkRateLimit,
+  DUPLICATE_DETECTION_CONFIGS,
+  checkDuplicate,
+  clearAllDuplicates,
+} from '@/lib/rate-limiting/duplicate-detector';
+import {
   RATE_LIMIT_CONFIGS,
+  checkRateLimit,
   clearAllRateLimits,
   getRateLimitStatus,
 } from '@/lib/rate-limiting/user-rate-limiter';
-import {
-  checkDuplicate,
-  DUPLICATE_DETECTION_CONFIGS,
-  clearAllDuplicates,
-} from '@/lib/rate-limiting/duplicate-detector';
+import { beforeEach, describe, expect, it } from 'bun:test';
 
 describe('Rate Limiting', () => {
   beforeEach(() => {
@@ -238,4 +238,3 @@ describe('Rate Limiting', () => {
     });
   });
 });
-

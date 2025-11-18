@@ -1,15 +1,15 @@
 /**
  * Agent Authentication API
- * 
+ *
  * @route POST /api/agents/auth - Authenticate agent
  * @access Public (with credentials)
- * 
+ *
  * @description
  * Secure authentication endpoint for autonomous Babylon agents. Provides
  * session-based authentication without requiring user Privy tokens. Agent
  * credentials are validated against environment variables, and successful
  * authentication returns a time-limited session token.
- * 
+ *
  * @openapi
  * /api/agents/auth:
  *   post:
@@ -54,7 +54,7 @@
  *         description: Invalid request format
  *       401:
  *         description: Invalid credentials
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/agents/auth', {
@@ -65,31 +65,31 @@
  *     agentSecret: process.env.AGENT_SECRET
  *   })
  * });
- * 
+ *
  * const { sessionToken, expiresIn } = await response.json();
- * 
+ *
  * // Use token for authenticated requests
  * await fetch('/api/some-endpoint', {
  *   headers: { 'Authorization': `Bearer ${sessionToken}` }
  * });
  * ```
- * 
+ *
  * @see {@link /lib/auth/agent-auth} Agent authentication implementation
  * @see {@link /examples/babylon-typescript-agent} Example agent usage
  */
 
-import type { NextRequest } from 'next/server';
-import { randomBytes } from 'crypto';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { AuthorizationError } from '@/lib/errors';
-import { AgentAuthSchema } from '@/lib/validation/schemas/agent';
-import { logger } from '@/lib/logger';
 import {
-  verifyAgentCredentials,
   cleanupExpiredSessions,
   createAgentSession,
   getSessionDuration,
+  verifyAgentCredentials,
 } from '@/lib/auth/agent-auth';
+import { AuthorizationError } from '@/lib/errors';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { AgentAuthSchema } from '@/lib/validation/schemas/agent';
+import { randomBytes } from 'node:crypto';
+import type { NextRequest } from 'next/server';
 
 /**
  * POST /api/agents/auth
@@ -100,7 +100,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Check if body is empty or not an object
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    throw new Error('Request body must be a JSON object containing agentId and agentSecret fields.');
+    throw new Error(
+      'Request body must be a JSON object containing agentId and agentSecret fields.'
+    );
   }
 
   const { agentId, agentSecret } = AgentAuthSchema.parse(body);

@@ -1,13 +1,13 @@
 /**
  * Prediction Market Price History API
- * 
+ *
  * @route GET /api/markets/predictions/[id]/history - Get price history
  * @access Public
- * 
+ *
  * @description
  * Returns price history for a prediction market including yes/no prices, share
  * counts, liquidity, and event types. Useful for charting and analytics.
- * 
+ *
  * @openapi
  * /api/markets/predictions/{id}/history:
  *   get:
@@ -64,22 +64,21 @@
  *                       timestamp:
  *                         type: string
  *                         format: date-time
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch(`/api/markets/predictions/${marketId}/history?limit=100`);
  * const { history } = await response.json();
  * ```
- * 
+ *
  * @see {@link /lib/services/prediction-price-history-service} Price history service
  */
 
-import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { PredictionPriceHistoryService } from '@/lib/services/prediction-price-history-service';
 import { PredictionMarketIdSchema } from '@/lib/validation/schemas';
+import type { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 const QuerySchema = z.object({
   limit: z
@@ -88,28 +87,27 @@ const QuerySchema = z.object({
     .default(200),
 });
 
-export const GET = withErrorHandling(async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) => {
-  const { id: marketId } = PredictionMarketIdSchema.parse(await context.params);
-  const { searchParams } = new URL(request.url);
-  const { limit } = QuerySchema.parse({ limit: searchParams.get('limit') });
+export const GET = withErrorHandling(
+  async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
+    const { id: marketId } = PredictionMarketIdSchema.parse(await context.params);
+    const { searchParams } = new URL(request.url);
+    const { limit } = QuerySchema.parse({ limit: searchParams.get('limit') });
 
-  const history = await PredictionPriceHistoryService.getHistory(marketId, limit);
+    const history = await PredictionPriceHistoryService.getHistory(marketId, limit);
 
-  return successResponse({
-    marketId,
-    history: history.reverse().map((point) => ({
-      id: point.id,
-      yesPrice: point.yesPrice,
-      noPrice: point.noPrice,
-      yesShares: Number(point.yesShares),
-      noShares: Number(point.noShares),
-      liquidity: Number(point.liquidity),
-      eventType: point.eventType,
-      source: point.source,
-      timestamp: point.createdAt.toISOString(),
-    })),
-  });
-});
+    return successResponse({
+      marketId,
+      history: history.reverse().map((point) => ({
+        id: point.id,
+        yesPrice: point.yesPrice,
+        noPrice: point.noPrice,
+        yesShares: Number(point.yesShares),
+        noShares: Number(point.noShares),
+        liquidity: Number(point.liquidity),
+        eventType: point.eventType,
+        source: point.source,
+        timestamp: point.createdAt.toISOString(),
+      })),
+    });
+  }
+);

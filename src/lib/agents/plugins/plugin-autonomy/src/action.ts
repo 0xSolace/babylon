@@ -1,18 +1,18 @@
 import {
   type Action,
   type ActionResult,
+  type HandlerCallback,
   type IAgentRuntime,
   type Memory,
   type State,
-  type HandlerCallback,
-  asUUID,
   type UUID,
+  asUUID,
 } from '@elizaos/core';
 import { v4 as uuidv4 } from 'uuid';
 
-interface AutonomyService {
+type AutonomyService = {
   getAutonomousRoomId?: () => string | undefined;
-}
+};
 
 /**
  * Send to Admin Action - allows agent to send messages to admin from autonomous context

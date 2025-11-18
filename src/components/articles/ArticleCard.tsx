@@ -1,9 +1,9 @@
 'use client';
 
-import { memo } from 'react';
+import { Avatar } from '@/components/shared/Avatar';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { Avatar } from '@/components/shared/Avatar';
+import { memo } from 'react';
 import { z } from 'zod';
 
 const _ArticleCardPostSchema = z.object({
@@ -48,10 +48,10 @@ export const ArticleCard = memo(function ArticleCard({
     timeAgo = `${diffHours}h ago`;
   } else {
     // Show date for articles older than 24 hours
-    timeAgo = publishedDate.toLocaleDateString('en-US', { 
-      month: 'short', 
+    timeAgo = publishedDate.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
-      year: publishedDate.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+      year: publishedDate.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
     });
   }
 
@@ -62,22 +62,23 @@ export const ArticleCard = memo(function ArticleCard({
   };
 
   return (
-    <article
+    <button
       className={cn(
         'px-4 py-3',
-        'hover:bg-muted/30 cursor-pointer transition-all duration-200',
+        'cursor-pointer transition-all duration-200 hover:bg-muted/30',
         'w-full overflow-hidden',
-        'border-b border-border/5',
+        'border-border/5 border-b',
         className
       )}
+      type="button"
       onClick={handleClick}
     >
       {/* Header: Avatar + Author + Timestamp */}
-      <div className="flex items-start gap-3 w-full mb-3">
+      <div className="mb-3 flex w-full items-start gap-3">
         {/* Avatar */}
         <Link
           href={`/profile/${post.authorId}`}
-          className="shrink-0 hover:opacity-80 transition-opacity"
+          className="shrink-0 transition-opacity hover:opacity-80"
           onClick={(e) => e.stopPropagation()}
         >
           <Avatar
@@ -90,56 +91,59 @@ export const ArticleCard = memo(function ArticleCard({
         </Link>
 
         {/* Author name and timestamp */}
-        <div className="flex items-start justify-between gap-3 flex-1 min-w-0">
-          <div className="flex flex-col min-w-0">
+        <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col">
             <Link
               href={`/profile/${post.authorId}`}
-              className="font-semibold text-lg sm:text-xl text-foreground hover:underline truncate"
+              className="truncate font-semibold text-foreground text-lg hover:underline sm:text-xl"
               onClick={(e) => e.stopPropagation()}
             >
               {post.authorName}
             </Link>
           </div>
-          <time className="text-muted-foreground text-base shrink-0 ml-2" title={publishedDate.toLocaleString()}>
+          <time
+            className="ml-2 shrink-0 text-base text-muted-foreground"
+            title={publishedDate.toLocaleString()}
+          >
             {timeAgo}
           </time>
         </div>
       </div>
 
       {/* Article Title with Read More Button */}
-      <div className="flex items-start justify-between gap-4 mb-3">
-        <h2 className="text-lg sm:text-xl font-bold text-foreground leading-tight flex-1">
+      <div className="mb-3 flex items-start justify-between gap-4">
+        <h2 className="flex-1 font-bold text-foreground text-lg leading-tight sm:text-xl">
           {post.articleTitle || 'Untitled Article'}
         </h2>
-        <button
-          className="inline-flex items-center gap-2 px-3 py-2 bg-[#0066FF] hover:bg-[#2952d9] text-primary-foreground text-sm font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0"
-          onClick={handleClick}
-        >
+        <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-[#0066FF] px-3 py-2 font-semibold text-primary-foreground text-sm transition-colors hover:bg-[#2952d9]">
           Read Full Article →
-        </button>
+        </span>
       </div>
 
       {/* Article Metadata */}
-      <div className="flex flex-wrap items-center gap-3 mb-3 text-sm text-muted-foreground">
+      <div className="mb-3 flex flex-wrap items-center gap-3 text-muted-foreground text-sm">
         {post.byline && <span>{post.byline}</span>}
-        {post.biasScore !== null && post.biasScore !== undefined && Math.abs(post.biasScore) >= 0.3 && (
-          <>
-            <span>·</span>
-            <span className={cn(
-              "text-xs font-semibold",
-              post.biasScore > 0 ? "text-green-500" : "text-red-500"
-            )}>
-              {post.biasScore > 0 ? '↗ Favorable' : '↘ Critical'}
-            </span>
-          </>
-        )}
+        {post.biasScore !== null &&
+          post.biasScore !== undefined &&
+          Math.abs(post.biasScore) >= 0.3 && (
+            <>
+              <span>·</span>
+              <span
+                className={cn(
+                  'font-semibold text-xs',
+                  post.biasScore > 0 ? 'text-green-500' : 'text-red-500'
+                )}
+              >
+                {post.biasScore > 0 ? '↗ Favorable' : '↘ Critical'}
+              </span>
+            </>
+          )}
       </div>
 
       {/* Article Summary */}
-      <div className="text-foreground leading-relaxed whitespace-pre-wrap break-words mb-3">
+      <div className="mb-3 whitespace-pre-wrap break-words text-foreground leading-relaxed">
         {post.content}
       </div>
-    </article>
+    </button>
   );
 });
-

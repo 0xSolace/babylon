@@ -1,35 +1,35 @@
 /**
  * Model Benchmark Service (For HuggingFace Integration)
- * 
+ *
  * Runs benchmark tests on trained RL models for HuggingFace upload decisions.
  * Compares new models against baselines and previous versions.
- * 
+ *
  * **Purpose:** Evaluate models for HuggingFace upload
  * **Used by:** HuggingFace integration, weekly CRON, CLI scripts
  * **Storage:** benchmark_results table (dedicated table)
  * **Focus:** Public model release, baseline comparison
- * 
+ *
  * **Note:** For training pipeline benchmarking, see BenchmarkService
- * 
+ *
  * @see BenchmarkService - For training pipeline evaluation
  */
 
-import { prisma } from '@/lib/prisma';
-import { BenchmarkRunner } from './BenchmarkRunner';
 import { agentRuntimeManager } from '@/lib/agents/runtime/AgentRuntimeManager';
 import { logger } from '@/lib/logger';
-import type { SimulationResult, SimulationMetrics } from './SimulationEngine';
-import { promises as fs } from 'fs';
-import * as path from 'path';
+import { prisma } from '@/lib/prisma';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
+import { BenchmarkRunner } from './BenchmarkRunner';
+import type { SimulationMetrics, SimulationResult } from './SimulationEngine';
 
-export interface ModelBenchmarkOptions {
+export type ModelBenchmarkOptions = {
   modelId: string;
   benchmarkPaths: string[]; // Paths to benchmark JSON files
   outputDir?: string;
   saveResults?: boolean;
-}
+};
 
-export interface ModelBenchmarkResult {
+export type ModelBenchmarkResult = {
   modelId: string;
   modelVersion: string;
   benchmarkId: string;
@@ -42,9 +42,9 @@ export interface ModelBenchmarkResult {
     optimalityDelta: number;
     improved: boolean;
   };
-}
+};
 
-export interface ModelComparisonResult {
+export type ModelComparisonResult = {
   newModel: {
     modelId: string;
     version: string;
@@ -61,15 +61,15 @@ export interface ModelComparisonResult {
     isImprovement: boolean;
   };
   recommendation: 'deploy' | 'keep_training' | 'baseline_better';
-}
+};
 
-export interface AverageMetrics {
+export type AverageMetrics = {
   totalPnl: number;
   accuracy: number;
   winRate: number;
   optimality: number;
   benchmarkCount: number;
-}
+};
 
 export class ModelBenchmarkService {
   /**
@@ -88,20 +88,26 @@ export class ModelBenchmarkService {
     }
 
     // Check if model already benchmarked
-    const existingBenchmarks = await this.getModelBenchmarks(options.modelId);
+    const existingBenchmarks = await ModelBenchmarkService.getModelBenchmarks(options.modelId);
     if (existingBenchmarks.length > 0 && !options.saveResults) {
-      logger.info('Model already benchmarked', { modelId: options.modelId, count: existingBenchmarks.length });
+      logger.info('Model already benchmarked', {
+        modelId: options.modelId,
+        count: existingBenchmarks.length,
+      });
       return existingBenchmarks;
     }
 
     // Create test agent for benchmarking
-    const testAgentId = await this.getOrCreateTestAgent();
-    
+    const testAgentId = await ModelBenchmarkService.getOrCreateTestAgent();
+
     const results: ModelBenchmarkResult[] = [];
 
     // Run each benchmark
     for (const benchmarkPath of options.benchmarkPaths) {
-      logger.info('Running benchmark', { benchmark: benchmarkPath, modelId: options.modelId });
+      logger.info('Running benchmark', {
+        benchmark: benchmarkPath,
+        modelId: options.modelId,
+      });
 
       try {
         // Get agent runtime (will use the RL model if configured)
@@ -113,7 +119,9 @@ export class ModelBenchmarkService {
           agentRuntime: runtime,
           agentUserId: testAgentId,
           saveTrajectory: false,
-          outputDir: options.outputDir || path.join(process.cwd(), 'benchmarks', 'model-results', model.version),
+          outputDir:
+            options.outputDir ||
+            path.join(process.cwd(), 'benchmarks', 'model-results', model.version),
           forceModel: model.storagePath, // Use the RL model
         });
 
@@ -128,11 +136,13 @@ export class ModelBenchmarkService {
         };
 
         // Compare to baseline if available
-        const baseline = await this.getBaselineBenchmark(benchmarkPath);
+        const baseline = await ModelBenchmarkService.getBaselineBenchmark(benchmarkPath);
         if (baseline) {
           benchmarkResult.comparisonToBaseline = {
             pnlDelta: simulationResult.metrics.totalPnl - baseline.totalPnl,
-            accuracyDelta: simulationResult.metrics.predictionMetrics.accuracy - baseline.predictionMetrics.accuracy,
+            accuracyDelta:
+              simulationResult.metrics.predictionMetrics.accuracy -
+              baseline.predictionMetrics.accuracy,
             optimalityDelta: simulationResult.metrics.optimalityScore - baseline.optimalityScore,
             improved: simulationResult.metrics.totalPnl > baseline.totalPnl,
           };
@@ -148,8 +158,8 @@ export class ModelBenchmarkService {
 
         // Save result if requested (to both database and files)
         if (options.saveResults) {
-          await this.saveBenchmarkResultToDatabase(benchmarkResult);
-          await this.saveBenchmarkResult(benchmarkResult);
+          await ModelBenchmarkService.saveBenchmarkResultToDatabase(benchmarkResult);
+          await ModelBenchmarkService.saveBenchmarkResult(benchmarkResult);
         }
       } catch (error) {
         logger.error('Benchmark failed', { benchmark: benchmarkPath, error });
@@ -158,9 +168,10 @@ export class ModelBenchmarkService {
 
     // Update model with aggregate benchmark score
     if (results.length > 0) {
-      const avgOptimality = results.reduce((sum, r) => sum + r.metrics.optimalityScore, 0) / results.length;
+      const avgOptimality =
+        results.reduce((sum, r) => sum + r.metrics.optimalityScore, 0) / results.length;
       const avgPnl = results.reduce((sum, r) => sum + r.metrics.totalPnl, 0) / results.length;
-      
+
       await prisma.trainedModel.update({
         where: { modelId: options.modelId },
         data: {
@@ -186,17 +197,19 @@ export class ModelBenchmarkService {
    */
   static async compareToBaseline(modelId: string): Promise<ModelComparisonResult> {
     // Get new model benchmarks
-    const newModelBenchmarks = await this.getModelBenchmarks(modelId);
-    
+    const newModelBenchmarks = await ModelBenchmarkService.getModelBenchmarks(modelId);
+
     if (newModelBenchmarks.length === 0) {
       throw new Error(`No benchmarks found for model: ${modelId}`);
     }
 
     // Calculate new model average metrics
-    const newModelMetrics = this.calculateAverageMetrics(newModelBenchmarks.map(b => b.metrics));
+    const newModelMetrics = ModelBenchmarkService.calculateAverageMetrics(
+      newModelBenchmarks.map((b) => b.metrics)
+    );
 
     // Get baseline benchmarks (use best baseline model)
-    const baselineMetrics = await this.getBaselineAverageMetrics();
+    const baselineMetrics = await ModelBenchmarkService.getBaselineAverageMetrics();
 
     // Calculate improvement
     const pnlDelta = newModelMetrics.totalPnl - baselineMetrics.totalPnl;
@@ -204,7 +217,7 @@ export class ModelBenchmarkService {
     const optimalityDelta = newModelMetrics.optimality - baselineMetrics.optimality;
 
     // Determine if this is an improvement (weighted score)
-    const improvementScore = 
+    const improvementScore =
       (pnlDelta > 0 ? 1 : 0) * 0.4 +
       (accuracyDelta > 0 ? 1 : 0) * 0.3 +
       (optimalityDelta > 0 ? 1 : 0) * 0.3;
@@ -223,7 +236,7 @@ export class ModelBenchmarkService {
     return {
       newModel: {
         modelId,
-        version: newModelBenchmarks[0]!.modelVersion,
+        version: newModelBenchmarks[0]?.modelVersion,
         avgMetrics: newModelMetrics,
       },
       baseline: {
@@ -254,16 +267,10 @@ export class ModelBenchmarkService {
       },
     });
 
-    return models.map(m => m.modelId);
+    return models.map((m) => m.modelId);
   }
 
-  /**
-   * Get model benchmark results
-   */
   private static async getModelBenchmarks(modelId: string): Promise<ModelBenchmarkResult[]> {
-    // For now, read from files
-    // In production, you'd store these in a database table
-    
     const benchmarksDir = path.join(process.cwd(), 'benchmarks', 'model-results');
     const results: ModelBenchmarkResult[] = [];
 
@@ -273,19 +280,19 @@ export class ModelBenchmarkService {
         select: { version: true },
       });
 
-      if (!model) return results;
+      if (!model) {
+        return results;
+      }
 
       const modelDir = path.join(benchmarksDir, model.version);
       const files = await fs.readdir(modelDir).catch(() => []);
 
       for (const file of files) {
-        if (file.endsWith('.json')) {
-          const filePath = path.join(modelDir, file);
-          const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-          
-          if (data.modelId === modelId) {
-            results.push(data);
-          }
+        if (!file.endsWith('.json')) continue;
+        const filePath = path.join(modelDir, file);
+        const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+        if (data.modelId === modelId) {
+          results.push(data);
         }
       }
     } catch (error) {
@@ -295,12 +302,9 @@ export class ModelBenchmarkService {
     return results;
   }
 
-  /**
-   * Save benchmark result to database
-   */
   private static async saveBenchmarkResultToDatabase(result: ModelBenchmarkResult): Promise<void> {
     const { generateSnowflakeId } = await import('@/lib/snowflake');
-    
+
     await prisma.benchmarkResult.create({
       data: {
         id: await generateSnowflakeId(),
@@ -313,22 +317,19 @@ export class ModelBenchmarkService {
         perpWinRate: result.metrics.perpMetrics.winRate,
         optimalityScore: result.metrics.optimalityScore,
         detailedMetrics: JSON.parse(JSON.stringify(result.metrics)),
-        baselinePnlDelta: result.comparisonToBaseline?.pnlDelta,
-        baselineAccuracyDelta: result.comparisonToBaseline?.accuracyDelta,
-        improved: result.comparisonToBaseline?.improved,
+        baselinePnlDelta: result.comparisonToBaseline?.pnlDelta ?? null,
+        baselineAccuracyDelta: result.comparisonToBaseline?.accuracyDelta ?? null,
+        improved: result.comparisonToBaseline?.improved ?? null,
         duration: result.metrics.timing.totalDuration,
       },
     });
-    
+
     logger.info('Benchmark result saved to database', {
       modelId: result.modelId,
       benchmarkId: result.benchmarkId,
     });
   }
 
-  /**
-   * Save benchmark result to file
-   */
   private static async saveBenchmarkResult(result: ModelBenchmarkResult): Promise<void> {
     const outputDir = path.join(process.cwd(), 'benchmarks', 'model-results', result.modelVersion);
     await fs.mkdir(outputDir, { recursive: true });
@@ -337,7 +338,7 @@ export class ModelBenchmarkService {
     const filePath = path.join(outputDir, filename);
 
     await fs.writeFile(filePath, JSON.stringify(result, null, 2));
-    
+
     logger.info('Benchmark result saved to file', { filePath });
   }
 
@@ -350,39 +351,36 @@ export class ModelBenchmarkService {
       orderBy: { runAt: 'desc' },
     });
 
-    return results.map(r => ({
+    return results.map((r) => ({
       modelId: r.modelId,
       modelVersion: '', // Not stored in results table
       benchmarkId: r.benchmarkId,
       benchmarkPath: r.benchmarkPath,
       runAt: r.runAt,
       metrics: r.detailedMetrics as unknown as SimulationMetrics,
-      comparisonToBaseline: r.baselinePnlDelta !== null ? {
-        pnlDelta: r.baselinePnlDelta!,
-        accuracyDelta: r.baselineAccuracyDelta!,
-        optimalityDelta: 0, // Not stored separately
-        improved: r.improved || false,
-      } : undefined,
+      comparisonToBaseline:
+        r.baselinePnlDelta !== null && r.baselineAccuracyDelta !== null
+          ? {
+              pnlDelta: r.baselinePnlDelta,
+              accuracyDelta: r.baselineAccuracyDelta,
+              optimalityDelta: 0, // Not stored separately
+              improved: r.improved || false,
+            }
+          : undefined,
     }));
   }
 
-  /**
-   * Get baseline benchmark for comparison
-   */
   private static async getBaselineBenchmark(benchmarkPath: string): Promise<SimulationMetrics | null> {
     try {
-      // Look for baseline result for this benchmark
       const baselinesDir = path.join(process.cwd(), 'benchmarks', 'baselines');
       const files = await fs.readdir(baselinesDir).catch(() => []);
 
       for (const file of files) {
-        if (file.endsWith('.json')) {
-          const filePath = path.join(baselinesDir, file);
-          const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-          
-          if (data.benchmark?.path === benchmarkPath || data.benchmark === benchmarkPath) {
-            return data.metrics;
-          }
+        if (!file.endsWith('.json')) continue;
+        const filePath = path.join(baselinesDir, file);
+        const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+        if (data.benchmark?.path === benchmarkPath || data.benchmark === benchmarkPath) {
+          return data.metrics;
         }
       }
     } catch (error) {
@@ -392,9 +390,6 @@ export class ModelBenchmarkService {
     return null;
   }
 
-  /**
-   * Calculate average metrics across multiple benchmark results
-   */
   private static calculateAverageMetrics(metricsArray: SimulationMetrics[]): AverageMetrics {
     if (metricsArray.length === 0) {
       return {
@@ -427,39 +422,30 @@ export class ModelBenchmarkService {
     };
   }
 
-  /**
-   * Get baseline average metrics
-   */
   private static async getBaselineAverageMetrics(): Promise<AverageMetrics> {
     const baselinesDir = path.join(process.cwd(), 'benchmarks', 'baselines');
     const metricsArray: SimulationMetrics[] = [];
 
     try {
       const files = await fs.readdir(baselinesDir).catch(() => []);
-
       for (const file of files) {
-        if (file.endsWith('.json')) {
-          const filePath = path.join(baselinesDir, file);
-          const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-          
-          if (data.metrics) {
-            metricsArray.push(data.metrics);
-          }
+        if (!file.endsWith('.json')) continue;
+        const filePath = path.join(baselinesDir, file);
+        const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+        if (data.metrics) {
+          metricsArray.push(data.metrics);
         }
       }
     } catch (error) {
       logger.warn('Could not load baseline metrics', { error });
     }
 
-    return this.calculateAverageMetrics(metricsArray);
+    return ModelBenchmarkService.calculateAverageMetrics(metricsArray);
   }
 
-  /**
-   * Get or create test agent for benchmarking
-   */
   private static async getOrCreateTestAgent(): Promise<string> {
     const testAgentUsername = 'model-benchmark-agent';
-    
+
     let agent = await prisma.user.findFirst({
       where: { username: testAgentUsername },
     });
@@ -468,10 +454,9 @@ export class ModelBenchmarkService {
       return agent.id;
     }
 
-    // Create new test agent
     const { generateSnowflakeId } = await import('@/lib/snowflake');
     const { ethers } = await import('ethers');
-    
+
     const agentId = await generateSnowflakeId();
     agent = await prisma.user.create({
       data: {
@@ -495,7 +480,7 @@ export class ModelBenchmarkService {
     });
 
     logger.info('Created model benchmark test agent', { agentId: agent.id });
-    
+
     return agent.id;
   }
 
@@ -509,7 +494,12 @@ export class ModelBenchmarkService {
     try {
       // First, look in benchmarks/standard/ directory
       const standardDir = path.join(benchmarksDir, 'standard');
-      if (await fs.access(standardDir).then(() => true).catch(() => false)) {
+      if (
+        await fs
+          .access(standardDir)
+          .then(() => true)
+          .catch(() => false)
+      ) {
         const standardFiles = await fs.readdir(standardDir);
         for (const file of standardFiles) {
           if (file.startsWith('standard-') && file.endsWith('.json')) {
@@ -520,7 +510,9 @@ export class ModelBenchmarkService {
 
       // If standard benchmarks found, use those
       if (standardBenchmarks.length > 0) {
-        logger.info(`Using ${standardBenchmarks.length} standard benchmarks from benchmarks/standard/`);
+        logger.info(
+          `Using ${standardBenchmarks.length} standard benchmarks from benchmarks/standard/`
+        );
         return standardBenchmarks;
       }
 
@@ -535,7 +527,11 @@ export class ModelBenchmarkService {
       // If still nothing, use any benchmark files
       if (standardBenchmarks.length === 0) {
         for (const file of files) {
-          if (file.startsWith('benchmark-') && file.endsWith('.json') && !file.includes('comparison')) {
+          if (
+            file.startsWith('benchmark-') &&
+            file.endsWith('.json') &&
+            !file.includes('comparison')
+          ) {
             const filePath = path.join(benchmarksDir, file);
             standardBenchmarks.push(filePath);
           }
@@ -546,10 +542,11 @@ export class ModelBenchmarkService {
     }
 
     if (standardBenchmarks.length === 0) {
-      logger.warn('No standard benchmarks found. Generate with: npx ts-node scripts/generate-standard-benchmarks.ts');
+      logger.warn(
+        'No standard benchmarks found. Generate with: npx ts-node scripts/generate-standard-benchmarks.ts'
+      );
     }
 
     return standardBenchmarks;
   }
 }
-

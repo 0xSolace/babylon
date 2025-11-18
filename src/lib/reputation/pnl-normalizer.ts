@@ -5,7 +5,7 @@
  * Uses sigmoid function to map unbounded ROI to bounded reputation score.
  */
 
-import type { Decimal } from '@prisma/client/runtime/library'
+import type { Decimal } from '@prisma/client/runtime/library';
 
 /**
  * Normalize PNL to 0-1 scale using sigmoid function
@@ -24,27 +24,27 @@ import type { Decimal } from '@prisma/client/runtime/library'
  * @returns Normalized score from 0 to 1
  */
 export function normalizePnL(pnl: number | Decimal, totalInvested: number | Decimal): number {
-  const pnlNum = typeof pnl === 'number' ? pnl : pnl.toNumber()
-  const investedNum = typeof totalInvested === 'number' ? totalInvested : totalInvested.toNumber()
+  const pnlNum = typeof pnl === 'number' ? pnl : pnl.toNumber();
+  const investedNum = typeof totalInvested === 'number' ? totalInvested : totalInvested.toNumber();
 
   // Handle edge cases
   if (investedNum === 0) {
-    return 0.5 // Neutral score if no investment
+    return 0.5; // Neutral score if no investment
   }
 
   if (pnlNum === 0) {
-    return 0.5 // Break-even = neutral
+    return 0.5; // Break-even = neutral
   }
 
   // Calculate ROI (return on investment)
-  const roi = pnlNum / investedNum
+  const roi = pnlNum / investedNum;
 
   // Apply sigmoid normalization
   // e^(-roi) for negative ROI dampening
-  const normalized = 1 / (1 + Math.exp(-roi))
+  const normalized = 1 / (1 + Math.exp(-roi));
 
   // Clamp to [0, 1] range (should already be in range, but safety check)
-  return Math.max(0, Math.min(1, normalized))
+  return Math.max(0, Math.min(1, normalized));
 }
 
 /**
@@ -57,12 +57,12 @@ export function normalizePnL(pnl: number | Decimal, totalInvested: number | Deci
  */
 export function denormalizePnL(normalized: number): number {
   // Clamp input to valid range
-  const clamped = Math.max(0.001, Math.min(0.999, normalized))
+  const clamped = Math.max(0.001, Math.min(0.999, normalized));
 
   // Inverse sigmoid
-  const roi = -Math.log(1 / clamped - 1)
+  const roi = -Math.log(1 / clamped - 1);
 
-  return roi
+  return roi;
 }
 
 /**
@@ -74,10 +74,10 @@ export function denormalizePnL(normalized: number): number {
  */
 export function calculateWinRate(profitableTrades: number, totalTrades: number): number {
   if (totalTrades === 0) {
-    return 0
+    return 0;
   }
 
-  return profitableTrades / totalTrades
+  return profitableTrades / totalTrades;
 }
 
 /**
@@ -88,17 +88,17 @@ export function calculateWinRate(profitableTrades: number, totalTrades: number):
  */
 export function calculateAverageROI(trades: Array<{ pnl: number; invested: number }>): number {
   if (trades.length === 0) {
-    return 0
+    return 0;
   }
 
   const totalROI = trades.reduce((sum, trade) => {
     if (trade.invested === 0) {
-      return sum
+      return sum;
     }
-    return sum + trade.pnl / trade.invested
-  }, 0)
+    return sum + trade.pnl / trade.invested;
+  }, 0);
 
-  return totalROI / trades.length
+  return totalROI / trades.length;
 }
 
 /**
@@ -113,23 +113,22 @@ export function calculateAverageROI(trades: Array<{ pnl: number; invested: numbe
  */
 export function calculateSharpeRatio(returns: number[], riskFreeRate = 0.02): number | null {
   if (returns.length < 2) {
-    return null // Need at least 2 returns for meaningful calculation
+    return null; // Need at least 2 returns for meaningful calculation
   }
 
   // Calculate average return
-  const avgReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
+  const avgReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
 
   // Calculate standard deviation (volatility)
-  const variance =
-    returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / (returns.length - 1)
-  const stdDev = Math.sqrt(variance)
+  const variance = returns.reduce((sum, r) => sum + (r - avgReturn) ** 2, 0) / (returns.length - 1);
+  const stdDev = Math.sqrt(variance);
 
   if (stdDev === 0) {
-    return null // No volatility = undefined Sharpe ratio
+    return null; // No volatility = undefined Sharpe ratio
   }
 
   // Sharpe ratio = (average return - risk-free rate) / standard deviation
-  return (avgReturn - riskFreeRate / 12) / stdDev // Divide risk-free rate by 12 for monthly
+  return (avgReturn - riskFreeRate / 12) / stdDev; // Divide risk-free rate by 12 for monthly
 }
 
 /**
@@ -139,11 +138,11 @@ export function calculateSharpeRatio(returns: number[], riskFreeRate = 0.02): nu
  * @returns Trust level string
  */
 export function getTrustLevel(reputationScore: number): string {
-  if (reputationScore < 20) return 'UNRATED'
-  if (reputationScore < 40) return 'LOW'
-  if (reputationScore < 60) return 'MEDIUM'
-  if (reputationScore < 80) return 'HIGH'
-  return 'EXCELLENT'
+  if (reputationScore < 20) return 'UNRATED';
+  if (reputationScore < 40) return 'LOW';
+  if (reputationScore < 60) return 'MEDIUM';
+  if (reputationScore < 80) return 'HIGH';
+  return 'EXCELLENT';
 }
 
 /**
@@ -160,14 +159,14 @@ export function calculateConfidenceScore(sampleSize: number): number {
   // Asymptotically approaches 1 as sample size grows
 
   if (sampleSize === 0) {
-    return 0
+    return 0;
   }
 
   // Confidence formula: 1 - e^(-samples/20)
   // Reaches ~50% confidence at 14 samples
   // Reaches ~75% confidence at 28 samples
   // Reaches ~90% confidence at 46 samples
-  const confidence = 1 - Math.exp(-sampleSize / 20)
+  const confidence = 1 - Math.exp(-sampleSize / 20);
 
-  return Math.max(0, Math.min(1, confidence))
+  return Math.max(0, Math.min(1, confidence));
 }

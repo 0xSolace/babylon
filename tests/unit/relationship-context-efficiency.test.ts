@@ -1,20 +1,20 @@
 /**
  * Relationship Context Efficiency Tests
- * 
+ *
  * Verifies that relationships are efficiently supplied in context
  */
 
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { PrismaClient } from '@prisma/client';
-import { RelationshipEvolutionEngine } from '@/engine/RelationshipEvolutionEngine';
 import { FeedGenerator } from '@/engine/FeedGenerator';
+import { RelationshipEvolutionEngine } from '@/engine/RelationshipEvolutionEngine';
 import { BabylonLLMClient } from '@/generator/llm/openai-client';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 describe('Relationship Context Efficiency', () => {
   let llmClient: BabylonLLMClient;
-  
+
   beforeAll(async () => {
     try {
       llmClient = new BabylonLLMClient();
@@ -25,10 +25,7 @@ describe('Relationship Context Efficiency', () => {
     // Create test relationship
     await prisma.actorRelationship.deleteMany({
       where: {
-        OR: [
-          { actor1Id: 'efficiency-test-1' },
-          { actor2Id: 'efficiency-test-1' },
-        ],
+        OR: [{ actor1Id: 'efficiency-test-1' }, { actor2Id: 'efficiency-test-1' }],
       },
     });
 
@@ -50,10 +47,7 @@ describe('Relationship Context Efficiency', () => {
   afterAll(async () => {
     await prisma.actorRelationship.deleteMany({
       where: {
-        OR: [
-          { actor1Id: 'efficiency-test-1' },
-          { actor2Id: 'efficiency-test-1' },
-        ],
+        OR: [{ actor1Id: 'efficiency-test-1' }, { actor2Id: 'efficiency-test-1' }],
       },
     });
     await prisma.actor.deleteMany({
@@ -90,7 +84,7 @@ describe('Relationship Context Efficiency', () => {
   test('context should be simple and directly usable in prompts', async () => {
     // Create a relationship for testing
     const engine = new RelationshipEvolutionEngine();
-    
+
     await prisma.actorRelationship.create({
       data: {
         id: 'test-rel-1',
@@ -115,12 +109,12 @@ describe('Relationship Context Efficiency', () => {
     // Should be directly injectable
     const prompt = `You are Test Actor.
 
-${context ? 'Your relationships:\n' + context : ''}
+${context ? `Your relationships:\n${context}` : ''}
 
 Write a post.`;
 
     expect(prompt).toContain('Your relationships:');
-    
+
     console.log('   ✅ Context is prompt-ready:');
     console.log(prompt);
   });
@@ -130,11 +124,10 @@ Write a post.`;
     const context = await engine.getRelationshipContextForActor('ailon-musk');
 
     // Should return empty or limited results
-    const lines = context.split('\n').filter(l => l.trim());
+    const lines = context.split('\n').filter((l) => l.trim());
     expect(lines.length).toBeLessThanOrEqual(5);
-    
+
     console.log(`   ✅ Limited to ${lines.length} relationships (efficient)`);
     console.log(`   ✅ Only top 5 strongest retrieved from database`);
   });
 });
-

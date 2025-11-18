@@ -4,28 +4,28 @@
  * Scans src/app/api directory and creates OpenAPI/Swagger documentation
  */
 
-import { promises as fs } from 'fs';
-import path from 'path';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 
-interface ApiParameter {
+type ApiParameter = {
   name: string;
   type: string;
   description?: string;
-}
+};
 
-interface ApiResponse {
+type ApiResponse = {
   status: string;
   description: string;
-}
+};
 
-interface ApiRoute {
+type ApiRoute = {
   path: string;
   methods: string[];
   description: string;
   parameters?: ApiParameter[];
   responses?: Record<string, ApiResponse>;
   tags?: string[];
-}
+};
 
 async function* walkDirectory(dir: string): AsyncGenerator<string> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -41,14 +41,14 @@ async function* walkDirectory(dir: string): AsyncGenerator<string> {
 
 async function extractApiInfo(filePath: string): Promise<ApiRoute | null> {
   const content = await fs.readFile(filePath, 'utf-8');
-  
+
   // Extract API path from file path
   const relativePath = path.relative(
     path.join(process.cwd(), '../src/app/api'),
     path.dirname(filePath)
   );
-  const apiPath = '/api/' + relativePath.replace(/\\/g, '/');
-  
+  const apiPath = `/api/${relativePath.replace(/\\/g, '/')}`;
+
   // Extract HTTP methods
   const methods: string[] = [];
   if (content.includes('export const GET')) methods.push('GET');
@@ -56,20 +56,20 @@ async function extractApiInfo(filePath: string): Promise<ApiRoute | null> {
   if (content.includes('export const PUT')) methods.push('PUT');
   if (content.includes('export const PATCH')) methods.push('PATCH');
   if (content.includes('export const DELETE')) methods.push('DELETE');
-  
+
   if (methods.length === 0) return null;
-  
+
   // Extract JSDoc comments
   const jsdocMatch = content.match(/\/\*\*([\s\S]*?)\*\//);
   let description = '';
   if (jsdocMatch) {
     description = jsdocMatch[1]
       .split('\n')
-      .map(line => line.replace(/^\s*\*\s?/, '').trim())
-      .filter(line => line.length > 0)
+      .map((line) => line.replace(/^\s*\*\s?/, '').trim())
+      .filter((line) => line.length > 0)
       .join(' ');
   }
-  
+
   // Determine tags based on path
   const tags: string[] = [];
   if (apiPath.includes('/markets')) tags.push('Markets');
@@ -80,7 +80,7 @@ async function extractApiInfo(filePath: string): Promise<ApiRoute | null> {
   else if (apiPath.includes('/posts')) tags.push('Social');
   else if (apiPath.includes('/pools')) tags.push('Pools');
   else tags.push('General');
-  
+
   return {
     path: apiPath,
     methods,
@@ -89,22 +89,22 @@ async function extractApiInfo(filePath: string): Promise<ApiRoute | null> {
   };
 }
 
-interface OpenAPIPath {
+type OpenAPIPath = {
   [method: string]: {
     summary: string;
     tags: string[];
     responses: Record<string, unknown>;
   };
-}
+};
 
 async function generateOpenAPISpec(routes: ApiRoute[]) {
   const paths: Record<string, OpenAPIPath> = {};
-  
+
   for (const route of routes) {
     if (!paths[route.path]) {
       paths[route.path] = {};
     }
-    
+
     for (const method of route.methods) {
       paths[route.path][method.toLowerCase()] = {
         summary: route.description || `${method} ${route.path}`,
@@ -133,7 +133,7 @@ async function generateOpenAPISpec(routes: ApiRoute[]) {
       };
     }
   }
-  
+
   const openApiSpec = {
     openapi: '3.0.0',
     info: {
@@ -157,7 +157,10 @@ async function generateOpenAPISpec(routes: ApiRoute[]) {
     ],
     tags: [
       { name: 'Authentication', description: 'User authentication endpoints' },
-      { name: 'Markets', description: 'Prediction market and perpetual futures endpoints' },
+      {
+        name: 'Markets',
+        description: 'Prediction market and perpetual futures endpoints',
+      },
       { name: 'Users', description: 'User profile and account management' },
       { name: 'Agents', description: 'Agent registration and management' },
       { name: 'A2A Protocol', description: 'Agent-to-agent communication' },
@@ -177,18 +180,21 @@ async function generateOpenAPISpec(routes: ApiRoute[]) {
       },
     },
   };
-  
+
   return openApiSpec;
 }
 
 async function generateMarkdownDocs(routes: ApiRoute[]) {
-  const groupedRoutes = routes.reduce((acc, route) => {
-    const tag = route.tags?.[0] || 'General';
-    if (!acc[tag]) acc[tag] = [];
-    acc[tag].push(route);
-    return acc;
-  }, {} as Record<string, ApiRoute[]>);
-  
+  const groupedRoutes = routes.reduce(
+    (acc, route) => {
+      const tag = route.tags?.[0] || 'General';
+      if (!acc[tag]) acc[tag] = [];
+      acc[tag].push(route);
+      return acc;
+    },
+    {} as Record<string, ApiRoute[]>
+  );
+
   let markdown = `# API Reference\n\n`;
   markdown += `Complete REST API documentation for Babylon.\n\n`;
   markdown += `## Base URL\n\n`;
@@ -196,10 +202,10 @@ async function generateMarkdownDocs(routes: ApiRoute[]) {
   markdown += `## Authentication\n\n`;
   markdown += `Most endpoints require authentication via Privy. Include the JWT token in the Authorization header:\n\n`;
   markdown += `\`\`\`\nAuthorization: Bearer YOUR_TOKEN\n\`\`\`\n\n`;
-  
+
   for (const [tag, tagRoutes] of Object.entries(groupedRoutes)) {
     markdown += `## ${tag}\n\n`;
-    
+
     for (const route of tagRoutes.sort((a, b) => a.path.localeCompare(b.path))) {
       markdown += `### ${route.methods.join(', ')} ${route.path}\n\n`;
       if (route.description) {
@@ -211,16 +217,16 @@ async function generateMarkdownDocs(routes: ApiRoute[]) {
       markdown += `---\n\n`;
     }
   }
-  
+
   return markdown;
 }
 
 async function main() {
   console.log('🔍 Scanning API routes...');
-  
+
   const apiDir = path.join(process.cwd(), '../src/app/api');
   const routes: ApiRoute[] = [];
-  
+
   for await (const filePath of walkDirectory(apiDir)) {
     const route = await extractApiInfo(filePath);
     if (route) {
@@ -228,9 +234,9 @@ async function main() {
       console.log(`  ✓ Found: ${route.methods.join(',')} ${route.path}`);
     }
   }
-  
+
   console.log(`\n📝 Found ${routes.length} API routes\n`);
-  
+
   // Generate OpenAPI spec
   console.log('📄 Generating OpenAPI spec...');
   const openApiSpec = await generateOpenAPISpec(routes);
@@ -238,7 +244,7 @@ async function main() {
   await fs.mkdir(path.dirname(specPath), { recursive: true });
   await fs.writeFile(specPath, JSON.stringify(openApiSpec, null, 2));
   console.log(`  ✓ Saved to public/openapi.json\n`);
-  
+
   // Generate Markdown docs
   console.log('📝 Generating Markdown documentation...');
   const markdown = await generateMarkdownDocs(routes);
@@ -246,9 +252,8 @@ async function main() {
   await fs.mkdir(path.dirname(mdPath), { recursive: true });
   await fs.writeFile(mdPath, markdown);
   console.log(`  ✓ Saved to app/api-reference/_generated/endpoints.mdx\n`);
-  
+
   console.log('✅ API documentation generated successfully!');
 }
 
 main().catch(console.error);
-

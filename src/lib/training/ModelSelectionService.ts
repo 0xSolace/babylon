@@ -1,16 +1,16 @@
 /**
  * Model Selection Service
- * 
+ *
  * Determines which base model to use for training based on:
  * 1. Number of available training bundles
  * 2. Existence of trained models
  * 3. Performance of previous models
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 
-export interface ModelSelectionResult {
+export type ModelSelectionResult = {
   modelId: string;
   modelPath: string;
   strategy: 'base' | 'continue' | 'force_first';
@@ -20,36 +20,36 @@ export interface ModelSelectionResult {
     bestModelScore?: number;
     baseModel?: string;
   };
-}
+};
 
-export interface TrainingBundle {
+export type TrainingBundle = {
   id: string;
   trajectoryCount: number;
   scenarioId: string | null;
   createdAt: Date;
-}
+};
 
 export class ModelSelectionService {
-  private readonly BASE_MODEL = 'OpenPipe/Qwen3-14B-Instruct';  // ONLY model available in W&B ART catalog
+  private readonly BASE_MODEL = 'OpenPipe/Qwen3-14B-Instruct'; // ONLY model available in W&B ART catalog
   private readonly BUNDLE_THRESHOLD = 1000;
   private readonly MIN_BUNDLES_FOR_TRAINING = 100;
   private readonly MAX_TRAINING_EXAMPLES = 2000;
 
   /**
    * Select base model for training
-   * 
+   *
    * Determines which model to use as the base for training based on available
    * training data and existing model performance.
-   * 
+   *
    * Decision tree:
    * 1. No models exist? → Force first model from base
    * 2. < 100 bundles? → Wait (not ready) - throws error
    * 3. < 1000 bundles? → Train from base model
    * 4. ≥ 1000 bundles? → Train from best performing model
-   * 
+   *
    * @returns ModelSelectionResult with selected model and strategy
    * @throws Error if insufficient training data (< 100 bundles)
-   * 
+   *
    * @example
    * ```typescript
    * const result = await modelSelectionService.selectBaseModel();
@@ -67,7 +67,11 @@ export class ModelSelectionService {
     const forceFirst = await this.shouldForceFirstModel();
 
     if (forceFirst) {
-      logger.info('No models exist - forcing first model creation', undefined, 'ModelSelectionService');
+      logger.info(
+        'No models exist - forcing first model creation',
+        undefined,
+        'ModelSelectionService'
+      );
       return {
         modelId: this.BASE_MODEL,
         modelPath: this.BASE_MODEL,
@@ -75,8 +79,8 @@ export class ModelSelectionService {
         reason: 'No trained models exist - creating first model from base',
         metadata: {
           baseModel: this.BASE_MODEL,
-          bundleCount  // Use actual count, not 0
-        }
+          bundleCount, // Use actual count, not 0
+        },
       };
     }
     logger.info(`Found ${bundleCount} training bundles`, undefined, 'ModelSelectionService');
@@ -85,7 +89,7 @@ export class ModelSelectionService {
     if (bundleCount < this.MIN_BUNDLES_FOR_TRAINING) {
       throw new Error(
         `Insufficient training data: ${bundleCount} bundles ` +
-        `(need ${this.MIN_BUNDLES_FOR_TRAINING} minimum)`
+          `(need ${this.MIN_BUNDLES_FOR_TRAINING} minimum)`
       );
     }
 
@@ -103,8 +107,8 @@ export class ModelSelectionService {
         reason: `Training from base model (${bundleCount} bundles < ${this.BUNDLE_THRESHOLD} threshold)`,
         metadata: {
           bundleCount,
-          baseModel: this.BASE_MODEL
-        }
+          baseModel: this.BASE_MODEL,
+        },
       };
     }
 
@@ -124,8 +128,8 @@ export class ModelSelectionService {
         reason: 'No previous models available - using base model',
         metadata: {
           bundleCount,
-          baseModel: this.BASE_MODEL
-        }
+          baseModel: this.BASE_MODEL,
+        },
       };
     }
 
@@ -133,7 +137,7 @@ export class ModelSelectionService {
       `Bundle count ${bundleCount} ≥ ${this.BUNDLE_THRESHOLD} - continuing from best model`,
       {
         bestModelId: bestModel.modelId,
-        bestScore: bestModel.benchmarkScore
+        bestScore: bestModel.benchmarkScore,
       },
       'ModelSelectionService'
     );
@@ -149,19 +153,19 @@ export class ModelSelectionService {
       metadata: {
         bundleCount,
         bestModelScore: bestModel.benchmarkScore || undefined,
-        baseModel: bestModel.baseModel
-      }
+        baseModel: bestModel.baseModel,
+      },
     };
   }
 
   /**
    * Get best performing model based on benchmark scores
-   * 
+   *
    * Finds the trained model with the highest benchmark score that is
    * ready or deployed. Used for continuing training from a strong baseline.
-   * 
+   *
    * @returns Best performing model record, or null if none found
-   * 
+   *
    * @remarks
    * Only considers models with status 'ready' or 'deployed' and
    * non-null benchmark scores.
@@ -170,11 +174,11 @@ export class ModelSelectionService {
     const model = await prisma.trainedModel.findFirst({
       where: {
         status: { in: ['ready', 'deployed'] },
-        benchmarkScore: { not: null }
+        benchmarkScore: { not: null },
       },
       orderBy: {
-        benchmarkScore: 'desc'
-      }
+        benchmarkScore: 'desc',
+      },
     });
 
     if (!model) {
@@ -188,7 +192,7 @@ export class ModelSelectionService {
         modelId: model.modelId,
         version: model.version,
         benchmarkScore: model.benchmarkScore,
-        avgReward: model.avgReward
+        avgReward: model.avgReward,
       },
       'ModelSelectionService'
     );
@@ -198,13 +202,13 @@ export class ModelSelectionService {
 
   /**
    * Count available training bundles
-   * 
+   *
    * A "bundle" is a trajectory that:
    * - Is marked as training data
    * - Has been scored (aiJudgeReward IS NOT NULL)
    * - Has not been used in training yet
    * - Has valid steps data (not 'null' or '[]')
-   * 
+   *
    * @returns Number of available training bundles
    */
   async countTrainingBundles(): Promise<number> {
@@ -215,12 +219,9 @@ export class ModelSelectionService {
         aiJudgeReward: { not: null },
         // Exclude string representations of null/empty
         NOT: {
-          OR: [
-            { stepsJson: 'null' },
-            { stepsJson: '[]' }
-          ]
-        }
-      }
+          OR: [{ stepsJson: 'null' }, { stepsJson: '[]' }],
+        },
+      },
     });
 
     return count;
@@ -228,10 +229,10 @@ export class ModelSelectionService {
 
   /**
    * Check if we should force first model creation
-   * 
+   *
    * Returns true if no trained models exist yet, indicating we should
    * create the first model from the base model.
-   * 
+   *
    * @returns True if no models exist, false otherwise
    */
   async shouldForceFirstModel(): Promise<boolean> {
@@ -245,8 +246,8 @@ export class ModelSelectionService {
   private async countTrainedModels(): Promise<number> {
     const count = await prisma.trainedModel.count({
       where: {
-        status: { in: ['training', 'ready', 'deployed'] }
-      }
+        status: { in: ['training', 'ready', 'deployed'] },
+      },
     });
 
     return count;
@@ -254,11 +255,11 @@ export class ModelSelectionService {
 
   /**
    * Get training data limit based on bundle count
-   * 
+   *
    * Determines how many trajectories to use for training:
    * - < 1000 bundles: Use all available (returns null)
    * - ≥ 1000 bundles: Cap at 2000 most recent
-   * 
+   *
    * @returns Limit number (2000) or null to use all available
    */
   async getTrainingDataLimit(): Promise<number | null> {
@@ -273,13 +274,13 @@ export class ModelSelectionService {
 
   /**
    * Get trajectories for training (with optional limit)
-   * 
+   *
    * Retrieves scored trajectories that haven't been used in training yet.
    * Orders by most recent first to prioritize fresh data.
-   * 
+   *
    * @param limit - Optional limit on number of trajectories to return
    * @returns Array of training trajectories
-   * 
+   *
    * @remarks
    * Filters to only include:
    * - isTrainingData: true
@@ -294,19 +295,16 @@ export class ModelSelectionService {
       aiJudgeReward: { not: null },
       // Exclude string representations of null/empty
       NOT: {
-        OR: [
-          { stepsJson: 'null' },
-          { stepsJson: '[]' }
-        ]
-      }
+        OR: [{ stepsJson: 'null' }, { stepsJson: '[]' }],
+      },
     };
 
     const trajectories = await prisma.trajectory.findMany({
       where,
       orderBy: {
-        createdAt: 'desc' // Most recent first
+        createdAt: 'desc', // Most recent first
       },
-      take: limit || undefined
+      take: limit || undefined,
     });
 
     logger.info(
@@ -320,12 +318,12 @@ export class ModelSelectionService {
 
   /**
    * Get model selection summary for logging/monitoring
-   * 
+   *
    * Provides a comprehensive summary of the current model selection state,
    * including bundle counts, model availability, and recommendations.
-   * 
+   *
    * @returns Summary object with counts, best model info, and recommendation
-   * 
+   *
    * @example
    * ```typescript
    * const summary = await modelSelectionService.getSelectionSummary();
@@ -360,11 +358,10 @@ export class ModelSelectionService {
       trainedModelCount,
       bestModel: bestModel?.modelId || null,
       bestScore: bestModel?.benchmarkScore || null,
-      recommendation
+      recommendation,
     };
   }
 }
 
 // Export singleton instance
 export const modelSelectionService = new ModelSelectionService();
-

@@ -1,20 +1,20 @@
 /**
  * Benchmark RL Model
- * 
+ *
  * Run standardized benchmarks on a trained RL model and save results.
- * 
+ *
  * Usage:
  *   npx ts-node scripts/benchmark-rl-model.ts --model=babylon-agent-v1.0.0
  */
 
 import { ModelBenchmarkService } from '@/lib/benchmark/ModelBenchmarkService';
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 
 async function main() {
   const args = process.argv.slice(2);
 
-  const modelId = args.find(a => a.startsWith('--model='))?.split('=')[1];
+  const modelId = args.find((a) => a.startsWith('--model='))?.split('=')[1];
   const compare = args.includes('--compare');
   const save = !args.includes('--no-save');
 
@@ -25,20 +25,22 @@ async function main() {
     console.log('\nOptions:');
     console.log('  --model=ID     Model ID from database (required)');
     console.log('  --compare      Compare to baseline');
-    console.log('  --no-save      Don\'t save results to files');
+    console.log("  --no-save      Don't save results to files");
     console.log('\nExamples:');
     console.log('  # Benchmark and save results');
     console.log('  npx ts-node scripts/benchmark-rl-model.ts --model=babylon-agent-v1.0.0');
     console.log('');
     console.log('  # Benchmark and compare to baseline');
-    console.log('  npx ts-node scripts/benchmark-rl-model.ts --model=babylon-agent-v1.0.0 --compare');
+    console.log(
+      '  npx ts-node scripts/benchmark-rl-model.ts --model=babylon-agent-v1.0.0 --compare'
+    );
     process.exit(1);
   }
 
   console.log('\n╔════════════════════════════════════════════════════════╗');
   console.log('║       RL MODEL BENCHMARKING                            ║');
   console.log('╚════════════════════════════════════════════════════════╝\n');
-  
+
   console.log(`Model ID: ${modelId}`);
   console.log(`Compare to Baseline: ${compare ? 'yes' : 'no'}`);
   console.log(`Save Results: ${save ? 'yes' : 'no'}\n`);
@@ -70,7 +72,9 @@ async function main() {
     }
 
     console.log(`Found ${benchmarkPaths.length} standard benchmarks:`);
-    benchmarkPaths.forEach(p => console.log(`  - ${p}`));
+    for (const path of benchmarkPaths) {
+      console.log(`  - ${path}`);
+    }
     console.log('');
 
     // Run benchmarks
@@ -94,30 +98,43 @@ async function main() {
       console.log(`   Run at: ${result.runAt.toISOString()}`);
       console.log(`   ────────────────────────────────`);
       console.log(`   P&L:        ${result.metrics.totalPnl.toFixed(2)}`);
-      console.log(`   Accuracy:   ${(result.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%`);
+      console.log(
+        `   Accuracy:   ${(result.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%`
+      );
       console.log(`   Win Rate:   ${(result.metrics.perpMetrics.winRate * 100).toFixed(1)}%`);
       console.log(`   Optimality: ${result.metrics.optimalityScore.toFixed(1)}`);
-      
+
       if (result.comparisonToBaseline) {
         console.log(`   ────────────────────────────────`);
         console.log('   vs Baseline:');
         const pnlDelta = result.comparisonToBaseline.pnlDelta;
         const accDelta = result.comparisonToBaseline.accuracyDelta;
         const optDelta = result.comparisonToBaseline.optimalityDelta;
-        
-        console.log(`     P&L:        ${pnlDelta > 0 ? '📈 +' : pnlDelta < 0 ? '📉 ' : '➡️  '}${pnlDelta.toFixed(2)}`);
-        console.log(`     Accuracy:   ${accDelta > 0 ? '📈 +' : accDelta < 0 ? '📉 ' : '➡️  '}${(accDelta * 100).toFixed(1)}%`);
-        console.log(`     Optimality: ${optDelta > 0 ? '📈 +' : optDelta < 0 ? '📉 ' : '➡️  '}${optDelta.toFixed(1)}`);
-        console.log(`     Improved:   ${result.comparisonToBaseline.improved ? '✅ Yes' : '❌ No'}`);
+
+        console.log(
+          `     P&L:        ${pnlDelta > 0 ? '📈 +' : pnlDelta < 0 ? '📉 ' : '➡️  '}${pnlDelta.toFixed(2)}`
+        );
+        console.log(
+          `     Accuracy:   ${accDelta > 0 ? '📈 +' : accDelta < 0 ? '📉 ' : '➡️  '}${(accDelta * 100).toFixed(1)}%`
+        );
+        console.log(
+          `     Optimality: ${optDelta > 0 ? '📈 +' : optDelta < 0 ? '📉 ' : '➡️  '}${optDelta.toFixed(1)}`
+        );
+        console.log(
+          `     Improved:   ${result.comparisonToBaseline.improved ? '✅ Yes' : '❌ No'}`
+        );
       }
       console.log('');
     }
 
     // Calculate averages
     const avgPnl = results.reduce((sum, r) => sum + r.metrics.totalPnl, 0) / results.length;
-    const avgAccuracy = results.reduce((sum, r) => sum + r.metrics.predictionMetrics.accuracy, 0) / results.length;
-    const avgWinRate = results.reduce((sum, r) => sum + r.metrics.perpMetrics.winRate, 0) / results.length;
-    const avgOptimality = results.reduce((sum, r) => sum + r.metrics.optimalityScore, 0) / results.length;
+    const avgAccuracy =
+      results.reduce((sum, r) => sum + r.metrics.predictionMetrics.accuracy, 0) / results.length;
+    const avgWinRate =
+      results.reduce((sum, r) => sum + r.metrics.perpMetrics.winRate, 0) / results.length;
+    const avgOptimality =
+      results.reduce((sum, r) => sum + r.metrics.optimalityScore, 0) / results.length;
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('              AVERAGE PERFORMANCE            ');
@@ -146,10 +163,18 @@ async function main() {
       console.log(`  Optimality: ${comparison.baseline.avgMetrics.optimality.toFixed(1)}`);
       console.log('');
       console.log('Improvement:');
-      console.log(`  P&L Delta:        ${comparison.improvement.pnlDelta > 0 ? '+' : ''}${comparison.improvement.pnlDelta.toFixed(2)}`);
-      console.log(`  Accuracy Delta:   ${comparison.improvement.accuracyDelta > 0 ? '+' : ''}${(comparison.improvement.accuracyDelta * 100).toFixed(1)}%`);
-      console.log(`  Optimality Delta: ${comparison.improvement.optimalityDelta > 0 ? '+' : ''}${comparison.improvement.optimalityDelta.toFixed(1)}`);
-      console.log(`  Is Improvement:   ${comparison.improvement.isImprovement ? '✅ Yes' : '❌ No'}`);
+      console.log(
+        `  P&L Delta:        ${comparison.improvement.pnlDelta > 0 ? '+' : ''}${comparison.improvement.pnlDelta.toFixed(2)}`
+      );
+      console.log(
+        `  Accuracy Delta:   ${comparison.improvement.accuracyDelta > 0 ? '+' : ''}${(comparison.improvement.accuracyDelta * 100).toFixed(1)}%`
+      );
+      console.log(
+        `  Optimality Delta: ${comparison.improvement.optimalityDelta > 0 ? '+' : ''}${comparison.improvement.optimalityDelta.toFixed(1)}`
+      );
+      console.log(
+        `  Is Improvement:   ${comparison.improvement.isImprovement ? '✅ Yes' : '❌ No'}`
+      );
       console.log('');
       console.log(`📋 Recommendation: ${comparison.recommendation.toUpperCase()}\n`);
     }
@@ -168,11 +193,8 @@ async function main() {
   }
 }
 
-main().catch(async error => {
+main().catch(async (error) => {
   console.error('Fatal error:', error);
   await prisma.$disconnect();
   process.exit(1);
 });
-
-
-

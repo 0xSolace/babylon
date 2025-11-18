@@ -2,10 +2,10 @@
  * Tests for TrendingTopicsEngine
  */
 
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
-import { TrendingTopicsEngine } from '../TrendingTopicsEngine';
-import type { FeedPost } from '@/shared/types';
 import type { BabylonLLMClient } from '@/generator/llm/openai-client';
+import type { FeedPost } from '@/shared/types';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { TrendingTopicsEngine } from '../TrendingTopicsEngine';
 
 describe('TrendingTopicsEngine', () => {
   let engine: TrendingTopicsEngine;
@@ -16,11 +16,20 @@ describe('TrendingTopicsEngine', () => {
     mockLLM = {
       generateJSON: mock(async () => ({
         trends: [
-          { trendName: 'AI Revolution', description: 'Major breakthroughs in AI technology reshaping the industry.' },
-          { trendName: 'Tech Regulation', description: 'Government proposes new tech oversight framework.' },
-          { trendName: 'Crypto Comeback', description: 'Digital assets rally amid positive sentiment.' },
-        ]
-      }))
+          {
+            trendName: 'AI Revolution',
+            description: 'Major breakthroughs in AI technology reshaping the industry.',
+          },
+          {
+            trendName: 'Tech Regulation',
+            description: 'Government proposes new tech oversight framework.',
+          },
+          {
+            trendName: 'Crypto Comeback',
+            description: 'Digital assets rally amid positive sentiment.',
+          },
+        ],
+      })),
     } as unknown as BabylonLLMClient;
 
     engine = new TrendingTopicsEngine(mockLLM);
@@ -73,7 +82,7 @@ describe('TrendingTopicsEngine', () => {
       mockLLM.generateJSON = mock(async () => ({
         trends: [
           { trendName: '', description: '' }, // Empty!
-        ]
+        ],
       }));
 
       const posts: FeedPost[] = [
@@ -90,7 +99,7 @@ describe('TrendingTopicsEngine', () => {
 
       await engine.updateTrends(posts, 10);
       const trends = engine.getTrends();
-      
+
       // Should use fallbacks for empty values
       expect(trends[0]?.trendName).toBe('ai'); // Fallback to tag
       expect(trends[0]?.description).toContain('posts discussing'); // Fallback description
@@ -157,15 +166,15 @@ describe('TrendingTopicsEngine', () => {
       const trends = engine.getTrends();
 
       // Crypto should rank higher due to recency despite same count
-      const cryptoTrend = trends.find(t => t.tag === 'crypto');
+      const cryptoTrend = trends.find((t) => t.tag === 'crypto');
       expect(cryptoTrend).toBeDefined();
-      expect(cryptoTrend!.recency).toBeGreaterThan(0.9);
+      expect(cryptoTrend?.recency).toBeGreaterThan(0.9);
     });
 
     it('should limit to top 5 trends', async () => {
       const posts: FeedPost[] = [];
       const tags = ['ai', 'crypto', 'tech', 'web3', 'gaming', 'social', 'finance'];
-      
+
       tags.forEach((tag, i) => {
         posts.push({
           id: `post-${i}`,
@@ -280,4 +289,3 @@ describe('TrendingTopicsEngine', () => {
     });
   });
 });
-

@@ -1,18 +1,18 @@
 /**
  * NPC Interaction Tracker
- * 
+ *
  * Tracks all user interactions with NPCs:
  * - Replies to NPC posts
  * - Likes on NPC posts
  * - Shares/retweets of NPC posts
- * 
+ *
  * Calculates engagement scores for group invite eligibility
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 
-export interface NPCInteractionScore {
+export type NPCInteractionScore = {
   userId: string;
   npcId: string;
   replyCount: number;
@@ -23,25 +23,14 @@ export interface NPCInteractionScore {
   engagementScore: number; // 0-100 score
   isEligibleForInvite: boolean;
   reasons: string[];
-}
+};
 
-export interface InteractionWindow {
+export type InteractionWindow = {
   startDate: Date;
   endDate: Date;
-}
+};
 
 export class NPCInteractionTracker {
-  // Thresholds for healthy engagement
-  private static readonly MIN_REPLIES = 3;
-  private static readonly MIN_LIKES = 5;
-  private static readonly MIN_TOTAL_INTERACTIONS = 10;
-  private static readonly MAX_INTERACTIONS_PER_DAY = 50; // Prevent spam
-  
-  // Weights for engagement score
-  private static readonly REPLY_WEIGHT = 3.0; // Replies are most valuable
-  private static readonly LIKE_WEIGHT = 1.0;
-  private static readonly SHARE_WEIGHT = 2.0;
-
   /**
    * Track a like interaction
    */
@@ -69,8 +58,12 @@ export class NPCInteractionTracker {
     // We don't need to store individual likes in UserInteraction
     // They're already in the Reaction table
     // This method is just for validation
-    
-    logger.debug(`User ${userId} liked NPC ${post.authorId}'s post`, undefined, 'NPCInteractionTracker');
+
+    logger.debug(
+      `User ${userId} liked NPC ${post.authorId}'s post`,
+      undefined,
+      'NPCInteractionTracker'
+    );
   }
 
   /**
@@ -99,8 +92,12 @@ export class NPCInteractionTracker {
 
     // We don't need to store individual shares in UserInteraction
     // They're already in the Share table
-    
-    logger.debug(`User ${userId} shared NPC ${post.authorId}'s post`, undefined, 'NPCInteractionTracker');
+
+    logger.debug(
+      `User ${userId} shared NPC ${post.authorId}'s post`,
+      undefined,
+      'NPCInteractionTracker'
+    );
   }
 
   /**
@@ -131,7 +128,7 @@ export class NPCInteractionTracker {
       },
     });
 
-    const npcPostIds = npcPosts.map(p => p.id);
+    const npcPostIds = npcPosts.map((p) => p.id);
 
     // Count replies (from UserInteraction table)
     const replyInteractions = await prisma.userInteraction.findMany({
@@ -149,9 +146,10 @@ export class NPCInteractionTracker {
     });
 
     const replyCount = replyInteractions.length;
-    const avgQualityScore = replyCount > 0
-      ? replyInteractions.reduce((sum, i) => sum + i.qualityScore, 0) / replyCount
-      : 0;
+    const avgQualityScore =
+      replyCount > 0
+        ? replyInteractions.reduce((sum, i) => sum + i.qualityScore, 0) / replyCount
+        : 0;
 
     // Count likes
     const likeCount = await prisma.reaction.count({
@@ -185,12 +183,12 @@ export class NPCInteractionTracker {
     const totalInteractions = replyCount + likeCount + shareCount;
 
     // Calculate engagement score (0-100)
-    const replyScore = replyCount * this.REPLY_WEIGHT;
-    const likeScore = likeCount * this.LIKE_WEIGHT;
-    const shareScore = shareCount * this.SHARE_WEIGHT;
-    
+    const replyScore = replyCount * NPCInteractionTracker.REPLY_WEIGHT;
+    const likeScore = likeCount * NPCInteractionTracker.LIKE_WEIGHT;
+    const shareScore = shareCount * NPCInteractionTracker.SHARE_WEIGHT;
+
     const rawScore = replyScore + likeScore + shareScore;
-    
+
     // Normalize to 0-100 scale (cap at reasonable max)
     const maxExpectedScore = 100; // Roughly 20 replies + 20 likes + 10 shares
     const engagementScore = Math.min(100, (rawScore / maxExpectedScore) * 100);
@@ -203,26 +201,28 @@ export class NPCInteractionTracker {
     const reasons: string[] = [];
     let isEligible = true;
 
-    if (replyCount < this.MIN_REPLIES) {
+    if (replyCount < NPCInteractionTracker.MIN_REPLIES) {
       isEligible = false;
-      reasons.push(`Need ${this.MIN_REPLIES - replyCount} more replies`);
+      reasons.push(`Need ${NPCInteractionTracker.MIN_REPLIES - replyCount} more replies`);
     }
 
-    if (likeCount < this.MIN_LIKES) {
+    if (likeCount < NPCInteractionTracker.MIN_LIKES) {
       isEligible = false;
-      reasons.push(`Need ${this.MIN_LIKES - likeCount} more likes`);
+      reasons.push(`Need ${NPCInteractionTracker.MIN_LIKES - likeCount} more likes`);
     }
 
-    if (totalInteractions < this.MIN_TOTAL_INTERACTIONS) {
+    if (totalInteractions < NPCInteractionTracker.MIN_TOTAL_INTERACTIONS) {
       isEligible = false;
-      reasons.push(`Need ${this.MIN_TOTAL_INTERACTIONS - totalInteractions} more total interactions`);
+      reasons.push(
+        `Need ${NPCInteractionTracker.MIN_TOTAL_INTERACTIONS - totalInteractions} more total interactions`
+      );
     }
 
     // Check for spam (too many interactions per day)
     const daysSinceStart = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
     const interactionsPerDay = totalInteractions / daysSinceStart;
-    
-    if (interactionsPerDay > this.MAX_INTERACTIONS_PER_DAY) {
+
+    if (interactionsPerDay > NPCInteractionTracker.MAX_INTERACTIONS_PER_DAY) {
       isEligible = false;
       reasons.push('Too many interactions per day (possible spam)');
     }
@@ -264,10 +264,12 @@ export class NPCInteractionTracker {
     const interactions = await prisma.userInteraction.findMany({
       where: {
         npcId,
-        timestamp: window ? {
-          gte: window.startDate,
-          lte: window.endDate,
-        } : undefined,
+        timestamp: window
+          ? {
+              gte: window.startDate,
+              lte: window.endDate,
+            }
+          : undefined,
       },
       select: {
         userId: true,
@@ -275,17 +277,15 @@ export class NPCInteractionTracker {
       distinct: ['userId'],
     });
 
-    const userIds = interactions.map(i => i.userId);
+    const userIds = interactions.map((i) => i.userId);
 
     // Calculate scores for each user
     const scores = await Promise.all(
-      userIds.map(userId => this.calculateEngagementScore(userId, npcId, window))
+      userIds.map((userId) => NPCInteractionTracker.calculateEngagementScore(userId, npcId, window))
     );
 
     // Sort by engagement score and return top N
-    return scores
-      .sort((a, b) => b.engagementScore - a.engagementScore)
-      .slice(0, limit);
+    return scores.sort((a, b) => b.engagementScore - a.engagementScore).slice(0, limit);
   }
 
   /**
@@ -295,10 +295,12 @@ export class NPCInteractionTracker {
     const interactions = await prisma.userInteraction.findMany({
       where: {
         userId,
-        timestamp: window ? {
-          gte: window.startDate,
-          lte: window.endDate,
-        } : undefined,
+        timestamp: window
+          ? {
+              gte: window.startDate,
+              lte: window.endDate,
+            }
+          : undefined,
       },
       select: {
         npcId: true,
@@ -306,7 +308,6 @@ export class NPCInteractionTracker {
       distinct: ['npcId'],
     });
 
-    return interactions.map(i => i.npcId);
+    return interactions.map((i) => i.npcId);
   }
 }
-

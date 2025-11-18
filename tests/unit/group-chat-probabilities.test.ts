@@ -3,13 +3,13 @@
  * Verifies the math for user retention and NPC dynamics
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 describe('Group Chat Probabilities - Mathematical Verification', () => {
   // Constants from the implementation
   const TICKS_PER_HOUR = 60;
   const TICKS_PER_DAY = 1440;
-  
+
   const BASE_KICK_PROBABILITY = 0.00007;
   const NPC_JOIN_PROBABILITY = 0.0007;
   const NPC_LEAVE_PROBABILITY = 0.0007;
@@ -163,9 +163,9 @@ describe('Group Chat Probabilities - Mathematical Verification', () => {
       // 1 post per day = good participation
       // Multiplier: 1×
       // Kick prob: 0.00007
-      
+
       const kickProb = BASE_KICK_PROBABILITY * 1;
-      const expectedDays = (1 / kickProb) / TICKS_PER_DAY;
+      const expectedDays = 1 / kickProb / TICKS_PER_DAY;
 
       expect(expectedDays).toBeCloseTo(9.92, 0.5);
       expect(expectedDays).toBeGreaterThan(9);
@@ -174,7 +174,7 @@ describe('Group Chat Probabilities - Mathematical Verification', () => {
 
     test('user who never posts is kicked in hours, not days', () => {
       const kickProb = BASE_KICK_PROBABILITY * 100;
-      const expectedHours = (1 / kickProb) / TICKS_PER_HOUR;
+      const expectedHours = 1 / kickProb / TICKS_PER_HOUR;
 
       expect(expectedHours).toBeLessThan(5);
       expect(expectedHours).toBeGreaterThan(1);
@@ -200,7 +200,7 @@ describe('Group Chat Probabilities - Mathematical Verification', () => {
       // All should be close to 1 (slow dynamics)
       expect(joinsPerDay).toBeCloseTo(1, 0.1);
       expect(leavesPerDay).toBeCloseTo(1, 0.1);
-      
+
       // Posts per group should be 10-20 per day
       expect(postsPerGroupPerDay).toBeGreaterThan(10);
       expect(postsPerGroupPerDay).toBeLessThan(20);
@@ -230,7 +230,7 @@ describe('Group Chat Probabilities - Mathematical Verification', () => {
 
     test('multipliers create reasonable kick times', () => {
       const multipliers = [1, 3, 5, 10, 20, 100];
-      
+
       for (const mult of multipliers) {
         const kickProb = BASE_KICK_PROBABILITY * mult;
         const expectedTicks = 1 / kickProb;
@@ -244,4 +244,3 @@ describe('Group Chat Probabilities - Mathematical Verification', () => {
     });
   });
 });
-

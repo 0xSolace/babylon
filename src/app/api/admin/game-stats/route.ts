@@ -1,13 +1,13 @@
 /**
  * Admin Game Statistics API
- * 
+ *
  * @route GET /api/admin/game-stats - Get game statistics
  * @access Admin
- * 
+ *
  * @description
  * Returns comprehensive game simulation statistics including game state,
  * content generation metrics, LLM usage, and rate calculations (per minute).
- * 
+ *
  * @openapi
  * /api/admin/game-stats:
  *   get:
@@ -37,7 +37,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const stats = await fetch('/api/admin/game-stats', {
@@ -46,11 +46,11 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { prisma } from '@/lib/prisma';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   // Require admin authentication
@@ -69,40 +69,40 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const [
     // Game state
     gameState,
-    
+
     // Total counts
     totalPosts,
     totalArticles,
     totalGroupChats,
     totalChatMessages,
     totalLLMCalls,
-    
+
     // Recent counts (last 24 hours)
     postsLast24h,
     articlesLast24h,
     groupChatsLast24h,
     messagesLast24h,
     llmCallsLast24h,
-    
+
     // Recent counts (last hour)
     postsLastHour,
     articlesLastHour,
     groupChatsLastHour,
     messagesLastHour,
     llmCallsLastHour,
-    
+
     // Recent counts (last 5 minutes)
     postsLast5Min,
     articlesLast5Min,
     messagesLast5Min,
     llmCallsLast5Min,
-    
+
     // Recent counts (last minute)
     postsLastMinute,
     articlesLastMinute,
     messagesLastMinute,
     llmCallsLastMinute,
-    
+
     // Token usage stats (last 24h)
     llmTokenStats,
   ] = await Promise.all([
@@ -120,7 +120,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         speed: true,
       },
     }),
-    
+
     // Total counts
     prisma.post.count({
       where: { type: 'post', deletedAt: null },
@@ -133,24 +133,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     }),
     prisma.message.count(),
     prisma.llmCallLog.count(),
-    
+
     // Last 24 hours
     prisma.post.count({
-      where: { 
+      where: {
         type: 'post',
         deletedAt: null,
         createdAt: { gte: twentyFourHoursAgo },
       },
     }),
     prisma.post.count({
-      where: { 
+      where: {
         type: 'article',
         deletedAt: null,
         createdAt: { gte: twentyFourHoursAgo },
       },
     }),
     prisma.chat.count({
-      where: { 
+      where: {
         isGroup: true,
         createdAt: { gte: twentyFourHoursAgo },
       },
@@ -161,24 +161,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.llmCallLog.count({
       where: { timestamp: { gte: twentyFourHoursAgo } },
     }),
-    
+
     // Last hour
     prisma.post.count({
-      where: { 
+      where: {
         type: 'post',
         deletedAt: null,
         createdAt: { gte: oneHourAgo },
       },
     }),
     prisma.post.count({
-      where: { 
+      where: {
         type: 'article',
         deletedAt: null,
         createdAt: { gte: oneHourAgo },
       },
     }),
     prisma.chat.count({
-      where: { 
+      where: {
         isGroup: true,
         createdAt: { gte: oneHourAgo },
       },
@@ -189,17 +189,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.llmCallLog.count({
       where: { timestamp: { gte: oneHourAgo } },
     }),
-    
+
     // Last 5 minutes
     prisma.post.count({
-      where: { 
+      where: {
         type: 'post',
         deletedAt: null,
         createdAt: { gte: fiveMinutesAgo },
       },
     }),
     prisma.post.count({
-      where: { 
+      where: {
         type: 'article',
         deletedAt: null,
         createdAt: { gte: fiveMinutesAgo },
@@ -211,17 +211,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.llmCallLog.count({
       where: { timestamp: { gte: fiveMinutesAgo } },
     }),
-    
+
     // Last minute
     prisma.post.count({
-      where: { 
+      where: {
         type: 'post',
         deletedAt: null,
         createdAt: { gte: oneMinuteAgo },
       },
     }),
     prisma.post.count({
-      where: { 
+      where: {
         type: 'article',
         deletedAt: null,
         createdAt: { gte: oneMinuteAgo },
@@ -233,7 +233,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.llmCallLog.count({
       where: { timestamp: { gte: oneMinuteAgo } },
     }),
-    
+
     // LLM token usage (last 24h)
     prisma.llmCallLog.aggregate({
       where: { timestamp: { gte: twentyFourHoursAgo } },
@@ -257,22 +257,19 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Calculate tick statistics
-  const uptimeMs = gameState.startedAt 
-    ? now.getTime() - gameState.startedAt.getTime()
-    : 0;
+  const uptimeMs = gameState.startedAt ? now.getTime() - gameState.startedAt.getTime() : 0;
   const uptimeMinutes = uptimeMs / (1000 * 60);
   const uptimeHours = uptimeMinutes / 60;
-  
+
   // Calculate time since last tick
   const timeSinceLastTickMs = gameState.lastTickAt
     ? now.getTime() - gameState.lastTickAt.getTime()
     : null;
-  
+
   // Estimate total ticks (based on game speed and uptime)
   const tickIntervalMs = gameState.speed || 60000;
-  const estimatedTotalTicks = gameState.isRunning && gameState.startedAt
-    ? Math.floor(uptimeMs / tickIntervalMs)
-    : 0;
+  const estimatedTotalTicks =
+    gameState.isRunning && gameState.startedAt ? Math.floor(uptimeMs / tickIntervalMs) : 0;
 
   // Calculate per-minute rates
   const rates = {
@@ -281,24 +278,25 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     articlesPerMinute: articlesLastMinute,
     messagesPerMinute: messagesLastMinute,
     llmCallsPerMinute: llmCallsLastMinute,
-    
+
     // Average per minute over last hour
     postsPerMinuteAvgHour: uptimeMinutes > 60 ? postsLastHour / 60 : 0,
     articlesPerMinuteAvgHour: uptimeMinutes > 60 ? articlesLastHour / 60 : 0,
     messagesPerMinuteAvgHour: uptimeMinutes > 60 ? messagesLastHour / 60 : 0,
     llmCallsPerMinuteAvgHour: uptimeMinutes > 60 ? llmCallsLastHour / 60 : 0,
-    
+
     // Average per minute over last 24 hours
     postsPerMinuteAvgDay: uptimeMinutes > 0 ? postsLast24h / Math.min(uptimeMinutes, 1440) : 0,
-    articlesPerMinuteAvgDay: uptimeMinutes > 0 ? articlesLast24h / Math.min(uptimeMinutes, 1440) : 0,
-    messagesPerMinuteAvgDay: uptimeMinutes > 0 ? messagesLast24h / Math.min(uptimeMinutes, 1440) : 0,
-    llmCallsPerMinuteAvgDay: uptimeMinutes > 0 ? llmCallsLast24h / Math.min(uptimeMinutes, 1440) : 0,
+    articlesPerMinuteAvgDay:
+      uptimeMinutes > 0 ? articlesLast24h / Math.min(uptimeMinutes, 1440) : 0,
+    messagesPerMinuteAvgDay:
+      uptimeMinutes > 0 ? messagesLast24h / Math.min(uptimeMinutes, 1440) : 0,
+    llmCallsPerMinuteAvgDay:
+      uptimeMinutes > 0 ? llmCallsLast24h / Math.min(uptimeMinutes, 1440) : 0,
   };
 
   // Calculate messages per group chat
-  const avgMessagesPerChat = totalGroupChats > 0 
-    ? totalChatMessages / totalGroupChats 
-    : 0;
+  const avgMessagesPerChat = totalGroupChats > 0 ? totalChatMessages / totalGroupChats : 0;
 
   return successResponse({
     gameState: {
@@ -370,10 +368,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       totalPromptTokens24h: llmTokenStats._sum.promptTokens || 0,
       totalCompletionTokens24h: llmTokenStats._sum.completionTokens || 0,
       totalTokens24h: llmTokenStats._sum.totalTokens || 0,
-      avgLatencyMs24h: llmTokenStats._avg.latencyMs 
+      avgLatencyMs24h: llmTokenStats._avg.latencyMs
         ? Math.round(llmTokenStats._avg.latencyMs * 10) / 10
         : null,
     },
   });
 });
-

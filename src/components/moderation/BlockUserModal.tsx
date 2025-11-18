@@ -4,18 +4,18 @@
 
 'use client';
 
+import { Ban, X } from 'lucide-react';
 import { useState, useTransition } from 'react';
-import { X, Ban } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface BlockUserModalProps {
+type BlockUserModalProps = {
   isOpen: boolean;
   onClose: () => void;
   targetUserId: string;
   targetDisplayName: string;
   isNPC?: boolean;
   onSuccess?: () => void;
-}
+};
 
 export function BlockUserModal({
   isOpen,
@@ -54,30 +54,29 @@ export function BlockUserModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Ban className="w-5 h-5 text-orange-500" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 font-bold text-xl">
+            <Ban className="h-5 w-5 text-orange-500" />
             Block User
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 hover:bg-muted rounded-lg transition-colors"
+            className="rounded-lg p-1 transition-colors hover:bg-muted"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <p className="text-muted-foreground mb-4">
+        <p className="mb-4 text-muted-foreground">
           Are you sure you want to block <strong>{targetDisplayName}</strong>?
         </p>
 
-        <div className="bg-muted/50 border border-border rounded-lg p-3 mb-4">
-          <p className="text-sm text-muted-foreground">
-            Blocking will:
-          </p>
-          <ul className="text-sm text-muted-foreground list-disc list-inside mt-2 space-y-1">
+        <div className="mb-4 rounded-lg border border-border bg-muted/50 p-3">
+          <p className="text-muted-foreground text-sm">Blocking will:</p>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-muted-foreground text-sm">
             {isNPC ? (
               <>
                 <li>Hide their posts from your feed</li>
@@ -95,14 +94,15 @@ export function BlockUserModal({
         </div>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">
+          <label htmlFor="block-reason" className="mb-2 block font-medium text-sm">
             Reason (optional)
           </label>
           <textarea
+            id="block-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Why are you blocking this user?"
-            className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:border-primary resize-none"
+            className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 focus:border-primary focus:outline-none"
             rows={3}
             maxLength={500}
           />
@@ -110,22 +110,24 @@ export function BlockUserModal({
 
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onClose}
             disabled={isBlocking}
-            className="flex-1 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
+            className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleBlock}
             disabled={isBlocking}
-            className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
           >
             {isBlocking ? (
               <>Blocking...</>
             ) : (
               <>
-                <Ban className="w-4 h-4" />
+                <Ban className="h-4 w-4" />
                 Block User
               </>
             )}
@@ -135,5 +137,3 @@ export function BlockUserModal({
     </div>
   );
 }
-
-

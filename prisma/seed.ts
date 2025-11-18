@@ -2,21 +2,21 @@
 
 /**
  * Database Seed Script
- * 
+ *
  * Seeds the database with:
  * - All actors from split JSON structure (public/data/actors/*.json)
  * - All organizations from split JSON structure (public/data/organizations/*.json)
  * - Initial game state
- * 
+ *
  * Run: bun run prisma:seed
  */
 
-import { PrismaClient, Prisma } from '@prisma/client';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { loadActorsData } from '../src/lib/data/actors-loader';
 import { logger } from '../src/lib/logger';
 import { generateSnowflakeId } from '../src/lib/snowflake';
-import { loadActorsData } from '../src/lib/data/actors-loader';
 
 const prisma = new PrismaClient();
 
@@ -28,83 +28,95 @@ async function main() {
   // Load actors data from new split structure
   const actorsData: SeedActorsDatabase = loadActorsData();
 
-  logger.info('Loaded:', {
-    actors: actorsData.actors.length,
-    organizations: actorsData.organizations.length
-  }, 'Script');
+  logger.info(
+    'Loaded:',
+    {
+      actors: actorsData.actors.length,
+      organizations: actorsData.organizations.length,
+    },
+    'Script'
+  );
 
   // Seed actors
   logger.info('Seeding actors...', undefined, 'Script');
-  
+
   // Create actors individually (Prisma Accelerate limitation with array fields)
   for (const actor of actorsData.actors) {
     const imagePath = join(process.cwd(), 'public', 'images', 'actors', `${actor.id}.jpg`);
     const profileImageUrl = existsSync(imagePath) ? `/images/actors/${actor.id}.jpg` : null;
-    
-    await prisma.actor.create({
-      data: {
-        id: actor.id,
-        name: actor.name,
-        description: actor.description || null,
-        domain: actor.domain || [],
-        personality: actor.personality || null,
-        tier: actor.tier || null,
-        affiliations: actor.affiliations || [],
-        postStyle: actor.postStyle || null,
-        postExample: actor.postExample || [],
-        tradingBalance: new Prisma.Decimal(1000),
-        reputationPoints: 1000,
-        profileImageUrl: profileImageUrl,
-        updatedAt: new Date(),
-      },
-    }).catch((error: unknown) => {
-      // Skip if actor already exists (P2002 = unique constraint violation)
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
-        return; // Skip duplicate
-      }
-      throw error;
-    });
+
+    await prisma.actor
+      .create({
+        data: {
+          id: actor.id,
+          name: actor.name,
+          description: actor.description || null,
+          domain: actor.domain || [],
+          personality: actor.personality || null,
+          tier: actor.tier || null,
+          affiliations: actor.affiliations || [],
+          postStyle: actor.postStyle || null,
+          postExample: actor.postExample || [],
+          tradingBalance: new Prisma.Decimal(1000),
+          reputationPoints: 1000,
+          profileImageUrl: profileImageUrl,
+          updatedAt: new Date(),
+        },
+      })
+      .catch((error: unknown) => {
+        // Skip if actor already exists (P2002 = unique constraint violation)
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+          return; // Skip duplicate
+        }
+        throw error;
+      });
   }
-  
+
   logger.info(`Seeded ${actorsData.actors.length} actors`, undefined, 'Script');
 
   // Seed organizations
   logger.info('Seeding organizations...', undefined, 'Script');
-  
+
   let orgCount = 0;
   for (const org of actorsData.organizations) {
     // Skip if missing required fields
     if (!org.id || !org.name || !org.type) {
-      logger.warn(`Skipping org "${org.id || 'unknown'}" - missing required fields`, undefined, 'Script');
+      logger.warn(
+        `Skipping org "${org.id || 'unknown'}" - missing required fields`,
+        undefined,
+        'Script'
+      );
       continue;
     }
-    
+
     // Check if organization image exists
     const orgImagePath = join(process.cwd(), 'public', 'images', 'organizations', `${org.id}.jpg`);
     const imageUrl = existsSync(orgImagePath) ? `/images/organizations/${org.id}.jpg` : null;
-    
-    await prisma.organization.create({
-      data: {
-        id: org.id,
-        name: org.name,
-        description: org.description || '',
-        type: org.type,
-        canBeInvolved: org.canBeInvolved !== false,
-        initialPrice: org.initialPrice || null,
-        currentPrice: org.initialPrice || null,
-        imageUrl: imageUrl,
-        updatedAt: new Date(),
-      },
-    }).catch((error: unknown) => {
-      // Skip if organization already exists (P2002 = unique constraint violation)
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
-        return; // Skip duplicate
-      }
-      throw error;
-    });
+
+    await prisma.organization
+      .create({
+        data: {
+          id: org.id,
+          name: org.name,
+          description: org.description || '',
+          type: org.type,
+          canBeInvolved: org.canBeInvolved !== false,
+          initialPrice: org.initialPrice || null,
+          currentPrice: org.initialPrice || null,
+          imageUrl: imageUrl,
+          updatedAt: new Date(),
+        },
+      })
+      .catch((error: unknown) => {
+        // Skip if organization already exists (P2002 = unique constraint violation)
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+          return; // Skip duplicate
+        }
+        throw error;
+      });
     orgCount++;
   }
-  
+
   logger.info(`Seeded ${orgCount} organizations`, undefined, 'Script');
 
   // Initialize game state
@@ -162,20 +174,20 @@ async function main() {
   // We no longer seed static relationships from JSON files
   logger.info('Relationships are dynamically generated by the game engine', undefined, 'Script');
   logger.info('Initial relationships will be created on first game tick', undefined, 'Script');
-  
+
   // Initialize NPC-to-NPC follows from existing relationships if any
   logger.info('Checking NPC-to-NPC follow relationships...', undefined, 'Script');
   const existingFollows = await prisma.actorFollow.count();
   const existingRelationships = await prisma.actorRelationship.count();
-  
+
   if (existingFollows === 0 && existingRelationships > 0) {
     logger.info('Creating follows from existing relationships...', undefined, 'Script');
-    
+
     try {
       // Get all relationships and create follow records
       const relationships = await prisma.actorRelationship.findMany();
       let followsCreated = 0;
-      
+
       for (const rel of relationships) {
         // Positive relationships = mutual follows
         if (rel.sentiment > 0.3) {
@@ -195,7 +207,7 @@ async function main() {
               isMutual: true,
             },
           });
-          
+
           // Actor 2 follows Actor 1
           await prisma.actorFollow.upsert({
             where: {
@@ -212,7 +224,7 @@ async function main() {
               isMutual: true,
             },
           });
-          
+
           followsCreated += 2;
         }
         // Rivals = they follow each other to keep tabs
@@ -232,7 +244,7 @@ async function main() {
               isMutual: false,
             },
           });
-          
+
           await prisma.actorFollow.upsert({
             where: {
               followerId_followingId: {
@@ -248,24 +260,32 @@ async function main() {
               isMutual: false,
             },
           });
-          
+
           followsCreated += 2;
         }
       }
-      
-      logger.info(`✅ Created ${followsCreated} follows from relationships`, { count: followsCreated }, 'Script');
+
+      logger.info(
+        `✅ Created ${followsCreated} follows from relationships`,
+        { count: followsCreated },
+        'Script'
+      );
     } catch (error) {
       logger.error('Failed to create follows', { error }, 'Script');
     }
   } else if (existingFollows > 0) {
-    logger.info(`Found ${existingFollows} existing NPC follow relationships`, { count: existingFollows }, 'Script');
+    logger.info(
+      `Found ${existingFollows} existing NPC follow relationships`,
+      { count: existingFollows },
+      'Script'
+    );
   } else {
     logger.info('No relationships yet - will be generated on first game tick', undefined, 'Script');
   }
 
   // Seed default real users for DM testing
   logger.info('Seeding default real users for DM testing...', undefined, 'Script');
-  
+
   const defaultUsers = [
     {
       id: 'demo-user-babylon-support',
@@ -319,7 +339,11 @@ async function main() {
     usersCreated++;
   }
 
-  logger.info(`Created/updated ${usersCreated} default real users for DM testing`, undefined, 'Script');
+  logger.info(
+    `Created/updated ${usersCreated} default real users for DM testing`,
+    undefined,
+    'Script'
+  );
 
   // NOTE: World facts are now seeded via seed-world-facts.ts
   // Run: bun run prisma/seed-world-facts.ts
@@ -339,17 +363,21 @@ async function main() {
     worldFacts: await prisma.worldFact.count(),
   };
 
-  logger.info('Database Summary:', {
-    actors: stats.actors,
-    organizations: `${stats.organizations} (${stats.companies} companies)`,
-    relationships: stats.relationships,
-    npcFollows: `${stats.actorFollows} (NPC-to-NPC)`,
-    userActorFollows: `${stats.userActorFollows} (User-to-NPC)`,
-    userFollows: `${stats.userFollows} (User-to-User)`,
-    posts: stats.posts,
-    realUsers: stats.realUsers,
-    worldFacts: stats.worldFacts,
-  }, 'Script');
+  logger.info(
+    'Database Summary:',
+    {
+      actors: stats.actors,
+      organizations: `${stats.organizations} (${stats.companies} companies)`,
+      relationships: stats.relationships,
+      npcFollows: `${stats.actorFollows} (NPC-to-NPC)`,
+      userActorFollows: `${stats.userActorFollows} (User-to-NPC)`,
+      userFollows: `${stats.userFollows} (User-to-User)`,
+      posts: stats.posts,
+      realUsers: stats.realUsers,
+      worldFacts: stats.worldFacts,
+    },
+    'Script'
+  );
 
   logger.info('SEED COMPLETE', undefined, 'Script');
 }

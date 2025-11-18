@@ -5,15 +5,15 @@
  */
 
 import { logger } from '@/lib/logger';
-import { redis, redisClientType, isRedisAvailable } from '@/lib/redis';
+import { isRedisAvailable, redis, redisClientType } from '@/lib/redis';
 import type { Redis as UpstashRedis } from '@upstash/redis';
 import type IORedis from 'ioredis';
 
-export interface AgentSession {
+export type AgentSession = {
   sessionToken: string;
   agentId: string;
   expiresAt: number;
-}
+};
 
 // In-memory session storage (in production, use Redis or database)
 const agentSessions = new Map<string, AgentSession>();
@@ -43,7 +43,9 @@ export function cleanupExpiredSessions(): void {
     }
   });
 
-  tokensToDelete.forEach(token => agentSessions.delete(token));
+  tokensToDelete.forEach((token) => {
+    agentSessions.delete(token);
+  });
 }
 
 /**
@@ -52,8 +54,7 @@ export function cleanupExpiredSessions(): void {
 export function verifyAgentCredentials(agentId: string, agentSecret: string): boolean {
   // Get configured agent credentials from environment
   const configuredAgentId =
-    process.env.BABYLON_AGENT_ID ??
-    (!isProduction ? DEFAULT_TEST_AGENT_ID : undefined);
+    process.env.BABYLON_AGENT_ID ?? (!isProduction ? DEFAULT_TEST_AGENT_ID : undefined);
   const configuredAgentSecret = process.env.CRON_SECRET;
 
   if (!configuredAgentSecret) {
@@ -76,7 +77,10 @@ export function verifyAgentCredentials(agentId: string, agentSecret: string): bo
 /**
  * Create a new agent session
  */
-export async function createAgentSession(agentId: string, sessionToken: string): Promise<AgentSession> {
+export async function createAgentSession(
+  agentId: string,
+  sessionToken: string
+): Promise<AgentSession> {
   const expiresAt = Date.now() + SESSION_DURATION;
   const session: AgentSession = {
     sessionToken,
@@ -106,7 +110,9 @@ export async function createAgentSession(agentId: string, sessionToken: string):
 /**
  * Verify agent session token
  */
-export async function verifyAgentSession(sessionToken: string): Promise<{ agentId: string } | null> {
+export async function verifyAgentSession(
+  sessionToken: string
+): Promise<{ agentId: string } | null> {
   if (useRedis && redis) {
     const key = `${SESSION_PREFIX}${sessionToken}`;
     let stored: string | null = null;

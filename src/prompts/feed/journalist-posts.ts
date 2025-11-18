@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating multiple breaking news posts from journalists.
- * 
+ *
  * Creates batch news posts from journalists covering world events.
  * Uses journalistic tone with breaking news urgency and references
  * specific events, sources, and actors.
- * 
+ *
  * Returns XML with multiple journalist post entries.
  */
 export const journalistPosts = definePrompt({
@@ -76,5 +76,5 @@ Respond with ONLY this XML format (example for 2 posts):
 </response>
 
 CRITICAL: Return EXACTLY {{journalistCount}} posts. Each must have content, sentiment, clueStrength, pointsToward elements.
-`.trim()
+`.trim(),
 });

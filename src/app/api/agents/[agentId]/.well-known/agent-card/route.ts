@@ -1,15 +1,15 @@
 /**
  * Per-Agent Agent Card Endpoint
- * 
+ *
  * @route GET /api/agents/[agentId]/.well-known/agent-card - Get agent card
  * @access Public
- * 
+ *
  * @description
  * Returns the A2A agent card for a specific agent. This follows the
  * A2A protocol specification for agent discovery via well-known URIs.
  * The agent card describes the agent's capabilities, skills, and how
  * to interact with it via the A2A protocol.
- * 
+ *
  * @openapi
  * /api/agents/{agentId}/.well-known/agent-card:
  *   get:
@@ -44,7 +44,7 @@
  *         description: A2A not enabled for agent
  *       404:
  *         description: Agent not found
- * 
+ *
  * @example
  * ```typescript
  * const card = await fetch(`/api/agents/${agentId}/.well-known/agent-card`)
@@ -52,20 +52,17 @@
  * ```
  */
 
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { generateAgentCardSync } from '@/lib/a2a/sdk/agent-card-generator'
-import { logger } from '@/lib/logger'
+import { generateAgentCardSync } from '@/lib/a2a/sdk/agent-card-generator';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ agentId: string }> }
-) {
+export async function GET(_req: Request, { params }: { params: Promise<{ agentId: string }> }) {
   try {
-    const { agentId } = await params
-    
+    const { agentId } = await params;
+
     const agent = await prisma.user.findUnique({
       where: { id: agentId },
       select: {
@@ -77,20 +74,26 @@ export async function GET(
         agentPersonality: true,
         agentTradingStrategy: true,
         isAgent: true,
-        a2aEnabled: true
-      }
-    })
+        a2aEnabled: true,
+      },
+    });
 
     if (!agent || !agent.isAgent) {
-      return NextResponse.json({
-        error: 'Agent not found'
-      }, { status: 404 })
+      return NextResponse.json(
+        {
+          error: 'Agent not found',
+        },
+        { status: 404 }
+      );
     }
 
     if (!agent.a2aEnabled) {
-      return NextResponse.json({
-        error: 'A2A is not enabled for this agent'
-      }, { status: 403 })
+      return NextResponse.json(
+        {
+          error: 'A2A is not enabled for this agent',
+        },
+        { status: 403 }
+      );
     }
 
     const agentCard = generateAgentCardSync({
@@ -100,20 +103,25 @@ export async function GET(
       profileImageUrl: agent.profileImageUrl,
       agentSystem: agent.agentSystem,
       agentPersonality: agent.agentPersonality,
-      agentTradingStrategy: agent.agentTradingStrategy
-    })
+      agentTradingStrategy: agent.agentTradingStrategy,
+    });
 
     return NextResponse.json(agentCard, {
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
-      }
-    })
+        'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+      },
+    });
   } catch (error) {
-    logger.error('Error generating agent card', { error, agentId: (await params).agentId })
-    return NextResponse.json({
-      error: 'Failed to generate agent card'
-    }, { status: 500 })
+    logger.error('Error generating agent card', {
+      error,
+      agentId: (await params).agentId,
+    });
+    return NextResponse.json(
+      {
+        error: 'Failed to generate agent card',
+      },
+      { status: 500 }
+    );
   }
 }
-

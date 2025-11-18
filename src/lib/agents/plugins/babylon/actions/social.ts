@@ -3,9 +3,9 @@
  * Actions for social interactions (posts, comments, likes)
  */
 
-import type { Action, IAgentRuntime, Memory, State, HandlerCallback } from '@elizaos/core'
+import type { Action, HandlerCallback, IAgentRuntime, Memory, State } from '@elizaos/core';
 // import { logger } from '@/lib/logger' // Commented out - not needed
-import type { BabylonRuntime } from '../types'
+import type { BabylonRuntime } from '../types';
 
 /**
  * Action: Create Post
@@ -19,20 +19,20 @@ export const createPostAction: Action = {
     [
       {
         name: '{{user1}}',
-        content: { text: 'Post about market analysis' }
+        content: { text: 'Post about market analysis' },
       },
       {
         name: '{{agent}}',
-        content: { text: 'Creating post...', action: 'CREATE_POST' }
-      }
-    ]
+        content: { text: 'Creating post...', action: 'CREATE_POST' },
+      },
+    ],
   ],
-  
+
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const content = message.content.text?.toLowerCase() || ''
-    return content.includes('post') || content.includes('share') || content.includes('publish')
+    const content = message.content.text?.toLowerCase() || '';
+    return content.includes('post') || content.includes('share') || content.includes('publish');
   },
-  
+
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
@@ -40,61 +40,62 @@ export const createPostAction: Action = {
     _options?: unknown,
     callback?: HandlerCallback
   ): Promise<void> => {
-    const babylonRuntime = runtime as BabylonRuntime
-    
+    const babylonRuntime = runtime as BabylonRuntime;
+
     if (!babylonRuntime.a2aClient?.isConnected()) {
       if (callback) {
         callback({
           text: 'A2A client not connected. Cannot create post.',
-          action: 'CREATE_POST'
-        })
+          action: 'CREATE_POST',
+        });
       }
-      return
+      return;
     }
-    
+
     // Extract post content
-    const content = message.content.text || ''
-    const postContent = content.replace(/^(post|share|publish)\s+/i, '').trim()
-    
+    const content = message.content.text || '';
+    const postContent = content.replace(/^(post|share|publish)\s+/i, '').trim();
+
     if (!postContent) {
       if (callback) {
         callback({
           text: 'No content provided for post.',
-          action: 'CREATE_POST'
-        })
+          action: 'CREATE_POST',
+        });
       }
-      return
+      return;
     }
-    
+
     try {
-      const result = await babylonRuntime.a2aClient.createPost(
-        postContent,
-        'post'
-      ) as { success?: boolean; postId?: string; message?: string }
-      
+      const result = (await babylonRuntime.a2aClient.createPost(postContent, 'post')) as {
+        success?: boolean;
+        postId?: string;
+        message?: string;
+      };
+
       if (callback) {
         if (result.success === false) {
           callback({
             text: `Failed to create post: ${result.message || 'Unknown error'}`,
-            action: 'CREATE_POST'
-          })
+            action: 'CREATE_POST',
+          });
         } else {
           callback({
             text: `Successfully created post! Post ID: ${result.postId || 'unknown'}`,
-            action: 'CREATE_POST'
-          })
+            action: 'CREATE_POST',
+          });
         }
       }
     } catch (error) {
       if (callback) {
         callback({
           text: `Error creating post: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          action: 'CREATE_POST'
-        })
+          action: 'CREATE_POST',
+        });
       }
     }
-  }
-}
+  },
+};
 
 /**
  * Action: Comment on Post
@@ -108,20 +109,20 @@ export const commentAction: Action = {
     [
       {
         name: '{{user1}}',
-        content: { text: 'Comment on post post-123 with "Great analysis!"' }
+        content: { text: 'Comment on post post-123 with "Great analysis!"' },
       },
       {
         name: '{{agent}}',
-        content: { text: 'Commenting on post...', action: 'COMMENT_ON_POST' }
-      }
-    ]
+        content: { text: 'Commenting on post...', action: 'COMMENT_ON_POST' },
+      },
+    ],
   ],
-  
+
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const content = message.content.text?.toLowerCase() || ''
-    return content.includes('comment') || content.includes('reply')
+    const content = message.content.text?.toLowerCase() || '';
+    return content.includes('comment') || content.includes('reply');
   },
-  
+
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
@@ -129,62 +130,77 @@ export const commentAction: Action = {
     _options?: unknown,
     callback?: HandlerCallback
   ): Promise<void> => {
-    const babylonRuntime = runtime as BabylonRuntime
-    
+    const babylonRuntime = runtime as BabylonRuntime;
+
     if (!babylonRuntime.a2aClient?.isConnected()) {
       if (callback) {
         callback({
           text: 'A2A client not connected. Cannot comment.',
-          action: 'COMMENT_ON_POST'
-        })
+          action: 'COMMENT_ON_POST',
+        });
       }
-      return
+      return;
     }
-    
+
     // Parse message
-    const content = message.content.text || ''
-    const postIdMatch = content.match(/post[:\s-]+([a-zA-Z0-9-]+)/)
-    const commentMatch = content.match(/(?:with|:)\s*["'](.+?)["']/) || content.match(/comment\s+(.+)$/i)
-    
+    const content = message.content.text || '';
+    const postIdMatch = content.match(/post[:\s-]+([a-zA-Z0-9-]+)/);
+    const commentMatch =
+      content.match(/(?:with|:)\s*["'](.+?)["']/) || content.match(/comment\s+(.+)$/i);
+
     if (!postIdMatch || !commentMatch) {
       if (callback) {
         callback({
           text: 'Could not parse comment parameters. Please specify post ID and comment text.',
-          action: 'COMMENT_ON_POST'
-        })
+          action: 'COMMENT_ON_POST',
+        });
       }
-      return
+      return;
     }
-    
-    const postId = postIdMatch[1]!
-    const commentContent = commentMatch[1]!
-    
+
+    const postId = postIdMatch[1];
+    const commentContent = commentMatch[1];
+
+    if (!postId || !commentContent) {
+      if (callback) {
+        callback({
+          text: 'Missing post ID or comment content.',
+          action: 'COMMENT_ON_POST',
+        });
+      }
+      return;
+    }
+
     try {
-      const result = await babylonRuntime.a2aClient.createComment(postId, commentContent) as { success?: boolean; commentId?: string; message?: string }
-      
+      const result = (await babylonRuntime.a2aClient.createComment(postId, commentContent)) as {
+        success?: boolean;
+        commentId?: string;
+        message?: string;
+      };
+
       if (callback) {
         if (result.success === false) {
           callback({
             text: `Failed to create comment: ${result.message || 'Unknown error'}`,
-            action: 'COMMENT_ON_POST'
-          })
+            action: 'COMMENT_ON_POST',
+          });
         } else {
           callback({
             text: `Successfully commented on post! Comment ID: ${result.commentId || 'unknown'}`,
-            action: 'COMMENT_ON_POST'
-          })
+            action: 'COMMENT_ON_POST',
+          });
         }
       }
     } catch (error) {
       if (callback) {
         callback({
           text: `Error creating comment: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          action: 'COMMENT_ON_POST'
-        })
+          action: 'COMMENT_ON_POST',
+        });
       }
     }
-  }
-}
+  },
+};
 
 /**
  * Action: Like Post
@@ -198,20 +214,20 @@ export const likePostAction: Action = {
     [
       {
         name: '{{user1}}',
-        content: { text: 'Like post post-123' }
+        content: { text: 'Like post post-123' },
       },
       {
         name: '{{agent}}',
-        content: { text: 'Liking post...', action: 'LIKE_POST' }
-      }
-    ]
+        content: { text: 'Liking post...', action: 'LIKE_POST' },
+      },
+    ],
   ],
-  
+
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const content = message.content.text?.toLowerCase() || ''
-    return content.includes('like') || content.includes('upvote')
+    const content = message.content.text?.toLowerCase() || '';
+    return content.includes('like') || content.includes('upvote');
   },
-  
+
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
@@ -219,58 +235,71 @@ export const likePostAction: Action = {
     _options?: unknown,
     callback?: HandlerCallback
   ): Promise<void> => {
-    const babylonRuntime = runtime as BabylonRuntime
-    
+    const babylonRuntime = runtime as BabylonRuntime;
+
     if (!babylonRuntime.a2aClient?.isConnected()) {
       if (callback) {
         callback({
           text: 'A2A client not connected. Cannot like post.',
-          action: 'LIKE_POST'
-        })
+          action: 'LIKE_POST',
+        });
       }
-      return
+      return;
     }
-    
+
     // Parse message
-    const content = message.content.text || ''
-    const postIdMatch = content.match(/post[:\s-]+([a-zA-Z0-9-]+)/)
-    
+    const content = message.content.text || '';
+    const postIdMatch = content.match(/post[:\s-]+([a-zA-Z0-9-]+)/);
+
     if (!postIdMatch) {
       if (callback) {
         callback({
           text: 'Could not parse post ID. Please specify which post to like.',
-          action: 'LIKE_POST'
-        })
+          action: 'LIKE_POST',
+        });
       }
-      return
+      return;
     }
-    
-    const postId = postIdMatch[1]!
-    
+
+    const postId = postIdMatch[1];
+
+    if (!postId) {
+      if (callback) {
+        callback({
+          text: 'Could not determine which post to like.',
+          action: 'LIKE_POST',
+        });
+      }
+      return;
+    }
+
     try {
-      const result = await babylonRuntime.a2aClient.likePost(postId) as { success?: boolean; likeCount?: number; message?: string }
-      
+      const result = (await babylonRuntime.a2aClient.likePost(postId)) as {
+        success?: boolean;
+        likeCount?: number;
+        message?: string;
+      };
+
       if (callback) {
         if (result.success === false) {
           callback({
             text: `Failed to like post: ${result.message || 'Unknown error'}`,
-            action: 'LIKE_POST'
-          })
+            action: 'LIKE_POST',
+          });
         } else {
           callback({
             text: `Successfully liked post ${postId}!${result.likeCount !== undefined ? ` Total likes: ${result.likeCount}` : ''}`,
-            action: 'LIKE_POST'
-          })
+            action: 'LIKE_POST',
+          });
         }
       }
     } catch (error) {
       if (callback) {
         callback({
           text: `Error liking post: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          action: 'LIKE_POST'
-        })
+          action: 'LIKE_POST',
+        });
       }
     }
-  }
-}
-
+  },
+};

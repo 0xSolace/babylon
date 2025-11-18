@@ -3,22 +3,22 @@
  * Handles: optimistic post creation, quote posts
  */
 
-import { create } from 'zustand';
 import type { FeedPost } from '@/shared/types';
+import { create } from 'zustand';
 
-interface FeedStoreState {
+type FeedStoreState = {
   // Callbacks for feed updates
   onOptimisticPost: ((post: FeedPost) => void) | null;
-}
+};
 
-interface FeedStoreActions {
+type FeedStoreActions = {
   // Register callback for optimistic post updates (used by feed page)
   registerOptimisticPostCallback: (callback: (post: FeedPost) => void) => void;
   unregisterOptimisticPostCallback: () => void;
-  
+
   // Add optimistic post (called by components like RepostButton)
   addOptimisticPost: (post: FeedPost) => void;
-}
+};
 
 type FeedStore = FeedStoreState & FeedStoreActions;
 
@@ -43,4 +43,3 @@ export const useFeedStore = create<FeedStore>((set, get) => ({
     }
   },
 }));
-

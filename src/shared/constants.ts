@@ -27,12 +27,12 @@ export const FEED_WIDGET_CONFIG = {
   SIGNIFICANT_PRICE_CHANGE_PERCENT: 2, // Minimum % change to be considered significant
   MIN_PRICE_CHANGE_PERCENT: 0.5, // Minimum % change for any price update to show
   ATH_THRESHOLD_PERCENT: 2, // Minimum % change to qualify as ATH
-  
+
   // Upcoming Events thresholds
   UPCOMING_EVENTS_DAYS: 7, // Days ahead to show upcoming events
   LIVE_EVENT_HOURS: 2, // Hours before event to mark as "LIVE"
   HINT_SHOW_DAYS: 1, // Days before event to show hint
-  
+
   // Display limits
   MAX_BREAKING_NEWS_ITEMS: 3,
   MAX_UPCOMING_EVENTS: 3,
@@ -62,9 +62,9 @@ export const POST_TYPES = {
  * Content gets progressively more chaotic as the game progresses
  */
 export const DAY_RANGES = {
-  EARLY: { min: 1, max: 10 },    // Days 1-10: Setup, introductions
-  MID: { min: 11, max: 20 },     // Days 11-20: Rising action
-  LATE: { min: 21, max: 30 },    // Days 21-30: Peak chaos
+  EARLY: { min: 1, max: 10 }, // Days 1-10: Setup, introductions
+  MID: { min: 11, max: 20 }, // Days 11-20: Rising action
+  LATE: { min: 21, max: 30 }, // Days 21-30: Peak chaos
 } as const;
 
 /**

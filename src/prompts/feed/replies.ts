@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating multiple reply posts creating conversations.
- * 
+ *
  * Generates a thread of replies from multiple actors responding to an
  * original post, creating natural conversation flows. Maintains character
  * voices and builds on previous replies in the thread.
- * 
+ *
  * Returns XML with multiple reply entries forming a conversation.
  */
 export const replies = definePrompt({
@@ -75,5 +75,5 @@ Respond with ONLY this XML format (example for 2 replies):
 </response>
 
 CRITICAL: Return EXACTLY {{replierCount}} replies. Each must have post, sentiment, clueStrength, pointsToward elements.
-`.trim()
+`.trim(),
 });

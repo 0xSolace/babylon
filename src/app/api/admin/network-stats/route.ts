@@ -1,13 +1,13 @@
 /**
  * Admin Network Statistics API
- * 
+ *
  * @route GET /api/admin/network-stats - Get network statistics
  * @access Admin
- * 
+ *
  * @description
  * Returns real-time network and database statistics including query performance,
  * slow queries, connection metrics, and database health. Admin only.
- * 
+ *
  * @openapi
  * /api/admin/network-stats:
  *   get:
@@ -35,7 +35,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const stats = await fetch('/api/admin/network-stats', {
@@ -44,11 +44,11 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
 import { requireAdmin } from '@/lib/api/admin-middleware';
 import { queryMonitor } from '@/lib/db/query-monitor';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/admin/network-stats
@@ -64,9 +64,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Calculate query metrics
   const totalQueries = queryStats.totalQueries;
-  const slowQueryRate = totalQueries > 0 
-    ? (queryStats.slowQueries / totalQueries) * 100 
-    : 0;
+  const slowQueryRate = totalQueries > 0 ? (queryStats.slowQueries / totalQueries) * 100 : 0;
 
   // Get top 10 slowest query types
   const topSlowQueries = Object.entries(slowQueries)
@@ -85,14 +83,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Get process uptime
   const uptime = process.uptime();
 
-  logger.info('Network stats requested', {
-    totalQueries,
-    slowQueryRate: `${slowQueryRate.toFixed(2)}%`,
-  }, 'GET /api/admin/network-stats');
+  logger.info(
+    'Network stats requested',
+    {
+      totalQueries,
+      slowQueryRate: `${slowQueryRate.toFixed(2)}%`,
+    },
+    'GET /api/admin/network-stats'
+  );
 
   return successResponse({
     timestamp: new Date().toISOString(),
-    
+
     // Database query performance
     database: {
       queries: {
@@ -104,7 +106,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         p99Duration: Math.round(queryStats.p99Duration * 100) / 100,
       },
       topSlowQueries,
-      recentQueries: recentQueries.map(q => ({
+      recentQueries: recentQueries.map((q) => ({
         query: q.query,
         duration: Math.round(q.duration * 100) / 100,
         timestamp: q.timestamp,
@@ -120,10 +122,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         formatted: formatUptime(uptime),
       },
       memory: {
-        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024 * 100) / 100, // MB
-        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024 * 100) / 100, // MB
-        external: Math.round(memUsage.external / 1024 / 1024 * 100) / 100, // MB
-        rss: Math.round(memUsage.rss / 1024 / 1024 * 100) / 100, // MB
+        heapUsed: Math.round((memUsage.heapUsed / 1024 / 1024) * 100) / 100, // MB
+        heapTotal: Math.round((memUsage.heapTotal / 1024 / 1024) * 100) / 100, // MB
+        external: Math.round((memUsage.external / 1024 / 1024) * 100) / 100, // MB
+        rss: Math.round((memUsage.rss / 1024 / 1024) * 100) / 100, // MB
       },
       env: process.env.NODE_ENV,
       pid: process.pid,
@@ -132,7 +134,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     // Health indicators
     health: {
       database: slowQueryRate < 5 ? 'healthy' : slowQueryRate < 15 ? 'warning' : 'critical',
-      memory: (memUsage.heapUsed / memUsage.heapTotal) < 0.9 ? 'healthy' : 'warning',
+      memory: memUsage.heapUsed / memUsage.heapTotal < 0.9 ? 'healthy' : 'warning',
       overall: determineOverallHealth(slowQueryRate, memUsage),
     },
   });
@@ -175,4 +177,3 @@ function determineOverallHealth(
 
   return 'healthy';
 }
-

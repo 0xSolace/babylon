@@ -1,34 +1,33 @@
 /**
  * Query Performance Monitoring
- * 
+ *
  * Tracks database query performance and logs slow queries.
  * Helps identify optimization opportunities under load.
  */
 
 import { logger } from '@/lib/logger';
 
-interface QueryMetrics {
+type QueryMetrics = {
   query: string;
   duration: number;
   timestamp: Date;
   model: string;
   operation: string;
-}
+};
 
-interface SlowQueryStats {
+type SlowQueryStats = {
   count: number;
   totalDuration: number;
   avgDuration: number;
   maxDuration: number;
   queries: QueryMetrics[];
-}
+};
 
 class QueryMonitor {
   private slowQueries: Map<string, SlowQueryStats> = new Map();
   private queryLog: QueryMetrics[] = [];
   private readonly SLOW_QUERY_THRESHOLD_MS = Number(process.env.SLOW_QUERY_THRESHOLD_MS) || 100;
   private readonly MAX_LOG_SIZE = 1000;
-  private readonly STATS_WINDOW_MS = 60000; // 1 minute
 
   /**
    * Record a database query execution
@@ -43,15 +42,19 @@ class QueryMonitor {
     // Track slow queries
     if (metrics.duration >= this.SLOW_QUERY_THRESHOLD_MS) {
       this.recordSlowQuery(metrics);
-      
+
       // Log slow query immediately
-      logger.warn('Slow query detected', {
-        model: metrics.model,
-        operation: metrics.operation,
-        duration: `${metrics.duration}ms`,
-        threshold: `${this.SLOW_QUERY_THRESHOLD_MS}ms`,
-        query: this.sanitizeQuery(metrics.query),
-      }, 'QueryMonitor');
+      logger.warn(
+        'Slow query detected',
+        {
+          model: metrics.model,
+          operation: metrics.operation,
+          duration: `${metrics.duration}ms`,
+          threshold: `${this.SLOW_QUERY_THRESHOLD_MS}ms`,
+          query: this.sanitizeQuery(metrics.query),
+        },
+        'QueryMonitor'
+      );
     }
   }
 
@@ -68,7 +71,7 @@ class QueryMonitor {
       existing.avgDuration = existing.totalDuration / existing.count;
       existing.maxDuration = Math.max(existing.maxDuration, metrics.duration);
       existing.queries.push(metrics);
-      
+
       // Keep only last 10 examples
       if (existing.queries.length > 10) {
         existing.queries.shift();
@@ -89,7 +92,7 @@ class QueryMonitor {
    */
   getSlowQueryStats(): Record<string, SlowQueryStats> {
     const stats: Record<string, SlowQueryStats> = {};
-    
+
     for (const [key, value] of this.slowQueries.entries()) {
       stats[key] = value;
     }
@@ -115,9 +118,7 @@ class QueryMonitor {
     p99Duration: number;
   } {
     const cutoff = Date.now() - windowMs;
-    const recentQueries = this.queryLog.filter(
-      q => q.timestamp.getTime() >= cutoff
-    );
+    const recentQueries = this.queryLog.filter((q) => q.timestamp.getTime() >= cutoff);
 
     if (recentQueries.length === 0) {
       return {
@@ -129,9 +130,9 @@ class QueryMonitor {
       };
     }
 
-    const durations = recentQueries.map(q => q.duration).sort((a, b) => a - b);
+    const durations = recentQueries.map((q) => q.duration).sort((a, b) => a - b);
     const slowCount = recentQueries.filter(
-      q => q.duration >= this.SLOW_QUERY_THRESHOLD_MS
+      (q) => q.duration >= this.SLOW_QUERY_THRESHOLD_MS
     ).length;
 
     const p95Index = Math.floor(durations.length * 0.95);
@@ -151,18 +152,14 @@ class QueryMonitor {
    */
   cleanup(olderThanMs: number = 300000): void {
     const cutoff = Date.now() - olderThanMs;
-    
+
     // Clean query log
-    this.queryLog = this.queryLog.filter(
-      q => q.timestamp.getTime() >= cutoff
-    );
+    this.queryLog = this.queryLog.filter((q) => q.timestamp.getTime() >= cutoff);
 
     // Clean slow query examples
     for (const [key, stats] of this.slowQueries.entries()) {
-      stats.queries = stats.queries.filter(
-        q => q.timestamp.getTime() >= cutoff
-      );
-      
+      stats.queries = stats.queries.filter((q) => q.timestamp.getTime() >= cutoff);
+
       if (stats.queries.length === 0) {
         this.slowQueries.delete(key);
       }
@@ -183,9 +180,9 @@ class QueryMonitor {
   private sanitizeQuery(query: string): string {
     // Truncate very long queries
     if (query.length > 500) {
-      return query.substring(0, 500) + '...';
+      return `${query.substring(0, 500)}...`;
     }
-    
+
     // Remove potential sensitive data (email, phone, passwords, etc.)
     return query
       .replace(/email\s*=\s*['"][^'"]+['"]/gi, 'email=***')
@@ -202,17 +199,22 @@ class QueryMonitor {
     const slowQueryStats = this.getSlowQueryStats();
     const slowQueryCount = Object.keys(slowQueryStats).length;
 
-    logger.info('Query performance summary', {
-      totalQueries: stats.totalQueries,
-      slowQueries: stats.slowQueries,
-      slowQueryPercentage: stats.totalQueries > 0 
-        ? `${((stats.slowQueries / stats.totalQueries) * 100).toFixed(2)}%`
-        : '0%',
-      avgDuration: `${stats.avgDuration.toFixed(2)}ms`,
-      p95Duration: `${stats.p95Duration.toFixed(2)}ms`,
-      p99Duration: `${stats.p99Duration.toFixed(2)}ms`,
-      uniqueSlowQueries: slowQueryCount,
-    }, 'QueryMonitor');
+    logger.info(
+      'Query performance summary',
+      {
+        totalQueries: stats.totalQueries,
+        slowQueries: stats.slowQueries,
+        slowQueryPercentage:
+          stats.totalQueries > 0
+            ? `${((stats.slowQueries / stats.totalQueries) * 100).toFixed(2)}%`
+            : '0%',
+        avgDuration: `${stats.avgDuration.toFixed(2)}ms`,
+        p95Duration: `${stats.p95Duration.toFixed(2)}ms`,
+        p99Duration: `${stats.p99Duration.toFixed(2)}ms`,
+        uniqueSlowQueries: slowQueryCount,
+      },
+      'QueryMonitor'
+    );
 
     // Log top 5 slowest query types
     if (slowQueryCount > 0) {
@@ -220,14 +222,18 @@ class QueryMonitor {
         .sort((a, b) => b[1].avgDuration - a[1].avgDuration)
         .slice(0, 5);
 
-      logger.info('Top 5 slowest query types', {
-        queries: sortedSlowQueries.map(([key, value]) => ({
-          query: key,
-          count: value.count,
-          avgDuration: `${value.avgDuration.toFixed(2)}ms`,
-          maxDuration: `${value.maxDuration.toFixed(2)}ms`,
-        })),
-      }, 'QueryMonitor');
+      logger.info(
+        'Top 5 slowest query types',
+        {
+          queries: sortedSlowQueries.map(([key, value]) => ({
+            query: key,
+            count: value.count,
+            avgDuration: `${value.avgDuration.toFixed(2)}ms`,
+            maxDuration: `${value.maxDuration.toFixed(2)}ms`,
+          })),
+        },
+        'QueryMonitor'
+      );
     }
   }
 }
@@ -248,4 +254,3 @@ if (process.env.NODE_ENV === 'development' && typeof setInterval !== 'undefined'
     queryMonitor.logSummary();
   }, 60000);
 }
-

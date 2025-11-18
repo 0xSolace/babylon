@@ -1,14 +1,14 @@
 /**
  * Market Bias Tuning API
- * 
+ *
  * @route POST /api/markets/bias/tune - Tune market bias
  * @access Authenticated
- * 
+ *
  * @description
  * Adjusts strength of existing market biases without full reconfiguration.
  * Setting strength to 0 deactivates the bias. Allows fine-tuning of bias
  * parameters.
- * 
+ *
  * @openapi
  * /api/markets/bias/tune:
  *   post:
@@ -59,7 +59,7 @@
  *         description: Invalid parameters
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/markets/bias/tune', {
@@ -71,15 +71,15 @@
  *   })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/feedback/bias-engine} Bias engine
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { biasEngine } from '@/lib/feedback/bias-engine'
-import { logger } from '@/lib/logger'
-import { z } from 'zod'
+import { biasEngine } from '@/lib/feedback/bias-engine';
+import { logger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const TuneBiasSchema = z.object({
   entityId: z.string().min(1, 'entityId is required'),
@@ -88,17 +88,17 @@ const TuneBiasSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const json = await request.json()
-  const parsed = TuneBiasSchema.parse(json)
+  const json = await request.json();
+  const parsed = TuneBiasSchema.parse(json);
 
-  const body = parsed
+  const body = parsed;
 
   if (body.strength === 0) {
-    biasEngine.removeBias(body.entityId)
+    biasEngine.removeBias(body.entityId);
 
     logger.info(`Market bias deactivated for ${body.entityId}`, {
       entityId: body.entityId,
-    })
+    });
 
     return NextResponse.json({
       success: true,
@@ -108,18 +108,18 @@ export async function POST(request: NextRequest) {
         strength: 0,
         active: false,
       },
-    })
+    });
   }
 
-  biasEngine.tuneBiasStrength(body.entityId, body.strength, body.decayRate)
+  biasEngine.tuneBiasStrength(body.entityId, body.strength, body.decayRate);
 
-  const updatedBias = biasEngine.getBiasAdjustment(body.entityId)
+  const updatedBias = biasEngine.getBiasAdjustment(body.entityId);
 
   logger.info(`Market bias tuned for ${body.entityId}`, {
     entityId: body.entityId,
     strength: body.strength,
     decayRate: body.decayRate,
-  })
+  });
 
   return NextResponse.json({
     success: true,
@@ -130,5 +130,5 @@ export async function POST(request: NextRequest) {
       adjustment: updatedBias,
       decayRate: body.decayRate,
     },
-  })
+  });
 }

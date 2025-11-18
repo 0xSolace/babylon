@@ -1,11 +1,11 @@
 /**
  * User Profile API Route
- * 
+ *
  * @description Retrieves comprehensive user profile information including stats, social connections, and account details
- * 
+ *
  * @route GET /api/users/[userId]/profile
  * @access Public (no authentication required)
- * 
+ *
  * @openapi
  * /api/users/{userId}/profile:
  *   get:
@@ -122,23 +122,23 @@ import type { NextRequest } from 'next/server';
 
 /**
  * GET Handler for User Profile
- * 
+ *
  * @description Retrieves comprehensive user profile information including stats and social connections
- * 
+ *
  * @param {NextRequest} request - Next.js request object
  * @param {Object} context - Route context containing dynamic parameters
  * @param {Promise<{userId: string}>} context.params - Dynamic route parameters
- * 
+ *
  * @returns {Promise<NextResponse>} User profile data with stats
- * 
+ *
  * @throws {NotFoundError} When user is not found
  * @throws {ValidationError} When userId parameter is invalid
- * 
+ *
  * @example
  * ```typescript
  * // Request
  * GET /api/users/johndoe/profile
- * 
+ *
  * // Response
  * {
  *   "user": {
@@ -155,99 +155,106 @@ import type { NextRequest } from 'next/server';
  * }
  * ```
  */
-export const GET = withErrorHandling(async (
-  request: NextRequest,
-  context: { params: Promise<{ userId: string }> }
-) => {
-  const params = await context.params;
-  const { userId } = UserIdParamSchema.parse(params);
+export const GET = withErrorHandling(
+  async (request: NextRequest, context: { params: Promise<{ userId: string }> }) => {
+    const params = await context.params;
+    const { userId } = UserIdParamSchema.parse(params);
 
-  // Optional authentication
-  await optionalAuth(request);
+    // Optional authentication
+    await optionalAuth(request);
 
-  // Get user profile - use findUserByIdentifier to handle new Privy users gracefully
-  const dbUser = await findUserByIdentifier(userId, {
-    id: true,
-    walletAddress: true,
-    username: true,
-    displayName: true,
-    bio: true,
-    profileImageUrl: true,
-    coverImageUrl: true,
-    isActor: true,
-    profileComplete: true,
-    hasUsername: true,
-    hasBio: true,
-    hasProfileImage: true,
-    onChainRegistered: true,
-    nftTokenId: true,
-    virtualBalance: true,
-    lifetimePnL: true,
-    reputationPoints: true,
-    earnedPoints: true,
-    invitePoints: true,
-    bonusPoints: true,
-    referralCount: true,
-    referralCode: true,
-    hasFarcaster: true,
-    hasTwitter: true,
-    farcasterUsername: true,
-    twitterUsername: true,
-    usernameChangedAt: true,
-    createdAt: true,
-  });
-  
-  // If user doesn't exist yet (new Privy user who hasn't completed signup), return null
-  if (!dbUser) {
-    logger.info('User not found - new Privy user who hasn\'t completed signup', { userId }, 'GET /api/users/[userId]/profile');
+    // Get user profile - use findUserByIdentifier to handle new Privy users gracefully
+    const dbUser = await findUserByIdentifier(userId, {
+      id: true,
+      walletAddress: true,
+      username: true,
+      displayName: true,
+      bio: true,
+      profileImageUrl: true,
+      coverImageUrl: true,
+      isActor: true,
+      profileComplete: true,
+      hasUsername: true,
+      hasBio: true,
+      hasProfileImage: true,
+      onChainRegistered: true,
+      nftTokenId: true,
+      virtualBalance: true,
+      lifetimePnL: true,
+      reputationPoints: true,
+      earnedPoints: true,
+      invitePoints: true,
+      bonusPoints: true,
+      referralCount: true,
+      referralCode: true,
+      hasFarcaster: true,
+      hasTwitter: true,
+      farcasterUsername: true,
+      twitterUsername: true,
+      usernameChangedAt: true,
+      createdAt: true,
+    });
+
+    // If user doesn't exist yet (new Privy user who hasn't completed signup), return null
+    if (!dbUser) {
+      logger.info(
+        "User not found - new Privy user who hasn't completed signup",
+        { userId },
+        'GET /api/users/[userId]/profile'
+      );
+      return successResponse({
+        user: null,
+      });
+    }
+
+    // Get cached profile stats (followers, following, posts, etc.)
+    const stats = await cachedDb.getUserProfileStats(dbUser.id);
+
+    logger.info(
+      'User profile fetched successfully',
+      { userId, stats },
+      'GET /api/users/[userId]/profile'
+    );
+
     return successResponse({
-      user: null,
+      user: {
+        id: dbUser.id,
+        walletAddress: dbUser.walletAddress,
+        username: dbUser.username,
+        displayName: dbUser.displayName,
+        bio: dbUser.bio,
+        profileImageUrl: dbUser.profileImageUrl,
+        coverImageUrl: dbUser.coverImageUrl,
+        isActor: dbUser.isActor,
+        profileComplete: dbUser.profileComplete,
+        hasUsername: dbUser.hasUsername,
+        hasBio: dbUser.hasBio,
+        hasProfileImage: dbUser.hasProfileImage,
+        onChainRegistered: dbUser.onChainRegistered,
+        nftTokenId: dbUser.nftTokenId,
+        virtualBalance: Number(dbUser.virtualBalance),
+        lifetimePnL: Number(dbUser.lifetimePnL),
+        reputationPoints: dbUser.reputationPoints,
+        earnedPoints: dbUser.earnedPoints,
+        invitePoints: dbUser.invitePoints,
+        bonusPoints: dbUser.bonusPoints,
+        referralCount: dbUser.referralCount,
+        referralCode: dbUser.referralCode,
+        hasFarcaster: dbUser.hasFarcaster,
+        hasTwitter: dbUser.hasTwitter,
+        farcasterUsername: dbUser.farcasterUsername,
+        twitterUsername: dbUser.twitterUsername,
+        usernameChangedAt: dbUser.usernameChangedAt?.toISOString() || null,
+        createdAt: dbUser.createdAt.toISOString(),
+        stats: stats || {
+          positions: 0,
+          comments: 0,
+          reactions: 0,
+          followers: 0,
+          following: 0,
+          posts: 0,
+        },
+      },
     });
   }
-
-  // Get cached profile stats (followers, following, posts, etc.)
-  const stats = await cachedDb.getUserProfileStats(dbUser.id);
-
-  logger.info('User profile fetched successfully', { userId, stats }, 'GET /api/users/[userId]/profile');
-
-  return successResponse({
-    user: {
-      id: dbUser.id,
-      walletAddress: dbUser.walletAddress,
-      username: dbUser.username,
-      displayName: dbUser.displayName,
-      bio: dbUser.bio,
-      profileImageUrl: dbUser.profileImageUrl,
-      coverImageUrl: dbUser.coverImageUrl,
-      isActor: dbUser.isActor,
-      profileComplete: dbUser.profileComplete,
-      hasUsername: dbUser.hasUsername,
-      hasBio: dbUser.hasBio,
-      hasProfileImage: dbUser.hasProfileImage,
-      onChainRegistered: dbUser.onChainRegistered,
-      nftTokenId: dbUser.nftTokenId,
-      virtualBalance: Number(dbUser.virtualBalance),
-      lifetimePnL: Number(dbUser.lifetimePnL),
-      reputationPoints: dbUser.reputationPoints,
-      earnedPoints: dbUser.earnedPoints,
-      invitePoints: dbUser.invitePoints,
-      bonusPoints: dbUser.bonusPoints,
-      referralCount: dbUser.referralCount,
-      referralCode: dbUser.referralCode,
-      hasFarcaster: dbUser.hasFarcaster,
-      hasTwitter: dbUser.hasTwitter,
-      farcasterUsername: dbUser.farcasterUsername,
-      twitterUsername: dbUser.twitterUsername,
-      usernameChangedAt: dbUser.usernameChangedAt?.toISOString() || null,
-      createdAt: dbUser.createdAt.toISOString(),
-      stats: stats || {
-        positions: 0,
-        comments: 0,
-        reactions: 0,
-        followers: 0,
-        following: 0,
-        posts: 0,
-      },
-    },
-  });
-});
+);

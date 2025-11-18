@@ -1,13 +1,13 @@
 /**
  * Favorites Feed API
- * 
+ *
  * @route GET /api/posts/feed/favorites - Get posts from favorited profiles
  * @access Authenticated (optional, returns empty if not authenticated)
- * 
+ *
  * @description
  * Returns posts from profiles the user has favorited. Optimized with batch queries
  * to prevent N+1 problems. Includes interaction counts and user interaction state.
- * 
+ *
  * @openapi
  * /api/posts/feed/favorites:
  *   get:
@@ -75,7 +75,7 @@
  *                   type: integer
  *       401:
  *         description: Unauthorized (returns empty feed)
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/posts/feed/favorites?limit=20&page=1', {
@@ -83,16 +83,16 @@
  * });
  * const { posts, total, hasMore } = await response.json();
  * ```
- * 
+ *
  * @see {@link /lib/db/context} RLS context
  */
 
-import type { NextRequest } from 'next/server';
 import { optionalAuth } from '@/lib/api/auth-middleware';
 import { asUser } from '@/lib/db/context';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { PostFeedQuerySchema } from '@/lib/validation/schemas';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { PostFeedQuerySchema } from '@/lib/validation/schemas';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/posts/feed/favorites
@@ -119,7 +119,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url);
   const queryParams = {
     limit: searchParams.get('limit'),
-    page: searchParams.get('page')
+    page: searchParams.get('page'),
   };
   const validatedQuery = PostFeedQuerySchema.partial().parse(queryParams);
   const limit = Math.min(validatedQuery.limit || 20, 100);
@@ -177,49 +177,48 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     });
 
     // Get interaction counts and user states - OPTIMIZED: Batch queries instead of N+1
-    const postIds = postsToReturn.map(p => p.id);
-    
+    const postIds = postsToReturn.map((p) => p.id);
+
     // Execute all queries in parallel (5 queries total instead of 5N)
-    const [allReactions, allComments, allShares, userReactions, userShares] =
-      await Promise.all([
-        db.reaction.groupBy({
-          by: ['postId'],
-          where: { postId: { in: postIds }, type: 'like' },
-          _count: { postId: true },
-        }),
-        db.comment.groupBy({
-          by: ['postId'],
-          where: { postId: { in: postIds } },
-          _count: { postId: true },
-        }),
-        db.share.groupBy({
-          by: ['postId'],
-          where: { postId: { in: postIds } },
-          _count: { postId: true },
-        }),
-        db.reaction.findMany({
-          where: {
-            postId: { in: postIds },
-            userId: user.userId,
-            type: 'like',
-          },
-          select: { postId: true },
-        }),
-        db.share.findMany({
-          where: {
-            postId: { in: postIds },
-            userId: user.userId,
-          },
-          select: { postId: true },
-        }),
-      ]);
+    const [allReactions, allComments, allShares, userReactions, userShares] = await Promise.all([
+      db.reaction.groupBy({
+        by: ['postId'],
+        where: { postId: { in: postIds }, type: 'like' },
+        _count: { postId: true },
+      }),
+      db.comment.groupBy({
+        by: ['postId'],
+        where: { postId: { in: postIds } },
+        _count: { postId: true },
+      }),
+      db.share.groupBy({
+        by: ['postId'],
+        where: { postId: { in: postIds } },
+        _count: { postId: true },
+      }),
+      db.reaction.findMany({
+        where: {
+          postId: { in: postIds },
+          userId: user.userId,
+          type: 'like',
+        },
+        select: { postId: true },
+      }),
+      db.share.findMany({
+        where: {
+          postId: { in: postIds },
+          userId: user.userId,
+        },
+        select: { postId: true },
+      }),
+    ]);
 
     // Create lookup maps for O(1) access
-    const reactionMap = new Map(allReactions.map(r => [r.postId, r._count.postId]));
-    const commentMap = new Map(allComments.map(c => [c.postId, c._count.postId]));
-    const shareMap = new Map(allShares.map(s => [s.postId, s._count.postId]));
-    const userReactionSet = new Set(userReactions.map(r => r.postId));
-    const userShareSet = new Set(userShares.map(s => s.postId));
+    const reactionMap = new Map(allReactions.map((r) => [r.postId, r._count.postId]));
+    const commentMap = new Map(allComments.map((c) => [c.postId, c._count.postId]));
+    const shareMap = new Map(allShares.map((s) => [s.postId, s._count.postId]));
+    const userReactionSet = new Set(userReactions.map((r) => r.postId));
+    const userShareSet = new Set(userShares.map((s) => s.postId));
 
     // Transform posts synchronously using lookup maps
     const transformedPosts = postsToReturn.map((post) => ({
@@ -242,7 +241,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     return { posts: transformedPosts, totalCount, hasMore };
   });
 
-  logger.info('Favorites feed fetched successfully', { userId: user.userId, count: result.posts.length, total: result.totalCount }, 'GET /api/posts/feed/favorites');
+  logger.info(
+    'Favorites feed fetched successfully',
+    {
+      userId: user.userId,
+      count: result.posts.length,
+      total: result.totalCount,
+    },
+    'GET /api/posts/feed/favorites'
+  );
 
   return successResponse({
     posts: result.posts,

@@ -1,14 +1,14 @@
 /**
  * Agent Benchmark API
- * 
+ *
  * @route POST /api/agents/[agentId]/benchmark - Run agent benchmark
  * @access Authenticated (owner only)
- * 
+ *
  * @description
  * Runs a serverless Eliza agent through a standardized benchmark simulation to measure
  * performance. Uses the same AutonomousCoordinator that powers autonomous ticks but in
  * a controlled simulation environment with pre-recorded game data.
- * 
+ *
  * @openapi
  * /api/agents/{agentId}/benchmark:
  *   post:
@@ -73,7 +73,7 @@
  *         description: Unauthorized
  *       404:
  *         description: Agent not found
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch(`/api/agents/${agentId}/benchmark`, {
@@ -84,7 +84,7 @@
  *   })
  * });
  * const { results } = await response.json();
- * 
+ *
  * // Run multiple for statistical significance
  * const multi = await fetch(`/api/agents/${agentId}/benchmark`, {
  *   method: 'POST',
@@ -94,38 +94,39 @@
  *   })
  * });
  * ```
- * 
+ *
  * @see {@link /scripts/run-eliza-benchmark.ts} CLI benchmark runner
  * @see {@link /src/lib/benchmark/SimulationEngine.ts} Simulation engine
  * @see {@link /src/lib/agents/autonomous/AutonomousCoordinator.ts} Autonomous coordinator
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { authenticateUser } from '@/lib/server-auth'
-import { agentRuntimeManager } from '@/lib/agents/runtime/AgentRuntimeManager'
-import { SimulationEngine, type SimulationConfig, type SimulationResult } from '@/lib/benchmark/SimulationEngine'
-import { SimulationA2AInterface } from '@/lib/benchmark/SimulationA2AInterface'
-import { AutonomousCoordinator } from '@/lib/agents/autonomous/AutonomousCoordinator'
-import type { BenchmarkGameSnapshot } from '@/lib/benchmark/BenchmarkDataGenerator'
-import { MetricsVisualizer } from '@/lib/benchmark/MetricsVisualizer'
-import { logger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
-import { promises as fs } from 'fs'
-import * as path from 'path'
+import { AutonomousCoordinator } from '@/lib/agents/autonomous/AutonomousCoordinator';
+import { agentRuntimeManager } from '@/lib/agents/runtime/AgentRuntimeManager';
+import type { BenchmarkGameSnapshot } from '@/lib/benchmark/BenchmarkDataGenerator';
+import { MetricsVisualizer } from '@/lib/benchmark/MetricsVisualizer';
+import { SimulationA2AInterface } from '@/lib/benchmark/SimulationA2AInterface';
+import {
+  type SimulationConfig,
+  SimulationEngine,
+  type SimulationResult,
+} from '@/lib/benchmark/SimulationEngine';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { authenticateUser } from '@/lib/server-auth';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ agentId: string }> }
-) {
-  const startTime = Date.now()
-  const { agentId } = await params
-  
-  logger.info('Agent benchmark endpoint hit', { agentId }, 'AgentBenchmark')
-  
+export async function POST(req: NextRequest, { params }: { params: Promise<{ agentId: string }> }) {
+  const startTime = Date.now();
+  const { agentId } = await params;
+
+  logger.info('Agent benchmark endpoint hit', { agentId }, 'AgentBenchmark');
+
   // Authenticate
-  const user = await authenticateUser(req)
-  
+  const user = await authenticateUser(req);
+
   // Verify agent ownership
   const agent = await prisma.user.findUnique({
     where: { id: agentId },
@@ -137,78 +138,83 @@ export async function POST(
       autonomousPosting: true,
       autonomousCommenting: true,
       managedBy: true,
-    }
-  })
-  
+    },
+  });
+
   if (!agent) {
-    return NextResponse.json(
-      { success: false, error: 'Agent not found' },
-      { status: 404 }
-    )
+    return NextResponse.json({ success: false, error: 'Agent not found' }, { status: 404 });
   }
-  
+
   if (!agent.isAgent) {
-    return NextResponse.json(
-      { success: false, error: 'User is not an agent' },
-      { status: 400 }
-    )
+    return NextResponse.json({ success: false, error: 'User is not an agent' }, { status: 400 });
   }
-  
+
   if (agent.managedBy !== user.id) {
     return NextResponse.json(
       { success: false, error: 'Not authorized to benchmark this agent' },
       { status: 403 }
-    )
+    );
   }
-  
+
   // Parse request body
-  const body = await req.json() as {
-    benchmarkPath?: string
-    benchmarkData?: unknown
-    runs?: number
-    outputDir?: string
-  }
-  
-  const runs = body.runs || 1
-  const outputDir = body.outputDir || `/tmp/benchmark-results/${agentId}/${Date.now()}`
-  
-  logger.info('Starting agent benchmark', {
-    agentId,
-    username: agent.username,
-    runs,
-    hasBenchmarkPath: !!body.benchmarkPath,
-    hasBenchmarkData: !!body.benchmarkData
-  }, 'AgentBenchmark')
-  
+  const body = (await req.json()) as {
+    benchmarkPath?: string;
+    benchmarkData?: unknown;
+    runs?: number;
+    outputDir?: string;
+  };
+
+  const runs = body.runs || 1;
+  const outputDir = body.outputDir || `/tmp/benchmark-results/${agentId}/${Date.now()}`;
+
+  logger.info(
+    'Starting agent benchmark',
+    {
+      agentId,
+      username: agent.username,
+      runs,
+      hasBenchmarkPath: !!body.benchmarkPath,
+      hasBenchmarkData: !!body.benchmarkData,
+    },
+    'AgentBenchmark'
+  );
+
   try {
     // Load benchmark snapshot
-    let snapshot
+    let snapshot: BenchmarkGameSnapshot;
     if (body.benchmarkData) {
-      snapshot = body.benchmarkData
+      snapshot = body.benchmarkData as BenchmarkGameSnapshot;
     } else if (body.benchmarkPath) {
       // Resolve path (support both absolute and relative)
       const fullPath = body.benchmarkPath.startsWith('/')
         ? body.benchmarkPath
-        : path.join(process.cwd(), body.benchmarkPath)
-      
-      const data = await fs.readFile(fullPath, 'utf-8')
-      snapshot = JSON.parse(data)
+        : path.join(process.cwd(), body.benchmarkPath);
+
+      const data = await fs.readFile(fullPath, 'utf-8');
+      snapshot = JSON.parse(data) as BenchmarkGameSnapshot;
     } else {
       return NextResponse.json(
-        { success: false, error: 'Either benchmarkPath or benchmarkData required' },
+        {
+          success: false,
+          error: 'Either benchmarkPath or benchmarkData required',
+        },
         { status: 400 }
-      )
+      );
     }
-    
-    logger.info('Benchmark loaded', {
-      id: snapshot.id,
-      ticks: snapshot.ticks?.length || 0
-    }, 'AgentBenchmark')
-    
+
+    logger.info(
+      'Benchmark loaded',
+      {
+        id: snapshot.id,
+        ticks: snapshot.ticks?.length || 0,
+      },
+      'AgentBenchmark'
+    );
+
     // Run single or multiple benchmarks
     if (runs === 1) {
-      const result = await runSingleBenchmark(agentId, snapshot, outputDir)
-      
+      const result = await runSingleBenchmark(agentId, snapshot, outputDir);
+
       return NextResponse.json({
         success: true,
         runs: 1,
@@ -219,28 +225,29 @@ export async function POST(
           optimalityScore: result.metrics.optimalityScore,
           actionsExecuted: result.actions.length,
           duration: Date.now() - startTime,
-          outputDir
-        }
-      })
+          outputDir,
+        },
+      });
     } else {
-      const results: SimulationResult[] = []
-      
+      const results: SimulationResult[] = [];
+
       for (let i = 0; i < runs; i++) {
-        logger.info(`Running benchmark ${i + 1}/${runs}`, { agentId }, 'AgentBenchmark')
+        logger.info(`Running benchmark ${i + 1}/${runs}`, { agentId }, 'AgentBenchmark');
         const result = await runSingleBenchmark(
           agentId,
           snapshot,
           path.join(outputDir, `run-${i + 1}`)
-        )
-        results.push(result)
+        );
+        results.push(result);
       }
-      
+
       // Calculate aggregate statistics
-      const avgPnl = results.reduce((sum, r) => sum + r.metrics.totalPnl, 0) / runs
-      const avgAccuracy = results.reduce((sum, r) => sum + r.metrics.predictionMetrics.accuracy, 0) / runs
-      const avgOptimality = results.reduce((sum, r) => sum + r.metrics.optimalityScore, 0) / runs
-      const avgActions = results.reduce((sum, r) => sum + r.actions.length, 0) / runs
-      
+      const avgPnl = results.reduce((sum, r) => sum + r.metrics.totalPnl, 0) / runs;
+      const avgAccuracy =
+        results.reduce((sum, r) => sum + r.metrics.predictionMetrics.accuracy, 0) / runs;
+      const avgOptimality = results.reduce((sum, r) => sum + r.metrics.optimalityScore, 0) / runs;
+      const avgActions = results.reduce((sum, r) => sum + r.actions.length, 0) / runs;
+
       // Generate comparison visualization
       await MetricsVisualizer.visualizeComparison(
         {
@@ -249,22 +256,22 @@ export async function POST(
             avgPnl,
             avgAccuracy,
             avgOptimality,
-            bestRun: results.reduce((best, curr) => 
+            bestRun: results.reduce((best, curr) =>
               curr.metrics.totalPnl > best.metrics.totalPnl ? curr : best
             ).id,
             worstRun: results.reduce((worst, curr) =>
               curr.metrics.totalPnl < worst.metrics.totalPnl ? curr : worst
-            ).id
-          }
+            ).id,
+          },
         },
         {
           outputDir,
           generateHtml: true,
           generateCsv: true,
-          generateCharts: false
+          generateCharts: false,
         }
-      )
-      
+      );
+
       return NextResponse.json({
         success: true,
         runs,
@@ -274,23 +281,27 @@ export async function POST(
           avgOptimality,
           avgActions,
           duration: Date.now() - startTime,
-          outputDir
-        }
-      })
+          outputDir,
+        },
+      });
     }
   } catch (error) {
-    logger.error('Benchmark execution failed', {
-      agentId,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, 'AgentBenchmark')
-    
+    logger.error(
+      'Benchmark execution failed',
+      {
+        agentId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+      'AgentBenchmark'
+    );
+
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Benchmark execution failed'
+        error: error instanceof Error ? error.message : 'Benchmark execution failed',
       },
       { status: 500 }
-    )
+    );
   }
 }
 
@@ -299,98 +310,110 @@ async function runSingleBenchmark(
   snapshot: unknown,
   outputDir: string
 ): Promise<SimulationResult> {
-  logger.info('Starting single benchmark run', { agentId }, 'AgentBenchmark')
-  
+  logger.info('Starting single benchmark run', { agentId }, 'AgentBenchmark');
+
   // Get agent runtime (initializes if needed)
-  const runtime = await agentRuntimeManager.getRuntime(agentId)
-  
+  const runtime = await agentRuntimeManager.getRuntime(agentId);
+
   // Type assertion for snapshot - cast to proper type
-  const typedSnapshot = snapshot as BenchmarkGameSnapshot
-  
+  const typedSnapshot = snapshot as BenchmarkGameSnapshot;
+
   // Create simulation engine
   const simConfig: SimulationConfig = {
     snapshot: typedSnapshot,
     agentId,
     fastForward: true,
-    responseTimeout: 30000
-  }
-  
+    responseTimeout: 30000,
+  };
+
   const engine = new SimulationEngine(simConfig);
-  
+
   // Create A2A interface and inject into runtime
   const a2aInterface = new SimulationA2AInterface(engine, agentId);
   // Extend runtime with simulation A2A interface
-  (runtime as { a2aClient?: unknown }).a2aClient = a2aInterface
-  
-  logger.info('Runtime and A2A interface initialized', { agentId }, 'AgentBenchmark')
-  
+  (runtime as { a2aClient?: unknown }).a2aClient = a2aInterface;
+
+  logger.info('Runtime and A2A interface initialized', { agentId }, 'AgentBenchmark');
+
   // Initialize simulation
-  engine.initialize()
-  
+  engine.initialize();
+
   // Create autonomous coordinator
-  const coordinator = new AutonomousCoordinator()
-  
+  const coordinator = new AutonomousCoordinator();
+
   // Run simulation with autonomous ticks
-  const totalTicks = typedSnapshot.ticks.length
-  logger.info('Starting simulation loop', { agentId, totalTicks }, 'AgentBenchmark')
-  
+  const totalTicks = typedSnapshot.ticks.length;
+  logger.info('Starting simulation loop', { agentId, totalTicks }, 'AgentBenchmark');
+
   while (!engine.isComplete()) {
-    const currentTick = engine.getCurrentTickNumber()
-    
-    logger.debug(`Autonomous tick ${currentTick + 1}/${totalTicks}`, { agentId }, 'AgentBenchmark')
-    
+    const currentTick = engine.getCurrentTickNumber();
+
+    logger.debug(`Autonomous tick ${currentTick + 1}/${totalTicks}`, { agentId }, 'AgentBenchmark');
+
     // Execute autonomous tick (agent makes decisions via A2A)
-    await coordinator.executeAutonomousTick(agentId, runtime)
+    await coordinator
+      .executeAutonomousTick(agentId, runtime)
       .then((tickResult) => {
-        logger.debug('Tick result', {
-          agentId,
-          success: tickResult.success,
-          actionsExecuted: tickResult.actionsExecuted,
-          method: tickResult.method
-        }, 'AgentBenchmark')
+        logger.debug(
+          'Tick result',
+          {
+            agentId,
+            success: tickResult.success,
+            actionsExecuted: tickResult.actionsExecuted,
+            method: tickResult.method,
+          },
+          'AgentBenchmark'
+        );
       })
       .catch((error: Error) => {
-        logger.error('Tick execution error', {
-          agentId,
-          error: error.message,
-          tick: currentTick
-        }, 'AgentBenchmark')
+        logger.error(
+          'Tick execution error',
+          {
+            agentId,
+            error: error.message,
+            tick: currentTick,
+          },
+          'AgentBenchmark'
+        );
         // Continue to next tick even if this one failed
-      })
-    
+      });
+
     // Advance simulation tick
-    engine.advanceTick()
+    engine.advanceTick();
   }
-  
-  logger.info('Simulation loop complete', { agentId, totalTicks }, 'AgentBenchmark')
-  
+
+  logger.info('Simulation loop complete', { agentId, totalTicks }, 'AgentBenchmark');
+
   // Calculate final results
-  const result = await engine.run()
-  
+  const result = await engine.run();
+
   // Save results to output directory
-  await fs.mkdir(outputDir, { recursive: true })
-  
-  const resultPath = path.join(outputDir, 'result.json')
-  await fs.writeFile(resultPath, JSON.stringify(result, null, 2))
-  
-  const metricsPath = path.join(outputDir, 'metrics.json')
-  await fs.writeFile(metricsPath, JSON.stringify(result.metrics, null, 2))
-  
+  await fs.mkdir(outputDir, { recursive: true });
+
+  const resultPath = path.join(outputDir, 'result.json');
+  await fs.writeFile(resultPath, JSON.stringify(result, null, 2));
+
+  const metricsPath = path.join(outputDir, 'metrics.json');
+  await fs.writeFile(metricsPath, JSON.stringify(result.metrics, null, 2));
+
   // Generate HTML visualization
   await MetricsVisualizer.visualizeSingleRun(result, {
     outputDir,
     generateHtml: true,
     generateCsv: true,
-    generateCharts: false
-  })
-  
-  logger.info('Benchmark completed', {
-    agentId,
-    totalPnl: result.metrics.totalPnl,
-    accuracy: result.metrics.predictionMetrics.accuracy,
-    optimalityScore: result.metrics.optimalityScore
-  }, 'AgentBenchmark')
-  
-  return result
-}
+    generateCharts: false,
+  });
 
+  logger.info(
+    'Benchmark completed',
+    {
+      agentId,
+      totalPnl: result.metrics.totalPnl,
+      accuracy: result.metrics.predictionMetrics.accuracy,
+      optimalityScore: result.metrics.optimalityScore,
+    },
+    'AgentBenchmark'
+  );
+
+  return result;
+}

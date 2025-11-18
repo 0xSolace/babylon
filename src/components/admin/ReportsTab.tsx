@@ -1,19 +1,19 @@
 /**
  * Admin Reports Tab
- * 
+ *
  * View and manage user reports
  */
 
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
-import { Flag, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { AlertCircle, CheckCircle, Clock, Flag, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
+import { toast } from 'sonner';
 
-interface ReportEvaluation {
+type ReportEvaluation = {
   outcome: 'valid_report' | 'invalid_report' | 'abusive_reporter' | 'insufficient_evidence';
   confidence: number;
   reasoning: string;
@@ -24,9 +24,9 @@ interface ReportEvaluation {
     reportsReceived: number;
     reportsSent: number;
   };
-}
+};
 
-interface Report {
+type Report = {
   id: string;
   reportType: string;
   category: string;
@@ -57,9 +57,9 @@ interface Report {
     username: string | null;
     displayName: string | null;
   } | null;
-}
+};
 
-interface ReportStats {
+type ReportStats = {
   totals: {
     total: number;
     pending: number;
@@ -67,7 +67,7 @@ interface ReportStats {
     resolved: number;
     dismissed: number;
   };
-}
+};
 
 type StatusFilter = 'all' | 'pending' | 'reviewing' | 'resolved' | 'dismissed';
 type PriorityFilter = 'all' | 'low' | 'normal' | 'high' | 'critical';
@@ -84,41 +84,44 @@ export function ReportsTab() {
   const [evaluatingReportId, setEvaluatingReportId] = useState<string | null>(null);
   const [, startRefresh] = useTransition();
 
+  const fetchReports = useCallback(
+    async (showRefreshing = false) => {
+      const fetchLogic = async () => {
+        const params = new URLSearchParams({
+          limit: '100',
+        });
+        if (statusFilter !== 'all') params.set('status', statusFilter);
+        if (priorityFilter !== 'all') params.set('priority', priorityFilter);
+
+        const response = await fetch(`/api/admin/reports?${params}`);
+        if (!response.ok) throw new Error('Failed to fetch reports');
+
+        const data = await response.json();
+        setReports(data.reports || []);
+        setLoading(false);
+      };
+
+      if (showRefreshing) {
+        startRefresh(fetchLogic);
+      } else {
+        await fetchLogic();
+      }
+    },
+    [priorityFilter, statusFilter]
+  );
+
+  const fetchStats = useCallback(async () => {
+    const response = await fetch('/api/admin/reports/stats');
+    if (!response.ok) return;
+
+    const data = await response.json();
+    setStats(data);
+  }, []);
+
   useEffect(() => {
     fetchReports();
     fetchStats();
-  }, [statusFilter, priorityFilter]);
-
-  const fetchReports = async (showRefreshing = false) => {
-    const fetchLogic = async () => {
-      const params = new URLSearchParams({
-        limit: '100',
-      });
-      if (statusFilter !== 'all') params.set('status', statusFilter);
-      if (priorityFilter !== 'all') params.set('priority', priorityFilter);
-
-      const response = await fetch(`/api/admin/reports?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch reports');
-      
-      const data = await response.json();
-      setReports(data.reports || []);
-      setLoading(false);
-    };
-
-    if (showRefreshing) {
-      startRefresh(fetchLogic);
-    } else {
-      await fetchLogic();
-    }
-  };
-
-  const fetchStats = async () => {
-    const response = await fetch('/api/admin/reports/stats');
-    if (!response.ok) return;
-    
-    const data = await response.json();
-    setStats(data);
-  };
+  }, [fetchReports, fetchStats]);
 
   const handleAction = async (reportId: string, action: string, resolution: string) => {
     const response = await fetch(`/api/admin/reports/${reportId}`, {
@@ -157,12 +160,12 @@ export function ReportsTab() {
 
       const data = await response.json();
       toast.success('Report evaluated successfully');
-      
+
       // Refresh reports to show evaluation
       await fetchReports(true);
-      
+
       // Show evaluation modal if we have the report selected
-      const report = reports.find(r => r.id === reportId);
+      const report = reports.find((r) => r.id === reportId);
       if (report && data.evaluation) {
         setSelectedReport({ ...report, evaluation: data.evaluation });
         setShowEvaluationModal(true);
@@ -217,13 +220,13 @@ export function ReportsTab() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Clock className="w-4 h-4 text-yellow-500" />;
+        return <Clock className="h-4 w-4 text-yellow-500" />;
       case 'reviewing':
-        return <AlertCircle className="w-4 h-4 text-blue-500" />;
+        return <AlertCircle className="h-4 w-4 text-blue-500" />;
       case 'resolved':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'dismissed':
-        return <XCircle className="w-4 h-4 text-gray-500" />;
+        return <XCircle className="h-4 w-4 text-gray-500" />;
       default:
         return null;
     }
@@ -243,26 +246,26 @@ export function ReportsTab() {
     <div className="space-y-6">
       {/* Stats Overview */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-card border border-border rounded-lg p-4">
-            <div className="text-sm text-muted-foreground mb-1">Total</div>
-            <div className="text-2xl font-bold">{stats.totals.total}</div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="mb-1 text-muted-foreground text-sm">Total</div>
+            <div className="font-bold text-2xl">{stats.totals.total}</div>
           </div>
-          <div className="bg-card border border-yellow-500/20 rounded-lg p-4">
-            <div className="text-sm text-muted-foreground mb-1">Pending</div>
-            <div className="text-2xl font-bold text-yellow-500">{stats.totals.pending}</div>
+          <div className="rounded-lg border border-yellow-500/20 bg-card p-4">
+            <div className="mb-1 text-muted-foreground text-sm">Pending</div>
+            <div className="font-bold text-2xl text-yellow-500">{stats.totals.pending}</div>
           </div>
-          <div className="bg-card border border-blue-500/20 rounded-lg p-4">
-            <div className="text-sm text-muted-foreground mb-1">Reviewing</div>
-            <div className="text-2xl font-bold text-blue-500">{stats.totals.reviewing}</div>
+          <div className="rounded-lg border border-blue-500/20 bg-card p-4">
+            <div className="mb-1 text-muted-foreground text-sm">Reviewing</div>
+            <div className="font-bold text-2xl text-blue-500">{stats.totals.reviewing}</div>
           </div>
-          <div className="bg-card border border-green-500/20 rounded-lg p-4">
-            <div className="text-sm text-muted-foreground mb-1">Resolved</div>
-            <div className="text-2xl font-bold text-green-500">{stats.totals.resolved}</div>
+          <div className="rounded-lg border border-green-500/20 bg-card p-4">
+            <div className="mb-1 text-muted-foreground text-sm">Resolved</div>
+            <div className="font-bold text-2xl text-green-500">{stats.totals.resolved}</div>
           </div>
-          <div className="bg-card border border-border rounded-lg p-4">
-            <div className="text-sm text-muted-foreground mb-1">Dismissed</div>
-            <div className="text-2xl font-bold">{stats.totals.dismissed}</div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="mb-1 text-muted-foreground text-sm">Dismissed</div>
+            <div className="font-bold text-2xl">{stats.totals.dismissed}</div>
           </div>
         </div>
       )}
@@ -270,13 +273,14 @@ export function ReportsTab() {
       {/* Filters */}
       <div className="flex flex-wrap gap-4">
         <div className="flex gap-2">
-          <span className="text-sm text-muted-foreground self-center">Status:</span>
+          <span className="self-center text-muted-foreground text-sm">Status:</span>
           {(['all', 'pending', 'reviewing', 'resolved', 'dismissed'] as const).map((s) => (
             <button
+              type="button"
               key={s}
               onClick={() => setStatusFilter(s)}
               className={cn(
-                'px-3 py-1.5 text-sm font-medium rounded transition-colors',
+                'rounded px-3 py-1.5 font-medium text-sm transition-colors',
                 statusFilter === s
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -288,13 +292,14 @@ export function ReportsTab() {
         </div>
 
         <div className="flex gap-2">
-          <span className="text-sm text-muted-foreground self-center">Priority:</span>
+          <span className="self-center text-muted-foreground text-sm">Priority:</span>
           {(['all', 'critical', 'high', 'normal', 'low'] as const).map((p) => (
             <button
+              type="button"
               key={p}
               onClick={() => setPriorityFilter(p)}
               className={cn(
-                'px-3 py-1.5 text-sm font-medium rounded transition-colors',
+                'rounded px-3 py-1.5 font-medium text-sm transition-colors',
                 priorityFilter === p
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -308,8 +313,8 @@ export function ReportsTab() {
 
       {/* Reports List */}
       {reports.length === 0 ? (
-        <div className="text-center text-muted-foreground py-12">
-          <Flag className="w-12 h-12 mx-auto mb-3 opacity-50" />
+        <div className="py-12 text-center text-muted-foreground">
+          <Flag className="mx-auto mb-3 h-12 w-12 opacity-50" />
           <p>No reports found</p>
         </div>
       ) : (
@@ -317,36 +322,44 @@ export function ReportsTab() {
           {reports.map((report) => (
             <div
               key={report.id}
-              className="bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition-colors"
+              className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50"
             >
               <div className="flex items-start gap-4">
                 {/* Status Icon */}
-                <div className="pt-1">
-                  {getStatusIcon(report.status)}
-                </div>
+                <div className="pt-1">{getStatusIcon(report.status)}</div>
 
                 {/* Content */}
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   {/* Header */}
-                  <div className="flex items-start justify-between gap-4 mb-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={cn('px-2 py-0.5 text-xs font-medium rounded border', getCategoryColor(report.category))}>
+                  <div className="mb-2 flex items-start justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          'rounded border px-2 py-0.5 font-medium text-xs',
+                          getCategoryColor(report.category)
+                        )}
+                      >
                         {report.category.replace('_', ' ')}
                       </span>
-                      <span className={cn('px-2 py-0.5 text-xs font-medium rounded', getPriorityColor(report.priority))}>
+                      <span
+                        className={cn(
+                          'rounded px-2 py-0.5 font-medium text-xs',
+                          getPriorityColor(report.priority)
+                        )}
+                      >
                         {report.priority}
                       </span>
-                      <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-500/10 text-purple-500">
+                      <span className="rounded bg-purple-500/10 px-2 py-0.5 font-medium text-purple-500 text-xs">
                         {report.reportType}
                       </span>
                     </div>
-                    <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    <div className="whitespace-nowrap text-muted-foreground text-xs">
                       {formatDate(report.createdAt)}
                     </div>
                   </div>
 
                   {/* Reporter & Reported User */}
-                  <div className="flex items-center gap-4 mb-3 text-sm">
+                  <div className="mb-3 flex items-center gap-4 text-sm">
                     <div className="flex items-center gap-2">
                       <Avatar
                         src={report.reporter.profileImageUrl || undefined}
@@ -370,7 +383,7 @@ export function ReportsTab() {
                             {report.reportedUser.displayName || report.reportedUser.username}
                           </span>
                           {report.reportedUser.isBanned && (
-                            <span className="px-2 py-0.5 text-xs rounded bg-red-500/20 text-red-500">
+                            <span className="rounded bg-red-500/20 px-2 py-0.5 text-red-500 text-xs">
                               Banned
                             </span>
                           )}
@@ -380,47 +393,54 @@ export function ReportsTab() {
                   </div>
 
                   {/* Reason */}
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                    {report.reason}
-                  </p>
+                  <p className="mb-3 line-clamp-2 text-muted-foreground text-sm">{report.reason}</p>
 
                   {/* Evaluation Badge */}
                   {report.evaluation && (
                     <div className="mb-2">
-                      <span className={cn(
-                        'px-2 py-1 text-xs font-medium rounded',
-                        report.evaluation.outcome === 'valid_report' ? 'bg-green-500/20 text-green-500' :
-                        report.evaluation.outcome === 'abusive_reporter' ? 'bg-red-500/20 text-red-500' :
-                        report.evaluation.outcome === 'invalid_report' ? 'bg-yellow-500/20 text-yellow-500' :
-                        'bg-gray-500/20 text-gray-500'
-                      )}>
-                        {report.evaluation.outcome.replace('_', ' ')} ({Math.round(report.evaluation.confidence * 100)}%)
+                      <span
+                        className={cn(
+                          'rounded px-2 py-1 font-medium text-xs',
+                          report.evaluation.outcome === 'valid_report'
+                            ? 'bg-green-500/20 text-green-500'
+                            : report.evaluation.outcome === 'abusive_reporter'
+                              ? 'bg-red-500/20 text-red-500'
+                              : report.evaluation.outcome === 'invalid_report'
+                                ? 'bg-yellow-500/20 text-yellow-500'
+                                : 'bg-gray-500/20 text-gray-500'
+                        )}
+                      >
+                        {report.evaluation.outcome.replace('_', ' ')} (
+                        {Math.round(report.evaluation.confidence * 100)}%)
                       </span>
                     </div>
                   )}
 
                   {/* Actions */}
                   {report.status === 'pending' || report.status === 'reviewing' ? (
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex flex-wrap gap-2">
                       <button
+                        type="button"
                         onClick={() => handleEvaluate(report.id)}
                         disabled={evaluatingReportId === report.id}
-                        className="px-3 py-1 text-sm bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors disabled:opacity-50"
+                        className="rounded bg-purple-500 px-3 py-1 text-sm text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
                       >
                         {evaluatingReportId === report.id ? 'Evaluating...' : 'Evaluate'}
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
                           setSelectedReport(report);
                           setShowActionModal(true);
                         }}
-                        className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+                        className="rounded bg-primary px-3 py-1 text-primary-foreground text-sm transition-colors hover:bg-primary/90"
                       >
                         Take Action
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleAction(report.id, 'dismiss', 'Dismissed by admin')}
-                        className="px-3 py-1 text-sm bg-muted text-foreground rounded hover:bg-muted/80 transition-colors"
+                        className="rounded bg-muted px-3 py-1 text-foreground text-sm transition-colors hover:bg-muted/80"
                       >
                         Dismiss
                       </button>
@@ -429,11 +449,12 @@ export function ReportsTab() {
                     <div className="text-sm">
                       {report.evaluation && (
                         <button
+                          type="button"
                           onClick={() => {
                             setSelectedReport(report);
                             setShowEvaluationModal(true);
                           }}
-                          className="text-primary hover:underline text-xs mb-2"
+                          className="mb-2 text-primary text-xs hover:underline"
                         >
                           View Evaluation Details
                         </button>
@@ -444,7 +465,7 @@ export function ReportsTab() {
                         </div>
                       )}
                       {report.resolver && (
-                        <div className="text-muted-foreground text-xs mt-1">
+                        <div className="mt-1 text-muted-foreground text-xs">
                           Resolved by {report.resolver.displayName || report.resolver.username}
                         </div>
                       )}
@@ -484,17 +505,17 @@ export function ReportsTab() {
   );
 }
 
-interface ActionModalProps {
+type ActionModalProps = {
   report: Report;
   onClose: () => void;
   onAction: (reportId: string, action: string, resolution: string) => void;
-}
+};
 
-interface EvaluationModalProps {
+type EvaluationModalProps = {
   report: Report;
   evaluation: ReportEvaluation;
   onClose: () => void;
-}
+};
 
 function EvaluationModal({ report, evaluation, onClose }: EvaluationModalProps) {
   const getOutcomeColor = (outcome: string) => {
@@ -511,14 +532,14 @@ function EvaluationModal({ report, evaluation, onClose }: EvaluationModalProps) 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">Report Evaluation</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-card p-6">
+        <h2 className="mb-4 font-bold text-xl">Report Evaluation</h2>
 
         {/* Evaluation Outcome */}
         <div className="mb-4">
-          <div className={cn('px-4 py-3 rounded-lg border', getOutcomeColor(evaluation.outcome))}>
-            <div className="flex items-center justify-between mb-2">
+          <div className={cn('rounded-lg border px-4 py-3', getOutcomeColor(evaluation.outcome))}>
+            <div className="mb-2 flex items-center justify-between">
               <span className="font-semibold text-lg">
                 {evaluation.outcome.replace('_', ' ').toUpperCase()}
               </span>
@@ -526,29 +547,29 @@ function EvaluationModal({ report, evaluation, onClose }: EvaluationModalProps) 
                 Confidence: {Math.round(evaluation.confidence * 100)}%
               </span>
             </div>
-            <p className="text-sm mt-2">{evaluation.reasoning}</p>
+            <p className="mt-2 text-sm">{evaluation.reasoning}</p>
           </div>
         </div>
 
         {/* Evidence Summary */}
         <div className="mb-4">
-          <h3 className="text-sm font-semibold mb-2">Evidence Collected</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-muted/50 rounded-lg p-3">
-              <div className="text-xs text-muted-foreground">Chat Messages</div>
-              <div className="text-lg font-bold">{evaluation.evidenceSummary.chatMessages}</div>
+          <h3 className="mb-2 font-semibold text-sm">Evidence Collected</h3>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-lg bg-muted/50 p-3">
+              <div className="text-muted-foreground text-xs">Chat Messages</div>
+              <div className="font-bold text-lg">{evaluation.evidenceSummary.chatMessages}</div>
             </div>
-            <div className="bg-muted/50 rounded-lg p-3">
-              <div className="text-xs text-muted-foreground">Posts</div>
-              <div className="text-lg font-bold">{evaluation.evidenceSummary.posts}</div>
+            <div className="rounded-lg bg-muted/50 p-3">
+              <div className="text-muted-foreground text-xs">Posts</div>
+              <div className="font-bold text-lg">{evaluation.evidenceSummary.posts}</div>
             </div>
-            <div className="bg-muted/50 rounded-lg p-3">
-              <div className="text-xs text-muted-foreground">Reports Received</div>
-              <div className="text-lg font-bold">{evaluation.evidenceSummary.reportsReceived}</div>
+            <div className="rounded-lg bg-muted/50 p-3">
+              <div className="text-muted-foreground text-xs">Reports Received</div>
+              <div className="font-bold text-lg">{evaluation.evidenceSummary.reportsReceived}</div>
             </div>
-            <div className="bg-muted/50 rounded-lg p-3">
-              <div className="text-xs text-muted-foreground">Reports Sent</div>
-              <div className="text-lg font-bold">{evaluation.evidenceSummary.reportsSent}</div>
+            <div className="rounded-lg bg-muted/50 p-3">
+              <div className="text-muted-foreground text-xs">Reports Sent</div>
+              <div className="font-bold text-lg">{evaluation.evidenceSummary.reportsSent}</div>
             </div>
           </div>
         </div>
@@ -556,10 +577,10 @@ function EvaluationModal({ report, evaluation, onClose }: EvaluationModalProps) 
         {/* Recommended Actions */}
         {evaluation.recommendedActions.length > 0 && (
           <div className="mb-4">
-            <h3 className="text-sm font-semibold mb-2">Recommended Actions</h3>
-            <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-              {evaluation.recommendedActions.map((action, index) => (
-                <li key={index}>{action}</li>
+            <h3 className="mb-2 font-semibold text-sm">Recommended Actions</h3>
+            <ul className="list-inside list-disc space-y-1 text-muted-foreground text-sm">
+              {evaluation.recommendedActions.map((action) => (
+                <li key={action}>{action}</li>
               ))}
             </ul>
           </div>
@@ -567,12 +588,26 @@ function EvaluationModal({ report, evaluation, onClose }: EvaluationModalProps) 
 
         {/* Report Details */}
         <div className="mb-4">
-          <h3 className="text-sm font-semibold mb-2">Report Details</h3>
-          <div className="bg-muted/50 rounded-lg p-3 text-sm">
-            <p><strong>Category:</strong> {report.category.replace('_', ' ')}</p>
-            <p><strong>Reason:</strong> {report.reason}</p>
+          <h3 className="mb-2 font-semibold text-sm">Report Details</h3>
+          <div className="rounded-lg bg-muted/50 p-3 text-sm">
+            <p>
+              <strong>Category:</strong> {report.category.replace('_', ' ')}
+            </p>
+            <p>
+              <strong>Reason:</strong> {report.reason}
+            </p>
             {report.evidence && (
-              <p><strong>Evidence:</strong> <a href={report.evidence} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">View</a></p>
+              <p>
+                <strong>Evidence:</strong>{' '}
+                <a
+                  href={report.evidence}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  View
+                </a>
+              </p>
             )}
           </div>
         </div>
@@ -580,8 +615,9 @@ function EvaluationModal({ report, evaluation, onClose }: EvaluationModalProps) 
         {/* Close Button */}
         <div className="flex justify-end">
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors"
+            className="rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80"
           >
             Close
           </button>
@@ -608,33 +644,42 @@ function ActionModal({ report, onClose, onAction }: ActionModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">Take Action on Report</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card p-6">
+        <h2 className="mb-4 font-bold text-xl">Take Action on Report</h2>
 
         {/* Report Details */}
-        <div className="bg-muted/50 rounded-lg p-4 mb-4">
-          <p className="text-sm text-muted-foreground mb-2">
+        <div className="mb-4 rounded-lg bg-muted/50 p-4">
+          <p className="mb-2 text-muted-foreground text-sm">
             <strong>Category:</strong> {report.category.replace('_', ' ')}
           </p>
-          <p className="text-sm text-muted-foreground mb-2">
+          <p className="mb-2 text-muted-foreground text-sm">
             <strong>Reason:</strong> {report.reason}
           </p>
           {report.evidence && (
-            <p className="text-sm text-muted-foreground">
-              <strong>Evidence:</strong> <a href={report.evidence} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">View</a>
+            <p className="text-muted-foreground text-sm">
+              <strong>Evidence:</strong>{' '}
+              <a
+                href={report.evidence}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                View
+              </a>
             </p>
           )}
         </div>
 
         {/* Evaluation Info */}
         {report.evaluation && (
-          <div className="mb-4 p-3 bg-muted/50 rounded-lg">
-            <div className="text-xs text-muted-foreground mb-1">AI Evaluation</div>
+          <div className="mb-4 rounded-lg bg-muted/50 p-3">
+            <div className="mb-1 text-muted-foreground text-xs">AI Evaluation</div>
             <div className="text-sm">
-              <strong>Outcome:</strong> {report.evaluation.outcome.replace('_', ' ')} ({Math.round(report.evaluation.confidence * 100)}% confidence)
+              <strong>Outcome:</strong> {report.evaluation.outcome.replace('_', ' ')} (
+              {Math.round(report.evaluation.confidence * 100)}% confidence)
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="mt-1 text-muted-foreground text-xs">
               Click "View Evaluation Details" in the report list to see full evaluation
             </p>
           </div>
@@ -642,11 +687,14 @@ function ActionModal({ report, onClose, onAction }: ActionModalProps) {
 
         {/* Action Selection */}
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Action</label>
+          <label htmlFor="reports-action" className="mb-2 block font-medium text-sm">
+            Action
+          </label>
           <select
+            id="reports-action"
             value={action}
             onChange={(e) => setAction(e.target.value)}
-            className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2"
           >
             <option value="resolve">Resolve (content removed/warning issued)</option>
             <option value="ban_user">Ban User</option>
@@ -657,12 +705,15 @@ function ActionModal({ report, onClose, onAction }: ActionModalProps) {
 
         {/* Resolution Message */}
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Resolution Message</label>
+          <label htmlFor="reports-resolution" className="mb-2 block font-medium text-sm">
+            Resolution Message
+          </label>
           <textarea
+            id="reports-resolution"
             value={resolution}
             onChange={(e) => setResolution(e.target.value)}
             placeholder="Explain the action taken..."
-            className="w-full px-3 py-2 bg-background border border-border rounded-lg resize-none"
+            className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2"
             rows={4}
           />
         </div>
@@ -670,16 +721,18 @@ function ActionModal({ report, onClose, onAction }: ActionModalProps) {
         {/* Buttons */}
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="flex-1 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+            className="flex-1 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={isSubmitting || !resolution.trim()}
-            className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+            className="flex-1 rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {isSubmitting ? 'Submitting...' : 'Submit'}
           </button>
@@ -688,5 +741,3 @@ function ActionModal({ report, onClose, onAction }: ActionModalProps) {
     </div>
   );
 }
-
-

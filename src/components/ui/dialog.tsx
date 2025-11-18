@@ -1,15 +1,15 @@
-import React from 'react';
 import { cn } from '@/lib/utils';
+import type React from 'react';
 
 /**
  * Dialog component for displaying modal dialogs.
- * 
+ *
  * Provides a modal dialog overlay with backdrop. Closes when backdrop
  * is clicked or onOpenChange is called. Only renders when open is true.
- * 
+ *
  * @param props - Dialog component props
  * @returns Dialog element or null if not open
- * 
+ *
  * @example
  * ```tsx
  * <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -24,11 +24,13 @@ export interface DialogProps extends React.ComponentPropsWithoutRef<'div'> {
 
 export const Dialog = ({ children, open, onOpenChange, className, ...props }: DialogProps) => {
   if (!open) return null;
-  
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div 
+      <button
+        type="button"
+        aria-label="Close dialog"
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => onOpenChange?.(false)}
       />
@@ -42,10 +44,10 @@ export const Dialog = ({ children, open, onOpenChange, className, ...props }: Di
 
 /**
  * Dialog content container component.
- * 
+ *
  * Wraps the dialog content with styling and prevents click propagation.
  * Includes fade-in and zoom-in animations.
- * 
+ *
  * @param props - DialogContent component props
  * @returns Dialog content element
  */
@@ -53,13 +55,16 @@ export type DialogContentProps = React.ComponentPropsWithoutRef<'div'>;
 
 export const DialogContent = ({ children, className, ...props }: DialogContentProps) => {
   return (
-    <div 
+    <div
       className={cn(
-        'bg-background border border-border rounded-lg shadow-lg w-full',
-        'animate-in fade-in-0 zoom-in-95 duration-200',
+        'w-full rounded-lg border border-border bg-background shadow-lg',
+        'fade-in-0 zoom-in-95 animate-in duration-200',
         className
       )}
       onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="true"
       {...props}
     >
       {children}
@@ -69,10 +74,10 @@ export const DialogContent = ({ children, className, ...props }: DialogContentPr
 
 /**
  * Dialog header container component.
- * 
+ *
  * Provides layout for dialog title and description with responsive
  * text alignment (center on mobile, left on desktop).
- * 
+ *
  * @param props - DialogHeader component props
  * @returns Dialog header element
  */
@@ -88,9 +93,9 @@ export const DialogHeader = ({ children, className, ...props }: DialogHeaderProp
 
 /**
  * Dialog title component.
- * 
+ *
  * Displays the dialog title with semibold font and tight tracking.
- * 
+ *
  * @param props - DialogTitle component props
  * @returns Dialog title element
  */
@@ -98,7 +103,7 @@ export type DialogTitleProps = React.ComponentPropsWithoutRef<'h2'>;
 
 export const DialogTitle = ({ children, className, ...props }: DialogTitleProps) => {
   return (
-    <h2 className={cn('text-lg font-semibold leading-none tracking-tight', className)} {...props}>
+    <h2 className={cn('font-semibold text-lg leading-none tracking-tight', className)} {...props}>
       {children}
     </h2>
   );
@@ -106,9 +111,9 @@ export const DialogTitle = ({ children, className, ...props }: DialogTitleProps)
 
 /**
  * Dialog description component.
- * 
+ *
  * Displays dialog description text with muted foreground color.
- * 
+ *
  * @param props - DialogDescription component props
  * @returns Dialog description element
  */
@@ -116,7 +121,7 @@ export type DialogDescriptionProps = React.ComponentPropsWithoutRef<'p'>;
 
 export const DialogDescription = ({ children, className, ...props }: DialogDescriptionProps) => {
   return (
-    <p className={cn('text-sm text-muted-foreground', className)} {...props}>
+    <p className={cn('text-muted-foreground text-sm', className)} {...props}>
       {children}
     </p>
   );
@@ -124,10 +129,10 @@ export const DialogDescription = ({ children, className, ...props }: DialogDescr
 
 /**
  * Dialog footer container component.
- * 
+ *
  * Provides layout for action buttons with responsive column/row
  * layout (column on mobile, row on desktop).
- * 
+ *
  * @param props - DialogFooter component props
  * @returns Dialog footer element
  */
@@ -135,9 +140,11 @@ export type DialogFooterProps = React.ComponentPropsWithoutRef<'div'>;
 
 export const DialogFooter = ({ children, className, ...props }: DialogFooterProps) => {
   return (
-    <div className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2', className)} {...props}>
+    <div
+      className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2', className)}
+      {...props}
+    >
       {children}
     </div>
   );
 };
-

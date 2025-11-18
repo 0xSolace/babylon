@@ -2,14 +2,14 @@
  * Perpetuals Settlement Mode Configuration
  *
  * Supports three modes:
- * - offchain: Fast MVP trading with database persistence 
- * - onchain: Decentralized trading with blockchain settlement (P 
+ * - offchain: Fast MVP trading with database persistence
+ * - onchain: Decentralized trading with blockchain settlement (P
  * - hybrid: Off-chain execution with periodic on-chain settlement (best of both)
  */
 
 export type PerpSettlementMode = 'offchain' | 'onchain' | 'hybrid';
 
-export interface PerpModeConfig {
+export type PerpModeConfig = {
   // Settlement mode
   settlementMode: PerpSettlementMode;
 
@@ -28,21 +28,22 @@ export interface PerpModeConfig {
   // Settlement options
   asyncSettlement: boolean; // true = don't await blockchain confirmation
   settlementRetries: number; // retry attempts for failed settlements
-}
+};
 
 /**
  * Load configuration from environment variables
  */
 export const PERP_CONFIG: PerpModeConfig = {
   // Default to off-chain MVP for fastest performance
-  settlementMode: (process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE || 'offchain') as PerpSettlementMode,
+  settlementMode: (process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE ||
+    'offchain') as PerpSettlementMode,
 
   // On-chain contract addresses (optional)
   diamondAddress: process.env.NEXT_PUBLIC_DIAMOND_ADDRESS,
 
   // Hybrid mode settings (1 hour batches, 100 positions max)
-  hybridBatchInterval: parseInt(process.env.NEXT_PUBLIC_HYBRID_BATCH_INTERVAL || '3600000'),
-  hybridBatchSize: parseInt(process.env.NEXT_PUBLIC_HYBRID_BATCH_SIZE || '100'),
+  hybridBatchInterval: parseInt(process.env.NEXT_PUBLIC_HYBRID_BATCH_INTERVAL || '3600000', 10),
+  hybridBatchSize: parseInt(process.env.NEXT_PUBLIC_HYBRID_BATCH_SIZE || '100', 10),
 
   // Feature flags (all disabled by default for MVP)
   enableOnChainMode: process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS === 'true',
@@ -51,7 +52,7 @@ export const PERP_CONFIG: PerpModeConfig = {
 
   // Settlement options (async by default to keep fast UX)
   asyncSettlement: process.env.NEXT_PUBLIC_ASYNC_SETTLEMENT !== 'false',
-  settlementRetries: parseInt(process.env.NEXT_PUBLIC_SETTLEMENT_RETRIES || '3'),
+  settlementRetries: parseInt(process.env.NEXT_PUBLIC_SETTLEMENT_RETRIES || '3', 10),
 };
 
 /**
@@ -59,7 +60,10 @@ export const PERP_CONFIG: PerpModeConfig = {
  */
 export function validatePerpConfig(): void {
   // Check on-chain modes have diamond address
-  if ((PERP_CONFIG.settlementMode === 'onchain' || PERP_CONFIG.settlementMode === 'hybrid') && !PERP_CONFIG.diamondAddress) {
+  if (
+    (PERP_CONFIG.settlementMode === 'onchain' || PERP_CONFIG.settlementMode === 'hybrid') &&
+    !PERP_CONFIG.diamondAddress
+  ) {
     throw new Error('NEXT_PUBLIC_DIAMOND_ADDRESS required for onchain/hybrid settlement modes');
   }
 

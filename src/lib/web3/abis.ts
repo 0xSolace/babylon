@@ -28,7 +28,7 @@ export const IDENTITY_REGISTRY_ABI = [
   'event AgentUpdated(uint256 indexed tokenId, string endpoint, bytes32 capabilitiesHash)',
   'event AgentDeactivated(uint256 indexed tokenId)',
   'event AgentReactivated(uint256 indexed tokenId)',
-] as const
+] as const;
 
 // ERC-8004 Reputation System ABI
 export const REPUTATION_SYSTEM_ABI = [
@@ -53,7 +53,7 @@ export const REPUTATION_SYSTEM_ABI = [
   'event FeedbackSubmitted(uint256 indexed tokenId, address indexed from, int8 rating)',
   'event AgentBanned(uint256 indexed tokenId)',
   'event AgentUnbanned(uint256 indexed tokenId)',
-] as const
+] as const;
 
 // Prediction Market Facet ABI
 export const PREDICTION_MARKET_ABI = [
@@ -86,18 +86,18 @@ export const PREDICTION_MARKET_ABI = [
   'event PositionClaimed(bytes32 indexed marketId, address indexed claimer, uint256 payout)',
   'event Deposited(address indexed user, uint256 amount)',
   'event Withdrawn(address indexed user, uint256 amount)',
-] as const
+] as const;
 
 // Oracle Facet ABI
 export const ORACLE_ABI = [
   // Oracle resolution requests
   'function requestChainlinkResolution(bytes32 _marketId) external payable',
   'function requestUMAResolution(bytes32 _marketId, uint8 _proposedOutcome) external payable',
-  
+
   // Oracle callbacks
   'function oracleCallback(bytes32 _requestId, bytes32 _marketId, uint8 _outcome) external',
   'function umaOracleCallback(bytes32 _marketId, uint8 _outcome) external',
-  
+
   // Oracle management
   'function setChainlinkOracle(address _oracle) external',
   'function setUMAOracle(address _oracle) external',
@@ -107,7 +107,7 @@ export const ORACLE_ABI = [
   // Events
   'event OracleRequested(bytes32 indexed marketId, bytes32 indexed requestId, string oracleType)',
   'event OracleResponseReceived(bytes32 indexed marketId, bytes32 indexed requestId, uint8 outcome)',
-] as const
+] as const;
 
 // Diamond Loupe ABI (for facet discovery)
 export const DIAMOND_LOUPE_ABI = [
@@ -115,7 +115,7 @@ export const DIAMOND_LOUPE_ABI = [
   'function facetFunctionSelectors(address facet) external view returns (bytes4[] memory)',
   'function facetAddresses() external view returns (address[] memory)',
   'function facetAddress(bytes4 functionSelector) external view returns (address)',
-] as const
+] as const;
 
 // Price Storage Facet ABI
 export const PRICE_STORAGE_FACET_ABI = [
@@ -123,20 +123,20 @@ export const PRICE_STORAGE_FACET_ABI = [
   'function updatePrices(bytes32[] calldata _marketIds, uint256 _tick, uint256[] calldata _prices) external',
   'function updatePrice(bytes32 _marketId, uint256 _tick, uint256 _price) external',
   'function submitPriceBatch(bytes32 _marketId, uint256 _startTick, uint256 _endTick, bytes32 _merkleRoot) external',
-  
+
   // Price queries
   'function getLatestPrice(bytes32 _marketId) external view returns (uint256 price, uint256 timestamp, uint256 tick)',
   'function getPriceAtTick(bytes32 _marketId, uint256 _tick) external view returns (uint256 price, uint256 timestamp)',
   'function getGlobalTickCounter() external view returns (uint256)',
-  
+
   // Authorization
   'function incrementTickCounter() external returns (uint256)',
   'function setAuthorizedUpdater(bytes32 _marketId, address _updater) external',
   'function getAuthorizedUpdater(bytes32 _marketId) external view returns (address)',
-  
+
   // Events
   'event PriceUpdated(bytes32 indexed marketId, uint256 indexed tick, uint256 price, uint256 timestamp)',
   'event PricesBatchUpdated(bytes32[] marketIds, uint256 tick, uint256 timestamp)',
   'event PriceBatchSubmitted(bytes32 indexed marketId, uint256 startTick, uint256 endTick, bytes32 merkleRoot)',
   'event AuthorizedUpdaterSet(bytes32 indexed marketId, address indexed updater, bool authorized)',
-] as const
+] as const;

@@ -1,14 +1,14 @@
 /**
  * Reputation Breakdown API
- * 
+ *
  * @route GET /api/reputation/breakdown/[userId] - Get detailed reputation breakdown
  * @access Public
- * 
+ *
  * @description
  * Returns detailed breakdown of reputation score components including PNL component
  * (40% weight), feedback component (40% weight), activity component (20% weight),
  * raw metrics, and confidence scores.
- * 
+ *
  * @openapi
  * /api/reputation/breakdown/{userId}:
  *   get:
@@ -66,46 +66,46 @@
  *                       example: 0.2
  *       404:
  *         description: User not found
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/reputation/breakdown/user_123');
  * const { breakdown, weights } = await response.json();
  * console.log(`PNL: ${breakdown.pnl} (${weights.pnl * 100}% weight)`);
  * ```
- * 
+ *
  * @see {@link /lib/reputation/reputation-service} Reputation service
  */
 
-import { NextResponse } from 'next/server'
-import { requireUserByIdentifier } from '@/lib/users/user-lookup'
-import { getReputationBreakdown } from '@/lib/reputation/reputation-service'
+import { getReputationBreakdown } from '@/lib/reputation/reputation-service';
+import { requireUserByIdentifier } from '@/lib/users/user-lookup';
+import { NextResponse } from 'next/server';
 
-interface RouteParams {
+type RouteParams = {
   params: Promise<{
-    userId: string
-  }>
-}
+    userId: string;
+  }>;
+};
 
 export async function GET(_request: Request, { params }: RouteParams) {
-  const { userId } = await params
+  const { userId } = await params;
 
-  const user = await requireUserByIdentifier(userId)
+  const user = await requireUserByIdentifier(userId);
 
-  const breakdown = await getReputationBreakdown(user.id)
+  const breakdown = await getReputationBreakdown(user.id);
 
   return NextResponse.json({
     success: true,
     userId: user.id,
-    reputationScore: breakdown!.reputationScore,
-    trustLevel: breakdown!.trustLevel,
-    confidenceScore: breakdown!.confidenceScore,
-    breakdown: breakdown!.breakdown,
-    metrics: breakdown!.metrics,
+    reputationScore: breakdown?.reputationScore,
+    trustLevel: breakdown?.trustLevel,
+    confidenceScore: breakdown?.confidenceScore,
+    breakdown: breakdown?.breakdown,
+    metrics: breakdown?.metrics,
     weights: {
       pnl: 0.4,
       feedback: 0.4,
       activity: 0.2,
     },
-  })
+  });
 }

@@ -1,24 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-import { useRouter } from 'next/navigation';
-
-import { ArrowLeft, Search, TrendingDown, TrendingUp } from 'lucide-react';
-
 import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard';
 import { CategoryPnLShareModal } from '@/components/markets/CategoryPnLShareModal';
 import { PerpPositionsList } from '@/components/markets/PerpPositionsList';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
-
 import { cn } from '@/lib/utils';
-
 import { useAuth } from '@/hooks/useAuth';
 import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
 import { useUserPositions } from '@/hooks/useUserPositions';
+import { ArrowLeft, Search, TrendingDown, TrendingUp } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-interface PerpMarket {
+type PerpMarket = {
   ticker: string;
   organizationId: string;
   name: string;
@@ -36,14 +31,13 @@ interface PerpMarket {
   };
   maxLeverage: number;
   minOrderSize: number;
-}
+};
 
 export default function PerpsPage() {
   const router = useRouter();
   const { user, authenticated, login } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [showCategoryPnLShareModal, setShowCategoryPnLShareModal] =
-    useState(false);
+  const [showCategoryPnLShareModal, setShowCategoryPnLShareModal] = useState(false);
 
   // Data
   const [perpMarkets, setPerpMarkets] = useState<PerpMarket[]>([]);
@@ -56,16 +50,13 @@ export default function PerpsPage() {
     lastUpdated: portfolioUpdatedAt,
   } = usePortfolioPnL();
 
-  const {
-    perpPositions,
-    refresh: refreshUserPositions,
-  } = useUserPositions(user?.id, { enabled: authenticated });
+  const { perpPositions, refresh: refreshUserPositions } = useUserPositions(user?.id, {
+    enabled: authenticated,
+  });
 
   // Use refs to store latest values to break dependency chains
   const fetchDataRef = useRef<(() => Promise<void>) | null>(null);
-  const refreshPositionsRef = useRef<(() => Promise<void>) | null>(
-    refreshUserPositions
-  );
+  const refreshPositionsRef = useRef<(() => Promise<void>) | null>(refreshUserPositions);
   const authenticatedRef = useRef(authenticated);
   const userIdRef = useRef<string | null>(user?.id || null);
 
@@ -95,7 +86,7 @@ export default function PerpsPage() {
 
     try {
       const perpsRes = await fetch('/api/markets/perps');
-      
+
       if (!perpsRes.ok) {
         throw new Error('Failed to fetch perp markets');
       }
@@ -137,18 +128,9 @@ export default function PerpsPage() {
   // Category P&L data
   const perpPnLData = useMemo(() => {
     if (perpPositions.length === 0) return null;
-    const unrealizedPnL = perpPositions.reduce(
-      (sum, pos) => sum + (pos.unrealizedPnL || 0),
-      0
-    );
-    const totalValue = perpPositions.reduce(
-      (sum, pos) => sum + Math.abs(pos.size || 0),
-      0
-    );
-    const openInterest = perpPositions.reduce(
-      (sum, pos) => sum + Math.abs(pos.size || 0),
-      0
-    );
+    const unrealizedPnL = perpPositions.reduce((sum, pos) => sum + (pos.unrealizedPnL || 0), 0);
+    const totalValue = perpPositions.reduce((sum, pos) => sum + Math.abs(pos.size || 0), 0);
+    const openInterest = perpPositions.reduce((sum, pos) => sum + Math.abs(pos.size || 0), 0);
     return {
       unrealizedPnL,
       positionCount: perpPositions.length,
@@ -171,12 +153,18 @@ export default function PerpsPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="p-4 space-y-6">
+        <div className="space-y-6 p-4">
           <Skeleton className="h-10 w-48" />
           <Skeleton className="h-12 w-full" />
           <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full" />
+            {[
+              'loading-card-1',
+              'loading-card-2',
+              'loading-card-3',
+              'loading-card-4',
+              'loading-card-5',
+            ].map((key) => (
+              <Skeleton key={key} className="h-24 w-full" />
             ))}
           </div>
         </div>
@@ -186,23 +174,24 @@ export default function PerpsPage() {
 
   return (
     <PageContainer>
-      <div className="p-4 space-y-6">
+      <div className="space-y-6 p-4">
         {/* Header */}
         <div>
           <button
+            type="button"
             onClick={() => router.push('/markets')}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
+            className="mb-4 flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Markets
           </button>
-          <h1 className="text-3xl font-bold">Perpetual Futures</h1>
+          <h1 className="font-bold text-3xl">Perpetual Futures</h1>
         </div>
 
         {/* Search */}
         <div className="relative">
           <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"
+            className="-translate-y-1/2 absolute top-1/2 left-3 h-5 w-5 text-muted-foreground"
             aria-hidden="true"
           />
           <input
@@ -211,7 +200,7 @@ export default function PerpsPage() {
             placeholder="Search tickers..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 rounded bg-muted/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:bg-muted focus:ring-2 focus:ring-[#0066FF]/30"
+            className="w-full rounded bg-muted/50 py-3 pr-4 pl-10 text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
           />
         </div>
 
@@ -231,7 +220,7 @@ export default function PerpsPage() {
         {/* Show positions section if authenticated and has positions */}
         {authenticated && perpPositions.length > 0 && (
           <>
-            <h2 className="text-sm font-bold text-muted-foreground">
+            <h2 className="font-bold text-muted-foreground text-sm">
               YOUR POSITIONS ({perpPositions.length})
             </h2>
             <PerpPositionsList
@@ -241,51 +230,42 @@ export default function PerpsPage() {
           </>
         )}
 
-        <h2 className="text-sm font-bold text-muted-foreground">ALL MARKETS</h2>
+        <h2 className="font-bold text-muted-foreground text-sm">ALL MARKETS</h2>
         <div className="space-y-2">
           {filteredPerpMarkets.map((market, idx) => (
             <button
+              type="button"
               key={`market-${market.ticker}-${idx}`}
               onClick={() => handleMarketClick(market)}
-              className="w-full p-3 rounded text-left bg-muted/30 hover:bg-muted transition-all cursor-pointer"
+              className="w-full cursor-pointer rounded bg-muted/30 p-3 text-left transition-all hover:bg-muted"
             >
-              <div className="flex justify-between mb-2">
+              <div className="mb-2 flex justify-between">
                 <div>
                   <div className="font-bold">${market.ticker}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {market.name}
-                  </div>
+                  <div className="text-muted-foreground text-xs">{market.name}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold">
-                    {formatPrice(market.currentPrice)}
-                  </div>
+                  <div className="font-bold">{formatPrice(market.currentPrice)}</div>
                   <div
                     className={cn(
-                      'text-xs font-medium flex items-center gap-1 justify-end',
+                      'flex items-center justify-end gap-1 font-medium text-xs',
                       market.change24h >= 0 ? 'text-green-600' : 'text-red-600'
                     )}
                   >
                     {market.change24h >= 0 ? (
-                      <TrendingUp className="w-3 h-3" />
+                      <TrendingUp className="h-3 w-3" />
                     ) : (
-                      <TrendingDown className="w-3 h-3" />
+                      <TrendingDown className="h-3 w-3" />
                     )}
                     {market.change24h >= 0 ? '+' : ''}
                     {market.changePercent24h.toFixed(2)}%
                   </div>
                 </div>
               </div>
-              <div className="flex gap-3 text-xs text-muted-foreground">
+              <div className="flex gap-3 text-muted-foreground text-xs">
                 <div>Vol: {formatVolume(market.volume24h)}</div>
                 <div>OI: {formatVolume(market.openInterest)}</div>
-                <div
-                  className={
-                    market.fundingRate.rate >= 0
-                      ? 'text-orange-500'
-                      : 'text-blue-500'
-                  }
-                >
+                <div className={market.fundingRate.rate >= 0 ? 'text-orange-500' : 'text-blue-500'}>
                   Fund: {(market.fundingRate.rate * 100).toFixed(4)}%
                 </div>
               </div>
@@ -295,14 +275,15 @@ export default function PerpsPage() {
 
         {/* CTA for non-authenticated users */}
         {!authenticated && (
-          <div className="flex flex-col items-center justify-center py-16 px-4 bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 rounded-lg border border-[#0066FF]/20">
-            <h3 className="text-2xl font-bold mb-2">Start Trading Today</h3>
-            <p className="text-sm text-muted-foreground mb-6 text-center max-w-md">
+          <div className="flex flex-col items-center justify-center rounded-lg border border-[#0066FF]/20 bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 px-4 py-16">
+            <h3 className="mb-2 font-bold text-2xl">Start Trading Today</h3>
+            <p className="mb-6 max-w-md text-center text-muted-foreground text-sm">
               Log in to trade perpetual futures
             </p>
             <button
+              type="button"
               onClick={login}
-              className="px-8 py-3 bg-[#0066FF] text-primary-foreground rounded-lg font-medium hover:bg-[#2952d9] transition-colors cursor-pointer shadow-lg shadow-[#0066FF]/20"
+              className="cursor-pointer rounded-lg bg-[#0066FF] px-8 py-3 font-medium text-primary-foreground shadow-[#0066FF]/20 shadow-lg transition-colors hover:bg-[#2952d9]"
             >
               Connect Wallet
             </button>
@@ -324,4 +305,3 @@ export default function PerpsPage() {
     </PageContainer>
   );
 }
-

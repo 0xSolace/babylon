@@ -1,13 +1,13 @@
 /**
  * Chat Group ID API
- * 
+ *
  * @route GET /api/chats/[id]/group - Get group ID for chat
  * @access Authenticated (participants only)
- * 
+ *
  * @description
  * Returns the user group ID associated with a group chat. Only works for
  * group chats (not DMs). Requires user to be a participant.
- * 
+ *
  * @openapi
  * /api/chats/{id}/group:
  *   get:
@@ -42,7 +42,7 @@
  *         description: Not a participant
  *       404:
  *         description: Chat not found
- * 
+ *
  * @example
  * ```typescript
  * const { groupId } = await fetch(`/api/chats/${chatId}/group`, {
@@ -51,12 +51,12 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { ApiError } from '@/lib/errors/api-errors'
-import { logger } from '@/lib/logger'
-import { asUser } from '@/lib/db/context'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { asUser } from '@/lib/db/context';
+import { ApiError } from '@/lib/errors/api-errors';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/chats/[id]/group
@@ -64,8 +64,8 @@ import { asUser } from '@/lib/db/context'
  */
 export const GET = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const user = await authenticate(request)
-    const { id: chatId } = await params
+    const user = await authenticate(request);
+    const { id: chatId } = await params;
 
     const groupId = await asUser(user, async (db) => {
       // Check if user is a participant in the chat
@@ -74,32 +74,35 @@ export const GET = withErrorHandling(
           chatId,
           userId: user.userId,
         },
-      })
+      });
 
       if (!participant) {
-        throw new ApiError('You are not a participant in this chat', 403)
+        throw new ApiError('You are not a participant in this chat', 403);
       }
 
       // Get the chat and its groupId
       const chat = await db.chat.findUnique({
         where: { id: chatId },
         select: { groupId: true, isGroup: true },
-      })
+      });
 
       if (!chat) {
-        throw new ApiError('Chat not found', 404)
+        throw new ApiError('Chat not found', 404);
       }
 
       if (!chat.isGroup || !chat.groupId) {
-        throw new ApiError('This chat is not associated with a group', 400)
+        throw new ApiError('This chat is not associated with a group', 400);
       }
 
-      return chat.groupId
-    })
+      return chat.groupId;
+    });
 
-    logger.info('Group ID retrieved from chat', { userId: user.userId, chatId, groupId }, 'GET /api/chats/:id/group')
+    logger.info(
+      'Group ID retrieved from chat',
+      { userId: user.userId, chatId, groupId },
+      'GET /api/chats/:id/group'
+    );
 
-    return successResponse({ groupId })
+    return successResponse({ groupId });
   }
-)
-
+);

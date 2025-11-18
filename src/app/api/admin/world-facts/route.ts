@@ -1,16 +1,16 @@
 /**
  * Admin World Facts API
- * 
+ *
  * @route GET /api/admin/world-facts - Get world facts
  * @route POST /api/admin/world-facts - Create/update world facts
  * @route DELETE /api/admin/world-facts - Delete world fact
  * @access Admin
- * 
+ *
  * @description
  * Manages world facts, RSS feeds, parody headlines, and character mappings.
  * GET returns all facts and related data. POST creates/updates facts.
  * DELETE removes a fact.
- * 
+ *
  * @openapi
  * /api/admin/world-facts:
  *   get:
@@ -81,7 +81,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const { facts } = await fetch('/api/admin/world-facts', {
@@ -90,14 +90,14 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { worldFactsService } from '@/lib/services/world-facts-service';
-import { rssFeedService } from '@/lib/services/rss-feed-service';
-import { createParodyHeadlineGenerator } from '@/lib/services/parody-headline-generator';
-import { characterMappingService } from '@/lib/services/character-mapping-service';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { characterMappingService } from '@/lib/services/character-mapping-service';
+import { createParodyHeadlineGenerator } from '@/lib/services/parody-headline-generator';
+import { rssFeedService } from '@/lib/services/rss-feed-service';
+import { worldFactsService } from '@/lib/services/world-facts-service';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/admin/world-facts - Get all world facts and related data
@@ -136,14 +136,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   switch (action) {
     case 'update_fact': {
       const { category, key, label, value, source, priority } = data;
-      const fact = await worldFactsService.setFact(
-        category,
-        key,
-        label,
-        value,
-        source,
-        priority
-      );
+      const fact = await worldFactsService.setFact(category, key, label, value, source, priority);
       logger.info(`Updated world fact: ${category}.${key}`, { fact }, 'WorldFactsAdmin');
       return successResponse({ fact });
     }
@@ -203,7 +196,3 @@ export const DELETE = withErrorHandling(async (request: NextRequest) => {
 
   return successResponse({ success: true });
 });
-
-
-
-

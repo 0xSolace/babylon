@@ -1,14 +1,14 @@
 /**
  * Admin Test DM Messages API
- * 
+ *
  * @route POST /api/admin/test-dm-messages - Send test DM messages
  * @access Admin
- * 
+ *
  * @description
  * Sends bulk test DM messages between two users for testing pagination
  * and message handling. Creates or gets DM chat and sends multiple messages.
  * Admin only.
- * 
+ *
  * @openapi
  * /api/admin/test-dm-messages:
  *   post:
@@ -46,7 +46,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/test-dm-messages', {
@@ -62,10 +62,10 @@
  */
 
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { prisma } from '@/lib/prisma';
 import { BusinessLogicError, NotFoundError } from '@/lib/errors';
 import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
 import { broadcastChatMessage } from '@/lib/sse/event-broadcaster';
 import { findUserByIdentifier } from '@/lib/users/user-lookup';
@@ -86,23 +86,27 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const body = await request.json();
   const { senderId, recipientId, messageCount } = TestDMMessagesSchema.parse(body);
 
-  logger.info('Admin sending test DM messages', { 
-    adminUserId: adminUser.userId,
-    senderId,
-    recipientId,
-    messageCount,
-  }, 'POST /api/admin/test-dm-messages');
+  logger.info(
+    'Admin sending test DM messages',
+    {
+      adminUserId: adminUser.userId,
+      senderId,
+      recipientId,
+      messageCount,
+    },
+    'POST /api/admin/test-dm-messages'
+  );
 
   // Verify both users exist (supports ID, username, or privyId)
   const [sender, recipient] = await Promise.all([
     findUserByIdentifier(senderId, {
-      id: true, 
+      id: true,
       isActor: true,
       displayName: true,
       username: true,
     }),
     findUserByIdentifier(recipientId, {
-      id: true, 
+      id: true,
       isActor: true,
       displayName: true,
       username: true,
@@ -127,12 +131,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Create DM chat ID (consistent format - sort IDs for consistency)
-  const sortedIds = [resolvedSenderId, resolvedRecipientId].sort()
-  const chatId = `dm-${sortedIds.join('-')}`
+  const sortedIds = [resolvedSenderId, resolvedRecipientId].sort();
+  const chatId = `dm-${sortedIds.join('-')}`;
 
   await prisma.chat.findUnique({
     where: { id: chatId },
-  })
+  });
 
   await prisma.chat.create({
     data: {
@@ -141,7 +145,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       isGroup: false,
       updatedAt: new Date(),
     },
-  })
+  });
 
   const [senderParticipant, recipientParticipant] = await Promise.all([
     prisma.chatParticipant.create({
@@ -158,66 +162,92 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         userId: resolvedRecipientId,
       },
     }),
-  ])
+  ]);
 
-  logger.info('Created new DM chat for test messages', { 
-    chatId, 
-    senderId: resolvedSenderId, 
-    recipientId: resolvedRecipientId,
-    senderParticipantId: senderParticipant.id,
-    recipientParticipantId: recipientParticipant.id
-  }, 'POST /api/admin/test-dm-messages')
+  logger.info(
+    'Created new DM chat for test messages',
+    {
+      chatId,
+      senderId: resolvedSenderId,
+      recipientId: resolvedRecipientId,
+      senderParticipantId: senderParticipant.id,
+      recipientParticipantId: recipientParticipant.id,
+    },
+    'POST /api/admin/test-dm-messages'
+  );
 
-  logger.info('Using existing DM chat for test messages', { 
-    chatId, 
-    senderId: resolvedSenderId, 
-    recipientId: resolvedRecipientId 
-  }, 'POST /api/admin/test-dm-messages')
+  logger.info(
+    'Using existing DM chat for test messages',
+    {
+      chatId,
+      senderId: resolvedSenderId,
+      recipientId: resolvedRecipientId,
+    },
+    'POST /api/admin/test-dm-messages'
+  );
 
   // Send test messages in batches
   const batchSize = 10;
-  const messages: Array<{ id: string; content: string; chatId: string; senderId: string; createdAt: Date }> = [];
+  const messages: Array<{
+    id: string;
+    content: string;
+    chatId: string;
+    senderId: string;
+    createdAt: Date;
+  }> = [];
 
-  logger.info('Starting to send test messages', { 
-    messageCount, 
-    batchSize,
-    chatId,
-    senderId: resolvedSenderId 
-  }, 'POST /api/admin/test-dm-messages');
+  logger.info(
+    'Starting to send test messages',
+    {
+      messageCount,
+      batchSize,
+      chatId,
+      senderId: resolvedSenderId,
+    },
+    'POST /api/admin/test-dm-messages'
+  );
 
   for (let i = 0; i < messageCount; i += batchSize) {
     const batch = [];
-    
-    for (let j = 0; j < batchSize && (i + j) < messageCount; j++) {
-      const messageNumber = i + j + 1
-      const content = `Test message #${messageNumber} - This is a test DM message for pagination testing. ${new Date().toISOString()}`
-      
+
+    for (let j = 0; j < batchSize && i + j < messageCount; j++) {
+      const messageNumber = i + j + 1;
+      const content = `Test message #${messageNumber} - This is a test DM message for pagination testing. ${new Date().toISOString()}`;
+
       batch.push({
         id: await generateSnowflakeId(),
         content,
         chatId,
         senderId: resolvedSenderId,
         createdAt: new Date(Date.now() + (i + j) * 100),
-      })
+      });
     }
 
     const result = await prisma.message.createMany({
       data: batch,
-    })
-    
-    logger.info(`Created batch of messages`, { 
-      batchNumber: Math.floor(i / batchSize) + 1,
-      batchSize: batch.length,
-      created: result.count,
-      totalSoFar: i + batch.length
-    }, 'POST /api/admin/test-dm-messages')
+    });
 
-    messages.push(...batch)
+    logger.info(
+      `Created batch of messages`,
+      {
+        batchNumber: Math.floor(i / batchSize) + 1,
+        batchSize: batch.length,
+        created: result.count,
+        totalSoFar: i + batch.length,
+      },
+      'POST /api/admin/test-dm-messages'
+    );
 
-    logger.error('Failed to create message batch', { 
-      batchNumber: Math.floor(i / batchSize) + 1,
-      batchSize: batch.length
-    }, 'POST /api/admin/test-dm-messages')
+    messages.push(...batch);
+
+    logger.error(
+      'Failed to create message batch',
+      {
+        batchNumber: Math.floor(i / batchSize) + 1,
+        batchSize: batch.length,
+      },
+      'POST /api/admin/test-dm-messages'
+    );
 
     // Broadcast messages via SSE
     for (const msg of batch) {
@@ -232,10 +262,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       });
     }
 
-    logger.info(`Sent batch of ${batch.length} test messages (${i + batch.length}/${messageCount})`, { 
-      chatId,
-      batchNumber: Math.floor(i / batchSize) + 1,
-    }, 'POST /api/admin/test-dm-messages');
+    logger.info(
+      `Sent batch of ${batch.length} test messages (${i + batch.length}/${messageCount})`,
+      {
+        chatId,
+        batchNumber: Math.floor(i / batchSize) + 1,
+      },
+      'POST /api/admin/test-dm-messages'
+    );
   }
 
   // Update chat updatedAt
@@ -244,11 +278,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     data: { updatedAt: new Date() },
   });
 
-  logger.info('Admin test DM messages sent successfully', { 
-    adminUserId: adminUser.userId,
-    chatId,
-    messageCount: messages.length,
-  }, 'POST /api/admin/test-dm-messages');
+  logger.info(
+    'Admin test DM messages sent successfully',
+    {
+      adminUserId: adminUser.userId,
+      chatId,
+      messageCount: messages.length,
+    },
+    'POST /api/admin/test-dm-messages'
+  );
 
   return successResponse({
     success: true,
@@ -258,4 +296,3 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     note: 'Chat cache is 30s. If not visible, refresh the page or wait 30 seconds.',
   });
 });
-

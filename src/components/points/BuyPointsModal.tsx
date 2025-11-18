@@ -1,51 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-
+import { Skeleton } from '@/components/shared/Skeleton';
+import { logger } from '@/lib/logger';
+import { cn } from '@/lib/utils';
+import { WALLET_ERROR_MESSAGES } from '@/lib/wallet-utils';
+import { useAuth } from '@/hooks/useAuth';
+import { useBuyPointsTx } from '@/hooks/useBuyPointsTx';
+import { useSmartWalletBalance } from '@/hooks/useSmartWalletBalance';
+import { CHAIN } from '@/constants/chains';
 import { useFundWallet, usePrivy } from '@privy-io/react-auth';
-import {
-  AlertCircle,
-  CheckCircle2,
-  DollarSign,
-  Sparkles,
-  X,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle2, DollarSign, Sparkles, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import type { Address } from 'viem';
 import { formatEther } from 'viem';
 
-import { Skeleton } from '@/components/shared/Skeleton';
-
-import { cn } from '@/lib/utils';
-import { WALLET_ERROR_MESSAGES } from '@/lib/wallet-utils';
-import { logger } from '@/lib/logger';
-
-import { useAuth } from '@/hooks/useAuth';
-import { useBuyPointsTx } from '@/hooks/useBuyPointsTx';
-import { useSmartWalletBalance } from '@/hooks/useSmartWalletBalance';
-
-import { CHAIN } from '@/constants/chains';
-
-interface BuyPointsModalProps {
+type BuyPointsModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
-}
+};
 
 type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error';
 
-interface PaymentRequest {
+type PaymentRequest = {
   requestId: string;
   to: string;
   from: string;
   amount: string;
-}
+};
 
-export function BuyPointsModal({
-  isOpen,
-  onClose,
-  onSuccess,
-}: BuyPointsModalProps) {
+export function BuyPointsModal({ isOpen, onClose, onSuccess }: BuyPointsModalProps) {
   const { user, smartWalletAddress, smartWalletReady } = useAuth();
   const { getAccessToken } = usePrivy();
   const { fundWallet } = useFundWallet();
@@ -55,9 +40,7 @@ export function BuyPointsModal({
   const [amountUSD, setAmountUSD] = useState('10');
   const [step, setStep] = useState<PaymentStep>('input');
   const [loading, setLoading] = useState(false);
-  const [_paymentRequestId, setPaymentRequestId] = useState<string | null>(
-    null
-  );
+  const [_paymentRequestId, setPaymentRequestId] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pointsAwarded, setPointsAwarded] = useState(0);
@@ -98,21 +81,21 @@ export function BuyPointsModal({
       // Poll for balance updates with timeout (30 seconds)
       const maxAttempts = 30;
       const pollInterval = 1000; // 1 second
-      
+
       // Show feedback to user
       toast.info('Waiting for deposit to settle...');
-      
+
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const updatedBalance = await refreshBalance();
-        
+
         if (updatedBalance && updatedBalance >= requiredAmountWei) {
           toast.success('Funds received!');
           return true;
         }
-        
+
         // Wait before next check (except on last attempt)
         if (attempt < maxAttempts - 1) {
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          await new Promise((resolve) => setTimeout(resolve, pollInterval));
         }
       }
 
@@ -257,8 +240,7 @@ export function BuyPointsModal({
       await handleVerifyPayment(paymentRequest.requestId, hash, paymentRequest);
     } catch (err) {
       logger.error('Payment failed', { error: err }, 'BuyPointsModal');
-      const errorMessage =
-        err instanceof Error ? err.message : 'Payment failed';
+      const errorMessage = err instanceof Error ? err.message : 'Payment failed';
 
       setError(errorMessage);
 
@@ -274,8 +256,7 @@ export function BuyPointsModal({
     paymentRequest: PaymentRequest
   ) => {
     try {
-      const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      const token = typeof window !== 'undefined' ? window.__privyAccessToken : null;
       if (!token) {
         throw new Error('Authentication required');
       }
@@ -314,9 +295,7 @@ export function BuyPointsModal({
       }
     } catch (err) {
       logger.error('Payment verification failed', { error: err }, 'BuyPointsModal');
-      setError(
-        err instanceof Error ? err.message : 'Payment verification failed'
-      );
+      setError(err instanceof Error ? err.message : 'Payment verification failed');
       setStep('error');
       toast.error('Failed to verify payment');
     } finally {
@@ -339,40 +318,40 @@ export function BuyPointsModal({
             <div className="space-y-4">
               {/* Amount Input */}
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label htmlFor="buy-points-amount" className="mb-2 block font-medium text-sm">
                   Amount (USD)
                 </label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <DollarSign className="-translate-y-1/2 absolute top-1/2 left-3 h-5 w-5 text-muted-foreground" />
                   <input
                     data-testid="points-amount-input"
+                    id="buy-points-amount"
                     type="number"
                     min="1"
                     max="1000"
                     step="1"
                     value={amountUSD}
                     onChange={(e) => setAmountUSD(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-sidebar border border-border rounded-lg focus:outline-none focus:border-border"
+                    className="w-full rounded-lg border border-border bg-sidebar py-3 pr-4 pl-10 focus:border-border focus:outline-none"
                     placeholder="10"
                     disabled={loading}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Min: $1 • Max: $1000
-                </p>
+                <p className="mt-1 text-muted-foreground text-xs">Min: $1 • Max: $1000</p>
               </div>
 
               {/* Quick Amount Buttons */}
               <div className="grid grid-cols-4 gap-2">
                 {[10, 25, 50, 100].map((amt) => (
                   <button
+                    type="button"
                     key={amt}
                     onClick={() => setAmountUSD(amt.toString())}
                     className={cn(
-                      'px-4 py-2 rounded-lg border transition-colors',
+                      'rounded-lg border px-4 py-2 transition-colors',
                       amountNum === amt
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-sidebar border-border hover:border-primary'
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-sidebar hover:border-primary'
                     )}
                     disabled={loading}
                   >
@@ -382,37 +361,31 @@ export function BuyPointsModal({
               </div>
 
               {/* Points Calculation */}
-              <div className="bg-sidebar border border-border rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-muted-foreground">
-                    You'll receive:
-                  </span>
+              <div className="rounded-2xl border border-border bg-sidebar p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-muted-foreground text-sm">You'll receive:</span>
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-5 w-5 text-yellow-500" />
-                    <span data-testid="points-amount-display" className="text-xl font-bold">
+                    <span data-testid="points-amount-display" className="font-bold text-xl">
                       {pointsAmount.toLocaleString()}
                     </span>
-                    <span className="text-sm text-muted-foreground">
-                      points
-                    </span>
+                    <span className="text-muted-foreground text-sm">points</span>
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground text-center mt-2">
+                <div className="mt-2 text-center text-muted-foreground text-xs">
                   100 points = $1 USD
                 </div>
               </div>
 
               {/* Info Box */}
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+              <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
                 <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-                  <div className="text-xs text-blue-700 dark:text-blue-300">
-                    <p className="font-medium mb-1">
-                      Points are non-transferable
-                    </p>
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                  <div className="text-blue-700 text-xs dark:text-blue-300">
+                    <p className="mb-1 font-medium">Points are non-transferable</p>
                     <p>
-                      Points can be used for trading and rewards but cannot be
-                      transferred to other users.
+                      Points can be used for trading and rewards but cannot be transferred to other
+                      users.
                     </p>
                   </div>
                 </div>
@@ -420,22 +393,24 @@ export function BuyPointsModal({
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-3 mt-6">
+            <div className="mt-6 flex gap-3">
               <button
+                type="button"
                 onClick={handleClose}
-                className="flex-1 px-4 py-3 bg-sidebar border border-border rounded-lg hover:bg-accent transition-colors"
+                className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-3 transition-colors hover:bg-accent"
                 disabled={loading}
               >
                 Cancel
               </button>
               <button
+                type="button"
                 data-testid="buy-points-submit-button"
                 onClick={handleCreatePayment}
                 disabled={loading || amountNum < 1 || amountNum > 1000}
                 className={cn(
-                  'flex-1 px-4 py-3 rounded-lg font-medium transition-colors',
+                  'flex-1 rounded-lg px-4 py-3 font-medium transition-colors',
                   'bg-primary text-primary-foreground hover:bg-primary/90',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'disabled:cursor-not-allowed disabled:opacity-50'
                 )}
               >
                 {loading ? 'Processing...' : `Buy ${pointsAmount} Points`}
@@ -447,16 +422,14 @@ export function BuyPointsModal({
       case 'payment':
       case 'verifying':
         return (
-          <div className="text-center py-8">
+          <div className="py-8 text-center">
             <div className="mx-auto mb-4 flex justify-center">
               <Skeleton className="h-16 w-16 rounded-full" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">
-              {step === 'payment'
-                ? 'Processing Payment...'
-                : 'Verifying Transaction...'}
+            <h3 className="mb-2 font-semibold text-lg">
+              {step === 'payment' ? 'Processing Payment...' : 'Verifying Transaction...'}
             </h3>
-            <p className="text-sm text-muted-foreground mb-4">
+            <p className="mb-4 text-muted-foreground text-sm">
               {step === 'payment'
                 ? 'Preparing your payment transaction...'
                 : 'Confirming your payment on the blockchain'}
@@ -467,7 +440,7 @@ export function BuyPointsModal({
                 href={`https://sepolia.basescan.org/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-primary hover:underline"
+                className="text-primary text-xs hover:underline"
               >
                 View transaction
               </a>
@@ -477,34 +450,33 @@ export function BuyPointsModal({
 
       case 'success':
         return (
-          <div data-testid="payment-success" className="text-center py-8">
-            <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Purchase Successful!</h3>
-            <div className="bg-sidebar border border-border rounded-2xl p-4 mb-6">
-              <div className="flex items-center justify-center gap-2 mb-2">
+          <div data-testid="payment-success" className="py-8 text-center">
+            <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-green-500" />
+            <h3 className="mb-2 font-semibold text-lg">Purchase Successful!</h3>
+            <div className="mb-6 rounded-2xl border border-border bg-sidebar p-4">
+              <div className="mb-2 flex items-center justify-center gap-2">
                 <Sparkles className="h-6 w-6 text-yellow-500" />
-                <span data-testid="points-awarded-amount" className="text-2xl font-bold">
+                <span data-testid="points-awarded-amount" className="font-bold text-2xl">
                   {pointsAwarded.toLocaleString()}
                 </span>
                 <span className="text-muted-foreground">points</span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                added to your account
-              </p>
+              <p className="text-muted-foreground text-xs">added to your account</p>
             </div>
             {txHash && (
               <a
                 href={`https://sepolia.basescan.org/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-primary hover:underline mb-4 inline-block"
+                className="mb-4 inline-block text-primary text-xs hover:underline"
               >
                 View transaction
               </a>
             )}
             <button
+              type="button"
               onClick={handleClose}
-              className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              className="w-full rounded-lg bg-primary px-4 py-3 text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Done
             </button>
@@ -513,25 +485,27 @@ export function BuyPointsModal({
 
       case 'error':
         return (
-          <div data-testid="payment-error" className="text-center py-8">
-            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Payment Failed</h3>
-            <p data-testid="payment-error-message" className="text-sm text-muted-foreground mb-6">
+          <div data-testid="payment-error" className="py-8 text-center">
+            <AlertCircle className="mx-auto mb-4 h-16 w-16 text-red-500" />
+            <h3 className="mb-2 font-semibold text-lg">Payment Failed</h3>
+            <p data-testid="payment-error-message" className="mb-6 text-muted-foreground text-sm">
               {error || 'An error occurred during payment'}
             </p>
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={handleClose}
-                className="flex-1 px-4 py-3 bg-sidebar border border-border rounded-lg hover:bg-accent transition-colors"
+                className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-3 transition-colors hover:bg-accent"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setStep('input');
                   setError(null);
                 }}
-                className="flex-1 px-4 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                className="flex-1 rounded-lg bg-primary px-4 py-3 text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 Try Again
               </button>
@@ -544,27 +518,28 @@ export function BuyPointsModal({
   return (
     <div
       data-testid="buy-points-modal-overlay"
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          handleClose();
-        }
-      }}
+      className="fixed relative inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
     >
+      <button
+        type="button"
+        onClick={handleClose}
+        className="absolute inset-0 focus:outline-none"
+        aria-label="Close buy points modal"
+      />
       <div
         data-testid="buy-points-modal"
-        className="bg-background border border-border rounded-xl w-full max-w-md shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 w-full max-w-md rounded-xl border border-border bg-background shadow-2xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border">
+        <div className="flex items-center justify-between border-border border-b p-6">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-yellow-500" />
-            <h2 className="text-xl font-bold">Buy Points</h2>
+            <h2 className="font-bold text-xl">Buy Points</h2>
           </div>
           <button
+            type="button"
             onClick={handleClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground transition-colors hover:text-foreground"
             disabled={loading || step === 'payment' || step === 'verifying'}
           >
             <X className="h-5 w-5" />

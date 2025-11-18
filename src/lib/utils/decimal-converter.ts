@@ -1,6 +1,6 @@
 /**
  * Decimal Converter Utilities
- * 
+ *
  * Handles safe conversion of Prisma Decimal values to strings,
  * accounting for serialization from cache (Redis) where Decimal
  * objects may be converted to strings, numbers, or plain objects.
@@ -8,19 +8,19 @@
 
 /**
  * Safely convert a value (Decimal, number, string, or unknown) to string
- * 
+ *
  * @param value - Value that might be a Prisma Decimal, number, string, or serialized object
  * @param defaultValue - Default value if conversion fails (default: '0')
  * @returns String representation of the value
- * 
+ *
  * @example
  * ```typescript
  * // Direct from database (Decimal object)
  * const balance = toSafeString(user.virtualBalance); // "1000.50"
- * 
+ *
  * // From cache (might be string, number, or object)
  * const cachedBalance = toSafeString(cachedUser.virtualBalance); // "1000.50"
- * 
+ *
  * // Handle null/undefined
  * const emptyBalance = toSafeString(null); // "0"
  * ```
@@ -60,11 +60,11 @@ export function toSafeString(value: unknown, defaultValue = '0'): string {
 
 /**
  * Safely convert a value to number
- * 
+ *
  * @param value - Value that might be a Prisma Decimal, number, string, or serialized object
  * @param defaultValue - Default value if conversion fails (default: 0)
  * @returns Numeric representation of the value
- * 
+ *
  * @example
  * ```typescript
  * const balance = toSafeNumber(user.virtualBalance); // 1000.5
@@ -86,7 +86,7 @@ export function toSafeNumber(value: unknown, defaultValue = 0): number {
   // String - parse as float
   if (typeof value === 'string') {
     const parsed = parseFloat(value);
-    return isNaN(parsed) ? defaultValue : parsed;
+    return Number.isNaN(parsed) ? defaultValue : parsed;
   }
 
   // Object with toString method - convert to string then parse
@@ -94,7 +94,7 @@ export function toSafeNumber(value: unknown, defaultValue = 0): number {
     try {
       const str = (value as { toString: () => string }).toString();
       const parsed = parseFloat(str);
-      return isNaN(parsed) ? defaultValue : parsed;
+      return Number.isNaN(parsed) ? defaultValue : parsed;
     } catch {
       // If conversion fails, fall through to default handling
     }
@@ -103,7 +103,7 @@ export function toSafeNumber(value: unknown, defaultValue = 0): number {
   // Fallback: try to coerce to number
   try {
     const num = Number(value);
-    return isNaN(num) ? defaultValue : num;
+    return Number.isNaN(num) ? defaultValue : num;
   } catch {
     return defaultValue;
   }
@@ -111,10 +111,10 @@ export function toSafeNumber(value: unknown, defaultValue = 0): number {
 
 /**
  * Convert multiple balance-related fields to strings safely
- * 
+ *
  * @param balanceData - Object containing balance fields
  * @returns Object with all balance fields as strings
- * 
+ *
  * @example
  * ```typescript
  * const balanceStrings = convertBalanceToStrings({
@@ -144,8 +144,3 @@ export function convertBalanceToStrings(balanceData: {
     lifetimePnL: toSafeString(balanceData.lifetimePnL),
   };
 }
-
-
-
-
-

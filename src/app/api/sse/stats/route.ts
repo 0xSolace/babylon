@@ -1,14 +1,14 @@
 /**
  * SSE Stats API
- * 
+ *
  * @route GET /api/sse/stats - Get SSE connection statistics
  * @access Public
- * 
+ *
  * @description
  * Returns statistics about connected Server-Sent Events (SSE) clients including
  * total connections, channels, and connection details. Useful for debugging and
  * monitoring real-time features.
- * 
+ *
  * @openapi
  * /api/sse/stats:
  *   get:
@@ -35,34 +35,37 @@
  *                       type: object
  *                 timestamp:
  *                   type: integer
- * 
+ *
  * @example
  * ```typescript
  * const { stats } = await fetch('/api/sse/stats')
  *   .then(r => r.json());
  * console.log(`Total SSE clients: ${stats.totalClients}`);
  * ```
- * 
+ *
  * @see {@link /lib/sse/event-broadcaster} Event broadcaster
  */
 
-import type { NextRequest } from 'next/server'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { getEventBroadcaster } from '@/lib/sse/event-broadcaster'
-import { logger } from '@/lib/logger'
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { getEventBroadcaster } from '@/lib/sse/event-broadcaster';
+import type { NextRequest } from 'next/server';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 export const GET = withErrorHandling(async (_request: NextRequest) => {
-  const broadcaster = getEventBroadcaster()
-  const stats = broadcaster.getStats()
+  const broadcaster = getEventBroadcaster();
+  const stats = broadcaster.getStats();
 
-  logger.info('SSE stats fetched successfully', { totalClients: stats.totalClients }, 'GET /api/sse/stats')
+  logger.info(
+    'SSE stats fetched successfully',
+    { totalClients: stats.totalClients },
+    'GET /api/sse/stats'
+  );
 
   return successResponse({
     success: true,
     stats,
-    timestamp: Date.now()
-  })
-})
-
+    timestamp: Date.now(),
+  });
+});

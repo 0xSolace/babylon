@@ -1,11 +1,11 @@
 /**
  * Image Upload API
- * 
+ *
  * @description
  * Handles image uploads for user profiles, cover images, and post attachments.
  * Automatically optimizes images to WebP format with Sharp library and uploads
  * to S3-compatible storage (MinIO in development, Cloudflare R2 in production).
- * 
+ *
  * **Features:**
  * - Automatic WebP conversion for optimal performance
  * - Image optimization with Sharp (quality: 85%)
@@ -14,17 +14,17 @@
  * - Multi-folder organization (profiles, covers, posts)
  * - S3-compatible storage integration
  * - Local storage fallback for development
- * 
+ *
  * **Supported Image Types:**
  * - profile: User profile avatars
  * - cover: User cover images
  * - post: Post attachments
- * 
+ *
  * **Storage:**
  * - **Development:** Local filesystem (`USE_LOCAL_STORAGE=true`)
  * - **Production:** Cloudflare R2 or S3-compatible storage
  * - **Vercel-compatible:** No local filesystem in production
- * 
+ *
  * **File Processing:**
  * 1. Receive multipart/form-data
  * 2. Validate file type and size
@@ -32,7 +32,7 @@
  * 4. Resize to max 2048x2048 (if larger)
  * 5. Upload to storage
  * 6. Return public URL
- * 
+ *
  * @openapi
  * /api/upload/image:
  *   post:
@@ -87,45 +87,46 @@
  *         description: Unauthorized
  *       429:
  *         description: Rate limit exceeded
- * 
+ *
  * @example
  * ```typescript
  * // Upload profile image
  * const formData = new FormData();
  * formData.append('file', imageFile);
  * formData.append('type', 'profile');
- * 
+ *
  * const response = await fetch('/api/upload/image', {
  *   method: 'POST',
  *   headers: { 'Authorization': `Bearer ${token}` },
  *   body: formData
  * });
- * 
+ *
  * const { url, size } = await response.json();
  * console.log(`Uploaded to: ${url} (${size} bytes)`);
  * ```
- * 
+ *
  * @see {@link /lib/storage/s3-client} S3 storage client
  * @see {@link /lib/validation/schemas} Upload validation
  */
 
+import { authenticate } from '@/lib/api/auth-middleware';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { RATE_LIMIT_CONFIGS, checkRateLimitAndDuplicates } from '@/lib/rate-limiting';
+import { getStorageClient } from '@/lib/storage/s3-client';
+import { ImageUploadSchema } from '@/lib/validation/schemas';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { NextRequest } from 'next/server';
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { ImageUploadSchema } from '@/lib/validation/schemas'
-import { getStorageClient } from '@/lib/storage/s3-client'
-import { logger } from '@/lib/logger'
-import sharp from 'sharp'
-import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { checkRateLimitAndDuplicates, RATE_LIMIT_CONFIGS } from '@/lib/rate-limiting'
+import sharp from 'sharp';
 
 // Configuration - only allow local storage in development
-const USE_LOCAL_STORAGE = process.env.USE_LOCAL_STORAGE === 'true' && process.env.NODE_ENV === 'development'
+const USE_LOCAL_STORAGE =
+  process.env.USE_LOCAL_STORAGE === 'true' && process.env.NODE_ENV === 'development';
 
 // Runtime configuration for Vercel
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/upload/image
@@ -133,7 +134,7 @@ export const dynamic = 'force-dynamic'
  */
 export const POST = withErrorHandling(async (request: NextRequest) => {
   // Authenticate user
-  const authUser = await authenticate(request)
+  const authUser = await authenticate(request);
 
   // Apply rate limiting (no duplicate detection for uploads)
   const rateLimitError = checkRateLimitAndDuplicates(
@@ -146,57 +147,61 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Parse multipart form data
-  const formData = await request.formData()
-  const file = formData.get('file') as File | null
-  const imageType = formData.get('type') as string | null // 'profile', 'cover', or 'post'
+  const formData = await request.formData();
+  const file = formData.get('file') as File | null;
+  const imageType = formData.get('type') as string | null; // 'profile', 'cover', or 'post'
 
   // Validate using schema
   ImageUploadSchema.parse({
     file: file ? { size: file.size, type: file.type } : null,
-    type: imageType || undefined
-  })
+    type: imageType || undefined,
+  });
 
   if (!file) {
-    throw new Error('No file provided')
+    throw new Error('No file provided');
   }
 
   // Determine folder based on image type
-  let folder: 'profiles' | 'covers' | 'posts' = 'posts'
-  if (imageType === 'profile') folder = 'profiles'
-  else if (imageType === 'cover') folder = 'covers'
+  let folder: 'profiles' | 'covers' | 'posts' = 'posts';
+  if (imageType === 'profile') folder = 'profiles';
+  else if (imageType === 'cover') folder = 'covers';
 
   // Generate unique filename
-  const timestamp = Date.now()
-  const randomString = Math.random().toString(36).substring(7)
-  const extension = 'webp' // We'll convert all images to webp for optimization
-  const filename = `${authUser.userId}_${timestamp}_${randomString}.${extension}`
+  const timestamp = Date.now();
+  const randomString = Math.random().toString(36).substring(7);
+  const extension = 'webp'; // We'll convert all images to webp for optimization
+  const filename = `${authUser.userId}_${timestamp}_${randomString}.${extension}`;
 
   // Convert file to buffer
-  const bytes = await file.arrayBuffer()
-  const buffer = Buffer.from(bytes)
+  const bytes = await file.arrayBuffer();
+  const buffer = Buffer.from(bytes);
 
   if (USE_LOCAL_STORAGE) {
     const optimized = await sharp(buffer)
       .webp({ quality: 85 })
       .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
-      .toBuffer()
+      .toBuffer();
 
-    const uploadDir = join(process.cwd(), 'public', 'uploads', folder)
-    await mkdir(uploadDir, { recursive: true })
+    const uploadDir = join(process.cwd(), 'public', 'uploads', folder);
+    await mkdir(uploadDir, { recursive: true });
 
-    const filePath = join(uploadDir, filename)
-    await writeFile(filePath, optimized)
+    const filePath = join(uploadDir, filename);
+    await writeFile(filePath, optimized);
 
-    const url = `/uploads/${folder}/${filename}`
+    const url = `/uploads/${folder}/${filename}`;
 
-    logger.info(`Image uploaded successfully to local storage (dev only)`, {
-      userId: authUser.userId,
-      filename,
-      path: filePath,
-      size: optimized.length,
-      originalSize: file.size,
-      type: imageType || 'unknown',
-    }, 'POST /api/upload/image')
+    logger.info(
+      `Image uploaded successfully to local storage (dev only)`,
+      {
+        userId: authUser.userId,
+        filename,
+        path: filePath,
+        size: optimized.length,
+        originalSize: file.size,
+        type: imageType || 'unknown',
+      },
+      'POST /api/upload/image'
+    );
 
     return successResponse({
       success: true,
@@ -204,27 +209,31 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       key: `${folder}/${filename}`,
       size: optimized.length,
       filename,
-    })
+    });
   }
 
   // Upload to S3-compatible storage (production or fallback)
-  const storage = getStorageClient()
+  const storage = getStorageClient();
   const result = await storage.uploadImage({
     file: buffer,
     filename,
     contentType: 'image/webp',
     folder,
     optimize: true, // Enable image optimization
-  })
+  });
 
-  logger.info(`Image uploaded successfully to external storage`, {
-    userId: authUser.userId,
-    filename,
-    key: result.key,
-    size: result.size,
-    originalSize: file.size,
-    type: imageType || 'unknown',
-  }, 'POST /api/upload/image')
+  logger.info(
+    `Image uploaded successfully to external storage`,
+    {
+      userId: authUser.userId,
+      filename,
+      key: result.key,
+      size: result.size,
+      originalSize: file.size,
+      type: imageType || 'unknown',
+    },
+    'POST /api/upload/image'
+  );
 
   return successResponse({
     success: true,
@@ -232,6 +241,5 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     key: result.key,
     size: result.size,
     filename,
-  })
-})
-
+  });
+});

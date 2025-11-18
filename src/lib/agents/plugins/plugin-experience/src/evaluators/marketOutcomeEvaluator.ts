@@ -1,44 +1,38 @@
 /**
  * Market Outcome Evaluator
- * 
+ *
  * Consolidated evaluator that:
  * 1. Tracks NPC trust scores (who to believe)
  * 2. Evaluates agent's own performance (win/loss tracking)
  * 3. Records learning experiences from market outcomes
- * 
+ *
  * Runs automatically when markets resolve.
  */
 
-import {
-  type Evaluator,
-  type IAgentRuntime,
-  type Memory,
-  type State,
-  logger,
-} from '@elizaos/core';
 import { prisma } from '@/lib/prisma';
+import { type Evaluator, type IAgentRuntime, type Memory, type State, logger } from '@elizaos/core';
 
-interface NPCTrustScore {
-  accuracy: number;      // 0-1, percentage of correct predictions
-  sampleSize: number;    // Number of predictions tracked
+type NPCTrustScore = {
+  accuracy: number; // 0-1, percentage of correct predictions
+  sampleSize: number; // Number of predictions tracked
   lastUpdated: string;
-}
+};
 
-interface AgentPerformanceScore {
+type AgentPerformanceScore = {
   marketsTraded: number;
   correctPredictions: number;
   incorrectPredictions: number;
   winRate: number;
   totalPnL: number;
   lastUpdated: string;
-}
+};
 
 /**
  * Extract YES/NO prediction from post content
  */
 function extractPredictionFromContent(content: string): 'YES' | 'NO' | null {
   const lower = content.toLowerCase();
-  
+
   // Strong indicators
   if (
     lower.includes('will succeed') ||
@@ -48,7 +42,7 @@ function extractPredictionFromContent(content: string): 'YES' | 'NO' | null {
   ) {
     return 'YES';
   }
-  
+
   if (
     lower.includes('will fail') ||
     lower.includes('definitely no') ||
@@ -57,14 +51,16 @@ function extractPredictionFromContent(content: string): 'YES' | 'NO' | null {
   ) {
     return 'NO';
   }
-  
+
   // Sentiment analysis
-  const positiveCount = (content.match(/succeed|success|win|positive|optimistic|confident/gi) || []).length;
-  const negativeCount = (content.match(/fail|failure|lose|negative|pessimistic|doubt/gi) || []).length;
-  
+  const positiveCount = (content.match(/succeed|success|win|positive|optimistic|confident/gi) || [])
+    .length;
+  const negativeCount = (content.match(/fail|failure|lose|negative|pessimistic|doubt/gi) || [])
+    .length;
+
   if (positiveCount > negativeCount + 2) return 'YES';
   if (negativeCount > positiveCount + 2) return 'NO';
-  
+
   return null;
 }
 
@@ -77,32 +73,31 @@ export const marketOutcomeEvaluator: Evaluator = {
 
   validate: async (_runtime: IAgentRuntime, message: Memory, _state?: State): Promise<boolean> => {
     const content = message.content;
-    
+
     // Run when a market has resolved
-    const isResolution = content.text?.includes('market resolved') ||
-                         content.text?.includes('question resolved') ||
-                         content.action === 'MARKET_RESOLVED';
-    
+    const isResolution =
+      content.text?.includes('market resolved') ||
+      content.text?.includes('question resolved') ||
+      content.action === 'MARKET_RESOLVED';
+
     return isResolution;
   },
 
-  handler: async (
-    runtime: IAgentRuntime,
-    message: Memory,
-    _state?: State
-  ): Promise<void> => {
+  handler: async (runtime: IAgentRuntime, message: Memory, _state?: State): Promise<void> => {
     try {
       const questionNumber = message.content.questionNumber as number;
       const outcome = message.content.outcome as boolean;
-      
+
       if (!questionNumber || outcome === undefined) {
         return;
       }
 
-      logger.info(`[Market Learning] Processing market ${questionNumber} outcome: ${outcome ? 'YES' : 'NO'}`);
+      logger.info(
+        `[Market Learning] Processing market ${questionNumber} outcome: ${outcome ? 'YES' : 'NO'}`
+      );
 
       // === 1. UPDATE NPC TRUST SCORES ===
-      
+
       // Only analyze posts up to resolution time (no future posts)
       const now = new Date();
       const posts = await prisma.post.findMany({
@@ -120,15 +115,15 @@ export const marketOutcomeEvaluator: Evaluator = {
       });
 
       // Fetch author details separately
-      const authorIds = [...new Set(posts.map(p => p.authorId))];
+      const authorIds = [...new Set(posts.map((p) => p.authorId))];
       const authors = await prisma.user.findMany({
         where: { id: { in: authorIds } },
         select: { id: true, displayName: true, isActor: true },
       });
-      const authorMap = new Map(authors.map(a => [a.id, a]));
+      const authorMap = new Map(authors.map((a) => [a.id, a]));
 
-      const npcPosts = posts.filter(p => authorMap.get(p.authorId)?.isActor);
-      
+      const npcPosts = posts.filter((p) => authorMap.get(p.authorId)?.isActor);
+
       // Get current trust scores
       // Note: messageManager API not available in this context
       // TODO: Implement proper state storage for trust scores
@@ -140,7 +135,7 @@ export const marketOutcomeEvaluator: Evaluator = {
         const author = authorMap.get(post.authorId);
         const npcName = author?.displayName || 'Unknown';
         const predicted = extractPredictionFromContent(post.content);
-        
+
         if (!predicted) continue;
 
         const npcSaidYes = predicted === 'YES';
@@ -153,7 +148,7 @@ export const marketOutcomeEvaluator: Evaluator = {
         };
 
         current.sampleSize++;
-        
+
         const learningRate = 0.1;
         if (correct) {
           current.accuracy = current.accuracy + learningRate * (1.0 - current.accuracy);
@@ -173,7 +168,7 @@ export const marketOutcomeEvaluator: Evaluator = {
       logger.info(`[NPC Trust] Updated ${npcUpdated} NPC trust scores (in-memory only)`);
 
       // === 2. EVALUATE AGENT'S OWN PERFORMANCE ===
-      
+
       // Check if agent had a position in this market
       const agentPosition = await prisma.position.findFirst({
         where: {
@@ -206,11 +201,15 @@ export const marketOutcomeEvaluator: Evaluator = {
 
         if (agentCorrect) {
           performance.correctPredictions++;
-          const profit = parseFloat(agentPosition.shares.toString()) * (1 - parseFloat(agentPosition.avgPrice.toString()));
+          const profit =
+            parseFloat(agentPosition.shares.toString()) *
+            (1 - parseFloat(agentPosition.avgPrice.toString()));
           performance.totalPnL += profit;
         } else {
           performance.incorrectPredictions++;
-          const loss = parseFloat(agentPosition.shares.toString()) * parseFloat(agentPosition.avgPrice.toString());
+          const loss =
+            parseFloat(agentPosition.shares.toString()) *
+            parseFloat(agentPosition.avgPrice.toString());
           performance.totalPnL -= loss;
         }
 
@@ -219,24 +218,27 @@ export const marketOutcomeEvaluator: Evaluator = {
 
         // Save performance
         // Note: messageManager API not available - performance tracked in-memory only
-        logger.info(`[Performance] ${agentCorrect ? 'WIN' : 'LOSS'} - Win rate: ${(performance.winRate * 100).toFixed(0)}% (${performance.correctPredictions}/${performance.marketsTraded}), P&L: $${performance.totalPnL.toFixed(2)}`);
+        logger.info(
+          `[Performance] ${agentCorrect ? 'WIN' : 'LOSS'} - Win rate: ${(performance.winRate * 100).toFixed(0)}% (${performance.correctPredictions}/${performance.marketsTraded}), P&L: $${performance.totalPnL.toFixed(2)}`
+        );
       }
 
       // === 3. LOG TOP PERFORMERS ===
-      
+
       const sorted = Object.entries(npcTrust).sort((a, b) => b[1].accuracy - a[1].accuracy);
       if (sorted.length > 0) {
         const top3 = sorted.slice(0, 3);
-        const topNPCsInfo = top3.map(([name, data]) => 
-          `${name}: ${(data.accuracy * 100).toFixed(0)}% (${data.sampleSize} samples)`
-        ).join(', ');
+        const topNPCsInfo = top3
+          .map(
+            ([name, data]) =>
+              `${name}: ${(data.accuracy * 100).toFixed(0)}% (${data.sampleSize} samples)`
+          )
+          .join(', ');
         logger.info(`[Top NPCs] ${topNPCsInfo}`);
       }
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error(`[Market Learning] Error: ${errorMessage}`);
     }
   },
 };
-

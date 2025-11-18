@@ -1,26 +1,26 @@
 /**
  * Market Decision Engine - NPC Trading Decision Generator
- * 
+ *
  * @module engine/MarketDecisionEngine
- * 
+ *
  * @description
  * Generates autonomous trading decisions for all NPCs using LLM-powered analysis.
  * Creates realistic market behavior where NPCs trade based on information, relationships,
  * and personality rather than following predetermined patterns.
- * 
+ *
  * **Core Functionality:**
  * - Generates trading decisions for all trading-enabled NPCs
  * - Uses LLM to analyze market context and make human-like decisions
  * - Batches NPCs together to minimize LLM costs (90% reduction vs individual calls)
  * - Token-aware with automatic chunking for large batches
  * - Validates decisions against constraints (balance, market availability)
- * 
+ *
  * **Decision Types:**
  * - `open_long` / `open_short` - Open perpetual futures positions
  * - `buy_yes` / `buy_no` - Buy prediction market shares
  * - `close_position` - Close existing position
  * - `hold` - No action this tick
- * 
+ *
  * **Context Provided to LLM:**
  * - NPC profile (personality, tier, balance)
  * - Relationships with other NPCs (allies/rivals affect decisions)
@@ -31,28 +31,28 @@
  * - Reality grounding (current date, prices, market context)
  * - Available markets (perps and predictions)
  * - Current positions (P&L, sizing)
- * 
+ *
  * **Batching Strategy:**
  * - Groups NPCs into batches that fit token limits
  * - Typical: 5-15 NPCs per batch depending on context size
  * - Preserves individual context for each NPC
  * - LLM generates array of decisions (one per NPC)
- * 
+ *
  * **Validation:**
  * - Rejects trades exceeding NPC balance
  * - Verifies market/ticker existence
  * - Validates action types
  * - Checks position ownership for closes
  * - Returns only valid decisions
- * 
+ *
  * @see {@link TradeExecutionService} - Executes validated decisions
  * @see {@link MarketContextService} - Builds NPC context
  * @see {@link GameEngine} - Calls generateBatchDecisions() each tick
- * 
+ *
  * @example
  * ```typescript
  * const engine = new MarketDecisionEngine(llm, contextService);
- * 
+ *
  * // Generate decisions for all NPCs
  * const decisions = await engine.generateBatchDecisions();
  * // => [
@@ -60,105 +60,115 @@
  * //   { npcId: 'bob', action: 'hold', ... },
  * //   { npcId: 'charlie', action: 'open_long', ticker: 'TECH', amount: 500, ... }
  * // ]
- * 
+ *
  * // Execute the trades
  * await tradeExecutionService.executeDecisionBatch(decisions);
  * ```
  */
 
 import { logger } from '@/lib/logger';
-import type { BabylonLLMClient } from '@/generator/llm/openai-client';
-import type { MarketContextService } from '@/lib/services/market-context-service';
-import { renderPrompt, npcMarketDecisions, generateWorldContext } from '@/prompts';
-import type { TradingDecision } from '@/types/market-decisions';
-import type { NPCMarketContext } from '@/types/market-context';
-import { countTokensSync, getSafeContextLimit, truncateToTokenLimitSync } from '@/lib/token-counter';
-import type { JsonValue } from '@/types/common';
 import { prisma } from '@/lib/prisma';
+import type { MarketContextService } from '@/lib/services/market-context-service';
+import {
+  countTokensSync,
+  getSafeContextLimit,
+  truncateToTokenLimitSync,
+} from '@/lib/token-counter';
+import type { BabylonLLMClient } from '@/generator/llm/openai-client';
+import { generateWorldContext, npcMarketDecisions, renderPrompt } from '@/prompts';
+import type { JsonValue } from '@/types/common';
+import type { NPCMarketContext } from '@/types/market-context';
+import type { TradingDecision } from '@/types/market-decisions';
 
 /**
  * Token management configuration
- * 
+ *
  * @interface TokenConfig
- * 
+ *
  * @property model - LLM model name (e.g., 'qwen/qwen3-32b' for Groq)
  * @property maxContextTokens - Maximum tokens for prompt context
  * @property maxOutputTokens - Maximum tokens for LLM response
  * @property tokensPerNPC - Estimated tokens per NPC context section
  */
-interface TokenConfig {
+type TokenConfig = {
   model: string;
   maxContextTokens: number;
   maxOutputTokens: number;
   tokensPerNPC: number;
-}
+};
 
 /**
  * Market Decision Engine
- * 
+ *
  * @class MarketDecisionEngine
- * 
+ *
  * @description
  * Generates trading decisions for NPCs using LLM-powered market analysis.
  * Automatically handles batching and token management to process all NPCs
  * efficiently while staying within model context limits.
- * 
+ *
  * **Key Responsibilities:**
  * - Generate realistic trading decisions based on NPC context
  * - Batch NPCs to minimize LLM API costs
  * - Manage token budgets automatically
  * - Validate all decisions against constraints
  * - Handle both individual and batch generation
- * 
+ *
  * **Architecture:**
  * - Uses `qwen/qwen3-32b` on Groq for speed and reliability (130k context)
  * - Dynamically calculates batch sizes based on token limits
  * - Falls back to individual processing if batches fail
  * - Strict validation prevents invalid trades
  * - Intelligent caching (1-minute TTL) reduces redundant DB queries across batches
- * 
+ *
  * @usage
  * Created once by GameEngine and called each tick to generate NPC trading decisions.
  */
 export class MarketDecisionEngine {
   private tokenConfig: TokenConfig;
-  
+
   // Caches to avoid redundant queries within same tick
-  private worldContextCache: { context: Awaited<ReturnType<typeof generateWorldContext>>; timestamp: number } | null = null;
-  private activeQuestionsCache: { questions: string; timestamp: number } | null = null;
+  private worldContextCache: {
+    context: Awaited<ReturnType<typeof generateWorldContext>>;
+    timestamp: number;
+  } | null = null;
+  private activeQuestionsCache: {
+    questions: string;
+    timestamp: number;
+  } | null = null;
   private recentEventsCache: { events: string; timestamp: number } | null = null;
   private readonly CACHE_TTL_MS = 60000; // 1 minute TTL for caches
-  
+
   /**
    * Create a new MarketDecisionEngine
-   * 
+   *
    * @param llm - Babylon LLM client for decision generation
    * @param contextService - Service for building NPC market context
    * @param options - Optional configuration overrides
    * @param options.model - LLM model to use (default: 'qwen/qwen3-32b' on Groq)
    * @param options.maxOutputTokens - Maximum tokens for response (default: 32k for qwen3-32b, 16k for Kimi)
-   * 
+   *
    * @description
    * Initializes the engine with token management configuration. Automatically
    * calculates safe context limits based on model and output requirements.
-   * 
+   *
    * **Model Selection:**
    * - Default: `qwen/qwen3-32b` on Groq (fast, 130k context)
    * - Alternative: Kimi models for high-quality content generation
    * - Fallback: OpenAI gpt-4o-mini (only if no Groq API key)
-   * 
+   *
    * **Token Budget:**
    * - Automatically calculated from model INPUT limits (output is separate)
    * - qwen3-32b: 130k INPUT (117k after safety), 32k OUTPUT (separate)
    * - Estimates ~400 tokens per NPC context
    * - Can handle 294 NPCs per batch (117k ÷ 400), typically processes 64 NPCs easily
-   * 
+   *
    * @example
    * ```typescript
    * const engine = new MarketDecisionEngine(
    *   llmClient,
    *   contextService,
-   *   { 
+   *   {
    *     model: 'qwen/qwen3-32b',  // Default - uses Groq
    *     maxOutputTokens: 32000      // 32k for qwen, 16k for Kimi
    *   }
@@ -175,7 +185,7 @@ export class MarketDecisionEngine {
   ) {
     // Use qwen3-32b for background trading operations - fast and reliable on Groq
     const model = options.model || 'qwen/qwen3-32b';
-    
+
     // Set output token limits based on model and provider:
     // Note: Input and output are SEPARATE limits on modern models
     // Per https://console.groq.com/docs/models:
@@ -187,7 +197,7 @@ export class MarketDecisionEngine {
     const isKimiModel = model.toLowerCase().includes('kimi');
     const isOpenAIModel = model.toLowerCase().includes('gpt') || llm.getProvider() === 'openai';
     const isLlama8B = model.includes('llama-3.1-8b');
-    
+
     // Set appropriate output limits based on model
     let defaultMaxOutput = 32000; // Default for most models
     if (isKimiModel) {
@@ -202,30 +212,34 @@ export class MarketDecisionEngine {
       // If prompt is large, reduce output tokens accordingly
       defaultMaxOutput = 8000; // Conservative limit for OpenAI to avoid "reduce length" errors
     }
-    
+
     const maxOutputTokens = options.maxOutputTokens || defaultMaxOutput;
-    
+
     this.tokenConfig = {
       model,
       maxContextTokens: getSafeContextLimit(model, maxOutputTokens),
       maxOutputTokens,
       tokensPerNPC: 800, // Actual average is ~780 tokens per NPC based on measurements
     };
-    
-    logger.info('MarketDecisionEngine initialized', {
-      model,
-      provider: llm.getProvider(),
-      maxContextTokens: this.tokenConfig.maxContextTokens,
-      maxOutputTokens,
-      isOpenAIModel,
-    }, 'MarketDecisionEngine');
+
+    logger.info(
+      'MarketDecisionEngine initialized',
+      {
+        model,
+        provider: llm.getProvider(),
+        maxContextTokens: this.tokenConfig.maxContextTokens,
+        maxOutputTokens,
+        isOpenAIModel,
+      },
+      'MarketDecisionEngine'
+    );
   }
-  
+
   /**
    * Generate trading decisions for all NPCs
-   * 
+   *
    * @returns Array of validated trading decisions
-   * 
+   *
    * @description
    * Main entry point for NPC decision generation. Automatically handles:
    * - Fetching context for all trading-enabled NPCs
@@ -233,28 +247,28 @@ export class MarketDecisionEngine {
    * - Generating decisions via LLM
    * - Validating all decisions
    * - Fallback to individual processing on batch failure
-   * 
+   *
    * **Process:**
    * 1. Fetch context for all NPCs via MarketContextService
    * 2. Calculate batch size based on token budget
    * 3. Process NPCs in batches via LLM
    * 4. Validate each decision against constraints
    * 5. Return only valid decisions
-   * 
+   *
    * **Performance:**
    * - Typical: 1 LLM call for 64 NPCs (single batch with 130k context)
    * - Fallback: Individual calls if batching fails (rare)
    * - ~5-10 seconds for full decision generation on qwen3-32b
-   * 
+   *
    * **Error Handling:**
    * - Batch failures trigger individual retry
    * - Individual failures logged but don't fail entire generation
    * - Always returns best-effort decision array
-   * 
+   *
    * @example
    * ```typescript
    * const decisions = await engine.generateBatchDecisions();
-   * 
+   *
    * console.log(`Generated ${decisions.length} decisions`);
    * console.log(`Trades: ${decisions.filter(d => d.action !== 'hold').length}`);
    * console.log(`Holds: ${decisions.filter(d => d.action === 'hold').length}`);
@@ -262,115 +276,135 @@ export class MarketDecisionEngine {
    */
   async generateBatchDecisions(): Promise<TradingDecision[]> {
     const startTime = Date.now();
-    
+
     // Get context for all NPCs
     const contexts = await this.contextService.buildContextForAllNPCs();
-    
+
     if (contexts.size === 0) {
       logger.warn('No NPCs with trading enabled found', {}, 'MarketDecisionEngine');
       return [];
     }
-    
-    logger.info(`Generating decisions for ${contexts.size} NPCs`, { npcCount: contexts.size }, 'MarketDecisionEngine');
-    
+
+    logger.info(
+      `Generating decisions for ${contexts.size} NPCs`,
+      { npcCount: contexts.size },
+      'MarketDecisionEngine'
+    );
+
     // Convert contexts to array
     const npcs = Array.from(contexts.values());
-    
+
     // Calculate how many NPCs we can process per batch
     // For OpenAI models, be more conservative due to combined input+output limits
-    const isOpenAIModel = this.tokenConfig.model.toLowerCase().includes('gpt') || this.llm.getProvider() === 'openai';
-    
+    const isOpenAIModel =
+      this.tokenConfig.model.toLowerCase().includes('gpt') || this.llm.getProvider() === 'openai';
+
     // Use a conservative estimate with safety margin (reserve 20% for prompt structure and variations)
     const safetyMargin = 0.8; // Use only 80% of available tokens
-    let maxNPCsPerBatch = Math.max(1, Math.floor(
-      (this.tokenConfig.maxContextTokens * safetyMargin) / this.tokenConfig.tokensPerNPC
-    ));
-    
+    let maxNPCsPerBatch = Math.max(
+      1,
+      Math.floor((this.tokenConfig.maxContextTokens * safetyMargin) / this.tokenConfig.tokensPerNPC)
+    );
+
     // Reduce batch size for OpenAI models to account for combined input+output limits
     if (isOpenAIModel) {
       // Reserve more tokens for output by reducing batch size
       maxNPCsPerBatch = Math.max(1, Math.floor(maxNPCsPerBatch * 0.5)); // 50% reduction for safety
     }
-    
-    logger.info('Token budget allocation', {
-      maxContextTokens: this.tokenConfig.maxContextTokens,
-      tokensPerNPC: this.tokenConfig.tokensPerNPC,
-      maxNPCsPerBatch,
-      totalNPCs: npcs.length,
-      batchesNeeded: Math.ceil(npcs.length / maxNPCsPerBatch),
-      isOpenAIModel,
-      provider: this.llm.getProvider(),
-    }, 'MarketDecisionEngine');
-    
+
+    logger.info(
+      'Token budget allocation',
+      {
+        maxContextTokens: this.tokenConfig.maxContextTokens,
+        tokensPerNPC: this.tokenConfig.tokensPerNPC,
+        maxNPCsPerBatch,
+        totalNPCs: npcs.length,
+        batchesNeeded: Math.ceil(npcs.length / maxNPCsPerBatch),
+        isOpenAIModel,
+        provider: this.llm.getProvider(),
+      },
+      'MarketDecisionEngine'
+    );
+
     // Process NPCs in batches if needed
     const allDecisions: TradingDecision[] = [];
-    
+
     for (let i = 0; i < npcs.length; i += maxNPCsPerBatch) {
       const batch = npcs.slice(i, i + maxNPCsPerBatch);
       const batchNum = Math.floor(i / maxNPCsPerBatch) + 1;
       const totalBatches = Math.ceil(npcs.length / maxNPCsPerBatch);
-      
-      logger.info(`Processing batch ${batchNum}/${totalBatches}`, {
-        batchSize: batch.length,
-        npcNames: batch.map(n => n.npcName).join(', '),
-      }, 'MarketDecisionEngine');
-      
+
+      logger.info(
+        `Processing batch ${batchNum}/${totalBatches}`,
+        {
+          batchSize: batch.length,
+          npcNames: batch.map((n) => n.npcName).join(', '),
+        },
+        'MarketDecisionEngine'
+      );
+
       const batchDecisions = await this.generateDecisionsForContexts(batch);
       allDecisions.push(...batchDecisions);
     }
-    
+
     // Validate all decisions
     const validDecisions = this.validateDecisions(allDecisions, contexts);
-    
+
     const duration = Date.now() - startTime;
-    const tradeCount = validDecisions.filter(d => d.action !== 'hold').length;
-    const holdCount = validDecisions.filter(d => d.action === 'hold').length;
-    
-    logger.info(`Generated ${validDecisions.length} decisions in ${duration}ms`, {
-      total: validDecisions.length,
-      trades: tradeCount,
-      holds: holdCount,
-      durationMs: duration,
-    }, 'MarketDecisionEngine');
-    
+    const tradeCount = validDecisions.filter((d) => d.action !== 'hold').length;
+    const holdCount = validDecisions.filter((d) => d.action === 'hold').length;
+
+    logger.info(
+      `Generated ${validDecisions.length} decisions in ${duration}ms`,
+      {
+        total: validDecisions.length,
+        trades: tradeCount,
+        holds: holdCount,
+        durationMs: duration,
+      },
+      'MarketDecisionEngine'
+    );
+
     return validDecisions;
   }
-  
+
   /**
    * Generate decisions for specific NPCs
    */
   async generateDecisionsForNPCs(npcIds: string[]): Promise<TradingDecision[]> {
     const contexts: NPCMarketContext[] = [];
-    
+
     for (const npcId of npcIds) {
       const context = await this.contextService.buildContextForNPC(npcId);
       contexts.push(context);
     }
-    
+
     const decisions = await this.generateDecisionsForContexts(contexts);
-    
-    const contextsMap = new Map(contexts.map(c => [c.npcId, c]));
+
+    const contextsMap = new Map(contexts.map((c) => [c.npcId, c]));
     return this.validateDecisions(decisions, contextsMap);
   }
-  
+
   /**
    * Generate decisions for an array of contexts using LLM with token validation
    */
-  private async generateDecisionsForContexts(contexts: NPCMarketContext[]): Promise<TradingDecision[]> {
+  private async generateDecisionsForContexts(
+    contexts: NPCMarketContext[]
+  ): Promise<TradingDecision[]> {
     if (contexts.length === 0) return [];
-    
+
     // Format NPCs data as string (existing prompts use pre-formatted strings)
     let npcsList = this.formatNPCsList(contexts);
-    
+
     // Get world context with caching (avoids redundant queries in same tick)
     const worldContext = await this.getCachedWorldContext();
-    
+
     // Get active questions with caching (especially comparative ones)
     const activeQuestionsText = await this.getCachedActiveQuestions();
-    
+
     // Get recent events with caching
     const recentEventsText = await this.getCachedRecentEvents();
-    
+
     // Build the full prompt
     let prompt = renderPrompt(npcMarketDecisions, {
       npcCount: contexts.length.toString(),
@@ -379,25 +413,33 @@ export class MarketDecisionEngine {
       activeQuestions: activeQuestionsText,
       recentEvents: recentEventsText,
     });
-    
+
     // Count tokens and enforce limit
     let promptTokens = countTokensSync(prompt);
-    
-    logger.info('Prompt token count', {
-      npcs: contexts.length,
-      promptTokens,
-      limit: this.tokenConfig.maxContextTokens,
-      withinLimit: promptTokens <= this.tokenConfig.maxContextTokens,
-    }, 'MarketDecisionEngine');
-    
+
+    logger.info(
+      'Prompt token count',
+      {
+        npcs: contexts.length,
+        promptTokens,
+        limit: this.tokenConfig.maxContextTokens,
+        withinLimit: promptTokens <= this.tokenConfig.maxContextTokens,
+      },
+      'MarketDecisionEngine'
+    );
+
     // If prompt exceeds limit, truncate intelligently
     if (promptTokens > this.tokenConfig.maxContextTokens) {
-      logger.warn('Prompt exceeds token limit, truncating', {
-        currentTokens: promptTokens,
-        maxTokens: this.tokenConfig.maxContextTokens,
-        npcs: contexts.length,
-      }, 'MarketDecisionEngine');
-      
+      logger.warn(
+        'Prompt exceeds token limit, truncating',
+        {
+          currentTokens: promptTokens,
+          maxTokens: this.tokenConfig.maxContextTokens,
+          npcs: contexts.length,
+        },
+        'MarketDecisionEngine'
+      );
+
       // Truncate the npcsList section while preserving prompt structure
       // Reserve extra buffer (10%) to account for token counting inaccuracies
       const promptPrefix = renderPrompt(npcMarketDecisions, {
@@ -410,10 +452,12 @@ export class MarketDecisionEngine {
       const prefixTokens = countTokensSync(promptPrefix);
       const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1); // 10% buffer
       const availableForNPCs = this.tokenConfig.maxContextTokens - prefixTokens - bufferTokens;
-      
-      const truncated = truncateToTokenLimitSync(npcsList, availableForNPCs, { ellipsis: true });
+
+      const truncated = truncateToTokenLimitSync(npcsList, availableForNPCs, {
+        ellipsis: true,
+      });
       npcsList = truncated.text;
-      
+
       prompt = renderPrompt(npcMarketDecisions, {
         npcCount: contexts.length.toString(),
         npcsList,
@@ -421,129 +465,171 @@ export class MarketDecisionEngine {
         activeQuestions: activeQuestionsText,
         recentEvents: recentEventsText,
       });
-      
+
       promptTokens = countTokensSync(prompt);
-      
-      logger.info('Truncated prompt to fit limit', {
-        newTokens: promptTokens,
-        truncatedChars: npcsList.length,
-        bufferTokens,
-      }, 'MarketDecisionEngine');
+
+      logger.info(
+        'Truncated prompt to fit limit',
+        {
+          newTokens: promptTokens,
+          truncatedChars: npcsList.length,
+          bufferTokens,
+        },
+        'MarketDecisionEngine'
+      );
     }
-    
+
     // Use XML format for more robust parsing (handles truncation better than JSON)
     // Handle OpenAI's combined input+output token limit errors by retrying with reduced output tokens
-    let rawResponse: TradingDecision[] | { decisions: TradingDecision[] | {decision: TradingDecision[]} } | { decision: TradingDecision[] } | null = null;
+    let rawResponse:
+      | TradingDecision[]
+      | { decisions: TradingDecision[] | { decision: TradingDecision[] } }
+      | { decision: TradingDecision[] }
+      | null = null;
     let maxOutputTokens = this.tokenConfig.maxOutputTokens;
     let retryCount = 0;
     const maxRetries = 3; // Increased from 2 to 3 for better reliability
-    
+
     while (retryCount <= maxRetries) {
       try {
         // On retry after string response, make prompt stricter
-        const retryPrompt = retryCount > 0 
-          ? `⚠️⚠️⚠️ CRITICAL FORMAT REQUIREMENT - RETRY ATTEMPT ${retryCount + 1} ⚠️⚠️⚠️
+        const retryPrompt =
+          retryCount > 0
+            ? `⚠️⚠️⚠️ CRITICAL FORMAT REQUIREMENT - RETRY ATTEMPT ${retryCount + 1} ⚠️⚠️⚠️
 
 You MUST respond with ONLY valid XML. NO text, NO explanations, NO reasoning, NO markdown.
 Your response MUST start with <decisions> and end with </decisions>.
 Your FIRST character MUST be '<' and your LAST character MUST be '>'.
 
 ${prompt}`
-          : prompt;
-        
+            : prompt;
+
         // Lower temperature on retry for more deterministic output
-        const temperature = retryCount > 0 ? Math.max(0.3, 0.7 - (retryCount * 0.1)) : 0.7;
-        
-        rawResponse = await this.llm.generateJSON<TradingDecision[] | { decisions: TradingDecision[] | {decision: TradingDecision[]} } | { decision: TradingDecision[] }>(
-          retryPrompt,
-          undefined,
-          { 
-            temperature,
-            maxTokens: maxOutputTokens,
-            model: this.tokenConfig.model,
-            format: 'xml', // Use XML for robustness
-          }
-        );
-        
+        const temperature = retryCount > 0 ? Math.max(0.3, 0.7 - retryCount * 0.1) : 0.7;
+
+        rawResponse = await this.llm.generateJSON<
+          | TradingDecision[]
+          | { decisions: TradingDecision[] | { decision: TradingDecision[] } }
+          | { decision: TradingDecision[] }
+        >(retryPrompt, undefined, {
+          temperature,
+          maxTokens: maxOutputTokens,
+          model: this.tokenConfig.model,
+          format: 'xml', // Use XML for robustness
+        });
+
         // Validate response is not a string (which indicates LLM ignored format)
         if (typeof rawResponse === 'string') {
-          logger.warn('LLM returned string instead of structured data, retrying with stricter prompt', {
-            attempt: retryCount + 1,
-            preview: (rawResponse as string).substring(0, 200)
-          }, 'MarketDecisionEngine');
-          
+          logger.warn(
+            'LLM returned string instead of structured data, retrying with stricter prompt',
+            {
+              attempt: retryCount + 1,
+              preview: (rawResponse as string).substring(0, 200),
+            },
+            'MarketDecisionEngine'
+          );
+
           if (retryCount < maxRetries) {
             retryCount++;
             continue; // Retry with stricter prompt
           }
-          
+
           // Last retry - try to salvage by extracting XML/JSON from the string
-          logger.error('LLM consistently ignoring format instructions, attempting to extract data', {
-            attempts: retryCount + 1
-          }, 'MarketDecisionEngine');
-          
+          logger.error(
+            'LLM consistently ignoring format instructions, attempting to extract data',
+            {
+              attempts: retryCount + 1,
+            },
+            'MarketDecisionEngine'
+          );
+
           // Try to extract XML from the string response
           const { parseXML } = await import('@/generator/llm/xml-parser');
           const xmlResult = parseXML(rawResponse as string);
           if (xmlResult.success && xmlResult.data) {
-            logger.info('Successfully extracted XML from string response', {}, 'MarketDecisionEngine');
+            logger.info(
+              'Successfully extracted XML from string response',
+              {},
+              'MarketDecisionEngine'
+            );
             rawResponse = xmlResult.data as typeof rawResponse;
             break;
           }
         }
-        
+
         break; // Success, exit retry loop
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        
+
         // Check if this is the "reduce length" error from OpenAI
         if (errorMessage.includes('reduce the length') || errorMessage.includes('400')) {
           if (retryCount < maxRetries) {
             // Reduce output tokens by 50% and retry
             maxOutputTokens = Math.max(2000, Math.floor(maxOutputTokens * 0.5));
             retryCount++;
-            
-            logger.warn('Token limit error, retrying with reduced output tokens', {
-              attempt: retryCount,
-              newMaxOutputTokens: maxOutputTokens,
-              promptTokens,
-              originalMaxOutputTokens: this.tokenConfig.maxOutputTokens,
-            }, 'MarketDecisionEngine');
-            
-            continue; // Retry with reduced tokens
+
+            logger.warn(
+              'Token limit error, retrying with reduced output tokens',
+              {
+                attempt: retryCount,
+                newMaxOutputTokens: maxOutputTokens,
+                promptTokens,
+                originalMaxOutputTokens: this.tokenConfig.maxOutputTokens,
+              },
+              'MarketDecisionEngine'
+            );
           } else {
             // If we've exhausted retries, try processing in smaller batches
-            logger.error('Token limit error persists after retries, falling back to smaller batch', {
-              error: errorMessage,
-              promptTokens,
-              maxOutputTokens,
-            }, 'MarketDecisionEngine');
-            
+            logger.error(
+              'Token limit error persists after retries, falling back to smaller batch',
+              {
+                error: errorMessage,
+                promptTokens,
+                maxOutputTokens,
+              },
+              'MarketDecisionEngine'
+            );
+
             // Fallback: process NPCs individually if batch fails
             if (contexts.length > 1) {
-              logger.info('Falling back to individual NPC processing', {
-                npcCount: contexts.length,
-              }, 'MarketDecisionEngine');
-              
+              logger.info(
+                'Falling back to individual NPC processing',
+                {
+                  npcCount: contexts.length,
+                },
+                'MarketDecisionEngine'
+              );
+
               const individualDecisions: TradingDecision[] = [];
               for (const context of contexts) {
                 try {
                   const singleDecisions = await this.generateDecisionsForContexts([context]);
                   individualDecisions.push(...singleDecisions);
                 } catch (individualError) {
-                  logger.warn('Failed to generate decision for individual NPC', {
-                    npcId: context.npcId,
-                    error: individualError instanceof Error ? individualError.message : String(individualError),
-                  }, 'MarketDecisionEngine');
+                  logger.warn(
+                    'Failed to generate decision for individual NPC',
+                    {
+                      npcId: context.npcId,
+                      error:
+                        individualError instanceof Error
+                          ? individualError.message
+                          : String(individualError),
+                    },
+                    'MarketDecisionEngine'
+                  );
                 }
               }
               return individualDecisions;
             }
-            
+
             // If single NPC also fails, return empty array
-            logger.error('Failed to generate decisions even for single NPC', {
-              error: errorMessage,
-            }, 'MarketDecisionEngine');
+            logger.error(
+              'Failed to generate decisions even for single NPC',
+              {
+                error: errorMessage,
+              },
+              'MarketDecisionEngine'
+            );
             return [];
           }
         } else {
@@ -552,16 +638,20 @@ ${prompt}`
         }
       }
     }
-    
+
     // TypeScript guard: ensure rawResponse was assigned
     if (rawResponse === null) {
-      logger.error('Failed to generate response after all retries', {
-        npcCount: contexts.length,
-        promptTokens,
-      }, 'MarketDecisionEngine');
+      logger.error(
+        'Failed to generate response after all retries',
+        {
+          npcCount: contexts.length,
+          promptTokens,
+        },
+        'MarketDecisionEngine'
+      );
       return [];
     }
-    
+
     // Extract decisions array - handle XML structure: <decisions><decision>...</decision></decisions>
     let response: TradingDecision[];
     if (Array.isArray(rawResponse)) {
@@ -575,15 +665,20 @@ ${prompt}`
           response = decisionsObj;
         } else if (decisionsObj && typeof decisionsObj === 'object' && 'decision' in decisionsObj) {
           // Nested structure from XML
-          const innerDecisions = (decisionsObj as { decision: TradingDecision[] | TradingDecision }).decision;
+          const innerDecisions = (decisionsObj as { decision: TradingDecision[] | TradingDecision })
+            .decision;
           response = Array.isArray(innerDecisions) ? innerDecisions : [innerDecisions];
         } else {
           logger.error('Invalid decisions structure', { decisionsObj }, 'MarketDecisionEngine');
           return [];
         }
-        logger.debug('Extracted decisions from XML', { 
-          decisionsCount: response.length 
-        }, 'MarketDecisionEngine');
+        logger.debug(
+          'Extracted decisions from XML',
+          {
+            decisionsCount: response.length,
+          },
+          'MarketDecisionEngine'
+        );
       } else if ('decision' in rawResponse) {
         // Handle both array and single decision object
         const decisionData = rawResponse.decision;
@@ -592,153 +687,184 @@ ${prompt}`
         } else if (decisionData && typeof decisionData === 'object') {
           // Single decision object - wrap in array
           response = [decisionData as TradingDecision];
-          logger.debug('Wrapped single decision in array', {
-            npcId: (decisionData as Record<string, JsonValue>).npcId
-          }, 'MarketDecisionEngine');
+          logger.debug(
+            'Wrapped single decision in array',
+            {
+              npcId: (decisionData as Record<string, JsonValue>).npcId,
+            },
+            'MarketDecisionEngine'
+          );
         } else {
           logger.error('Invalid decision structure', { decisionData }, 'MarketDecisionEngine');
           return [];
         }
-        logger.debug('Extracted decisions from flat XML structure', { 
-          decisionsCount: response.length 
-        }, 'MarketDecisionEngine');
+        logger.debug(
+          'Extracted decisions from flat XML structure',
+          {
+            decisionsCount: response.length,
+          },
+          'MarketDecisionEngine'
+        );
       } else {
-        logger.error('LLM returned object without decisions', { 
-          response: rawResponse,
-          keys: Object.keys(rawResponse)
-        }, 'MarketDecisionEngine');
+        logger.error(
+          'LLM returned object without decisions',
+          {
+            response: rawResponse,
+            keys: Object.keys(rawResponse),
+          },
+          'MarketDecisionEngine'
+        );
         return [];
       }
     } else {
       // Type assertion needed since rawResponse could be anything
-      const responsePreview = typeof rawResponse === 'string' 
-        ? (rawResponse as string).substring(0, 200) 
-        : rawResponse;
-        
-      logger.error('LLM returned invalid response type', { 
-        response: responsePreview,
-        type: typeof rawResponse
-      }, 'MarketDecisionEngine');
-      
+      const responsePreview =
+        typeof rawResponse === 'string' ? (rawResponse as string).substring(0, 200) : rawResponse;
+
+      logger.error(
+        'LLM returned invalid response type',
+        {
+          response: responsePreview,
+          type: typeof rawResponse,
+        },
+        'MarketDecisionEngine'
+      );
+
       // If LLM returned a string explanation, log it
       if (typeof rawResponse === 'string') {
-        logger.error('LLM ignored XML format and returned text explanation', {
-          explanation: (rawResponse as string).substring(0, 300)
-        }, 'MarketDecisionEngine');
+        logger.error(
+          'LLM ignored XML format and returned text explanation',
+          {
+            explanation: (rawResponse as string).substring(0, 300),
+          },
+          'MarketDecisionEngine'
+        );
       }
-      
+
       return [];
     }
-    
-    logger.info(`Processed ${response.length} decisions for ${contexts.length} NPCs`, { 
-      responseLength: response.length,
-      npcCount: contexts.length,
-      sampleDecision: response.length > 0 ? response[0] : null
-    }, 'MarketDecisionEngine');
-    
+
+    logger.info(
+      `Processed ${response.length} decisions for ${contexts.length} NPCs`,
+      {
+        responseLength: response.length,
+        npcCount: contexts.length,
+        sampleDecision: response.length > 0 ? response[0] : null,
+      },
+      'MarketDecisionEngine'
+    );
+
     if (response.length === 0) {
-      logger.warn('LLM returned empty array for batch decisions', { npcCount: contexts.length }, 'MarketDecisionEngine');
+      logger.warn(
+        'LLM returned empty array for batch decisions',
+        { npcCount: contexts.length },
+        'MarketDecisionEngine'
+      );
     }
-    
+
     return response;
   }
-  
+
   /**
    * Format NPCs data as a readable string for the prompt with relationships
    * Applies intelligent truncation to stay within token budgets
    */
   private formatNPCsList(contexts: NPCMarketContext[]): string {
-    return contexts.map((ctx, index) => {
-      let section = `## NPC ${index + 1}: ${ctx.npcName}\n\n`;
-      section += `**Profile:**\n`;
-      section += `- ID: ${ctx.npcId}\n`;
-      section += `- Personality: ${ctx.personality}\n`;
-      section += `- Tier: ${ctx.tier}\n`;
-      section += `- Available Balance: $${ctx.availableBalance.toLocaleString()}\n\n`;
-      
-      // Relationships (limit to top 5 strongest)
-      if (ctx.relationships && ctx.relationships.length > 0) {
-        section += `**Relationships:**\n`;
-        const topRelationships = ctx.relationships
-          .sort((a, b) => b.strength - a.strength)
-          .slice(0, 5);
-        
-        topRelationships.forEach(rel => {
-          const sentimentDesc = rel.sentiment > 0.5 ? '✅' : rel.sentiment < -0.5 ? '❌' : '➖';
-          section += `- ${rel.relationshipType} with ${rel.actorName} (${sentimentDesc})`;
-          if (rel.history && rel.history.length < 50) section += `: ${rel.history}`;
+    return contexts
+      .map((ctx, index) => {
+        let section = `## NPC ${index + 1}: ${ctx.npcName}\n\n`;
+        section += `**Profile:**\n`;
+        section += `- ID: ${ctx.npcId}\n`;
+        section += `- Personality: ${ctx.personality}\n`;
+        section += `- Tier: ${ctx.tier}\n`;
+        section += `- Available Balance: $${ctx.availableBalance.toLocaleString()}\n\n`;
+
+        // Relationships (limit to top 5 strongest)
+        if (ctx.relationships && ctx.relationships.length > 0) {
+          section += `**Relationships:**\n`;
+          const topRelationships = ctx.relationships
+            .sort((a, b) => b.strength - a.strength)
+            .slice(0, 5);
+
+          topRelationships.forEach((rel) => {
+            const sentimentDesc = rel.sentiment > 0.5 ? '✅' : rel.sentiment < -0.5 ? '❌' : '➖';
+            section += `- ${rel.relationshipType} with ${rel.actorName} (${sentimentDesc})`;
+            if (rel.history && rel.history.length < 50) section += `: ${rel.history}`;
+            section += `\n`;
+          });
+          section += `Rule: Rivals (❌) bet opposite, Allies (✅) bet same\n\n`;
+        }
+
+        section += `**Information Access:**\n\n`;
+
+        // Recent Posts (reduced to 8 to save tokens)
+        section += `Recent Posts (Last 8):\n`;
+        ctx.recentPosts.slice(0, 8).forEach((post) => {
+          // Truncate long posts to save tokens
+          const content =
+            post.content.length > 150 ? `${post.content.substring(0, 150)}...` : post.content;
+          section += `- [@${post.authorName}]: ${content}`;
+          if (post.articleTitle) section += ` [${post.articleTitle}]`;
           section += `\n`;
         });
-        section += `Rule: Rivals (❌) bet opposite, Allies (✅) bet same\n\n`;
-      }
-      
-      section += `**Information Access:**\n\n`;
-      
-      // Recent Posts (reduced to 8 to save tokens)
-      section += `Recent Posts (Last 8):\n`;
-      ctx.recentPosts.slice(0, 8).forEach(post => {
-        // Truncate long posts to save tokens
-        const content = post.content.length > 150 ? post.content.substring(0, 150) + '...' : post.content;
-        section += `- [@${post.authorName}]: ${content}`;
-        if (post.articleTitle) section += ` [${post.articleTitle}]`;
-        section += `\n`;
-      });
-      
-      // Group Chat Messages (reduced to 5 to save tokens)
-      if (ctx.groupChatMessages.length > 0) {
-        section += `\n🔒 Insider Info (Last 5):\n`;
-        ctx.groupChatMessages.slice(0, 5).forEach(msg => {
-          const message = msg.message.length > 100 ? msg.message.substring(0, 100) + '...' : msg.message;
-          section += `- [${msg.fromName}]: ${message}\n`;
+
+        // Group Chat Messages (reduced to 5 to save tokens)
+        if (ctx.groupChatMessages.length > 0) {
+          section += `\n🔒 Insider Info (Last 5):\n`;
+          ctx.groupChatMessages.slice(0, 5).forEach((msg) => {
+            const message =
+              msg.message.length > 100 ? `${msg.message.substring(0, 100)}...` : msg.message;
+            section += `- [${msg.fromName}]: ${message}\n`;
+          });
+        }
+
+        // Recent Events (reduced to 5 to save tokens)
+        section += `\nRecent Events (Last 5):\n`;
+        ctx.recentEvents.slice(0, 5).forEach((event) => {
+          section += `- ${event.description} (${event.type})`;
+          if (event.relatedQuestion) section += ` [Q${event.relatedQuestion}]`;
+          section += `\n`;
         });
-      }
-      
-      // Recent Events (reduced to 5 to save tokens)
-      section += `\nRecent Events (Last 5):\n`;
-      ctx.recentEvents.slice(0, 5).forEach(event => {
-        section += `- ${event.description} (${event.type})`;
-        if (event.relatedQuestion) section += ` [Q${event.relatedQuestion}]`;
-        section += `\n`;
-      });
-      
-      section += `\n---\n\n`;
-      section += `**Markets:**\n\n`;
-      
-      // Perp Markets (limit to 5 to save tokens)
-      section += `Perpetual Futures (Top 5):\n`;
-      ctx.perpMarkets.slice(0, 5).forEach(market => {
-        const sign = market.changePercent24h > 0 ? '+' : '';
-        section += `- ${market.ticker}: $${market.currentPrice.toFixed(2)} (${sign}${market.changePercent24h.toFixed(1)}%)\n`;
-      });
-      
-      // Prediction Markets (limit to 5)
-      section += `\nPrediction Markets (Top 5):\n`;
-      ctx.predictionMarkets.slice(0, 5).forEach(market => {
-        section += `- Q${market.id}: ${market.text}\n`;
-        section += `  YES: ${market.yesPrice.toFixed(0)}% | NO: ${market.noPrice.toFixed(0)}% | ${market.daysUntilResolution}d\n`;
-      });
-      
-      section += `\n---\n\n`;
-      
-      // Current Positions (all, usually few)
-      section += `**Positions:**\n`;
-      if (ctx.currentPositions.length > 0) {
-        ctx.currentPositions.forEach(pos => {
-          const symbol = pos.ticker || `Q${pos.marketId}`;
-          section += `- ${pos.marketType} ${symbol} ${pos.side}: P&L $${pos.unrealizedPnL.toFixed(0)}\n`;
+
+        section += `\n---\n\n`;
+        section += `**Markets:**\n\n`;
+
+        // Perp Markets (limit to 5 to save tokens)
+        section += `Perpetual Futures (Top 5):\n`;
+        ctx.perpMarkets.slice(0, 5).forEach((market) => {
+          const sign = market.changePercent24h > 0 ? '+' : '';
+          section += `- ${market.ticker}: $${market.currentPrice.toFixed(2)} (${sign}${market.changePercent24h.toFixed(1)}%)\n`;
         });
-      } else {
-        section += `None\n`;
-      }
-      
-      section += `\n**DECISION:**\n`;
-      section += `Balance: $${ctx.availableBalance.toLocaleString()} (MAX)\n`;
-      section += `Actions: open_long, open_short, buy_yes, buy_no, close_position, hold\n\n`;
-      
-      return section;
-    }).join('\n\n');
+
+        // Prediction Markets (limit to 5)
+        section += `\nPrediction Markets (Top 5):\n`;
+        ctx.predictionMarkets.slice(0, 5).forEach((market) => {
+          section += `- Q${market.id}: ${market.text}\n`;
+          section += `  YES: ${market.yesPrice.toFixed(0)}% | NO: ${market.noPrice.toFixed(0)}% | ${market.daysUntilResolution}d\n`;
+        });
+
+        section += `\n---\n\n`;
+
+        // Current Positions (all, usually few)
+        section += `**Positions:**\n`;
+        if (ctx.currentPositions.length > 0) {
+          ctx.currentPositions.forEach((pos) => {
+            const symbol = pos.ticker || `Q${pos.marketId}`;
+            section += `- ${pos.marketType} ${symbol} ${pos.side}: P&L $${pos.unrealizedPnL.toFixed(0)}\n`;
+          });
+        } else {
+          section += `None\n`;
+        }
+
+        section += `\n**DECISION:**\n`;
+        section += `Balance: $${ctx.availableBalance.toLocaleString()} (MAX)\n`;
+        section += `Actions: open_long, open_short, buy_yes, buy_no, close_position, hold\n\n`;
+
+        return section;
+      })
+      .join('\n\n');
   }
-  
+
   /**
    * Validate decisions against constraints
    */
@@ -746,76 +872,95 @@ ${prompt}`
     decisions: TradingDecision[],
     contexts: Map<string, NPCMarketContext>
   ): TradingDecision[] {
-    logger.info(`Validating ${decisions.length} raw LLM decisions`, { 
-      decisionsCount: decisions.length,
-      contextsCount: contexts.size,
-      sampleDecisionAction: decisions[0]?.action,
-      sampleNpcName: decisions[0]?.npcName
-    }, 'MarketDecisionEngine');
-    
+    logger.info(
+      `Validating ${decisions.length} raw LLM decisions`,
+      {
+        decisionsCount: decisions.length,
+        contextsCount: contexts.size,
+        sampleDecisionAction: decisions[0]?.action,
+        sampleNpcName: decisions[0]?.npcName,
+      },
+      'MarketDecisionEngine'
+    );
+
     // Create reverse map from npcName to npcId for fallback lookup
     const nameToIdMap = new Map<string, string>();
     for (const [id, context] of contexts.entries()) {
       nameToIdMap.set(context.npcName.toLowerCase(), id);
       // Also try slugified versions (replace spaces with hyphens, lowercase)
-      const slugified = context.npcName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const slugified = context.npcName
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '');
       if (slugified !== context.npcName.toLowerCase()) {
         nameToIdMap.set(slugified, id);
       }
     }
-    
+
     const valid: TradingDecision[] = [];
     const rejectionReasons: Record<string, number> = {};
-    
+
     for (const decision of decisions) {
       // Skip decisions missing required fields early
       if (!decision.npcId && !decision.npcName) {
-        rejectionReasons['missing_identifiers'] = (rejectionReasons['missing_identifiers'] || 0) + 1;
-        logger.warn(`Decision missing both npcId and npcName`, {
-          decision: JSON.stringify(decision),
-        }, 'MarketDecisionEngine');
+        rejectionReasons.missing_identifiers = (rejectionReasons.missing_identifiers || 0) + 1;
+        logger.warn(
+          `Decision missing both npcId and npcName`,
+          {
+            decision: JSON.stringify(decision),
+          },
+          'MarketDecisionEngine'
+        );
         continue;
       }
-      
+
       let context = contexts.get(decision.npcId || '');
-      
+
       // Fallback: try to find by name if ID doesn't match
       if (!context && decision.npcName) {
         const nameKey = decision.npcName.toLowerCase();
         const slugifiedKey = nameKey.replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
         const foundId = nameToIdMap.get(nameKey) || nameToIdMap.get(slugifiedKey);
-        
+
         if (foundId) {
           context = contexts.get(foundId);
           if (context) {
             // Update decision with correct ID
             decision.npcId = foundId;
-            logger.debug(`Fixed NPC ID mismatch: ${decision.npcName} -> ${foundId}`, {
-              originalId: decision.npcId,
-              correctedId: foundId,
-            }, 'MarketDecisionEngine');
+            logger.debug(
+              `Fixed NPC ID mismatch: ${decision.npcName} -> ${foundId}`,
+              {
+                originalId: decision.npcId,
+                correctedId: foundId,
+              },
+              'MarketDecisionEngine'
+            );
           }
         }
       }
-      
+
       if (!context) {
-        rejectionReasons['no_context'] = (rejectionReasons['no_context'] || 0) + 1;
-        logger.warn(`Decision for unknown NPC: ${decision.npcId || 'missing'} (name: ${decision.npcName || 'missing'})`, {
-          decision: JSON.stringify(decision),
-        }, 'MarketDecisionEngine');
+        rejectionReasons.no_context = (rejectionReasons.no_context || 0) + 1;
+        logger.warn(
+          `Decision for unknown NPC: ${decision.npcId || 'missing'} (name: ${decision.npcName || 'missing'})`,
+          {
+            decision: JSON.stringify(decision),
+          },
+          'MarketDecisionEngine'
+        );
         continue;
       }
-      
+
       // Ensure npcName is set from context if missing
       if (!decision.npcName) {
         decision.npcName = context.npcName;
       }
-      
+
       // Ensure npcId is set from context if missing
       if (!decision.npcId) {
         decision.npcId = context.npcId;
       }
-      
+
       // Validate hold action
       if (decision.action === 'hold') {
         logger.info(`${decision.npcName} chose to HOLD`, {}, 'MarketDecisionEngine');
@@ -827,20 +972,28 @@ ${prompt}`
         });
         continue;
       }
-      
+
       // Validate close_position action
       if (decision.action === 'close_position') {
         if (!decision.positionId) {
-          logger.warn(`Close position decision missing positionId for ${decision.npcName}`, {}, 'MarketDecisionEngine');
+          logger.warn(
+            `Close position decision missing positionId for ${decision.npcName}`,
+            {},
+            'MarketDecisionEngine'
+          );
           continue;
         }
-        
-        const position = context.currentPositions.find(p => p.id === decision.positionId);
+
+        const position = context.currentPositions.find((p) => p.id === decision.positionId);
         if (!position) {
-          logger.warn(`Position ${decision.positionId} not found for ${decision.npcName}`, {}, 'MarketDecisionEngine');
+          logger.warn(
+            `Position ${decision.positionId} not found for ${decision.npcName}`,
+            {},
+            'MarketDecisionEngine'
+          );
           continue;
         }
-        
+
         valid.push({
           ...decision,
           marketType: position.marketType,
@@ -849,13 +1002,17 @@ ${prompt}`
         });
         continue;
       }
-      
+
       // Validate trading actions
       if (decision.amount <= 0) {
-        logger.warn(`Invalid amount ${decision.amount} for ${decision.npcName}`, {}, 'MarketDecisionEngine');
+        logger.warn(
+          `Invalid amount ${decision.amount} for ${decision.npcName}`,
+          {},
+          'MarketDecisionEngine'
+        );
         continue;
       }
-      
+
       if (decision.amount > context.availableBalance) {
         logger.warn(
           `LLM suggested amount exceeds balance for ${decision.npcName}: $${decision.amount.toLocaleString()} > $${context.availableBalance.toLocaleString()} - REJECTING`,
@@ -865,96 +1022,132 @@ ${prompt}`
         // REJECT the decision instead of scaling - this forces LLM to respect constraints
         continue;
       }
-      
+
       // Validate market type (only 'perp' or 'prediction' are valid, 'pool' was removed)
       if (!decision.marketType) {
-        rejectionReasons['missing_market_type'] = (rejectionReasons['missing_market_type'] || 0) + 1;
-        logger.warn(`Trading decision missing marketType for ${decision.npcName || decision.npcId || 'unknown'}`, {
-          decision: JSON.stringify(decision),
-        }, 'MarketDecisionEngine');
+        rejectionReasons.missing_market_type = (rejectionReasons.missing_market_type || 0) + 1;
+        logger.warn(
+          `Trading decision missing marketType for ${decision.npcName || decision.npcId || 'unknown'}`,
+          {
+            decision: JSON.stringify(decision),
+          },
+          'MarketDecisionEngine'
+        );
         continue;
       }
-      
+
       // Validate marketType is one of the allowed values (reject 'pool' and any other invalid values)
       const marketTypeStr = String(decision.marketType);
       if (marketTypeStr !== 'perp' && marketTypeStr !== 'prediction') {
-        rejectionReasons['invalid_market_type'] = (rejectionReasons['invalid_market_type'] || 0) + 1;
+        rejectionReasons.invalid_market_type = (rejectionReasons.invalid_market_type || 0) + 1;
         const isPool = marketTypeStr === 'pool';
-        logger.warn(`Invalid marketType '${marketTypeStr}' for ${decision.npcName || decision.npcId || 'unknown'} - ${isPool ? 'pools market type was removed, ' : ''}must be 'perp' or 'prediction'`, {
-          decision: JSON.stringify(decision),
-        }, 'MarketDecisionEngine');
+        logger.warn(
+          `Invalid marketType '${marketTypeStr}' for ${decision.npcName || decision.npcId || 'unknown'} - ${isPool ? 'pools market type was removed, ' : ''}must be 'perp' or 'prediction'`,
+          {
+            decision: JSON.stringify(decision),
+          },
+          'MarketDecisionEngine'
+        );
         continue;
       }
-      
+
       // Validate perp actions
       if (decision.action === 'open_long' || decision.action === 'open_short') {
         if (decision.marketType !== 'perp') {
-          logger.warn(`Perp action with non-perp market type for ${decision.npcName}`, {}, 'MarketDecisionEngine');
+          logger.warn(
+            `Perp action with non-perp market type for ${decision.npcName}`,
+            {},
+            'MarketDecisionEngine'
+          );
           continue;
         }
-        
+
         if (!decision.ticker) {
-          logger.warn(`Perp decision missing ticker for ${decision.npcName}`, {}, 'MarketDecisionEngine');
+          logger.warn(
+            `Perp decision missing ticker for ${decision.npcName}`,
+            {},
+            'MarketDecisionEngine'
+          );
           continue;
         }
-        
+
         // Verify ticker exists
-        const perpExists = context.perpMarkets.find(p => p.ticker === decision.ticker);
+        const perpExists = context.perpMarkets.find((p) => p.ticker === decision.ticker);
         if (!perpExists) {
-          logger.warn(`Unknown perp ticker ${decision.ticker} for ${decision.npcName}`, {}, 'MarketDecisionEngine');
+          logger.warn(
+            `Unknown perp ticker ${decision.ticker} for ${decision.npcName}`,
+            {},
+            'MarketDecisionEngine'
+          );
           continue;
         }
       }
-      
+
       // Validate prediction actions
       if (decision.action === 'buy_yes' || decision.action === 'buy_no') {
         if (decision.marketType !== 'prediction') {
-          logger.warn(`Prediction action with non-prediction market type for ${decision.npcName}`, {}, 'MarketDecisionEngine');
+          logger.warn(
+            `Prediction action with non-prediction market type for ${decision.npcName}`,
+            {},
+            'MarketDecisionEngine'
+          );
           continue;
         }
-        
+
         if (!decision.marketId) {
-          logger.warn(`Prediction decision missing marketId for ${decision.npcName}`, {}, 'MarketDecisionEngine');
+          logger.warn(
+            `Prediction decision missing marketId for ${decision.npcName}`,
+            {},
+            'MarketDecisionEngine'
+          );
           continue;
         }
-        
+
         // Verify market exists
-        const marketExists = context.predictionMarkets.find(p => p.id === decision.marketId);
+        const marketExists = context.predictionMarkets.find((p) => p.id === decision.marketId);
         if (!marketExists) {
-          logger.warn(`Unknown prediction market ${decision.marketId} for ${decision.npcName}`, {}, 'MarketDecisionEngine');
+          logger.warn(
+            `Unknown prediction market ${decision.marketId} for ${decision.npcName}`,
+            {},
+            'MarketDecisionEngine'
+          );
           continue;
         }
       }
-      
+
       // Validate confidence
       if (decision.confidence < 0 || decision.confidence > 1) {
         decision.confidence = Math.max(0, Math.min(1, decision.confidence));
       }
-      
+
       // Add timestamp
       valid.push({
         ...decision,
         timestamp: new Date().toISOString(),
       });
     }
-    
-    logger.info(`Validated ${valid.length}/${decisions.length} decisions`, {
-      valid: valid.length,
-      total: decisions.length,
-      filtered: decisions.length - valid.length,
-      rejectionReasons,
-    }, 'MarketDecisionEngine');
-    
+
+    logger.info(
+      `Validated ${valid.length}/${decisions.length} decisions`,
+      {
+        valid: valid.length,
+        total: decisions.length,
+        filtered: decisions.length - valid.length,
+        rejectionReasons,
+      },
+      'MarketDecisionEngine'
+    );
+
     return valid;
   }
-  
+
   /**
    * Fallback: Generate decision for a single NPC
    */
   async generateSingleDecision(npcId: string): Promise<TradingDecision> {
     const context = await this.contextService.buildContextForNPC(npcId);
     const decisions = await this.generateDecisionsForContexts([context]);
-    
+
     if (decisions.length === 0) {
       return {
         npcId: context.npcId,
@@ -967,89 +1160,119 @@ ${prompt}`
         timestamp: new Date().toISOString(),
       };
     }
-    
-    return decisions[0]!;
+
+    const [firstDecision] = decisions;
+
+    if (!firstDecision) {
+      return {
+        npcId: context.npcId,
+        npcName: context.npcName,
+        action: 'hold',
+        marketType: null,
+        amount: 0,
+        confidence: 1,
+        reasoning: 'No valid decision returned',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    return firstDecision;
   }
-  
+
   /**
    * Get cached world context or fetch if expired
    * Caching reduces redundant queries when processing multiple NPC batches in same tick
    */
   private async getCachedWorldContext(): Promise<Awaited<ReturnType<typeof generateWorldContext>>> {
     const now = Date.now();
-    
+
     // Return cached if still valid
-    if (this.worldContextCache && (now - this.worldContextCache.timestamp) < this.CACHE_TTL_MS) {
-      logger.debug('Using cached world context', {
-        age: now - this.worldContextCache.timestamp,
-      }, 'MarketDecisionEngine');
+    if (this.worldContextCache && now - this.worldContextCache.timestamp < this.CACHE_TTL_MS) {
+      logger.debug(
+        'Using cached world context',
+        {
+          age: now - this.worldContextCache.timestamp,
+        },
+        'MarketDecisionEngine'
+      );
       return this.worldContextCache.context;
     }
-    
+
     // Fetch fresh context
     const context = await generateWorldContext({
       maxActors: 0,
       includeActors: false,
       realityGroundingLevel: 'minimal',
     });
-    
+
     // Cache it
     this.worldContextCache = { context, timestamp: now };
     logger.debug('Cached world context', {}, 'MarketDecisionEngine');
-    
+
     return context;
   }
-  
+
   /**
    * Get cached active questions or fetch if expired
    * Caching prevents redundant DB queries when processing multiple NPC batches
    */
   private async getCachedActiveQuestions(): Promise<string> {
     const now = Date.now();
-    
+
     // Return cached if still valid
-    if (this.activeQuestionsCache && (now - this.activeQuestionsCache.timestamp) < this.CACHE_TTL_MS) {
-      logger.debug('Using cached active questions', {
-        age: now - this.activeQuestionsCache.timestamp,
-      }, 'MarketDecisionEngine');
+    if (
+      this.activeQuestionsCache &&
+      now - this.activeQuestionsCache.timestamp < this.CACHE_TTL_MS
+    ) {
+      logger.debug(
+        'Using cached active questions',
+        {
+          age: now - this.activeQuestionsCache.timestamp,
+        },
+        'MarketDecisionEngine'
+      );
       return this.activeQuestionsCache.questions;
     }
-    
+
     // Fetch fresh questions
     const questions = await this.formatActiveQuestions();
-    
+
     // Cache it
     this.activeQuestionsCache = { questions, timestamp: now };
     logger.debug('Cached active questions', {}, 'MarketDecisionEngine');
-    
+
     return questions;
   }
-  
+
   /**
    * Get cached recent events or fetch if expired
    * Caching prevents redundant DB queries when processing multiple NPC batches
    */
   private async getCachedRecentEvents(): Promise<string> {
     const now = Date.now();
-    
+
     // Return cached if still valid
-    if (this.recentEventsCache && (now - this.recentEventsCache.timestamp) < this.CACHE_TTL_MS) {
-      logger.debug('Using cached recent events', {
-        age: now - this.recentEventsCache.timestamp,
-      }, 'MarketDecisionEngine');
+    if (this.recentEventsCache && now - this.recentEventsCache.timestamp < this.CACHE_TTL_MS) {
+      logger.debug(
+        'Using cached recent events',
+        {
+          age: now - this.recentEventsCache.timestamp,
+        },
+        'MarketDecisionEngine'
+      );
       return this.recentEventsCache.events;
     }
-    
+
     // Fetch fresh events
     const events = await this.formatRecentEvents();
-    
+
     // Cache it
     this.recentEventsCache = { events, timestamp: now };
     logger.debug('Cached recent events', {}, 'MarketDecisionEngine');
-    
+
     return events;
   }
-  
+
   /**
    * Format active questions for trading context
    * Especially important for comparative questions like "Will X outperform Y?"
@@ -1062,25 +1285,25 @@ ${prompt}`
       orderBy: { createdAt: 'desc' },
       take: 10, // Top 10 most recent questions
     });
-    
+
     if (questions.length === 0) {
       return 'No active prediction questions currently.';
     }
-    
-    const formatted = questions.map(q => {
+
+    const formatted = questions.map((q) => {
       const daysUntil = Math.ceil(
         (q.resolutionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       );
       return `- "${q.text}" (resolves in ${daysUntil} days)`;
     });
-    
+
     return formatted.join('\n');
   }
-  
+
   /**
    * Format recent events from current game for trading context
    * Helps NPCs understand the narrative when making decisions
-   * 
+   *
    * Note: NPCs already receive recent posts in their individual context.
    * This provides high-level supplementary context for the batch.
    */
@@ -1088,18 +1311,18 @@ ${prompt}`
     try {
       // Get recent posts from the last 24 hours
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      
+
       // Get actor IDs first
       const actors = await prisma.actor.findMany({
         select: { id: true, name: true },
       });
-      const actorMap = new Map(actors.map(a => [a.id, a.name]));
-      const actorIds = actors.map(a => a.id);
-      
+      const actorMap = new Map(actors.map((a) => [a.id, a.name]));
+      const actorIds = actors.map((a) => a.id);
+
       if (actorIds.length === 0) {
         return 'No actors available for narrative context.';
       }
-      
+
       const recentPosts = await prisma.post.findMany({
         where: {
           createdAt: { gte: oneDayAgo },
@@ -1113,30 +1336,33 @@ ${prompt}`
           authorId: true,
         },
       });
-      
+
       if (recentPosts.length === 0) {
         return 'No recent posts in last 24 hours.';
       }
-      
+
       const events = ['Recent developments (last 24h):'];
-      recentPosts.forEach(post => {
+      recentPosts.forEach((post) => {
         const name = actorMap.get(post.authorId) || 'Unknown';
         // Truncate to 100 chars for token efficiency
-        const content = post.content.length > 100 
-          ? `${post.content.substring(0, 100)}...` 
-          : post.content;
+        const content =
+          post.content.length > 100 ? `${post.content.substring(0, 100)}...` : post.content;
         events.push(`- ${name}: ${content}`);
       });
-      
+
       return events.join('\n');
     } catch (error) {
-      logger.warn('Failed to fetch recent events', {
-        error: error instanceof Error ? error.message : String(error),
-      }, 'MarketDecisionEngine');
+      logger.warn(
+        'Failed to fetch recent events',
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'MarketDecisionEngine'
+      );
       return 'NPCs have access to recent posts in their individual contexts.';
     }
   }
-  
+
   /**
    * Clear all caches
    * Call this when you want to force fresh data on next query
@@ -1148,4 +1374,3 @@ ${prompt}`
     logger.debug('Cleared all caches', {}, 'MarketDecisionEngine');
   }
 }
-

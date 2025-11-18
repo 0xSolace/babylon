@@ -1,11 +1,11 @@
 /**
  * Game-Knowledge Rewards
- * 
+ *
  * Compute rewards using perfect game information
  */
 
-import type { Trajectory, TrajectoryStep } from './types';
 import type { JsonValue } from '@/types/common';
+import type { Trajectory, TrajectoryStep } from './types';
 
 /**
  * Compute trajectory reward using game knowledge
@@ -26,7 +26,9 @@ export function computeStepReward(step: TrajectoryStep): number {
 /**
  * Build game state from database
  */
-export async function buildGameStateFromDB(_trajectoryId: string): Promise<Record<string, JsonValue>> {
+export async function buildGameStateFromDB(
+  _trajectoryId: string
+): Promise<Record<string, JsonValue>> {
   // Placeholder implementation
   return {};
 }
@@ -34,9 +36,6 @@ export async function buildGameStateFromDB(_trajectoryId: string): Promise<Recor
 /**
  * Recompute trajectory rewards
  */
-export async function recomputeTrajectoryRewards(
-  _trajectoryIds: string[]
-): Promise<void> {
+export async function recomputeTrajectoryRewards(_trajectoryIds: string[]): Promise<void> {
   // Placeholder implementation
 }
-

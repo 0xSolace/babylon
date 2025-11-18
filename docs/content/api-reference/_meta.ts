@@ -5,5 +5,5 @@ export default {
   users: 'Users API',
   social: 'Social API',
   errors: 'Error Handling',
-  _generated: 'Generated Docs'
-}
+  _generated: 'Generated Docs',
+};

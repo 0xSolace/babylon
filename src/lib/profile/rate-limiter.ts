@@ -1,19 +1,19 @@
 /**
  * Rate Limiter for Backend-Signed Profile Updates
- * 
+ *
  * Prevents abuse of the backend signing feature by limiting
  * how often users can update their profiles.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
 
-interface RateLimitConfig {
+type RateLimitConfig = {
   maxUpdatesPerDay: number;
   maxUpdatesPerHour: number;
   maxUsernameChangesPerDay: number;
-}
+};
 
 const DEFAULT_CONFIG: RateLimitConfig = {
   maxUpdatesPerDay: 50, // 50 profile updates per day
@@ -21,11 +21,11 @@ const DEFAULT_CONFIG: RateLimitConfig = {
   maxUsernameChangesPerDay: 2, // Only 2 username changes per day
 };
 
-interface RateLimitResult {
+type RateLimitResult = {
   allowed: boolean;
   reason?: string;
   retryAfter?: number; // Seconds until retry allowed
-}
+};
 
 /**
  * Check if user is allowed to update their profile
@@ -153,12 +153,14 @@ export async function logProfileUpdate(
 export async function getProfileUpdateHistory(
   userId: string,
   limit: number = 20
-): Promise<Array<{
-  changedFields: string[];
-  backendSigned: boolean;
-  txHash: string | null;
-  createdAt: Date;
-}>> {
+): Promise<
+  Array<{
+    changedFields: string[];
+    backendSigned: boolean;
+    txHash: string | null;
+    createdAt: Date;
+  }>
+> {
   return await prisma.profileUpdateLog.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
@@ -171,4 +173,3 @@ export async function getProfileUpdateHistory(
     },
   });
 }
-

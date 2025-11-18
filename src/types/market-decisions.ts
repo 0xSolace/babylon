@@ -1,6 +1,6 @@
 /**
  * Market Decision Types
- * 
+ *
  * Types for LLM-driven NPC trading decisions
  */
 
@@ -14,7 +14,7 @@ export type MarketAction =
 
 export type MarketType = 'perp' | 'prediction';
 
-export interface TradingDecision {
+export type TradingDecision = {
   npcId: string;
   npcName: string;
   action: MarketAction;
@@ -26,9 +26,9 @@ export interface TradingDecision {
   confidence: number;
   reasoning: string;
   timestamp?: string;
-}
+};
 
-export interface ExecutedTrade {
+export type ExecutedTrade = {
   npcId: string;
   npcName: string;
   poolId: string;
@@ -45,9 +45,9 @@ export interface ExecutedTrade {
   reasoning: string;
   positionId: string;
   timestamp: string;
-}
+};
 
-export interface TradingExecutionResult {
+export type TradingExecutionResult = {
   totalDecisions: number;
   successfulTrades: number;
   failedTrades: number;
@@ -60,9 +60,9 @@ export interface TradingExecutionResult {
     error: string;
   }>;
   executedTrades: ExecutedTrade[];
-}
+};
 
-export interface TradeImpact {
+export type TradeImpact = {
   ticker?: string;
   marketId?: string; // Market ID is a Snowflake string
   longVolume: number;
@@ -71,7 +71,4 @@ export interface TradeImpact {
   noVolume: number;
   netSentiment: number;
   priceImpact: number;
-}
-
-
-
+};

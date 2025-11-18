@@ -1,13 +1,13 @@
 /**
  * Admin Management API
- * 
+ *
  * @route GET /api/admin/admins - Get admin users
  * @access Admin
- * 
+ *
  * @description
  * Returns list of all admin users with their details. Excludes NPCs/actors.
  * Admin only endpoint.
- * 
+ *
  * @openapi
  * /api/admin/admins:
  *   get:
@@ -40,7 +40,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const { admins } = await fetch('/api/admin/admins', {
@@ -49,11 +49,11 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { prisma } from '@/lib/prisma';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   // Require admin authentication
@@ -96,5 +96,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     total: admins.length,
   });
 });
-
-

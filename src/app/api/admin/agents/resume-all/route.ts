@@ -1,14 +1,14 @@
 /**
  * Admin Agents Resume All API
- * 
+ *
  * @route POST /api/admin/agents/resume-all - Resume all agents
  * @access Admin
- * 
+ *
  * @description
  * Resumes all autonomous agents that have sufficient points. Re-enables all
  * autonomous behaviors (trading, posting, commenting, DMs, group chats).
  * Admin only.
- * 
+ *
  * @openapi
  * /api/admin/agents/resume-all:
  *   post:
@@ -35,7 +35,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/agents/resume-all', {
@@ -45,10 +45,10 @@
  * ```
  */
 
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
 
 export async function POST(_req: NextRequest) {
   try {
@@ -86,8 +86,3 @@ export async function POST(_req: NextRequest) {
     );
   }
 }
-
-
-
-
-

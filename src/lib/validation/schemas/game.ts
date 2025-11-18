@@ -9,21 +9,29 @@ import { UserIdSchema } from './common';
  * Game tick cron authentication schema
  */
 export const GameTickCronSchema = z.object({
-  authorization: z.string().regex(/^Bearer .+$/, 'Authorization must be Bearer token')
+  authorization: z.string().regex(/^Bearer .+$/, 'Authorization must be Bearer token'),
 });
 
 /**
  * Image upload schema (for multipart form data)
  */
 export const ImageUploadSchema = z.object({
-  file: z.object({
-    size: z.number().positive().max(10 * 1024 * 1024), // 10MB max
-    type: z.string().refine(
-      (type) => ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/jpg'].includes(type),
-      { message: 'Invalid file type. Allowed: jpeg, png, webp, gif' }
-    )
-  }).nullable(),
-  type: z.enum(['profile', 'cover', 'post']).optional()
+  file: z
+    .object({
+      size: z
+        .number()
+        .positive()
+        .max(10 * 1024 * 1024), // 10MB max
+      type: z
+        .string()
+        .refine(
+          (type) =>
+            ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/jpg'].includes(type),
+          { message: 'Invalid file type. Allowed: jpeg, png, webp, gif' }
+        ),
+    })
+    .nullable(),
+  type: z.enum(['profile', 'cover', 'post']).optional(),
 });
 
 /**
@@ -32,10 +40,10 @@ export const ImageUploadSchema = z.object({
  */
 export const UploadImageSchema = z.object({
   file: z.custom<File | Blob>((val) => val instanceof File || val instanceof Blob, {
-    message: 'File must be a File or Blob object'
+    message: 'File must be a File or Blob object',
   }),
   filename: z.string().optional(),
-  maxSizeKB: z.number().positive().max(10240).default(5120) // 5MB default
+  maxSizeKB: z.number().positive().max(10240).default(5120), // 5MB default
 });
 
 /**
@@ -44,7 +52,10 @@ export const UploadImageSchema = z.object({
 export const ImageUploadBodySchema = z.object({
   image: z.string().min(1), // Base64 encoded image
   filename: z.string().optional(),
-  contentType: z.string().regex(/^image\/(jpeg|jpg|png|gif|webp)$/).default('image/jpeg')
+  contentType: z
+    .string()
+    .regex(/^image\/(jpeg|jpg|png|gif|webp)$/)
+    .default('image/jpeg'),
 });
 
 /**
@@ -55,7 +66,7 @@ export const RegistryQuerySchema = z.object({
   sortBy: z.enum(['username', 'createdAt', 'nftTokenId']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
   limit: z.coerce.number().positive().max(100).default(100),
-  offset: z.coerce.number().nonnegative().default(0)
+  offset: z.coerce.number().nonnegative().default(0),
 });
 
 /**
@@ -74,9 +85,9 @@ export const AwardPointsSchema = z.object({
     'trade',
     'achievement',
     'bonus',
-    'penalty'
+    'penalty',
   ]),
-  description: z.string().max(500).optional()
+  description: z.string().max(500).optional(),
 });
 
 /**
@@ -84,7 +95,7 @@ export const AwardPointsSchema = z.object({
  */
 export const ReferralQuerySchema = z.object({
   userId: UserIdSchema,
-  includeStats: z.coerce.boolean().default(false)
+  includeStats: z.coerce.boolean().default(false),
 });
 
 /**
@@ -93,7 +104,7 @@ export const ReferralQuerySchema = z.object({
 export const LinkSocialAccountSchema = z.object({
   platform: z.enum(['twitter', 'farcaster']),
   username: z.string().min(1).max(50),
-  verificationToken: z.string().optional()
+  verificationToken: z.string().optional(),
 });
 
 /**
@@ -102,21 +113,21 @@ export const LinkSocialAccountSchema = z.object({
 export const UpdateVisibilitySchema = z.object({
   showTwitterPublic: z.boolean().optional(),
   showFarcasterPublic: z.boolean().optional(),
-  showWalletPublic: z.boolean().optional()
+  showWalletPublic: z.boolean().optional(),
 });
 
 /**
  * Share count schema
  */
 export const ShareCountSchema = z.object({
-  shareCount: z.number().int().nonnegative().default(1)
+  shareCount: z.number().int().nonnegative().default(1),
 });
 
 /**
  * Username param schema
  */
 export const UsernameParamSchema = z.object({
-  username: z.string().min(1).max(30)
+  username: z.string().min(1).max(30),
 });
 
 /**
@@ -124,7 +135,7 @@ export const UsernameParamSchema = z.object({
  * Uses UserIdSchema from common for consistency
  */
 export const UserIdParamSchema = z.object({
-  userId: UserIdSchema
+  userId: UserIdSchema,
 });
 
 /**
@@ -132,7 +143,7 @@ export const UserIdParamSchema = z.object({
  */
 export const BreakingNewsQuerySchema = z.object({
   limit: z.coerce.number().positive().max(20).default(5),
-  category: z.string().optional()
+  category: z.string().optional(),
 });
 
 /**
@@ -140,7 +151,7 @@ export const BreakingNewsQuerySchema = z.object({
  */
 export const UpcomingEventsQuerySchema = z.object({
   limit: z.coerce.number().positive().max(50).default(10),
-  timeframe: z.enum(['24h', '7d', '30d']).default('7d')
+  timeframe: z.enum(['24h', '7d', '30d']).default('7d'),
 });
 
 /**
@@ -148,13 +159,16 @@ export const UpcomingEventsQuerySchema = z.object({
  */
 export const TrendingPostsQuerySchema = z.object({
   limit: z.coerce.number().positive().max(50).default(10),
-  timeframe: z.string().transform((val): '1h' | '6h' | '24h' | '7d' => {
-    const validTimeframes: readonly ['1h', '6h', '24h', '7d'] = ['1h', '6h', '24h', '7d'];
-    return (validTimeframes as readonly string[]).includes(val)
-      ? (val as '1h' | '6h' | '24h' | '7d')
-      : '24h'; // Default to 24h for invalid values
-  }).default('24h'),
-  minInteractions: z.coerce.number().nonnegative().default(5)
+  timeframe: z
+    .string()
+    .transform((val): '1h' | '6h' | '24h' | '7d' => {
+      const validTimeframes: readonly ['1h', '6h', '24h', '7d'] = ['1h', '6h', '24h', '7d'];
+      return (validTimeframes as readonly string[]).includes(val)
+        ? (val as '1h' | '6h' | '24h' | '7d')
+        : '24h'; // Default to 24h for invalid values
+    })
+    .default('24h'),
+  minInteractions: z.coerce.number().nonnegative().default(5),
 });
 
 /**
@@ -164,6 +178,5 @@ export const StatsQuerySchema = z.object({
   includeMarkets: z.coerce.boolean().default(true),
   includeUsers: z.coerce.boolean().default(true),
   includePools: z.coerce.boolean().default(true),
-  includeVolume: z.coerce.boolean().default(true)
+  includeVolume: z.coerce.boolean().default(true),
 });
-

@@ -1,24 +1,24 @@
 /**
  * Cached Database Service
- * 
+ *
  * Wraps database-service with intelligent caching layer.
  * Provides cached versions of frequently accessed queries.
- * 
+ *
  * Usage:
  *   import { cachedDb } from '@/lib/cached-database-service'
  *   const posts = await cachedDb.getRecentPosts(100)
  */
 
-import db from './database-service';
+import type { Post } from '@prisma/client';
 import {
+  CACHE_KEYS,
+  DEFAULT_TTLS,
   getCacheOrFetch,
   invalidateCache,
   invalidateCachePattern,
-  CACHE_KEYS,
-  DEFAULT_TTLS,
 } from './cache-service';
+import db from './database-service';
 import { logger } from './logger';
-import type { Post } from '@prisma/client';
 
 /**
  * Cached wrapper for database service
@@ -29,37 +29,33 @@ class CachedDatabaseService {
    */
   async getRecentPosts(limit = 100, cursorOrOffset?: string | number): Promise<Post[]> {
     const isCursor = typeof cursorOrOffset === 'string';
-    const cacheKey = isCursor 
+    const cacheKey = isCursor
       ? `${limit}:cursor:${cursorOrOffset}`
       : `${limit}:offset:${cursorOrOffset || 0}`;
-    
-    return getCacheOrFetch(
-      cacheKey,
-      () => db().getRecentPosts(limit, cursorOrOffset),
-      {
-        namespace: CACHE_KEYS.POSTS_LIST,
-        ttl: DEFAULT_TTLS.POSTS_LIST,
-      }
-    );
+
+    return getCacheOrFetch(cacheKey, () => db().getRecentPosts(limit, cursorOrOffset), {
+      namespace: CACHE_KEYS.POSTS_LIST,
+      ttl: DEFAULT_TTLS.POSTS_LIST,
+    });
   }
 
   /**
    * Get posts by actor with caching (cursor-based or offset-based pagination)
    */
-  async getPostsByActor(authorId: string, limit = 100, cursorOrOffset?: string | number): Promise<Post[]> {
+  async getPostsByActor(
+    authorId: string,
+    limit = 100,
+    cursorOrOffset?: string | number
+  ): Promise<Post[]> {
     const isCursor = typeof cursorOrOffset === 'string';
-    const cacheKey = isCursor 
+    const cacheKey = isCursor
       ? `${authorId}:${limit}:cursor:${cursorOrOffset}`
       : `${authorId}:${limit}:offset:${cursorOrOffset || 0}`;
-    
-    return getCacheOrFetch(
-      cacheKey,
-      () => db().getPostsByActor(authorId, limit, cursorOrOffset),
-      {
-        namespace: CACHE_KEYS.POSTS_BY_ACTOR,
-        ttl: DEFAULT_TTLS.POSTS_BY_ACTOR,
-      }
-    );
+
+    return getCacheOrFetch(cacheKey, () => db().getPostsByActor(authorId, limit, cursorOrOffset), {
+      namespace: CACHE_KEYS.POSTS_BY_ACTOR,
+      ttl: DEFAULT_TTLS.POSTS_BY_ACTOR,
+    });
   }
 
   /**
@@ -73,10 +69,10 @@ class CachedDatabaseService {
     cursorOrOffset?: string | number
   ): Promise<Post[]> {
     const isCursor = typeof cursorOrOffset === 'string';
-    const cacheKey = isCursor 
+    const cacheKey = isCursor
       ? `${userId}:${limit}:cursor:${cursorOrOffset}`
       : `${userId}:${limit}:offset:${cursorOrOffset || 0}`;
-    
+
     return getCacheOrFetch(
       cacheKey,
       async () => {
@@ -91,18 +87,18 @@ class CachedDatabaseService {
             select: { id: true },
           }),
         ]);
-        
+
         const testAuthorIds = new Set([
-          ...testUsers.map(u => u.id),
-          ...testActors.map(a => a.id),
+          ...testUsers.map((u) => u.id),
+          ...testActors.map((a) => a.id),
         ]);
-        
+
         // Remove test users from followedIds
-        const nonTestFollowedIds = followedIds.filter(id => !testAuthorIds.has(id));
-        
+        const nonTestFollowedIds = followedIds.filter((id) => !testAuthorIds.has(id));
+
         const cursor = isCursor ? (cursorOrOffset as string) : undefined;
         const offset = !isCursor && typeof cursorOrOffset === 'number' ? cursorOrOffset : 0;
-        
+
         // Build where clause with cursor or use offset
         const now = new Date();
         const where: {
@@ -113,7 +109,7 @@ class CachedDatabaseService {
           authorId: { in: nonTestFollowedIds },
           deletedAt: null,
         };
-        
+
         // Time-based filter: Only return posts up to current time (prevent future access)
         if (cursor) {
           where.timestamp = {
@@ -123,7 +119,7 @@ class CachedDatabaseService {
         } else {
           where.timestamp = { lte: now }; // ✅ No future posts
         }
-        
+
         // Query posts from database (only from non-test users)
         const posts = await db().prisma.post.findMany({
           where,
@@ -133,7 +129,7 @@ class CachedDatabaseService {
           take: limit,
           skip: cursor ? 0 : offset, // Only use skip if using offset pagination
         });
-        
+
         return posts;
       },
       {
@@ -148,12 +144,13 @@ class CachedDatabaseService {
    */
   async getUserById(userId: string) {
     const cacheKey = userId;
-    
+
     return getCacheOrFetch(
       cacheKey,
-      () => db().prisma.user.findUnique({
-        where: { id: userId },
-      }),
+      () =>
+        db().prisma.user.findUnique({
+          where: { id: userId },
+        }),
       {
         namespace: CACHE_KEYS.USER,
         ttl: DEFAULT_TTLS.USER,
@@ -166,11 +163,9 @@ class CachedDatabaseService {
    */
   async getUsersByIds(userIds: string[]) {
     // For bulk operations, we still cache individual users
-    const users = await Promise.all(
-      userIds.map(id => this.getUserById(id))
-    );
-    
-    return users.filter(u => u !== null);
+    const users = await Promise.all(userIds.map((id) => this.getUserById(id)));
+
+    return users.filter((u) => u !== null);
   }
 
   /**
@@ -178,18 +173,19 @@ class CachedDatabaseService {
    */
   async getUserBalance(userId: string) {
     const cacheKey = userId;
-    
+
     return getCacheOrFetch(
       cacheKey,
-      () => db().prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          virtualBalance: true,
-          totalDeposited: true,
-          totalWithdrawn: true,
-          lifetimePnL: true,
-        },
-      }),
+      () =>
+        db().prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            virtualBalance: true,
+            totalDeposited: true,
+            totalWithdrawn: true,
+            lifetimePnL: true,
+          },
+        }),
       {
         namespace: CACHE_KEYS.USER_BALANCE,
         ttl: DEFAULT_TTLS.USER_BALANCE,
@@ -202,7 +198,7 @@ class CachedDatabaseService {
    */
   async getUserProfileStats(userId: string) {
     const cacheKey = userId;
-    
+
     return getCacheOrFetch(
       cacheKey,
       async () => {
@@ -241,7 +237,10 @@ class CachedDatabaseService {
 
         return {
           followers: user._count.Follow_Follow_followingIdToUser,
-          following: user._count.Follow_Follow_followerIdToUser + user._count.UserActorFollow + legacyActorFollowCount,
+          following:
+            user._count.Follow_Follow_followerIdToUser +
+            user._count.UserActorFollow +
+            legacyActorFollowCount,
           positions: user._count.Position,
           comments: user._count.Comment,
           reactions: user._count.Reaction,
@@ -260,12 +259,13 @@ class CachedDatabaseService {
    */
   async getActorById(actorId: string) {
     const cacheKey = actorId;
-    
+
     return getCacheOrFetch(
       cacheKey,
-      () => db().prisma.actor.findUnique({
-        where: { id: actorId },
-      }),
+      () =>
+        db().prisma.actor.findUnique({
+          where: { id: actorId },
+        }),
       {
         namespace: CACHE_KEYS.ACTOR,
         ttl: DEFAULT_TTLS.ACTOR,
@@ -277,11 +277,9 @@ class CachedDatabaseService {
    * Get multiple actors with caching
    */
   async getActorsByIds(actorIds: string[]) {
-    const actors = await Promise.all(
-      actorIds.map(id => this.getActorById(id))
-    );
-    
-    return actors.filter(a => a !== null);
+    const actors = await Promise.all(actorIds.map((id) => this.getActorById(id)));
+
+    return actors.filter((a) => a !== null);
   }
 
   /**
@@ -289,12 +287,13 @@ class CachedDatabaseService {
    */
   async getOrganizationById(orgId: string) {
     const cacheKey = orgId;
-    
+
     return getCacheOrFetch(
       cacheKey,
-      () => db().prisma.organization.findUnique({
-        where: { id: orgId },
-      }),
+      () =>
+        db().prisma.organization.findUnique({
+          where: { id: orgId },
+        }),
       {
         namespace: CACHE_KEYS.ORGANIZATION,
         ttl: DEFAULT_TTLS.ORGANIZATION,
@@ -307,13 +306,14 @@ class CachedDatabaseService {
    */
   async getActiveMarkets() {
     const cacheKey = 'active';
-    
+
     return getCacheOrFetch(
       cacheKey,
-      () => db().prisma.market.findMany({
-        where: { resolved: false },
-        orderBy: { createdAt: 'desc' },
-      }),
+      () =>
+        db().prisma.market.findMany({
+          where: { resolved: false },
+          orderBy: { createdAt: 'desc' },
+        }),
       {
         namespace: CACHE_KEYS.MARKETS_LIST,
         ttl: DEFAULT_TTLS.MARKETS_LIST,
@@ -326,16 +326,17 @@ class CachedDatabaseService {
    */
   async getTrendingTags(limit = 10) {
     const cacheKey = `${limit}`;
-    
+
     return getCacheOrFetch(
       cacheKey,
-      () => db().prisma.trendingTag.findMany({
-        take: limit,
-        orderBy: { rank: 'asc' },
-        include: {
-          Tag: true,
-        },
-      }),
+      () =>
+        db().prisma.trendingTag.findMany({
+          take: limit,
+          orderBy: { rank: 'asc' },
+          include: {
+            Tag: true,
+          },
+        }),
       {
         namespace: CACHE_KEYS.TRENDING_TAGS,
         ttl: DEFAULT_TTLS.TRENDING_TAGS,
@@ -359,7 +360,9 @@ class CachedDatabaseService {
    */
   async invalidateActorPostsCache(actorId: string) {
     logger.info('Invalidating actor posts cache', { actorId }, 'CachedDatabaseService');
-    await invalidateCachePattern(`${actorId}:*`, { namespace: CACHE_KEYS.POSTS_BY_ACTOR });
+    await invalidateCachePattern(`${actorId}:*`, {
+      namespace: CACHE_KEYS.POSTS_BY_ACTOR,
+    });
   }
 
   /**
@@ -371,7 +374,9 @@ class CachedDatabaseService {
       invalidateCache(userId, { namespace: CACHE_KEYS.USER }),
       invalidateCache(userId, { namespace: CACHE_KEYS.USER_BALANCE }),
       invalidateCache(userId, { namespace: 'user:profile:stats' }),
-      invalidateCachePattern(`${userId}:*`, { namespace: CACHE_KEYS.POSTS_FOLLOWING }),
+      invalidateCachePattern(`${userId}:*`, {
+        namespace: CACHE_KEYS.POSTS_FOLLOWING,
+      }),
       invalidateCachePattern('*', { namespace: 'user:follows' }), // Invalidate follows cache
     ]);
   }
@@ -384,18 +389,13 @@ class CachedDatabaseService {
     await invalidateCachePattern('*', { namespace: CACHE_KEYS.MARKETS_LIST });
   }
 
-
   /**
    * Invalidate all caches (use sparingly!)
    */
   async invalidateAllCaches() {
     logger.warn('Invalidating all caches', undefined, 'CachedDatabaseService');
-    await Promise.all([
-      this.invalidatePostsCache(),
-      this.invalidateMarketsCache(),
-    ]);
+    await Promise.all([this.invalidatePostsCache(), this.invalidateMarketsCache()]);
   }
 }
 
 export const cachedDb = new CachedDatabaseService();
-

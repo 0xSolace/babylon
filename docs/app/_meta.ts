@@ -1,5 +1,3 @@
-const meta = {
-
-};
+const meta = {};
 
 export default meta;

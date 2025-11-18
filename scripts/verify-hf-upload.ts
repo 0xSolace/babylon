@@ -1,20 +1,20 @@
 /**
  * Verify HuggingFace Upload
- * 
+ *
  * Verifies that the upload to HuggingFace was successful.
  * Checks that files exist and are accessible.
  */
 
-import { promises as fs } from 'fs';
-import * as path from 'path';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 
 async function verifyUpload(): Promise<boolean> {
   console.log('\n╔════════════════════════════════════════════════════════╗');
   console.log('║    VERIFYING HUGGINGFACE UPLOAD                        ║');
   console.log('╚════════════════════════════════════════════════════════╝\n');
-  
+
   const dataDir = path.join(process.cwd(), 'exports', 'huggingface', 'latest');
-  
+
   const requiredFiles = [
     'index.json',
     'summary.json',
@@ -22,36 +22,36 @@ async function verifyUpload(): Promise<boolean> {
     'benchmarks.jsonl',
     'README.md',
   ];
-  
+
   let allExist = true;
-  
+
   for (const file of requiredFiles) {
     const filePath = path.join(dataDir, file);
     try {
       await fs.access(filePath);
       const stats = await fs.stat(filePath);
       console.log(`✅ ${file} (${Math.round(stats.size / 1024)}KB)`);
-    } catch (error) {
+    } catch (_error) {
       console.error(`❌ ${file} - NOT FOUND`);
       allExist = false;
     }
   }
-  
+
   // Check for month files
   const monthsDir = path.join(dataDir, 'by-month');
   try {
     const monthFiles = await fs.readdir(monthsDir);
     console.log(`✅ by-month/ directory (${monthFiles.length} files)`);
-    
+
     for (const monthFile of monthFiles) {
       console.log(`   - ${monthFile}`);
     }
-  } catch (error) {
+  } catch (_error) {
     console.warn(`⚠️  by-month/ directory empty or missing`);
   }
-  
+
   console.log('');
-  
+
   if (allExist) {
     console.log('✅ All required files present!\n');
     return true;
@@ -67,4 +67,3 @@ async function main() {
 }
 
 main();
-

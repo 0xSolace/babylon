@@ -1,19 +1,19 @@
 /**
  * Error Type Definitions
- * 
+ *
  * Proper error types to replace all 'unknown' and 'any' error types
  */
 
-import type { JsonValue } from '@/types/common'
+import type { JsonValue } from '@/types/common';
 
 /**
  * Base error interface for all application errors
  */
-export interface AppError {
+export type AppError = {
   message: string;
   code?: string;
   details?: Record<string, string | number | boolean>;
-}
+};
 
 /**
  * Authentication error
@@ -65,8 +65,13 @@ export interface ValidationError extends Error {
  * Type guard to check if error is AuthenticationError
  */
 export function isAuthenticationError(error: Error): error is AuthenticationError {
-  return 'code' in error && typeof (error as AuthenticationError).code === 'string' && 
-         ['AUTH_FAILED', 'AUTH_TOKEN_INVALID', 'AUTH_TOKEN_EXPIRED'].includes((error as AuthenticationError).code);
+  return (
+    'code' in error &&
+    typeof (error as AuthenticationError).code === 'string' &&
+    ['AUTH_FAILED', 'AUTH_TOKEN_INVALID', 'AUTH_TOKEN_EXPIRED'].includes(
+      (error as AuthenticationError).code
+    )
+  );
 }
 
 /**
@@ -80,8 +85,13 @@ export function isDatabaseError(error: Error): error is DatabaseError {
  * Type guard to check if error is LLMError
  */
 export function isLLMError(error: Error): error is LLMError {
-  return 'code' in error && typeof (error as LLMError).code === 'string' && 
-         ['LLM_GENERATION_FAILED', 'LLM_RATE_LIMIT', 'LLM_INVALID_RESPONSE'].includes((error as LLMError).code);
+  return (
+    'code' in error &&
+    typeof (error as LLMError).code === 'string' &&
+    ['LLM_GENERATION_FAILED', 'LLM_RATE_LIMIT', 'LLM_INVALID_RESPONSE'].includes(
+      (error as LLMError).code
+    )
+  );
 }
 
 /**
@@ -101,17 +111,22 @@ export function isValidationError(error: Error): error is ValidationError {
 /**
  * Extract error message from any error-like object
  */
-export function extractErrorMessage(error: Error | AppError | string | JsonValue | { message?: string }): string {
+export function extractErrorMessage(
+  error: Error | AppError | string | JsonValue | { message?: string }
+): string {
   if (typeof error === 'string') {
     return error;
   }
   if (error instanceof Error) {
     return error.message;
   }
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
     return error.message;
   }
   return 'An unknown error occurred';
 }
-
-

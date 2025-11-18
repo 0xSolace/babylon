@@ -1,13 +1,13 @@
 /**
  * Admin Training Benchmark API
- * 
+ *
  * @route POST /api/admin/training/benchmark - Benchmark model
  * @access Admin
- * 
+ *
  * @description
  * Benchmarks a trained model and optionally compares with previous best model.
  * Returns performance metrics and comparison results.
- * 
+ *
  * @openapi
  * /api/admin/training/benchmark:
  *   post:
@@ -52,7 +52,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/training/benchmark', {
@@ -63,10 +63,10 @@
  * ```
  */
 
+import { logger } from '@/lib/logger';
+import { benchmarkService } from '@/lib/training/BenchmarkService';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { benchmarkService } from '@/lib/training/BenchmarkService';
-import { logger } from '@/lib/logger';
 
 export const maxDuration = 300; // 5 minutes for benchmarking
 
@@ -76,10 +76,7 @@ export async function POST(request: NextRequest) {
     const { modelId, compare = true, threshold = 0.95 } = body;
 
     if (!modelId) {
-      return NextResponse.json(
-        { error: 'Model ID required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Model ID required' }, { status: 400 });
     }
 
     logger.info('Starting model benchmark', { modelId }, 'BenchmarkAPI');
@@ -97,21 +94,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    logger.info('Benchmark complete', { modelId, score: benchmarkResults.benchmarkScore }, 'BenchmarkAPI');
+    logger.info(
+      'Benchmark complete',
+      { modelId, score: benchmarkResults.benchmarkScore },
+      'BenchmarkAPI'
+    );
 
     return NextResponse.json({
       success: true,
       benchmark: benchmarkResults,
-      comparison
+      comparison,
     });
-
   } catch (error) {
     logger.error('Benchmark failed', error, 'BenchmarkAPI');
-    
+
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Benchmark failed'
+        error: error instanceof Error ? error.message : 'Benchmark failed',
       },
       { status: 500 }
     );
@@ -125,19 +125,17 @@ export async function GET(_request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      summary
+      summary,
     });
-
   } catch (error) {
     logger.error('Failed to get benchmark summary', error, 'BenchmarkAPI');
-    
+
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to get summary'
+        error: error instanceof Error ? error.message : 'Failed to get summary',
       },
       { status: 500 }
     );
   }
 }
-

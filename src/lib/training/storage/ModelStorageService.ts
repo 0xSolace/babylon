@@ -1,17 +1,17 @@
 /**
  * Model Storage Service (Vercel Blob)
- * 
+ *
  * Handles model versioning and storage using Vercel Blob.
  * Stores trained models with metadata for easy deployment.
  */
 
-import { put, del, list } from '@vercel/blob';
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import fs from 'fs/promises';
-import path from 'path';
+import { prisma } from '@/lib/prisma';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { del, list, put } from '@vercel/blob';
 
-export interface ModelVersion {
+export type ModelVersion = {
   version: string;
   baseModel: string;
   blobUrl: string;
@@ -25,11 +25,11 @@ export interface ModelVersion {
     baseModel?: string;
     [key: string]: unknown;
   };
-}
+};
 
 export class ModelStorageService {
   private readonly blobPrefix = 'models/';
-  
+
   /**
    * Upload trained model to Vercel Blob
    */
@@ -41,7 +41,7 @@ export class ModelStorageService {
     try {
       logger.info('Uploading model to Vercel Blob', {
         version: options.version,
-        path: options.modelPath
+        path: options.modelPath,
       });
 
       // Read model file
@@ -49,14 +49,10 @@ export class ModelStorageService {
       const fileName = path.basename(options.modelPath);
 
       // Upload to Vercel Blob
-      const blob = await put(
-        `${this.blobPrefix}${options.version}/${fileName}`,
-        modelData,
-        {
-          access: 'public', // Models can be publicly downloaded
-          addRandomSuffix: false
-        }
-      );
+      const blob = await put(`${this.blobPrefix}${options.version}/${fileName}`, modelData, {
+        access: 'public', // Models can be publicly downloaded
+        addRandomSuffix: false,
+      });
 
       // Upload metadata
       await put(
@@ -64,14 +60,14 @@ export class ModelStorageService {
         JSON.stringify(options.metadata || {}, null, 2),
         {
           access: 'public',
-          addRandomSuffix: false
+          addRandomSuffix: false,
         }
       );
 
       logger.info('Model uploaded to Vercel Blob', {
         version: options.version,
         url: blob.url,
-        size: (blob as { size?: number }).size || 0
+        size: (blob as { size?: number }).size || 0,
       });
 
       // Save to database
@@ -86,8 +82,8 @@ export class ModelStorageService {
           accuracy: options.metadata?.accuracy as number | undefined,
           avgReward: options.metadata?.avgReward as number | undefined,
           status: 'ready',
-          agentsUsing: 0
-        }
+          agentsUsing: 0,
+        },
       });
 
       return {
@@ -96,9 +92,8 @@ export class ModelStorageService {
         blobUrl: blob.url,
         size: (blob as { size?: number }).size || 0,
         uploadedAt: new Date(),
-        metadata: options.metadata || {}
+        metadata: options.metadata || {},
       };
-
     } catch (error) {
       logger.error('Failed to upload model', error);
       throw error;
@@ -115,7 +110,7 @@ export class ModelStorageService {
     try {
       const model = await prisma.trainedModel.findFirst({
         where: { version },
-        select: { storagePath: true }
+        select: { storagePath: true },
       });
 
       if (!model) {
@@ -129,13 +124,12 @@ export class ModelStorageService {
       // Download metadata
       const metadataUrl = model.storagePath.replace(/\/[^/]+$/, '/metadata.json');
       const metadataResponse = await fetch(metadataUrl);
-      const metadata = await metadataResponse.json() as ModelVersion['metadata'];
+      const metadata = (await metadataResponse.json()) as ModelVersion['metadata'];
 
       return {
         modelData,
-        metadata
+        metadata,
       };
-
     } catch (error) {
       logger.error('Failed to download model', error);
       throw error;
@@ -148,22 +142,22 @@ export class ModelStorageService {
   async listModels(): Promise<ModelVersion[]> {
     try {
       const { blobs } = await list({
-        prefix: this.blobPrefix
+        prefix: this.blobPrefix,
       });
 
       // Group by version
-      interface BlobInfo {
+      type BlobInfo = {
         url: string;
         pathname: string;
         size: number;
         uploadedAt: string | Date;
-      }
-      
-      interface VersionData {
+      };
+
+      type VersionData = {
         version: string;
         blobs: BlobInfo[];
-      }
-      
+      };
+
       const versions = new Map<string, VersionData>();
 
       for (const blob of blobs) {
@@ -174,35 +168,36 @@ export class ModelStorageService {
         if (!versions.has(version)) {
           versions.set(version, {
             version,
-            blobs: []
+            blobs: [],
           });
         }
         // Convert uploadedAt to string if it's a Date
         const blobInfo: BlobInfo = {
           ...blob,
-          uploadedAt: blob.uploadedAt instanceof Date 
-            ? blob.uploadedAt.toISOString() 
-            : blob.uploadedAt
+          uploadedAt:
+            blob.uploadedAt instanceof Date ? blob.uploadedAt.toISOString() : blob.uploadedAt,
         };
-        versions.get(version)!.blobs.push(blobInfo);
+        versions.get(version)?.blobs.push(blobInfo);
       }
 
       // Get metadata for each version
       const models: ModelVersion[] = [];
 
       for (const [version, data] of versions) {
-        const modelBlob = data.blobs.find((b: BlobInfo) => 
-          b.pathname.endsWith('.safetensors') || b.pathname.endsWith('.bin')
+        const modelBlob = data.blobs.find(
+          (b: BlobInfo) => b.pathname.endsWith('.safetensors') || b.pathname.endsWith('.bin')
         );
 
         if (modelBlob) {
           // Try to get metadata
           let metadata: ModelVersion['metadata'] = {};
           try {
-            const metadataBlob = data.blobs.find((b: BlobInfo) => b.pathname.endsWith('metadata.json'));
+            const metadataBlob = data.blobs.find((b: BlobInfo) =>
+              b.pathname.endsWith('metadata.json')
+            );
             if (metadataBlob) {
               const response = await fetch(metadataBlob.url);
-              metadata = await response.json() as ModelVersion['metadata'];
+              metadata = (await response.json()) as ModelVersion['metadata'];
             }
           } catch {
             // No metadata, use defaults
@@ -213,18 +208,16 @@ export class ModelStorageService {
             baseModel: metadata.baseModel || 'unknown',
             blobUrl: modelBlob.url,
             size: modelBlob.size,
-            uploadedAt: modelBlob.uploadedAt instanceof Date 
-              ? modelBlob.uploadedAt 
-              : new Date(modelBlob.uploadedAt),
-            metadata
+            uploadedAt:
+              modelBlob.uploadedAt instanceof Date
+                ? modelBlob.uploadedAt
+                : new Date(modelBlob.uploadedAt),
+            metadata,
           });
         }
       }
 
-      return models.sort((a, b) => 
-        b.uploadedAt.getTime() - a.uploadedAt.getTime()
-      );
-
+      return models.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime());
     } catch (error) {
       logger.error('Failed to list models', error);
       return [];
@@ -237,7 +230,7 @@ export class ModelStorageService {
   async deleteModel(version: string): Promise<void> {
     try {
       const { blobs } = await list({
-        prefix: `${this.blobPrefix}${version}/`
+        prefix: `${this.blobPrefix}${version}/`,
       });
 
       for (const blob of blobs) {
@@ -249,12 +242,11 @@ export class ModelStorageService {
         where: { version },
         data: {
           status: 'archived',
-          archivedAt: new Date()
-        }
+          archivedAt: new Date(),
+        },
       });
 
       logger.info('Model deleted from Vercel Blob', { version });
-
     } catch (error) {
       logger.error('Failed to delete model', error);
       throw error;
@@ -272,4 +264,3 @@ export class ModelStorageService {
 
 // Singleton
 export const modelStorage = new ModelStorageService();
-

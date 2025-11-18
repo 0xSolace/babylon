@@ -1,12 +1,12 @@
 /**
  * RSS Feed Service Unit Tests
- * 
+ *
  * These are true unit tests that test RSS parsing logic without database access.
  * For database integration tests, see tests/integration/
  */
 
-import { describe, test, expect } from 'bun:test';
 import { rssFeedService } from '@/lib/services/rss-feed-service';
+import { describe, expect, test } from 'bun:test';
 
 describe('RSSFeedService', () => {
   test('should parse RSS 2.0 format', async () => {
@@ -30,10 +30,11 @@ describe('RSSFeedService', () => {
     // Mock fetch for this test
     const originalFetch = global.fetch;
     global.fetch = Object.assign(
-      async () => ({
-        ok: true,
-        text: async () => rssXml,
-      }) as Response,
+      async () =>
+        ({
+          ok: true,
+          text: async () => rssXml,
+        }) as Response,
       { preconnect: originalFetch.preconnect }
     );
 
@@ -54,11 +55,12 @@ describe('RSSFeedService', () => {
     // Mock fetch to fail
     const originalFetch = global.fetch;
     global.fetch = Object.assign(
-      async () => ({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      }) as Response,
+      async () =>
+        ({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+        }) as Response,
       { preconnect: originalFetch.preconnect }
     );
 

@@ -7,26 +7,26 @@
  * Pattern based on: LinkSocialAccountsModal.tsx
  */
 
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { Loader2, Send } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
-import { StarRatingInput } from './StarRating'
-import { ScoreSlider } from './ScoreSlider'
+import { cn } from '@/lib/utils';
+import { Loader2, Send } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { ScoreSlider } from './ScoreSlider';
+import { StarRatingInput } from './StarRating';
 
-interface FeedbackFormProps {
-  toUserId: string
-  toUserName?: string
-  category?: 'game_performance' | 'trade_execution' | 'social_interaction' | 'general'
-  interactionType?: string
-  gameId?: string
-  tradeId?: string
-  onSuccess?: () => void
-  onCancel?: () => void
-  className?: string
-}
+type FeedbackFormProps = {
+  toUserId: string;
+  toUserName?: string;
+  category?: 'game_performance' | 'trade_execution' | 'social_interaction' | 'general';
+  interactionType?: string;
+  gameId?: string;
+  tradeId?: string;
+  onSuccess?: () => void;
+  onCancel?: () => void;
+  className?: string;
+};
 
 export function FeedbackForm({
   toUserId,
@@ -39,26 +39,26 @@ export function FeedbackForm({
   onCancel,
   className = '',
 }: FeedbackFormProps) {
-  const [score, setScore] = useState<number>(70) // 0-100, default 70 (3.5 stars)
-  const [comment, setComment] = useState<string>('')
-  const [submitting, setSubmitting] = useState(false)
+  const [score, setScore] = useState<number>(70); // 0-100, default 70 (3.5 stars)
+  const [comment, setComment] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (score < 0 || score > 100) {
-      toast.error('Please select a valid rating')
-      return
+      toast.error('Please select a valid rating');
+      return;
     }
 
-    setSubmitting(true)
+    setSubmitting(true);
 
-    const token = typeof window !== 'undefined' ? window.__privyAccessToken : null
+    const token = typeof window !== 'undefined' ? window.__privyAccessToken : null;
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-    }
+    };
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`
+      headers.Authorization = `Bearer ${token}`;
     }
 
     const response = await fetch('/api/feedback/submit', {
@@ -75,50 +75,50 @@ export function FeedbackForm({
           tradeId: tradeId || undefined,
         },
       }),
-    })
+    });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to submit feedback' }))
-      setSubmitting(false)
-      throw new Error(error.error || 'Failed to submit feedback')
+      const error = await response.json().catch(() => ({ error: 'Failed to submit feedback' }));
+      setSubmitting(false);
+      throw new Error(error.error || 'Failed to submit feedback');
     }
 
-    const data = await response.json()
+    const data = await response.json();
 
-    toast.success(data.message || 'Feedback submitted successfully!')
+    toast.success(data.message || 'Feedback submitted successfully!');
 
     // Reset form
-    setScore(70)
-    setComment('')
+    setScore(70);
+    setComment('');
 
     if (onSuccess) {
-      onSuccess()
+      onSuccess();
     }
-    setSubmitting(false)
-  }
+    setSubmitting(false);
+  };
 
   return (
     <form onSubmit={handleSubmit} className={cn('space-y-6', className)}>
       {/* Rating Input */}
       <div className="space-y-3">
-        <label className="text-sm font-medium text-foreground">
+        <label htmlFor="feedback-rating" className="font-medium text-foreground text-sm">
           Rate {toUserName || 'this user'}
         </label>
-        <StarRatingInput value={score} onChange={setScore} showDescriptions={true} />
-        <div className="text-xs text-muted-foreground">
-          Or use the slider for more precise control:
-        </div>
-        <ScoreSlider
+        <StarRatingInput
+          id="feedback-rating"
           value={score}
           onChange={setScore}
-          showValue={true}
-          showLabels={true}
+          showDescriptions={true}
         />
+        <div className="text-muted-foreground text-xs">
+          Or use the slider for more precise control:
+        </div>
+        <ScoreSlider value={score} onChange={setScore} showValue={true} showLabels={true} />
       </div>
 
       {/* Comment Input */}
       <div className="space-y-2">
-        <label htmlFor="comment" className="text-sm font-medium text-foreground">
+        <label htmlFor="comment" className="font-medium text-foreground text-sm">
           Comments (optional)
         </label>
         <textarea
@@ -129,13 +129,13 @@ export function FeedbackForm({
           maxLength={500}
           rows={4}
           className={cn(
-            'w-full px-3 py-2 bg-muted rounded-lg border border-border',
+            'w-full rounded-lg border border-border bg-muted px-3 py-2',
             'text-foreground placeholder-muted-foreground',
-            'focus:outline-none focus:ring-2 focus:ring-[#1c9cf0] focus:border-transparent',
+            'focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#1c9cf0]',
             'resize-none transition-colors'
           )}
         />
-        <div className="flex justify-between text-xs text-muted-foreground">
+        <div className="flex justify-between text-muted-foreground text-xs">
           <span>Maximum 500 characters</span>
           <span>{comment.length}/500</span>
         </div>
@@ -147,19 +147,19 @@ export function FeedbackForm({
           type="submit"
           disabled={submitting}
           className={cn(
-            'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-semibold transition-colors',
-            'bg-[#1c9cf0] hover:bg-[#1c9cf0]/90 text-primary-foreground',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition-colors',
+            'bg-[#1c9cf0] text-primary-foreground hover:bg-[#1c9cf0]/90',
+            'disabled:cursor-not-allowed disabled:opacity-50'
           )}
         >
           {submitting ? (
             <>
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               <span>Submitting...</span>
             </>
           ) : (
             <>
-              <Send className="w-4 h-4" />
+              <Send className="h-4 w-4" />
               <span>Submit Feedback</span>
             </>
           )}
@@ -170,9 +170,9 @@ export function FeedbackForm({
             onClick={onCancel}
             disabled={submitting}
             className={cn(
-              'px-4 py-3 rounded-lg font-semibold transition-colors',
-              'bg-muted hover:bg-muted/70 text-foreground',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'rounded-lg px-4 py-3 font-semibold transition-colors',
+              'bg-muted text-foreground hover:bg-muted/70',
+              'disabled:cursor-not-allowed disabled:opacity-50'
             )}
           >
             Cancel
@@ -180,5 +180,5 @@ export function FeedbackForm({
         )}
       </div>
     </form>
-  )
+  );
 }

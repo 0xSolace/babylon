@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating expert analysis and commentary posts.
- * 
+ *
  * Creates analytical posts from experts providing informed commentary
  * on events, market movements, or policy. Uses authoritative, analytical
  * tone with specific references and implications.
- * 
+ *
  * Returns XML with expert commentary and metadata.
  */
 export const expertCommentary = definePrompt({
@@ -55,5 +55,5 @@ Respond with ONLY this XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

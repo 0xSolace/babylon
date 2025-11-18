@@ -1,14 +1,14 @@
 /**
  * Current User Profile API
- * 
+ *
  * @route GET /api/users/me
  * @access Authenticated
- * 
+ *
  * @description
  * Returns the authenticated user's complete profile information including
  * profile status, social connections, reputation, and onboarding state.
  * Central endpoint for user session management and profile data.
- * 
+ *
  * @openapi
  * /api/users/me:
  *   get:
@@ -56,7 +56,7 @@
  *                       type: object
  *       401:
  *         description: Unauthorized
- * 
+ *
  * **Profile Data Includes:**
  * - **Identity:** username, display name, bio, avatar, cover image
  * - **Onboarding Status:** profile completion, on-chain registration
@@ -65,29 +65,29 @@
  * - **Reputation:** reputation points, referral code, referral source
  * - **Stats:** cached profile statistics (posts, followers, following)
  * - **Permissions:** admin status, actor/agent flag
- * 
+ *
  * **Onboarding States:**
  * - `needsOnboarding: true` - User needs to complete profile setup
  * - `needsOnchain: true` - Profile complete but not registered on-chain
  * - Both false - Fully onboarded user
- * 
+ *
  * **Profile Completeness:**
  * A profile is considered complete when user has:
  * - Set a username
  * - Added a bio
  * - Uploaded a profile image
- * 
+ *
  * **Caching:**
  * Profile stats (posts, followers, etc.) are cached for performance.
  * Cache is invalidated on relevant user actions.
- * 
+ *
  * @returns {object} User profile response
  * @property {boolean} authenticated - Always true (auth required)
  * @property {boolean} needsOnboarding - Whether user needs profile setup
  * @property {boolean} needsOnchain - Whether user needs on-chain registration
  * @property {object|null} user - User profile object (null if no profile yet)
  * @property {object} user.stats - Cached profile statistics
- * 
+ *
  * **User Object Fields:**
  * @property {string} user.id - User ID
  * @property {string} user.privyId - Privy authentication ID
@@ -106,10 +106,10 @@
  * @property {boolean} user.hasTwitter - Twitter connected
  * @property {boolean} user.isAdmin - Admin privileges
  * @property {boolean} user.isActor - Agent/actor flag
- * 
+ *
  * @throws {401} Unauthorized - authentication required
  * @throws {500} Internal server error
- * 
+ *
  * @example
  * ```typescript
  * // Get current user profile
@@ -117,7 +117,7 @@
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
  * const { user, needsOnboarding, needsOnchain } = await response.json();
- * 
+ *
  * if (needsOnboarding) {
  *   // Redirect to onboarding flow
  *   router.push('/onboarding');
@@ -129,19 +129,19 @@
  *   console.log(`Welcome, ${user.displayName}!`);
  * }
  * ```
- * 
+ *
  * @see {@link /lib/cached-database-service} Profile stats caching
  * @see {@link /lib/api/auth-middleware} Authentication
  * @see {@link /src/app/onboarding/page.tsx} Onboarding flow
  * @see {@link /src/contexts/AuthContext.tsx} Auth context consumer
  */
 
-import type { NextRequest } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { cachedDb } from '@/lib/cached-database-service'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { cachedDb } from '@/lib/cached-database-service';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
 
 const userSelect = {
   id: true,
@@ -173,40 +173,40 @@ const userSelect = {
   isActor: true,
   createdAt: true,
   updatedAt: true,
-} as const
+} as const;
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const authUser = await authenticate(request)
-  const privyId = authUser.privyId ?? authUser.userId
+  const authUser = await authenticate(request);
+  const privyId = authUser.privyId ?? authUser.userId;
 
   logger.info(
     'Fetching user profile',
     { privyId, dbUserId: authUser.dbUserId },
     'GET /api/users/me'
-  )
+  );
 
   const dbUser = await prisma.user.findUnique({
     where: { privyId },
     select: userSelect,
-  })
+  });
 
   if (!dbUser) {
     logger.info(
       'Authenticated user has no profile record yet',
       { privyId, dbUserId: authUser.dbUserId },
       'GET /api/users/me'
-    )
+    );
 
     return successResponse({
       authenticated: true,
       needsOnboarding: true,
       needsOnchain: false,
       user: null,
-    })
+    });
   }
 
   // Get cached profile stats
-  const stats = await cachedDb.getUserProfileStats(dbUser.id)
+  const stats = await cachedDb.getUserProfileStats(dbUser.id);
 
   const responseUser = {
     id: dbUser.id,
@@ -239,29 +239,29 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     createdAt: dbUser.createdAt.toISOString(),
     updatedAt: dbUser.updatedAt.toISOString(),
     stats: stats || undefined,
-  }
+  };
 
-  const needsOnboarding = !dbUser.profileComplete
-  const needsOnchain = dbUser.profileComplete && !dbUser.onChainRegistered
+  const needsOnboarding = !dbUser.profileComplete;
+  const needsOnchain = dbUser.profileComplete && !dbUser.onChainRegistered;
 
   logger.info(
     'Authenticated user profile fetched',
-    { 
-      userId: dbUser.id, 
+    {
+      userId: dbUser.id,
       username: dbUser.username,
       profileComplete: dbUser.profileComplete,
       onChainRegistered: dbUser.onChainRegistered,
       nftTokenId: dbUser.nftTokenId,
-      needsOnboarding, 
-      needsOnchain 
+      needsOnboarding,
+      needsOnchain,
     },
     'GET /api/users/me'
-  )
+  );
 
   return successResponse({
     authenticated: true,
     needsOnboarding,
     needsOnchain,
     user: responseUser,
-  })
-})
+  });
+});

@@ -3,55 +3,54 @@
  * Handles: likes, comments, shares, and favorites with real-time polling
  */
 
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { retryIfRetryable } from '@/lib/retry';
 import type {
-  PostInteraction,
+  CommentData,
   CommentInteraction,
   CommentWithReplies,
-  CommentData,
   FavoriteProfile,
-  PendingInteraction,
   InteractionError,
+  PendingInteraction,
+  PostInteraction,
 } from '@/types/interactions';
-import { retryIfRetryable } from '@/lib/retry';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-interface RepostPost {
-  id: string
-  originalPostId: string
-  userId: string
-  createdAt: number
-  content: string
-  authorId: string
-  authorName: string
-  authorUsername?: string
-  authorProfileImageUrl?: string
-  timestamp: string
-  isRepost: boolean
-  originalAuthorId?: string | null
-  originalAuthorName?: string | null
-  originalAuthorUsername?: string | null
-  originalAuthorProfileImageUrl?: string | null
-  originalContent?: string | null
-  quoteComment?: string | null
-}
+type RepostPost = {
+  id: string;
+  originalPostId: string;
+  userId: string;
+  createdAt: number;
+  content: string;
+  authorId: string;
+  authorName: string;
+  authorUsername?: string;
+  authorProfileImageUrl?: string;
+  timestamp: string;
+  isRepost: boolean;
+  originalAuthorId?: string | null;
+  originalAuthorName?: string | null;
+  originalAuthorUsername?: string | null;
+  originalAuthorProfileImageUrl?: string | null;
+  originalContent?: string | null;
+  quoteComment?: string | null;
+};
 
-interface InteractionStoreState {
+type InteractionStoreState = {
   // State maps
   postInteractions: Map<string, PostInteraction>;
   commentInteractions: Map<string, CommentInteraction>;
   favoritedProfiles: Set<string>;
   pendingInteractions: Map<string, PendingInteraction>;
 
-
   // Loading states
   loadingStates: Map<string, boolean>;
 
   // Error states
   errors: Map<string, InteractionError>;
-}
+};
 
-interface InteractionStoreActions {
+type InteractionStoreActions = {
   // Like actions
   toggleLike: (postId: string) => Promise<void>;
   toggleCommentLike: (commentId: string) => Promise<void>;
@@ -63,7 +62,10 @@ interface InteractionStoreActions {
   loadComments: (postId: string) => Promise<CommentWithReplies[]>;
 
   // Share actions
-  toggleShare: (postId: string, comment?: string) => Promise<{ repostPost?: RepostPost } | void>;
+  toggleShare: (
+    postId: string,
+    comment?: string
+  ) => Promise<{ repostPost?: RepostPost } | undefined>;
 
   // Favorite actions
   toggleFavorite: (profileId: string) => Promise<void>;
@@ -77,7 +79,7 @@ interface InteractionStoreActions {
   isFavorited: (profileId: string) => boolean;
   setLoading: (id: string, loading: boolean) => void;
   setError: (id: string, error: InteractionError) => void;
-}
+};
 
 type InteractionStore = InteractionStoreState & InteractionStoreActions;
 
@@ -94,37 +96,42 @@ async function getAuthToken(): Promise<string | null> {
   if (typeof window !== 'undefined' && window.__privyAccessToken) {
     return window.__privyAccessToken;
   }
-  
+
   return null;
 }
 
 async function apiCall<T>(url: string, options: RequestInit = {}): Promise<T> {
-  return retryIfRetryable(async () => {
-    const token = await getAuthToken();
+  return retryIfRetryable(
+    async () => {
+      const token = await getAuthToken();
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string>),
-    };
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string>),
+      };
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
+
+      try {
+        return await response.json();
+      } catch (error) {
+        throw new Error(
+          `Failed to parse response: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+      }
+    },
+    {
+      maxAttempts: 3,
+      initialDelayMs: 1000,
     }
-
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-
-    try {
-      return await response.json();
-    } catch (error) {
-      throw new Error(`Failed to parse response: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }, {
-    maxAttempts: 3,
-    initialDelayMs: 1000,
-  });
+  );
 }
 
 export const useInteractionStore = create<InteractionStore>()(
@@ -169,10 +176,9 @@ export const useInteractionStore = create<InteractionStore>()(
         setLoading(postId, true);
 
         const method = wasLiked ? 'DELETE' : 'POST';
-        const response = await apiCall<{ data: { likeCount: number; isLiked: boolean } }>(
-          `/api/posts/${postId}/like`,
-          { method }
-        );
+        const response = await apiCall<{
+          data: { likeCount: number; isLiked: boolean };
+        }>(`/api/posts/${postId}/like`, { method });
 
         set((state) => ({
           postInteractions: new Map(state.postInteractions).set(postId, {
@@ -216,10 +222,9 @@ export const useInteractionStore = create<InteractionStore>()(
         setLoading(commentId, true);
 
         const method = wasLiked ? 'DELETE' : 'POST';
-        const response = await apiCall<{ data: { likeCount: number; isLiked: boolean } }>(
-          `/api/comments/${commentId}/like`,
-          { method }
-        );
+        const response = await apiCall<{
+          data: { likeCount: number; isLiked: boolean };
+        }>(`/api/comments/${commentId}/like`, { method });
 
         set((state) => ({
           commentInteractions: new Map(state.commentInteractions).set(commentId, {
@@ -239,13 +244,10 @@ export const useInteractionStore = create<InteractionStore>()(
 
         setLoading(loadingKey, true);
 
-        const response = await apiCall<CommentData>(
-          `/api/posts/${postId}/comments`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ content, parentCommentId: parentId }),
-          }
-        );
+        const response = await apiCall<CommentData>(`/api/posts/${postId}/comments`, {
+          method: 'POST',
+          body: JSON.stringify({ content, parentCommentId: parentId }),
+        });
 
         if (!parentId) {
           const currentInteraction = postInteractions.get(postId);
@@ -308,9 +310,9 @@ export const useInteractionStore = create<InteractionStore>()(
 
         setLoading(loadingKey, true);
 
-        const response = await apiCall<{ data: { comments: CommentWithReplies[] } }>(
-          `/api/posts/${postId}/comments`
-        );
+        const response = await apiCall<{
+          data: { comments: CommentWithReplies[] };
+        }>(`/api/posts/${postId}/comments`);
 
         setLoading(loadingKey, false);
         return response.data.comments;
@@ -347,13 +349,16 @@ export const useInteractionStore = create<InteractionStore>()(
 
         const method = wasShared ? 'DELETE' : 'POST';
         const body = comment ? JSON.stringify({ comment }) : JSON.stringify({});
-        const response = await apiCall<{ data: { shareCount: number; isShared: boolean; repostPost?: RepostPost } }>(
-          `/api/posts/${postId}/share`,
-          { 
-            method,
-            ...(method === 'POST' && { body })
-          }
-        );
+        const response = await apiCall<{
+          data: {
+            shareCount: number;
+            isShared: boolean;
+            repostPost?: RepostPost;
+          };
+        }>(`/api/posts/${postId}/share`, {
+          method,
+          ...(method === 'POST' && { body }),
+        });
 
         set((state) => ({
           postInteractions: new Map(state.postInteractions).set(postId, {
@@ -396,9 +401,9 @@ export const useInteractionStore = create<InteractionStore>()(
 
         setLoading('favorites', true);
 
-        const response = await apiCall<{ data: { profiles: FavoriteProfile[] } }>(
-          '/api/profiles/favorites'
-        );
+        const response = await apiCall<{
+          data: { profiles: FavoriteProfile[] };
+        }>('/api/profiles/favorites');
 
         const favoriteIds = new Set(response.data.profiles.map((p) => p.id));
         set({ favoritedProfiles: favoriteIds });
@@ -467,7 +472,10 @@ export const useInteractionStore = create<InteractionStore>()(
       }),
       // Custom deserialization to convert arrays back to Maps and Sets
       merge: (persistedState: unknown, currentState: InteractionStore) => {
-        const persisted = (persistedState as Partial<PersistedInteractionState> | null | undefined) || {
+        const persisted = (persistedState as
+          | Partial<PersistedInteractionState>
+          | null
+          | undefined) || {
           postInteractions: undefined,
           commentInteractions: undefined,
           favoritedProfiles: undefined,

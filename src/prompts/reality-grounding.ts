@@ -1,19 +1,19 @@
 /**
  * Reality Grounding - Current World State
- * 
+ *
  * Provides current date, prices, politics, culture, and tech landscape
  * to ground LLM outputs in 2025 reality and prevent outdated predictions.
- * 
+ *
  * Last Updated: November 15, 2025
  */
 
 /**
  * Get current date and time context for prompts.
- * 
+ *
  * Returns various formatted date/time strings updated dynamically
  * at generation time. Used to ensure all generated content references
  * the current date correctly.
- * 
+ *
  * @returns Object containing:
  *   - `dateISO`: ISO 8601 formatted date string
  *   - `dateFull`: Full human-readable date (e.g., "Monday, November 16, 2025")
@@ -37,12 +37,12 @@ export function getCurrentDateContext(): {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
     }),
     time: now.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     }),
     year: now.getFullYear().toString(),
     month: now.toLocaleDateString('en-US', { month: 'long' }),
@@ -52,7 +52,7 @@ export function getCurrentDateContext(): {
 
 /**
  * CURRENT WORLD FACTS (November 2025)
- * 
+ *
  * Key facts to ground AI generation in current reality:
  * - Cryptocurrency prices
  * - Stock prices
@@ -168,16 +168,16 @@ Instead focus on:
 
 /**
  * Get a concise reality grounding string for prompts.
- * 
+ *
  * Returns a condensed version of current world facts including prices,
  * leadership, AI state, and key 2025 context. Includes current date
  * dynamically. Suitable for most prompts that need reality grounding.
- * 
+ *
  * @returns Concise reality grounding string with current date and key facts
  */
 export function getRealityGrounding(): string {
   const dateCtx = getCurrentDateContext();
-  
+
   return `
 === REALITY GROUNDING (${dateCtx.dateFull}) ===
 
@@ -216,10 +216,10 @@ Focus on: Company events, regulations, tech breakthroughs, political decisions, 
 
 /**
  * Get a minimal reality check string for quick context.
- * 
+ *
  * Returns a very brief one-line summary of key current facts.
  * Useful when token limits are tight or only basic grounding is needed.
- * 
+ *
  * @returns Minimal one-line reality grounding string
  */
 export function getMinimalRealityGrounding(): string {
@@ -229,40 +229,39 @@ export function getMinimalRealityGrounding(): string {
 
 /**
  * Reality check for generated content.
- * 
+ *
  * Validates that content references current reality (prices, dates, leadership).
  * Returns warnings if outdated references are detected, such as:
  * - Outdated cryptocurrency prices (e.g., Bitcoin at $30K instead of $95K)
  * - Wrong president (Biden instead of Trump)
  * - Outdated AI models (GPT-4 instead of GPT-5.1)
  * - Outdated iPhone models (iPhone 14/15 instead of iPhone 17)
- * 
+ *
  * @param text - The generated content to check
  * @returns Array of warning messages about outdated references
  */
 export function checkRealityGrounding(text: string): string[] {
   const warnings: string[] = [];
-  
+
   // Check for outdated crypto prices
   if (text.match(/bitcoin.*?\$([1-5][0-9],?000)/i)) {
     warnings.push('WARNING: Outdated Bitcoin price detected (should be ~$95K in Nov 2025)');
   }
-  
+
   // Check for wrong president
   if (text.match(/president.*?biden/i) && !text.match(/former|ex-/i)) {
     warnings.push('WARNING: Biden is no longer president (Trump since Jan 2025)');
   }
-  
+
   // Check for outdated AI models
   if (text.match(/GPT-4(?!\.5)/i) && !text.match(/old|previous|earlier/i)) {
     warnings.push('WARNING: GPT-4 is outdated (current: GPT-5.1 as of Nov 2025)');
   }
-  
+
   // Check for outdated iPhone
   if (text.match(/iPhone\s*(14|15|16)(?!\s*series)/i) && !text.match(/old|previous|earlier/i)) {
     warnings.push('WARNING: iPhone 17 is current generation in 2025');
   }
-  
+
   return warnings;
 }
-

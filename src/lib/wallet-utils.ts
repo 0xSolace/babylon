@@ -6,14 +6,9 @@ import type { ConnectedWallet } from '@privy-io/react-auth';
 /**
  * Check if a wallet is a Privy embedded wallet
  */
-export function isEmbeddedPrivyWallet(
-  wallet?: ConnectedWallet | null
-): boolean {
+export function isEmbeddedPrivyWallet(wallet?: ConnectedWallet | null): boolean {
   if (!wallet) return false;
-  return (
-    wallet.walletClientType === 'privy' ||
-    wallet.walletClientType === 'privy-v2'
-  );
+  return wallet.walletClientType === 'privy' || wallet.walletClientType === 'privy-v2';
 }
 
 /**
@@ -27,18 +22,14 @@ export function isExternalWallet(wallet?: ConnectedWallet | null): boolean {
 /**
  * Find the embedded wallet from a list of wallets
  */
-export function findEmbeddedWallet(
-  wallets: ConnectedWallet[]
-): ConnectedWallet | undefined {
+export function findEmbeddedWallet(wallets: ConnectedWallet[]): ConnectedWallet | undefined {
   return wallets.find(isEmbeddedPrivyWallet);
 }
 
 /**
  * Find an external wallet from a list of wallets
  */
-export function findExternalWallet(
-  wallets: ConnectedWallet[]
-): ConnectedWallet | undefined {
+export function findExternalWallet(wallets: ConnectedWallet[]): ConnectedWallet | undefined {
   return wallets.find(isExternalWallet);
 }
 
@@ -62,8 +53,7 @@ export const WALLET_ERROR_MESSAGES = {
  * Get a user-friendly error message for wallet-related errors
  */
 export function getWalletErrorMessage(error: unknown): string {
-  const message =
-    error instanceof Error ? error.message.toLowerCase() : String(error);
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error);
 
   if (message.includes('user rejected') || message.includes('user denied')) {
     return WALLET_ERROR_MESSAGES.USER_REJECTED;
@@ -81,16 +71,5 @@ export function getWalletErrorMessage(error: unknown): string {
     return WALLET_ERROR_MESSAGES.NO_WALLET;
   }
 
-  return error instanceof Error
-    ? error.message
-    : 'An unknown error occurred with your wallet.';
+  return error instanceof Error ? error.message : 'An unknown error occurred with your wallet.';
 }
-
-
-
-
-
-
-
-
-

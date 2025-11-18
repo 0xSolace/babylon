@@ -1,18 +1,5 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-import { useRouter } from 'next/navigation';
-
-import {
-  ArrowUpDown,
-  Clock,
-  Flame,
-  Search,
-  TrendingDown,
-  TrendingUp
-} from 'lucide-react';
-
 import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard';
 import { CategoryPnLShareModal } from '@/components/markets/CategoryPnLShareModal';
 import { MarketsWidgetSidebar } from '@/components/markets/MarketsWidgetSidebar';
@@ -23,14 +10,15 @@ import { PredictionPositionsList } from '@/components/markets/PredictionPosition
 import { BuyPointsModal } from '@/components/points/BuyPointsModal';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton, WidgetPanelSkeleton } from '@/components/shared/Skeleton';
-
 import { cn } from '@/lib/utils';
-
 import { useAuth } from '@/hooks/useAuth';
 import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
 import { useUserPositions } from '@/hooks/useUserPositions';
+import { ArrowUpDown, Clock, Flame, Search, TrendingDown, TrendingUp } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-interface PerpMarket {
+type PerpMarket = {
   ticker: string;
   organizationId: string;
   name: string;
@@ -48,9 +36,9 @@ interface PerpMarket {
   };
   maxLeverage: number;
   minOrderSize: number;
-}
+};
 
-interface PredictionUserPosition {
+type PredictionUserPosition = {
   id: string;
   marketId: string;
   question?: string;
@@ -63,9 +51,9 @@ interface PredictionUserPosition {
   unrealizedPnL: number;
   resolved?: boolean;
   resolution?: boolean | null;
-}
+};
 
-interface PredictionMarket {
+type PredictionMarket = {
   id: number | string;
   text: string;
   status: 'active' | 'resolved' | 'cancelled';
@@ -80,7 +68,7 @@ interface PredictionMarket {
   oracleCommitTxHash?: string | null;
   oracleRevealTxHash?: string | null;
   oraclePublishedAt?: string | null;
-}
+};
 
 type MarketTab = 'dashboard' | 'futures' | 'predictions';
 
@@ -91,8 +79,7 @@ export default function MarketsPage() {
   const { user, authenticated, login } = useAuth();
   const [activeTab, setActiveTab] = useState<MarketTab>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
-  const [predictionSort, setPredictionSort] =
-    useState<PredictionSort>('trending');
+  const [predictionSort, setPredictionSort] = useState<PredictionSort>('trending');
   const [showBuyPointsModal, setShowBuyPointsModal] = useState(false);
   const [showPnLShareModal, setShowPnLShareModal] = useState(false);
   const [showCategoryPnLShareModal, setShowCategoryPnLShareModal] = useState<
@@ -121,9 +108,7 @@ export default function MarketsPage() {
 
   // Use refs to store latest values to break dependency chains
   const fetchDataRef = useRef<(() => Promise<void>) | null>(null);
-  const refreshPositionsRef = useRef<(() => Promise<void>) | null>(
-    refreshUserPositions
-  );
+  const refreshPositionsRef = useRef<(() => Promise<void>) | null>(refreshUserPositions);
   const authenticatedRef = useRef(authenticated);
   const userIdRef = useRef<string | null>(user?.id || null);
   const prevAuthRef = useRef<{
@@ -159,9 +144,7 @@ export default function MarketsPage() {
     try {
       const [perpsRes, predictionsRes] = await Promise.all([
         fetch('/api/markets/perps'),
-        fetch(
-          `/api/markets/predictions${isAuth && userId ? `?userId=${userId}` : ''}`
-        ),
+        fetch(`/api/markets/predictions${isAuth && userId ? `?userId=${userId}` : ''}`),
       ]);
 
       if (!perpsRes.ok || !predictionsRes.ok) {
@@ -236,9 +219,7 @@ export default function MarketsPage() {
   );
 
   const filteredPredictions = predictions.filter(
-    (p) =>
-      !searchQuery.trim() ||
-      p.text.toLowerCase().includes(searchQuery.toLowerCase())
+    (p) => !searchQuery.trim() || p.text.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Sort predictions based on selected option
@@ -265,17 +246,11 @@ export default function MarketsPage() {
           );
         case 'ending-soon':
           return (
-            (a.resolutionDate
-              ? new Date(a.resolutionDate).getTime()
-              : Infinity) -
+            (a.resolutionDate ? new Date(a.resolutionDate).getTime() : Infinity) -
             (b.resolutionDate ? new Date(b.resolutionDate).getTime() : Infinity)
           );
         case 'volume':
-          return (
-            (b.yesShares || 0) +
-            (b.noShares || 0) -
-            ((a.yesShares || 0) + (a.noShares || 0))
-          );
+          return (b.yesShares || 0) + (b.noShares || 0) - ((a.yesShares || 0) + (a.noShares || 0));
         default:
           return 0;
       }
@@ -285,9 +260,7 @@ export default function MarketsPage() {
   }, [filteredPredictions, predictionSort]);
 
   const activePredictions = sortedPredictions;
-  const resolvedPredictions = filteredPredictions.filter(
-    (p) => p.status === 'resolved'
-  );
+  const resolvedPredictions = filteredPredictions.filter((p) => p.status === 'resolved');
 
   // Calculate trending tokens (mix of % gain and volume) - memoized
   const trendingMarkets = useMemo(() => {
@@ -324,18 +297,9 @@ export default function MarketsPage() {
   // Category P&L data
   const perpPnLData = useMemo(() => {
     if (perpPositions.length === 0) return null;
-    const unrealizedPnL = perpPositions.reduce(
-      (sum, pos) => sum + (pos.unrealizedPnL || 0),
-      0
-    );
-    const totalValue = perpPositions.reduce(
-      (sum, pos) => sum + Math.abs(pos.size || 0),
-      0
-    );
-    const openInterest = perpPositions.reduce(
-      (sum, pos) => sum + Math.abs(pos.size || 0),
-      0
-    );
+    const unrealizedPnL = perpPositions.reduce((sum, pos) => sum + (pos.unrealizedPnL || 0), 0);
+    const totalValue = perpPositions.reduce((sum, pos) => sum + Math.abs(pos.size || 0), 0);
+    const openInterest = perpPositions.reduce((sum, pos) => sum + Math.abs(pos.size || 0), 0);
     return {
       unrealizedPnL,
       positionCount: perpPositions.length,
@@ -351,10 +315,7 @@ export default function MarketsPage() {
       const costBasis = pos.shares * pos.avgPrice;
       return sum + (currentValue - costBasis);
     }, 0);
-    const totalShares = predictionPositions.reduce(
-      (sum, pos) => sum + pos.shares,
-      0
-    );
+    const totalShares = predictionPositions.reduce((sum, pos) => sum + pos.shares, 0);
     const totalValue = predictionPositions.reduce(
       (sum, pos) => sum + pos.shares * pos.currentPrice,
       0
@@ -386,27 +347,25 @@ export default function MarketsPage() {
 
   const getDaysLeft = (date?: string) => {
     if (!date) return null;
-    const diff = Math.ceil(
-      (new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    );
+    const diff = Math.ceil((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     return Math.max(0, diff);
   };
 
   if (loading) {
     return (
       <PageContainer noPadding className="flex flex-col">
-        <div className="p-4 space-y-6">
+        <div className="space-y-6 p-4">
           {/* Tabs skeleton */}
           <div className="flex gap-0">
             {['Dashboard', 'Perps', 'Predictions'].map((tab) => (
               <div key={tab} className="flex-1 px-4 py-2.5">
-                <Skeleton className="h-5 w-20 mx-auto" />
+                <Skeleton className="mx-auto h-5 w-20" />
               </div>
             ))}
           </div>
 
           {/* Content skeletons */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <WidgetPanelSkeleton />
             <WidgetPanelSkeleton />
           </div>
@@ -419,87 +378,84 @@ export default function MarketsPage() {
   return (
     <PageContainer noPadding className="flex flex-col">
       {/* Desktop: Content + Widgets layout */}
-      <div className="hidden xl:flex flex-1 overflow-hidden">
+      <div className="hidden flex-1 overflow-hidden xl:flex">
         {/* Main content */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Header */}
-          <div className="sticky top-0 z-10 bg-background shadow-sm flex-shrink-0">
-            <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+          <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
+            <div className="space-y-3 p-3 sm:space-y-4 sm:p-4">
               {/* Tabs */}
               <div
                 role="tablist"
                 aria-label="Market sections"
-                className="flex gap-0 overflow-x-auto scrollbar-hide"
+                className="scrollbar-hide flex gap-0 overflow-x-auto"
               >
                 <button
+                  type="button"
                   role="tab"
                   aria-selected={activeTab === 'dashboard'}
                   aria-controls="dashboard-panel"
                   onClick={() => setActiveTab('dashboard')}
                   className={cn(
-                    'flex-1 px-3 sm:px-4 py-2.5 transition-all whitespace-nowrap text-sm sm:text-base cursor-pointer',
+                    'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
                     activeTab === 'dashboard'
-                      ? 'text-foreground font-bold'
+                      ? 'font-bold text-foreground'
                       : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   Dashboard
                 </button>
-              <button
-                role="tab"
-                aria-selected={activeTab === 'futures'}
-                aria-controls="futures-panel"
-                onClick={() => router.push('/markets/perps')}
-                className={cn(
-                  'flex-1 px-3 sm:px-4 py-2.5 transition-all whitespace-nowrap text-sm sm:text-base cursor-pointer',
-                  activeTab === 'futures'
-                    ? 'text-foreground font-bold'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                Perps
-              </button>
-              <button
-                role="tab"
-                aria-selected={activeTab === 'predictions'}
-                aria-controls="predictions-panel"
-                onClick={() => router.push('/markets/predictions')}
-                className={cn(
-                  'flex-1 px-3 sm:px-4 py-2.5 transition-all whitespace-nowrap text-sm sm:text-base cursor-pointer',
-                  activeTab === 'predictions'
-                    ? 'text-foreground font-bold'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                Predictions
-              </button>
-            </div>
-
-            {/* Search - hide on dashboard */}
-            {activeTab !== 'dashboard' && (
-              <div className="relative">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <input
-                  type="search"
-                  aria-label={
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'futures'}
+                  aria-controls="futures-panel"
+                  onClick={() => router.push('/markets/perps')}
+                  className={cn(
+                    'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
                     activeTab === 'futures'
-                      ? 'Search tickers'
-                      : 'Search questions'
-                  }
-                  placeholder={
-                    activeTab === 'futures'
-                      ? 'Search tickers...'
-                      : 'Search questions...'
-                  }
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded bg-muted/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:bg-muted focus:ring-2 focus:ring-[#0066FF]/30"
-                />
+                      ? 'font-bold text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  Perps
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'predictions'}
+                  aria-controls="predictions-panel"
+                  onClick={() => router.push('/markets/predictions')}
+                  className={cn(
+                    'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
+                    activeTab === 'predictions'
+                      ? 'font-bold text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  Predictions
+                </button>
               </div>
-            )}
+
+              {/* Search - hide on dashboard */}
+              {activeTab !== 'dashboard' && (
+                <div className="relative">
+                  <Search
+                    className="-translate-y-1/2 absolute top-1/2 left-3 h-5 w-5 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="search"
+                    aria-label={activeTab === 'futures' ? 'Search tickers' : 'Search questions'}
+                    placeholder={
+                      activeTab === 'futures' ? 'Search tickers...' : 'Search questions...'
+                    }
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full rounded bg-muted/50 py-3 pr-4 pl-10 text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -510,7 +466,7 @@ export default function MarketsPage() {
                 id="dashboard-panel"
                 role="tabpanel"
                 aria-labelledby="dashboard-tab"
-                className="p-4 space-y-6"
+                className="space-y-6 p-4"
               >
                 {authenticated && (
                   <PortfolioPnLCard
@@ -523,84 +479,79 @@ export default function MarketsPage() {
                 )}
 
                 {/* Positions Overview - Only show if authenticated and has positions */}
-                {authenticated &&
-                  (perpPositions.length > 0 ||
-                    predictionPositions.length > 0) && (
-                    <div className="bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 rounded-lg p-4 border border-[#0066FF]/20">
-                      <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-                        <div className="w-1 h-5 bg-[#0066FF] rounded-full" />
-                        Your Positions
-                      </h2>
+                {authenticated && (perpPositions.length > 0 || predictionPositions.length > 0) && (
+                  <div className="rounded-lg border border-[#0066FF]/20 bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 p-4">
+                    <h2 className="mb-3 flex items-center gap-2 font-bold text-lg">
+                      <div className="h-5 w-1 rounded-full bg-[#0066FF]" />
+                      Your Positions
+                    </h2>
 
-                      {/* Perp Positions */}
-                      {perpPositions.length > 0 && (
-                        <div className="mb-4">
-                          <h3 className="text-sm font-semibold text-muted-foreground mb-2">
-                            PERPETUAL FUTURES ({perpPositions.length})
-                          </h3>
-                          <PerpPositionsList
-                            positions={perpPositions}
-                            onPositionClosed={handlePositionsRefresh}
-                          />
-                        </div>
-                      )}
+                    {/* Perp Positions */}
+                    {perpPositions.length > 0 && (
+                      <div className="mb-4">
+                        <h3 className="mb-2 font-semibold text-muted-foreground text-sm">
+                          PERPETUAL FUTURES ({perpPositions.length})
+                        </h3>
+                        <PerpPositionsList
+                          positions={perpPositions}
+                          onPositionClosed={handlePositionsRefresh}
+                        />
+                      </div>
+                    )}
 
-                      {/* Prediction Positions */}
-                      {predictionPositions.length > 0 && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-muted-foreground mb-2">
-                            PREDICTIONS ({predictionPositions.length})
-                          </h3>
-                          <PredictionPositionsList
-                            positions={predictionPositions}
-                            onPositionSold={handlePositionsRefresh}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    {/* Prediction Positions */}
+                    {predictionPositions.length > 0 && (
+                      <div>
+                        <h3 className="mb-2 font-semibold text-muted-foreground text-sm">
+                          PREDICTIONS ({predictionPositions.length})
+                        </h3>
+                        <PredictionPositionsList
+                          positions={predictionPositions}
+                          onPositionSold={handlePositionsRefresh}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Market Sections Grid */}
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                   {/* Trending Perps */}
-                  <div className="bg-card/50 backdrop-blur rounded-lg p-4 border border-border">
-                    <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5 text-green-600" />
+                  <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
+                    <h2 className="mb-3 flex items-center gap-2 font-bold text-lg">
+                      <TrendingUp className="h-5 w-5 text-green-600" />
                       Trending Perpetuals
                     </h2>
                     {trendingMarkets.length > 0 ? (
                       <div className="space-y-2">
                         {trendingMarkets.map((market, idx) => (
                           <button
+                            type="button"
                             key={`trending-${market.ticker}-${idx}`}
                             onClick={() => handleMarketClick(market)}
-                            className="w-full p-3 rounded-lg text-left bg-muted/30 hover:bg-muted transition-all cursor-pointer border border-transparent hover:border-[#0066FF]/30"
+                            className="w-full cursor-pointer rounded-lg border border-transparent bg-muted/30 p-3 text-left transition-all hover:border-[#0066FF]/30 hover:bg-muted"
                           >
-                            <div className="flex justify-between items-center">
+                            <div className="flex items-center justify-between">
                               <div className="flex-1">
-                                <div className="font-bold text-sm">
-                                  ${market.ticker}
-                                </div>
-                                <div className="text-xs text-muted-foreground truncate">
+                                <div className="font-bold text-sm">${market.ticker}</div>
+                                <div className="truncate text-muted-foreground text-xs">
                                   {market.name}
                                 </div>
                               </div>
-                              <div className="text-right ml-3">
+                              <div className="ml-3 text-right">
                                 <div className="font-bold text-sm">
                                   {formatPrice(market.currentPrice)}
                                 </div>
                                 <div
                                   className={cn(
-                                    'text-xs font-bold flex items-center gap-1 justify-end',
-                                    market.change24h >= 0
-                                      ? 'text-green-600'
-                                      : 'text-red-600'
+                                    'flex items-center justify-end gap-1 font-bold text-xs',
+                                    market.change24h >= 0 ? 'text-green-600' : 'text-red-600'
                                   )}
                                 >
                                   {market.change24h >= 0 ? (
-                                    <TrendingUp className="w-3 h-3" />
+                                    <TrendingUp className="h-3 w-3" />
                                   ) : (
-                                    <TrendingDown className="w-3 h-3" />
+                                    <TrendingDown className="h-3 w-3" />
                                   )}
                                   {market.change24h >= 0 ? '+' : ''}
                                   {market.changePercent24h.toFixed(2)}%
@@ -611,62 +562,60 @@ export default function MarketsPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="p-6 rounded-lg bg-muted/30 text-center">
-                        <p className="text-sm text-muted-foreground">
-                          No markets available yet.
-                        </p>
+                      <div className="rounded-lg bg-muted/30 p-6 text-center">
+                        <p className="text-muted-foreground text-sm">No markets available yet.</p>
                       </div>
                     )}
                   </div>
 
                   {/* Top Predictions */}
-                  <div className="bg-card/50 backdrop-blur rounded-lg p-4 border border-border">
-                    <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5 text-purple-600" />
+                  <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
+                    <h2 className="mb-3 flex items-center gap-2 font-bold text-lg">
+                      <TrendingUp className="h-5 w-5 text-purple-600" />
                       Hot Predictions
                     </h2>
                     {topPredictions.length > 0 ? (
                       <div className="space-y-2">
                         {topPredictions.map((prediction, idx) => {
                           const totalShares =
-                            (prediction.yesShares || 0) +
-                            (prediction.noShares || 0);
+                            (prediction.yesShares || 0) + (prediction.noShares || 0);
                           const yesPercent =
                             totalShares > 0
-                              ? ((prediction.yesShares || 0) / totalShares) *
-                                100
+                              ? ((prediction.yesShares || 0) / totalShares) * 100
                               : 50;
-                          const daysLeft = getDaysLeft(
-                            prediction.resolutionDate
-                          );
+                          const daysLeft = getDaysLeft(prediction.resolutionDate);
 
                           return (
                             <button
+                              type="button"
                               key={`hot-pred-${prediction.id}-${idx}`}
                               onClick={() => handlePredictionClick(prediction)}
-                              className="w-full p-3 rounded-lg text-left bg-muted/30 hover:bg-muted transition-all cursor-pointer border border-transparent hover:border-purple-500/30"
+                              className="w-full cursor-pointer rounded-lg border border-transparent bg-muted/30 p-3 text-left transition-all hover:border-purple-500/30 hover:bg-muted"
                             >
-                              <div className="font-medium text-sm mb-2 line-clamp-2">
+                              <div className="mb-2 line-clamp-2 font-medium text-sm">
                                 {prediction.text}
                                 {prediction.oracleCommitTxHash && (
-                                  <span className="ml-2 text-xs text-green-600" title="Committed to oracle">✓</span>
+                                  <span
+                                    className="ml-2 text-green-600 text-xs"
+                                    title="Committed to oracle"
+                                  >
+                                    ✓
+                                  </span>
                                 )}
                               </div>
                               <div className="flex items-center justify-between gap-2 text-xs">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-green-600 font-bold">
+                                  <span className="font-bold text-green-600">
                                     {yesPercent.toFixed(0)}% YES
                                   </span>
-                                  <span className="text-muted-foreground">
-                                    •
-                                  </span>
-                                  <span className="text-red-600 font-bold">
+                                  <span className="text-muted-foreground">•</span>
+                                  <span className="font-bold text-red-600">
                                     {(100 - yesPercent).toFixed(0)}% NO
                                   </span>
                                 </div>
                                 {daysLeft !== null && (
                                   <div className="flex items-center gap-1 text-muted-foreground">
-                                    <Clock className="w-3 h-3" />
+                                    <Clock className="h-3 w-3" />
                                     {daysLeft}d
                                   </div>
                                 )}
@@ -676,10 +625,8 @@ export default function MarketsPage() {
                         })}
                       </div>
                     ) : (
-                      <div className="p-6 rounded-lg bg-muted/30 text-center">
-                        <p className="text-sm text-muted-foreground">
-                          No active predictions yet.
-                        </p>
+                      <div className="rounded-lg bg-muted/30 p-6 text-center">
+                        <p className="text-muted-foreground text-sm">No active predictions yet.</p>
                       </div>
                     )}
                   </div>
@@ -687,16 +634,15 @@ export default function MarketsPage() {
 
                 {/* CTA for non-authenticated users */}
                 {!authenticated && (
-                  <div className="flex flex-col items-center justify-center py-16 px-4 bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 rounded-lg border border-[#0066FF]/20">
-                    <h3 className="text-2xl font-bold mb-2">
-                      Start Trading Today
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-6 text-center max-w-md">
+                  <div className="flex flex-col items-center justify-center rounded-lg border border-[#0066FF]/20 bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 px-4 py-16">
+                    <h3 className="mb-2 font-bold text-2xl">Start Trading Today</h3>
+                    <p className="mb-6 max-w-md text-center text-muted-foreground text-sm">
                       Log in to trade perpetual futures and prediction markets
                     </p>
                     <button
+                      type="button"
                       onClick={login}
-                      className="px-8 py-3 bg-[#0066FF] text-primary-foreground rounded-lg font-medium hover:bg-[#2952d9] transition-colors cursor-pointer shadow-lg shadow-[#0066FF]/20"
+                      className="cursor-pointer rounded-lg bg-[#0066FF] px-8 py-3 font-medium text-primary-foreground shadow-[#0066FF]/20 shadow-lg transition-colors hover:bg-[#2952d9]"
                     >
                       Connect Wallet
                     </button>
@@ -704,12 +650,7 @@ export default function MarketsPage() {
                 )}
               </div>
             ) : activeTab === 'futures' ? (
-              <div
-                id="futures-panel"
-                role="tabpanel"
-                aria-labelledby="futures-tab"
-                className="p-4"
-              >
+              <div id="futures-panel" role="tabpanel" aria-labelledby="futures-tab" className="p-4">
                 {/* Category P&L Card */}
                 {authenticated && perpPnLData && (
                   <div className="mb-6">
@@ -728,7 +669,7 @@ export default function MarketsPage() {
                 {/* Show positions section if authenticated and has positions */}
                 {authenticated && perpPositions.length > 0 && (
                   <>
-                    <h2 className="text-sm font-bold text-muted-foreground mb-3">
+                    <h2 className="mb-3 font-bold text-muted-foreground text-sm">
                       YOUR POSITIONS ({perpPositions.length})
                     </h2>
                     <div className="mb-6">
@@ -740,53 +681,44 @@ export default function MarketsPage() {
                   </>
                 )}
 
-                <h2 className="text-sm font-bold text-muted-foreground mb-3">
-                  ALL MARKETS
-                </h2>
+                <h2 className="mb-3 font-bold text-muted-foreground text-sm">ALL MARKETS</h2>
                 <div className="space-y-2">
                   {filteredPerpMarkets.map((market, idx) => (
                     <button
+                      type="button"
                       key={`market-${market.ticker}-${idx}`}
                       onClick={() => handleMarketClick(market)}
-                      className="w-full p-3 rounded text-left bg-muted/30 hover:bg-muted transition-all cursor-pointer"
+                      className="w-full cursor-pointer rounded bg-muted/30 p-3 text-left transition-all hover:bg-muted"
                     >
-                      <div className="flex justify-between mb-2">
+                      <div className="mb-2 flex justify-between">
                         <div>
                           <div className="font-bold">${market.ticker}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {market.name}
-                          </div>
+                          <div className="text-muted-foreground text-xs">{market.name}</div>
                         </div>
                         <div className="text-right">
-                          <div className="font-bold">
-                            {formatPrice(market.currentPrice)}
-                          </div>
+                          <div className="font-bold">{formatPrice(market.currentPrice)}</div>
                           <div
                             className={cn(
-                              'text-xs font-medium flex items-center gap-1 justify-end',
-                              market.change24h >= 0
-                                ? 'text-green-600'
-                                : 'text-red-600'
+                              'flex items-center justify-end gap-1 font-medium text-xs',
+                              market.change24h >= 0 ? 'text-green-600' : 'text-red-600'
                             )}
                           >
                             {market.change24h >= 0 ? (
-                              <TrendingUp className="w-3 h-3" />
+                              <TrendingUp className="h-3 w-3" />
                             ) : (
-                              <TrendingDown className="w-3 h-3" />
+                              <TrendingDown className="h-3 w-3" />
                             )}
                             {market.change24h >= 0 ? '+' : ''}
                             {market.changePercent24h.toFixed(2)}%
                           </div>
                         </div>
                       </div>
-                      <div className="flex gap-3 text-xs text-muted-foreground">
+                      <div className="flex gap-3 text-muted-foreground text-xs">
                         <div>Vol: {formatVolume(market.volume24h)}</div>
                         <div>OI: {formatVolume(market.openInterest)}</div>
                         <div
                           className={
-                            market.fundingRate.rate >= 0
-                              ? 'text-orange-500'
-                              : 'text-blue-500'
+                            market.fundingRate.rate >= 0 ? 'text-orange-500' : 'text-blue-500'
                           }
                         >
                           Fund: {(market.fundingRate.rate * 100).toFixed(4)}%
@@ -811,9 +743,7 @@ export default function MarketsPage() {
                       data={predictionPnLData}
                       loading={portfolioLoading}
                       error={portfolioError}
-                      onShare={() =>
-                        setShowCategoryPnLShareModal('predictions')
-                      }
+                      onShare={() => setShowCategoryPnLShareModal('predictions')}
                       onRefresh={refreshPortfolio}
                       lastUpdated={portfolioUpdatedAt}
                     />
@@ -823,7 +753,7 @@ export default function MarketsPage() {
                 {/* Show positions section if authenticated and has positions */}
                 {authenticated && predictionPositions.length > 0 && (
                   <>
-                    <h2 className="text-sm font-bold text-muted-foreground mb-3">
+                    <h2 className="mb-3 font-bold text-muted-foreground text-sm">
                       YOUR POSITIONS ({predictionPositions.length})
                     </h2>
                     <div className="mb-6">
@@ -835,41 +765,44 @@ export default function MarketsPage() {
                   </>
                 )}
 
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-bold text-muted-foreground">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="font-bold text-muted-foreground text-sm">
                     ACTIVE MARKETS ({activePredictions.length})
                   </h2>
 
                   {/* Sorting Controls */}
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() => setPredictionSort('trending')}
                       className={cn(
-                        'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+                        'rounded-full px-3 py-1.5 font-medium text-xs transition-all',
                         predictionSort === 'trending'
                           ? 'bg-[#0066FF] text-primary-foreground'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'
                       )}
                     >
-                      <Flame className="w-3 h-3 inline mr-1" />
+                      <Flame className="mr-1 inline h-3 w-3" />
                       Trending
                     </button>
                     <button
+                      type="button"
                       onClick={() => setPredictionSort('volume')}
                       className={cn(
-                        'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+                        'rounded-full px-3 py-1.5 font-medium text-xs transition-all',
                         predictionSort === 'volume'
                           ? 'bg-[#0066FF] text-primary-foreground'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'
                       )}
                     >
-                      <ArrowUpDown className="w-3 h-3 inline mr-1" />
+                      <ArrowUpDown className="mr-1 inline h-3 w-3" />
                       Volume
                     </button>
                     <button
+                      type="button"
                       onClick={() => setPredictionSort('newest')}
                       className={cn(
-                        'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+                        'rounded-full px-3 py-1.5 font-medium text-xs transition-all',
                         predictionSort === 'newest'
                           ? 'bg-[#0066FF] text-primary-foreground'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'
@@ -878,93 +811,89 @@ export default function MarketsPage() {
                       Newest
                     </button>
                     <button
+                      type="button"
                       onClick={() => setPredictionSort('ending-soon')}
                       className={cn(
-                        'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+                        'rounded-full px-3 py-1.5 font-medium text-xs transition-all',
                         predictionSort === 'ending-soon'
                           ? 'bg-[#0066FF] text-primary-foreground'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'
                       )}
                     >
-                      <Clock className="w-3 h-3 inline mr-1" />
+                      <Clock className="mr-1 inline h-3 w-3" />
                       Ending Soon
                     </button>
                   </div>
                 </div>
 
-                <div className="space-y-2 mb-6">
+                <div className="mb-6 space-y-2">
                   {activePredictions.map((prediction, idx) => {
                     const daysLeft = getDaysLeft(prediction.resolutionDate);
-                    const totalShares =
-                      (prediction.yesShares || 0) + (prediction.noShares || 0);
+                    const totalShares = (prediction.yesShares || 0) + (prediction.noShares || 0);
                     const yesPrice =
                       totalShares > 0
-                        ? (
-                            ((prediction.yesShares || 0) / totalShares) *
-                            100
-                          ).toFixed(1)
+                        ? (((prediction.yesShares || 0) / totalShares) * 100).toFixed(1)
                         : '50';
                     const noPrice =
                       totalShares > 0
-                        ? (
-                            ((prediction.noShares || 0) / totalShares) *
-                            100
-                          ).toFixed(1)
+                        ? (((prediction.noShares || 0) / totalShares) * 100).toFixed(1)
                         : '50';
                     const hasPosition =
-                      prediction.userPosition !== null &&
-                      prediction.userPosition !== undefined;
+                      prediction.userPosition !== null && prediction.userPosition !== undefined;
 
                     return (
                       <button
+                        type="button"
                         key={`prediction-${prediction.id}-${idx}`}
                         onClick={() => handlePredictionClick(prediction)}
                         className={cn(
-                          'w-full p-3 rounded text-left transition-all cursor-pointer',
+                          'w-full cursor-pointer rounded p-3 text-left transition-all',
                           hasPosition
                             ? 'bg-[#0066FF]/5 hover:bg-[#0066FF]/20'
                             : 'bg-muted/30 hover:bg-muted'
                         )}
                       >
-                        <div className="font-medium mb-2">
+                        <div className="mb-2 font-medium">
                           {prediction.text}
                           {prediction.oracleCommitTxHash && (
-                            <span className="ml-2 text-xs text-green-600" title="Committed to oracle">
+                            <span
+                              className="ml-2 text-green-600 text-xs"
+                              title="Committed to oracle"
+                            >
                               ✓ Committed
                             </span>
                           )}
                           {prediction.oracleRevealTxHash && (
-                            <span className="ml-2 text-xs text-purple-600" title="Revealed on-chain">
+                            <span
+                              className="ml-2 text-purple-600 text-xs"
+                              title="Revealed on-chain"
+                            >
                               ✓ Revealed
                             </span>
                           )}
                         </div>
                         <div className="flex flex-col gap-2">
-                          <div className="flex gap-3 text-xs items-center justify-between">
+                          <div className="flex items-center justify-between gap-3 text-xs">
                             <div className="flex gap-3 text-muted-foreground">
                               <div className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
+                                <Clock className="h-3 w-3" />
                                 {daysLeft !== null ? `${daysLeft}d` : 'Soon'}
                               </div>
                               <div className="flex items-center gap-1">
-                                <ArrowUpDown className="w-3 h-3" />
+                                <ArrowUpDown className="h-3 w-3" />
                                 {totalShares > 0 ? totalShares.toFixed(0) : '0'}
                               </div>
                             </div>
                             <div className="flex gap-2">
-                              <div className="text-green-600 font-medium">
-                                {yesPrice}% YES
-                              </div>
-                              <div className="text-red-600 font-medium">
-                                {noPrice}% NO
-                              </div>
+                              <div className="font-medium text-green-600">{yesPrice}% YES</div>
+                              <div className="font-medium text-red-600">{noPrice}% NO</div>
                             </div>
                           </div>
                           {hasPosition && prediction.userPosition && (
                             <div className="flex items-center gap-2 text-xs">
                               <span
                                 className={cn(
-                                  'px-2 py-0.5 rounded font-medium',
+                                  'rounded px-2 py-0.5 font-medium',
                                   prediction.userPosition.side === 'YES'
                                     ? 'bg-green-600/20 text-green-600'
                                     : 'bg-red-600/20 text-red-600'
@@ -981,13 +910,8 @@ export default function MarketsPage() {
                                     : 'text-red-600'
                                 )}
                               >
-                                {prediction.userPosition.unrealizedPnL >= 0
-                                  ? '+'
-                                  : ''}
-                                $
-                                {prediction.userPosition.unrealizedPnL.toFixed(
-                                  2
-                                )}
+                                {prediction.userPosition.unrealizedPnL >= 0 ? '+' : ''}$
+                                {prediction.userPosition.unrealizedPnL.toFixed(2)}
                               </span>
                             </div>
                           )}
@@ -999,7 +923,7 @@ export default function MarketsPage() {
 
                 {resolvedPredictions.length > 0 && (
                   <>
-                    <h2 className="text-sm font-bold text-muted-foreground mb-3 mt-6">
+                    <h2 className="mt-6 mb-3 font-bold text-muted-foreground text-sm">
                       RESOLVED ({resolvedPredictions.length})
                     </h2>
                     <div className="space-y-2">
@@ -1008,20 +932,16 @@ export default function MarketsPage() {
                         .map((prediction, idx) => (
                           <div
                             key={`resolved-${prediction.id}-${idx}`}
-                            className="p-3 rounded bg-muted/20 opacity-60"
+                            className="rounded bg-muted/20 p-3 opacity-60"
                           >
-                            <div className="font-medium mb-2">
-                              {prediction.text}
-                            </div>
+                            <div className="mb-2 font-medium">{prediction.text}</div>
                             <div className="flex gap-2 text-xs">
-                              <span className="text-muted-foreground">
-                                Resolved:
-                              </span>
+                              <span className="text-muted-foreground">Resolved:</span>
                               <span
                                 className={
                                   prediction.resolvedOutcome
-                                    ? 'text-green-600 font-bold'
-                                    : 'text-red-600 font-bold'
+                                    ? 'font-bold text-green-600'
+                                    : 'font-bold text-red-600'
                                 }
                               >
                                 {prediction.resolvedOutcome ? 'YES' : 'NO'}
@@ -1037,13 +957,12 @@ export default function MarketsPage() {
           </div>
 
           {!authenticated && activeTab !== 'dashboard' && (
-            <div className="shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] bg-muted/30 p-4 text-center">
-              <p className="text-sm text-muted-foreground mb-3">
-                Log in to trade
-              </p>
+            <div className="bg-muted/30 p-4 text-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+              <p className="mb-3 text-muted-foreground text-sm">Log in to trade</p>
               <button
+                type="button"
                 onClick={login}
-                className="px-6 py-3 bg-[#0066FF] text-primary-foreground rounded font-medium hover:bg-[#2952d9] transition-colors cursor-pointer"
+                className="cursor-pointer rounded bg-[#0066FF] px-6 py-3 font-medium text-primary-foreground transition-colors hover:bg-[#2952d9]"
               >
                 Connect Wallet
               </button>
@@ -1063,53 +982,56 @@ export default function MarketsPage() {
       </div>
 
       {/* Mobile/Tablet: Full width content */}
-      <div className="flex xl:hidden flex-col flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden xl:hidden">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-background shadow-sm flex-shrink-0">
-          <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+        <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
+          <div className="space-y-3 p-3 sm:space-y-4 sm:p-4">
             {/* Tabs */}
             <div
               role="tablist"
               aria-label="Market sections"
-              className="flex gap-0 overflow-x-auto scrollbar-hide"
+              className="scrollbar-hide flex gap-0 overflow-x-auto"
             >
               <button
+                type="button"
                 role="tab"
                 aria-selected={activeTab === 'dashboard'}
                 aria-controls="dashboard-panel"
                 onClick={() => setActiveTab('dashboard')}
                 className={cn(
-                  'flex-1 px-3 sm:px-4 py-2.5 transition-all whitespace-nowrap text-sm sm:text-base cursor-pointer',
+                  'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
                   activeTab === 'dashboard'
-                    ? 'text-foreground font-bold'
+                    ? 'font-bold text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 Dashboard
               </button>
               <button
+                type="button"
                 role="tab"
                 aria-selected={activeTab === 'futures'}
                 aria-controls="futures-panel"
                 onClick={() => router.push('/markets/perps')}
                 className={cn(
-                  'flex-1 px-3 sm:px-4 py-2.5 transition-all whitespace-nowrap text-sm sm:text-base cursor-pointer',
+                  'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
                   activeTab === 'futures'
-                    ? 'text-foreground font-bold'
+                    ? 'font-bold text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 Perps
               </button>
               <button
+                type="button"
                 role="tab"
                 aria-selected={activeTab === 'predictions'}
                 aria-controls="predictions-panel"
                 onClick={() => router.push('/markets/predictions')}
                 className={cn(
-                  'flex-1 px-3 sm:px-4 py-2.5 transition-all whitespace-nowrap text-sm sm:text-base cursor-pointer',
+                  'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
                   activeTab === 'predictions'
-                    ? 'text-foreground font-bold'
+                    ? 'font-bold text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
@@ -1121,24 +1043,18 @@ export default function MarketsPage() {
             {activeTab !== 'dashboard' && (
               <div className="relative">
                 <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"
+                  className="-translate-y-1/2 absolute top-1/2 left-3 h-5 w-5 text-muted-foreground"
                   aria-hidden="true"
                 />
                 <input
                   type="search"
-                  aria-label={
-                    activeTab === 'futures'
-                      ? 'Search tickers'
-                      : 'Search questions'
-                  }
+                  aria-label={activeTab === 'futures' ? 'Search tickers' : 'Search questions'}
                   placeholder={
-                    activeTab === 'futures'
-                      ? 'Search tickers...'
-                      : 'Search questions...'
+                    activeTab === 'futures' ? 'Search tickers...' : 'Search questions...'
                   }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded bg-muted/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:bg-muted focus:ring-2 focus:ring-[#0066FF]/30"
+                  className="w-full rounded bg-muted/50 py-3 pr-4 pl-10 text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
                 />
               </div>
             )}
@@ -1152,7 +1068,7 @@ export default function MarketsPage() {
               id="dashboard-panel"
               role="tabpanel"
               aria-labelledby="dashboard-tab"
-              className="p-4 space-y-6"
+              className="space-y-6 p-4"
             >
               {authenticated && (
                 <PortfolioPnLCard
@@ -1165,82 +1081,77 @@ export default function MarketsPage() {
               )}
 
               {/* Positions Overview - Only show if authenticated and has positions */}
-              {authenticated &&
-                (perpPositions.length > 0 ||
-                  predictionPositions.length > 0) && (
-                  <div className="bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 rounded-lg p-4 border border-[#0066FF]/20">
-                    <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-                      <div className="w-1 h-5 bg-[#0066FF] rounded-full" />
-                      Your Positions
-                    </h2>
+              {authenticated && (perpPositions.length > 0 || predictionPositions.length > 0) && (
+                <div className="rounded-lg border border-[#0066FF]/20 bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 p-4">
+                  <h2 className="mb-3 flex items-center gap-2 font-bold text-lg">
+                    <div className="h-5 w-1 rounded-full bg-[#0066FF]" />
+                    Your Positions
+                  </h2>
 
-                    {/* Perp Positions */}
-                    {perpPositions.length > 0 && (
-                      <div className="mb-4">
-                        <h3 className="text-sm font-semibold text-muted-foreground mb-2">
-                          PERPETUAL FUTURES ({perpPositions.length})
-                        </h3>
-                        <PerpPositionsList
-                          positions={perpPositions}
-                          onPositionClosed={handlePositionsRefresh}
-                        />
-                      </div>
-                    )}
+                  {/* Perp Positions */}
+                  {perpPositions.length > 0 && (
+                    <div className="mb-4">
+                      <h3 className="mb-2 font-semibold text-muted-foreground text-sm">
+                        PERPETUAL FUTURES ({perpPositions.length})
+                      </h3>
+                      <PerpPositionsList
+                        positions={perpPositions}
+                        onPositionClosed={handlePositionsRefresh}
+                      />
+                    </div>
+                  )}
 
-                    {/* Prediction Positions */}
-                    {predictionPositions.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-semibold text-muted-foreground mb-2">
-                          PREDICTIONS ({predictionPositions.length})
-                        </h3>
-                        <PredictionPositionsList
-                          positions={predictionPositions}
-                          onPositionSold={handlePositionsRefresh}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
+                  {/* Prediction Positions */}
+                  {predictionPositions.length > 0 && (
+                    <div>
+                      <h3 className="mb-2 font-semibold text-muted-foreground text-sm">
+                        PREDICTIONS ({predictionPositions.length})
+                      </h3>
+                      <PredictionPositionsList
+                        positions={predictionPositions}
+                        onPositionSold={handlePositionsRefresh}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Trending Perps */}
-              <div className="bg-card/50 backdrop-blur rounded-lg p-4 border border-border">
-                <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
+              <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
+                <h2 className="mb-3 flex items-center gap-2 font-bold text-lg">
+                  <TrendingUp className="h-5 w-5 text-green-600" />
                   Trending Perpetuals
                 </h2>
                 {trendingMarkets.length > 0 ? (
                   <div className="space-y-2">
                     {trendingMarkets.map((market, idx) => (
                       <button
+                        type="button"
                         key={`trending-mobile-${market.ticker}-${idx}`}
                         onClick={() => handleMarketClick(market)}
-                        className="w-full p-3 rounded-lg text-left bg-muted/30 hover:bg-muted transition-all cursor-pointer border border-transparent hover:border-[#0066FF]/30"
+                        className="w-full cursor-pointer rounded-lg border border-transparent bg-muted/30 p-3 text-left transition-all hover:border-[#0066FF]/30 hover:bg-muted"
                       >
-                        <div className="flex justify-between items-center">
+                        <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <div className="font-bold text-sm">
-                              ${market.ticker}
-                            </div>
-                            <div className="text-xs text-muted-foreground truncate">
+                            <div className="font-bold text-sm">${market.ticker}</div>
+                            <div className="truncate text-muted-foreground text-xs">
                               {market.name}
                             </div>
                           </div>
-                          <div className="text-right ml-3">
+                          <div className="ml-3 text-right">
                             <div className="font-bold text-sm">
                               {formatPrice(market.currentPrice)}
                             </div>
                             <div
                               className={cn(
-                                'text-xs font-bold flex items-center gap-1 justify-end',
-                                market.change24h >= 0
-                                  ? 'text-green-600'
-                                  : 'text-red-600'
+                                'flex items-center justify-end gap-1 font-bold text-xs',
+                                market.change24h >= 0 ? 'text-green-600' : 'text-red-600'
                               )}
                             >
                               {market.change24h >= 0 ? (
-                                <TrendingUp className="w-3 h-3" />
+                                <TrendingUp className="h-3 w-3" />
                               ) : (
-                                <TrendingDown className="w-3 h-3" />
+                                <TrendingDown className="h-3 w-3" />
                               )}
                               {market.change24h >= 0 ? '+' : ''}
                               {market.changePercent24h.toFixed(2)}%
@@ -1251,57 +1162,57 @@ export default function MarketsPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="p-6 rounded-lg bg-muted/30 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      No markets available yet.
-                    </p>
+                  <div className="rounded-lg bg-muted/30 p-6 text-center">
+                    <p className="text-muted-foreground text-sm">No markets available yet.</p>
                   </div>
                 )}
               </div>
 
               {/* Top Predictions */}
-              <div className="bg-card/50 backdrop-blur rounded-lg p-4 border border-border">
-                <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-purple-600" />
+              <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
+                <h2 className="mb-3 flex items-center gap-2 font-bold text-lg">
+                  <TrendingUp className="h-5 w-5 text-purple-600" />
                   Hot Predictions
                 </h2>
                 {topPredictions.length > 0 ? (
                   <div className="space-y-2">
                     {topPredictions.map((prediction, idx) => {
-                      const totalShares =
-                        (prediction.yesShares || 0) +
-                        (prediction.noShares || 0);
+                      const totalShares = (prediction.yesShares || 0) + (prediction.noShares || 0);
                       const yesPercent =
-                        totalShares > 0
-                          ? ((prediction.yesShares || 0) / totalShares) * 100
-                          : 50;
+                        totalShares > 0 ? ((prediction.yesShares || 0) / totalShares) * 100 : 50;
                       const daysLeft = getDaysLeft(prediction.resolutionDate);
 
                       return (
                         <button
+                          type="button"
                           key={`hot-pred-mobile-${prediction.id}-${idx}`}
                           onClick={() => handlePredictionClick(prediction)}
-                          className="w-full p-3 rounded-lg text-left bg-muted/30 hover:bg-muted transition-all cursor-pointer border border-transparent hover:border-purple-500/30"
+                          className="w-full cursor-pointer rounded-lg border border-transparent bg-muted/30 p-3 text-left transition-all hover:border-purple-500/30 hover:bg-muted"
                         >
-                          <div className="font-medium text-sm mb-2 line-clamp-2">
+                          <div className="mb-2 line-clamp-2 font-medium text-sm">
                             {prediction.text}
                             {prediction.oracleCommitTxHash && (
-                              <span className="ml-2 text-xs text-green-600" title="Committed to oracle">✓</span>
+                              <span
+                                className="ml-2 text-green-600 text-xs"
+                                title="Committed to oracle"
+                              >
+                                ✓
+                              </span>
                             )}
                           </div>
                           <div className="flex items-center justify-between gap-2 text-xs">
                             <div className="flex items-center gap-2">
-                              <span className="text-green-600 font-bold">
+                              <span className="font-bold text-green-600">
                                 {yesPercent.toFixed(0)}% YES
                               </span>
                               <span className="text-muted-foreground">•</span>
-                              <span className="text-red-600 font-bold">
+                              <span className="font-bold text-red-600">
                                 {(100 - yesPercent).toFixed(0)}% NO
                               </span>
                             </div>
                             {daysLeft !== null && (
                               <div className="flex items-center gap-1 text-muted-foreground">
-                                <Clock className="w-3 h-3" />
+                                <Clock className="h-3 w-3" />
                                 {daysLeft}d
                               </div>
                             )}
@@ -1311,26 +1222,23 @@ export default function MarketsPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="p-6 rounded-lg bg-muted/30 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      No active predictions yet.
-                    </p>
+                  <div className="rounded-lg bg-muted/30 p-6 text-center">
+                    <p className="text-muted-foreground text-sm">No active predictions yet.</p>
                   </div>
                 )}
               </div>
 
               {/* CTA for non-authenticated users */}
               {!authenticated && (
-                <div className="flex flex-col items-center justify-center py-16 px-4 bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 rounded-lg border border-[#0066FF]/20">
-                  <h3 className="text-2xl font-bold mb-2">
-                    Start Trading Today
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-6 text-center max-w-md">
+                <div className="flex flex-col items-center justify-center rounded-lg border border-[#0066FF]/20 bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 px-4 py-16">
+                  <h3 className="mb-2 font-bold text-2xl">Start Trading Today</h3>
+                  <p className="mb-6 max-w-md text-center text-muted-foreground text-sm">
                     Log in to trade perpetual futures and prediction markets
                   </p>
                   <button
+                    type="button"
                     onClick={login}
-                    className="px-8 py-3 bg-[#0066FF] text-primary-foreground rounded-lg font-medium hover:bg-[#2952d9] transition-colors cursor-pointer shadow-lg shadow-[#0066FF]/20"
+                    className="cursor-pointer rounded-lg bg-[#0066FF] px-8 py-3 font-medium text-primary-foreground shadow-[#0066FF]/20 shadow-lg transition-colors hover:bg-[#2952d9]"
                   >
                     Connect Wallet
                   </button>
@@ -1338,12 +1246,7 @@ export default function MarketsPage() {
               )}
             </div>
           ) : activeTab === 'futures' ? (
-            <div
-              id="futures-panel"
-              role="tabpanel"
-              aria-labelledby="futures-tab"
-              className="p-4"
-            >
+            <div id="futures-panel" role="tabpanel" aria-labelledby="futures-tab" className="p-4">
               {/* Category P&L Card */}
               {authenticated && perpPnLData && (
                 <div className="mb-6">
@@ -1362,7 +1265,7 @@ export default function MarketsPage() {
               {/* Show positions section if authenticated and has positions */}
               {authenticated && perpPositions.length > 0 && (
                 <>
-                  <h2 className="text-sm font-bold text-muted-foreground mb-3">
+                  <h2 className="mb-3 font-bold text-muted-foreground text-sm">
                     YOUR POSITIONS ({perpPositions.length})
                   </h2>
                   <div className="mb-6">
@@ -1374,53 +1277,44 @@ export default function MarketsPage() {
                 </>
               )}
 
-              <h2 className="text-sm font-bold text-muted-foreground mb-3">
-                ALL MARKETS
-              </h2>
+              <h2 className="mb-3 font-bold text-muted-foreground text-sm">ALL MARKETS</h2>
               <div className="space-y-2">
                 {filteredPerpMarkets.map((market, idx) => (
                   <button
+                    type="button"
                     key={`market-${market.ticker}-${idx}`}
                     onClick={() => handleMarketClick(market)}
-                    className="w-full p-3 rounded text-left bg-muted/30 hover:bg-muted transition-all cursor-pointer"
+                    className="w-full cursor-pointer rounded bg-muted/30 p-3 text-left transition-all hover:bg-muted"
                   >
-                    <div className="flex justify-between mb-2">
+                    <div className="mb-2 flex justify-between">
                       <div>
                         <div className="font-bold">${market.ticker}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {market.name}
-                        </div>
+                        <div className="text-muted-foreground text-xs">{market.name}</div>
                       </div>
                       <div className="text-right">
-                        <div className="font-bold">
-                          {formatPrice(market.currentPrice)}
-                        </div>
+                        <div className="font-bold">{formatPrice(market.currentPrice)}</div>
                         <div
                           className={cn(
-                            'text-xs font-medium flex items-center gap-1 justify-end',
-                            market.change24h >= 0
-                              ? 'text-green-600'
-                              : 'text-red-600'
+                            'flex items-center justify-end gap-1 font-medium text-xs',
+                            market.change24h >= 0 ? 'text-green-600' : 'text-red-600'
                           )}
                         >
                           {market.change24h >= 0 ? (
-                            <TrendingUp className="w-3 h-3" />
+                            <TrendingUp className="h-3 w-3" />
                           ) : (
-                            <TrendingDown className="w-3 h-3" />
+                            <TrendingDown className="h-3 w-3" />
                           )}
                           {market.change24h >= 0 ? '+' : ''}
                           {market.changePercent24h.toFixed(2)}%
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-3 text-xs text-muted-foreground">
+                    <div className="flex gap-3 text-muted-foreground text-xs">
                       <div>Vol: {formatVolume(market.volume24h)}</div>
                       <div>OI: {formatVolume(market.openInterest)}</div>
                       <div
                         className={
-                          market.fundingRate.rate >= 0
-                            ? 'text-orange-500'
-                            : 'text-blue-500'
+                          market.fundingRate.rate >= 0 ? 'text-orange-500' : 'text-blue-500'
                         }
                       >
                         Fund: {(market.fundingRate.rate * 100).toFixed(4)}%
@@ -1455,7 +1349,7 @@ export default function MarketsPage() {
               {/* Show positions section if authenticated and has positions */}
               {authenticated && predictionPositions.length > 0 && (
                 <>
-                  <h2 className="text-sm font-bold text-muted-foreground mb-3">
+                  <h2 className="mb-3 font-bold text-muted-foreground text-sm">
                     YOUR POSITIONS ({predictionPositions.length})
                   </h2>
                   <div className="mb-6">
@@ -1468,40 +1362,43 @@ export default function MarketsPage() {
               )}
 
               <div className="mb-3">
-                <h2 className="text-sm font-bold text-muted-foreground mb-2">
+                <h2 className="mb-2 font-bold text-muted-foreground text-sm">
                   ACTIVE MARKETS ({activePredictions.length})
                 </h2>
 
                 {/* Sorting Controls - Mobile responsive */}
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+                <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-2">
                   <button
+                    type="button"
                     onClick={() => setPredictionSort('trending')}
                     className={cn(
-                      'px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap flex-shrink-0',
+                      'flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-xs transition-all',
                       predictionSort === 'trending'
                         ? 'bg-[#0066FF] text-primary-foreground'
                         : 'bg-muted/50 text-muted-foreground hover:bg-muted'
                     )}
                   >
-                    <Flame className="w-3 h-3 inline mr-1" />
+                    <Flame className="mr-1 inline h-3 w-3" />
                     Trending
                   </button>
                   <button
+                    type="button"
                     onClick={() => setPredictionSort('volume')}
                     className={cn(
-                      'px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap flex-shrink-0',
+                      'flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-xs transition-all',
                       predictionSort === 'volume'
                         ? 'bg-[#0066FF] text-primary-foreground'
                         : 'bg-muted/50 text-muted-foreground hover:bg-muted'
                     )}
                   >
-                    <ArrowUpDown className="w-3 h-3 inline mr-1" />
+                    <ArrowUpDown className="mr-1 inline h-3 w-3" />
                     Volume
                   </button>
                   <button
+                    type="button"
                     onClick={() => setPredictionSort('newest')}
                     className={cn(
-                      'px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap flex-shrink-0',
+                      'flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-xs transition-all',
                       predictionSort === 'newest'
                         ? 'bg-[#0066FF] text-primary-foreground'
                         : 'bg-muted/50 text-muted-foreground hover:bg-muted'
@@ -1510,93 +1407,83 @@ export default function MarketsPage() {
                     Newest
                   </button>
                   <button
+                    type="button"
                     onClick={() => setPredictionSort('ending-soon')}
                     className={cn(
-                      'px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap flex-shrink-0',
+                      'flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-xs transition-all',
                       predictionSort === 'ending-soon'
                         ? 'bg-[#0066FF] text-primary-foreground'
                         : 'bg-muted/50 text-muted-foreground hover:bg-muted'
                     )}
                   >
-                    <Clock className="w-3 h-3 inline mr-1" />
+                    <Clock className="mr-1 inline h-3 w-3" />
                     Ending Soon
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-2 mb-6">
+              <div className="mb-6 space-y-2">
                 {activePredictions.map((prediction, idx) => {
                   const daysLeft = getDaysLeft(prediction.resolutionDate);
-                  const totalShares =
-                    (prediction.yesShares || 0) + (prediction.noShares || 0);
+                  const totalShares = (prediction.yesShares || 0) + (prediction.noShares || 0);
                   const yesPrice =
                     totalShares > 0
-                      ? (
-                          ((prediction.yesShares || 0) / totalShares) *
-                          100
-                        ).toFixed(1)
+                      ? (((prediction.yesShares || 0) / totalShares) * 100).toFixed(1)
                       : '50';
                   const noPrice =
                     totalShares > 0
-                      ? (
-                          ((prediction.noShares || 0) / totalShares) *
-                          100
-                        ).toFixed(1)
+                      ? (((prediction.noShares || 0) / totalShares) * 100).toFixed(1)
                       : '50';
                   const hasPosition =
-                    prediction.userPosition !== null &&
-                    prediction.userPosition !== undefined;
+                    prediction.userPosition !== null && prediction.userPosition !== undefined;
 
                   return (
                     <button
+                      type="button"
                       key={`prediction-${prediction.id}-${idx}`}
                       onClick={() => handlePredictionClick(prediction)}
                       className={cn(
-                        'w-full p-3 rounded text-left transition-all cursor-pointer',
+                        'w-full cursor-pointer rounded p-3 text-left transition-all',
                         hasPosition
                           ? 'bg-[#0066FF]/5 hover:bg-[#0066FF]/20'
                           : 'bg-muted/30 hover:bg-muted'
                       )}
                     >
-                      <div className="font-medium mb-2">
+                      <div className="mb-2 font-medium">
                         {prediction.text}
                         {prediction.oracleCommitTxHash && (
-                          <span className="ml-2 text-xs text-green-600" title="Committed to oracle">
+                          <span className="ml-2 text-green-600 text-xs" title="Committed to oracle">
                             ✓ Committed
                           </span>
                         )}
                         {prediction.oracleRevealTxHash && (
-                          <span className="ml-2 text-xs text-purple-600" title="Revealed on-chain">
+                          <span className="ml-2 text-purple-600 text-xs" title="Revealed on-chain">
                             ✓ Revealed
                           </span>
                         )}
                       </div>
                       <div className="flex flex-col gap-2">
-                        <div className="flex gap-3 text-xs items-center justify-between">
+                        <div className="flex items-center justify-between gap-3 text-xs">
                           <div className="flex gap-3 text-muted-foreground">
                             <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
+                              <Clock className="h-3 w-3" />
                               {daysLeft !== null ? `${daysLeft}d` : 'Soon'}
                             </div>
                             <div className="flex items-center gap-1">
-                              <ArrowUpDown className="w-3 h-3" />
+                              <ArrowUpDown className="h-3 w-3" />
                               {totalShares > 0 ? totalShares.toFixed(0) : '0'}
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <div className="text-green-600 font-medium">
-                              {yesPrice}% YES
-                            </div>
-                            <div className="text-red-600 font-medium">
-                              {noPrice}% NO
-                            </div>
+                            <div className="font-medium text-green-600">{yesPrice}% YES</div>
+                            <div className="font-medium text-red-600">{noPrice}% NO</div>
                           </div>
                         </div>
                         {hasPosition && prediction.userPosition && (
                           <div className="flex items-center gap-2 text-xs">
                             <span
                               className={cn(
-                                'px-2 py-0.5 rounded font-medium',
+                                'rounded px-2 py-0.5 font-medium',
                                 prediction.userPosition.side === 'YES'
                                   ? 'bg-green-600/20 text-green-600'
                                   : 'bg-red-600/20 text-red-600'
@@ -1613,10 +1500,7 @@ export default function MarketsPage() {
                                   : 'text-red-600'
                               )}
                             >
-                              {prediction.userPosition.unrealizedPnL >= 0
-                                ? '+'
-                                : ''}
-                              $
+                              {prediction.userPosition.unrealizedPnL >= 0 ? '+' : ''}$
                               {prediction.userPosition.unrealizedPnL.toFixed(2)}
                             </span>
                           </div>
@@ -1629,7 +1513,7 @@ export default function MarketsPage() {
 
               {resolvedPredictions.length > 0 && (
                 <>
-                  <h2 className="text-sm font-bold text-muted-foreground mb-3 mt-6">
+                  <h2 className="mt-6 mb-3 font-bold text-muted-foreground text-sm">
                     RESOLVED ({resolvedPredictions.length})
                   </h2>
                   <div className="space-y-2">
@@ -1638,20 +1522,16 @@ export default function MarketsPage() {
                       .map((prediction, idx) => (
                         <div
                           key={`resolved-${prediction.id}-${idx}`}
-                          className="p-3 rounded bg-muted/20 opacity-60"
+                          className="rounded bg-muted/20 p-3 opacity-60"
                         >
-                          <div className="font-medium mb-2">
-                            {prediction.text}
-                          </div>
+                          <div className="mb-2 font-medium">{prediction.text}</div>
                           <div className="flex gap-2 text-xs">
-                            <span className="text-muted-foreground">
-                              Resolved:
-                            </span>
+                            <span className="text-muted-foreground">Resolved:</span>
                             <span
                               className={
                                 prediction.resolvedOutcome
-                                  ? 'text-green-600 font-bold'
-                                  : 'text-red-600 font-bold'
+                                  ? 'font-bold text-green-600'
+                                  : 'font-bold text-red-600'
                               }
                             >
                               {prediction.resolvedOutcome ? 'YES' : 'NO'}
@@ -1667,13 +1547,12 @@ export default function MarketsPage() {
         </div>
 
         {!authenticated && activeTab !== 'dashboard' && (
-          <div className="shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] bg-muted/30 p-4 text-center">
-            <p className="text-sm text-muted-foreground mb-3">
-              Log in to trade
-            </p>
+          <div className="bg-muted/30 p-4 text-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <p className="mb-3 text-muted-foreground text-sm">Log in to trade</p>
             <button
+              type="button"
               onClick={login}
-              className="px-6 py-3 bg-[#0066FF] text-primary-foreground rounded font-medium hover:bg-[#2952d9] transition-colors cursor-pointer"
+              className="cursor-pointer rounded bg-[#0066FF] px-6 py-3 font-medium text-primary-foreground transition-colors hover:bg-[#2952d9]"
             >
               Connect Wallet
             </button>

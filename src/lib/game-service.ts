@@ -1,11 +1,11 @@
 /**
  * Game Service - API Wrapper
- * 
+ *
  * Provides access to game data for API routes.
  * Game tick runs automatically via cron (production) or local simulator (development).
- * 
+ *
  * Note: All operations query the database directly, which is updated by game tick.
- * 
+ *
  * Vercel-compatible: No filesystem access, all data from database.
  */
 
@@ -63,16 +63,16 @@ class GameService {
   async getRealtimePosts(limit = 100, offset = 0, actorId?: string) {
     // On Vercel: Read from database instead of filesystem
     // The daemon writes posts to database, so we can query them directly
-    const posts = actorId 
+    const posts = actorId
       ? await db().getPostsByActor(actorId, limit)
       : await db().getRecentPosts(limit, offset);
-    
+
     if (!posts || posts.length === 0) {
       return null;
     }
 
     return {
-      posts: posts.map(post => ({
+      posts: posts.map((post) => ({
         id: post.id,
         content: post.content,
         authorId: post.authorId,

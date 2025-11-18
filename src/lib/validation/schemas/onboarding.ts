@@ -1,9 +1,13 @@
-import { z } from 'zod'
-import { UsernameSchema } from './common'
+import { z } from 'zod';
+import { UsernameSchema } from './common';
 
 export const OnboardingProfileSchema = z.object({
   username: UsernameSchema,
-  displayName: z.string().trim().min(1, 'Display name is required').max(80, 'Display name must be at most 80 characters'),
+  displayName: z
+    .string()
+    .trim()
+    .min(1, 'Display name is required')
+    .max(80, 'Display name must be at most 80 characters'),
   bio: z
     .string()
     .trim()
@@ -38,4 +42,4 @@ export const OnboardingProfileSchema = z.object({
   // Legal acceptance (required for GDPR compliance)
   tosAccepted: z.boolean().optional(),
   privacyPolicyAccepted: z.boolean().optional(),
-})
+});

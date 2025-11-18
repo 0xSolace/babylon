@@ -1,16 +1,16 @@
-'use client'
+'use client';
 
-import { PnLShareModal } from './PnLShareModal'
-import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL'
-import type { User } from '@/stores/authStore'
+import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL';
+import type { User } from '@/stores/authStore';
+import { PnLShareModal } from './PnLShareModal';
 
-interface PortfolioPnLShareModalProps {
-  isOpen: boolean
-  onClose: () => void
-  data: PortfolioPnLSnapshot | null | undefined
-  user: User | null
-  lastUpdated?: Date | null | number
-}
+type PortfolioPnLShareModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  data: PortfolioPnLSnapshot | null | undefined;
+  user: User | null;
+  lastUpdated?: Date | null | number;
+};
 
 export function PortfolioPnLShareModal({
   isOpen,
@@ -26,6 +26,5 @@ export function PortfolioPnLShareModal({
       portfolioData={data ?? null}
       user={user}
     />
-  )
+  );
 }
-

@@ -1,14 +1,14 @@
 /**
  * Agent-to-User Feedback API
- * 
+ *
  * @route POST /api/feedback/agent-to-user - Submit agent feedback for user
  * @route GET /api/feedback/agent-to-user - Get agent feedback for user
  * @access Public
- * 
+ *
  * @description
  * Allows agents to rate users after interactions. Useful for tracking user
  * behavior, cooperation, and interaction quality. GET returns feedback history.
- * 
+ *
  * @openapi
  * /api/feedback/agent-to-user:
  *   post:
@@ -76,7 +76,7 @@
  *         description: Feedback retrieved successfully
  *       400:
  *         description: Invalid query parameters
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/feedback/agent-to-user', {
@@ -91,14 +91,14 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
-import { requireUserByIdentifier } from '@/lib/users/user-lookup'
-import { logger } from '@/lib/logger'
-import { generateSnowflakeId } from '@/lib/snowflake'
-import { z } from 'zod'
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import { requireUserByIdentifier } from '@/lib/users/user-lookup';
+import type { Prisma } from '@prisma/client';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const AgentToUserFeedbackSchema = z.object({
   agentId: z.string().min(1, 'agentId is required'),
@@ -109,24 +109,24 @@ const AgentToUserFeedbackSchema = z.object({
   category: z.string().min(1).optional(),
   interactionType: z.string().min(1).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-})
+});
 
 const AgentToUserFeedbackQuerySchema = z.object({
   userId: z.string().min(1, 'userId is required'),
   limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
-})
+});
 
 export async function POST(request: NextRequest) {
-  const json = await request.json()
-  const parsed = AgentToUserFeedbackSchema.parse(json)
+  const json = await request.json();
+  const parsed = AgentToUserFeedbackSchema.parse(json);
 
-  const body = parsed
+  const body = parsed;
 
-  const fromAgent = await requireUserByIdentifier(body.agentId)
-  const toUser = await requireUserByIdentifier(body.toUserId)
+  const fromAgent = await requireUserByIdentifier(body.agentId);
+  const toUser = await requireUserByIdentifier(body.toUserId);
 
-  const now = new Date()
+  const now = new Date();
   const feedback = await prisma.feedback.create({
     data: {
       id: await generateSnowflakeId(),
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
       createdAt: now,
       updatedAt: now,
     },
-  })
+  });
 
   logger.info('Agent-to-user feedback created', {
     feedbackId: feedback.id,
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
     toUserId: toUser.id,
     score: body.score,
     rating: body.rating,
-  })
+  });
 
   return NextResponse.json(
     {
@@ -165,27 +165,33 @@ export async function POST(request: NextRequest) {
       },
     },
     { status: 201 }
-  )
+  );
 }
 
 /**
  * GET endpoint to retrieve feedback for a user from agents
  */
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const userIdParam = searchParams.get('userId')!
-  const limitParam = searchParams.get('limit')
-  const offsetParam = searchParams.get('offset')
+  const { searchParams } = new URL(request.url);
+  const userIdParam = searchParams.get('userId');
+  if (!userIdParam) {
+    return NextResponse.json(
+      { success: false, error: 'Missing userId parameter' },
+      { status: 400 }
+    );
+  }
+  const limitParam = searchParams.get('limit');
+  const offsetParam = searchParams.get('offset');
 
   const queryParse = AgentToUserFeedbackQuerySchema.parse({
     userId: userIdParam,
     limit: limitParam ? Number(limitParam) : undefined,
     offset: offsetParam ? Number(offsetParam) : undefined,
-  })
+  });
 
-  const { userId, limit, offset } = queryParse
+  const { userId, limit, offset } = queryParse;
 
-  const user = await requireUserByIdentifier(userId)
+  const user = await requireUserByIdentifier(userId);
 
   const feedback = await prisma.feedback.findMany({
     where: {
@@ -210,7 +216,7 @@ export async function GET(request: NextRequest) {
     },
     take: limit,
     skip: offset,
-  })
+  });
 
   const total = await prisma.feedback.count({
     where: {
@@ -219,7 +225,7 @@ export async function GET(request: NextRequest) {
         in: ['agent_to_user', 'game', 'trade', 'chat'],
       },
     },
-  })
+  });
 
   return NextResponse.json({
     feedback,
@@ -229,5 +235,5 @@ export async function GET(request: NextRequest) {
       offset,
       hasMore: offset + limit < total,
     },
-  })
+  });
 }

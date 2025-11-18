@@ -1,13 +1,13 @@
 /**
  * Admin Group Messages API
- * 
+ *
  * @route GET /api/admin/groups/[id]/messages - Get group messages
  * @access Admin
- * 
+ *
  * @description
  * Returns all messages in a specific group chat for admin verification
  * and debugging. Includes pagination support.
- * 
+ *
  * @openapi
  * /api/admin/groups/{id}/messages:
  *   get:
@@ -50,7 +50,7 @@
  *         description: Admin access required
  *       404:
  *         description: Group not found
- * 
+ *
  * @example
  * ```typescript
  * const { messages } = await fetch(`/api/admin/groups/${groupId}/messages`, {
@@ -59,134 +59,126 @@
  * ```
  */
 
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { authenticate } from '@/lib/api/auth-middleware';
 import { withErrorHandling } from '@/lib/errors/error-handler';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 /**
  * GET /api/admin/groups/[id]/messages
  * Get all messages in a group chat
  * Admin only
  */
-export const GET = withErrorHandling(async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) => {
-  const user = await authenticate(request);
-  
-  // Check admin permissions
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.userId },
-    select: { isAdmin: true },
-  });
+export const GET = withErrorHandling(
+  async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
+    const user = await authenticate(request);
 
-  if (!dbUser?.isAdmin) {
-    return NextResponse.json(
-      { error: 'Admin access required' },
-      { status: 403 }
-    );
-  }
+    // Check admin permissions
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { isAdmin: true },
+    });
 
-  const { id: chatId } = await context.params;
+    if (!dbUser?.isAdmin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
 
-  // Get query parameters
-  const { searchParams } = new URL(request.url);
-  const limit = parseInt(searchParams.get('limit') || '100');
-  const offset = parseInt(searchParams.get('offset') || '0');
+    const { id: chatId } = await context.params;
 
-  // Get chat details
-  const chat = await prisma.chat.findUnique({
-    where: { id: chatId },
-    select: {
-      id: true,
-      name: true,
-      isGroup: true,
-      createdAt: true,
-    },
-  });
+    // Get query parameters
+    const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get('limit') || '100', 10);
+    const offset = parseInt(searchParams.get('offset') || '0', 10);
 
-  if (!chat) {
-    return NextResponse.json(
-      { error: 'Chat not found' },
-      { status: 404 }
-    );
-  }
-
-  // Get total message count
-  const totalMessages = await prisma.message.count({
-    where: { chatId },
-  });
-
-  // Get messages with pagination
-  const messages = await prisma.message.findMany({
-    where: { chatId },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    skip: offset,
-    take: limit,
-  });
-
-  // Get sender details
-  const senderIds = [...new Set(messages.map(m => m.senderId))];
-  const [users, actors] = await Promise.all([
-    prisma.user.findMany({
-      where: { id: { in: senderIds } },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        isActor: true,
-        profileImageUrl: true,
-      },
-    }),
-    prisma.actor.findMany({
-      where: { id: { in: senderIds } },
+    // Get chat details
+    const chat = await prisma.chat.findUnique({
+      where: { id: chatId },
       select: {
         id: true,
         name: true,
-        profileImageUrl: true,
+        isGroup: true,
+        createdAt: true,
       },
-    }),
-  ]);
+    });
 
-  const enrichedMessages = messages.map(m => {
-    const user = users.find(u => u.id === m.senderId);
-    const actor = actors.find(a => a.id === m.senderId);
-    
-    return {
-      id: m.id,
-      content: m.content,
-      createdAt: m.createdAt,
-      sender: {
-        id: m.senderId,
-        name: user?.displayName || user?.username || actor?.name || 'Unknown',
-        username: user?.username || null,
-        isNPC: !!actor || user?.isActor,
-        profileImageUrl: user?.profileImageUrl || actor?.profileImageUrl,
-      },
-    };
-  });
+    if (!chat) {
+      return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
+    }
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      chat: {
-        id: chat.id,
-        name: chat.name,
-        isGroup: chat.isGroup,
-        createdAt: chat.createdAt,
-      },
-      messages: enrichedMessages,
-      pagination: {
-        total: totalMessages,
-        offset,
-        limit,
-        hasMore: offset + limit < totalMessages,
-      },
-    },
-  });
-});
+    // Get total message count
+    const totalMessages = await prisma.message.count({
+      where: { chatId },
+    });
 
+    // Get messages with pagination
+    const messages = await prisma.message.findMany({
+      where: { chatId },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      skip: offset,
+      take: limit,
+    });
+
+    // Get sender details
+    const senderIds = [...new Set(messages.map((m) => m.senderId))];
+    const [users, actors] = await Promise.all([
+      prisma.user.findMany({
+        where: { id: { in: senderIds } },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          isActor: true,
+          profileImageUrl: true,
+        },
+      }),
+      prisma.actor.findMany({
+        where: { id: { in: senderIds } },
+        select: {
+          id: true,
+          name: true,
+          profileImageUrl: true,
+        },
+      }),
+    ]);
+
+    const enrichedMessages = messages.map((m) => {
+      const user = users.find((u) => u.id === m.senderId);
+      const actor = actors.find((a) => a.id === m.senderId);
+
+      return {
+        id: m.id,
+        content: m.content,
+        createdAt: m.createdAt,
+        sender: {
+          id: m.senderId,
+          name: user?.displayName || user?.username || actor?.name || 'Unknown',
+          username: user?.username || null,
+          isNPC: !!actor || user?.isActor,
+          profileImageUrl: user?.profileImageUrl || actor?.profileImageUrl,
+        },
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        chat: {
+          id: chat.id,
+          name: chat.name,
+          isGroup: chat.isGroup,
+          createdAt: chat.createdAt,
+        },
+        messages: enrichedMessages,
+        pagination: {
+          total: totalMessages,
+          offset,
+          limit,
+          hasMore: offset + limit < totalMessages,
+        },
+      },
+    });
+  }
+);

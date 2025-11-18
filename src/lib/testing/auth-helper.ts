@@ -1,17 +1,17 @@
 /**
  * Authentication Helper for Load Testing
- * 
+ *
  * Creates test user and generates auth tokens for load testing
  */
 
 import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
 
-export interface TestUser {
+export type TestUser = {
   userId: string;
   username: string;
   authToken: string;
-}
+};
 
 /**
  * Create a test user for load testing
@@ -73,4 +73,3 @@ export async function cleanupTestUsers(usernames: string[]): Promise<void> {
     },
   });
 }
-

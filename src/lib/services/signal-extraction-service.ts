@@ -1,57 +1,57 @@
 /**
  * Signal Extraction Service
- * 
+ *
  * **INTERNAL USE ONLY - NOT EXPOSED TO AGENTS**
- * 
+ *
  * Aggregates and analyzes signal from feed posts for:
  * - Internal game engine decision making
  * - NPC trading decisions
  * - Admin debugging and monitoring
  * - Testing and validation
- * 
+ *
  * ⚠️ SECURITY: This service reveals weighted predictions and should NEVER
  * be exposed via public API. Agents must analyze the raw feed themselves.
- * 
+ *
  * Weights evidence by source reliability and tracks signal strength over time.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 
-export interface SignalAnalysis {
+export type SignalAnalysis = {
   marketId: string;
   questionText: string;
-  
+
   // Aggregated signal
-  yesSignal: number;      // Weighted YES evidence
-  noSignal: number;       // Weighted NO evidence
-  netSignal: number;      // yesSignal - noSignal
+  yesSignal: number; // Weighted YES evidence
+  noSignal: number; // Weighted NO evidence
+  netSignal: number; // yesSignal - noSignal
   signalStrength: number; // 0-1, how strong the evidence is
-  
+
   // Signal distribution
   totalPosts: number;
-  signalPosts: number;  // Posts with clear signal
-  noisePosts: number;   // Posts without signal
-  signalRatio: number;  // signalPosts / totalPosts
-  
+  signalPosts: number; // Posts with clear signal
+  noisePosts: number; // Posts without signal
+  signalRatio: number; // signalPosts / totalPosts
+
   // By source type
   insiderSignal: { yes: number; no: number };
   expertSignal: { yes: number; no: number };
   journalistSignal: { yes: number; no: number };
-  
+
   // Top sources
   topYesSources: Array<{ name: string; reliability: number; weight: number }>;
   topNoSources: Array<{ name: string; reliability: number; weight: number }>;
-  
+
   // Temporal signal
   earlySignal: { yes: number; no: number }; // Days 1-10
-  midSignal: { yes: number; no: number };   // Days 11-20
-  lateSignal: { yes: number; no: number };  // Days 21-30
-  
+  midSignal: { yes: number; no: number }; // Days 11-20
+  lateSignal: { yes: number; no: number }; // Days 21-30
+
   // Recommendation
   suggestedOutcome: 'YES' | 'NO' | 'UNCERTAIN';
   confidence: number; // 0-1, how confident the suggestion is
-}
+};
 
 export class SignalExtractionService {
   /**
@@ -94,9 +94,9 @@ export class SignalExtractionService {
       },
       take: 1000, // Limit to prevent huge queries
     });
-    
+
     // Get author information separately
-    const authorIds = [...new Set(posts.map(p => p.authorId))];
+    const authorIds = [...new Set(posts.map((p) => p.authorId))];
     const users = await prisma.user.findMany({
       where: {
         id: { in: authorIds },
@@ -107,15 +107,15 @@ export class SignalExtractionService {
         isActor: true,
       },
     });
-    const userMap = new Map(users.map(u => [u.id, u]));
+    const userMap = new Map(users.map((u) => [u.id, u]));
 
     // Get actor reliability scores for NPC posts
-    const npcPosts = posts.filter(p => {
+    const npcPosts = posts.filter((p) => {
       const user = userMap.get(p.authorId);
       return user?.isActor;
     });
-    const npcIds = npcPosts.map(p => p.authorId);
-    
+    const npcIds = npcPosts.map((p) => p.authorId);
+
     const actors = await prisma.actor.findMany({
       where: {
         id: { in: npcIds },
@@ -127,26 +127,34 @@ export class SignalExtractionService {
       },
     });
 
-    const actorMap = new Map(actors.map(a => [a.id, a]));
+    const actorMap = new Map(actors.map((a) => [a.id, a]));
 
     // Initialize signal accumulators
     let yesSignal = 0;
     let noSignal = 0;
-    
+
     const byType = {
       insider: { yes: 0, no: 0 },
       expert: { yes: 0, no: 0 },
       journalist: { yes: 0, no: 0 },
     };
-    
+
     const byPeriod = {
       early: { yes: 0, no: 0 },
       mid: { yes: 0, no: 0 },
       late: { yes: 0, no: 0 },
     };
 
-    const yesSources: Array<{ name: string; reliability: number; weight: number }> = [];
-    const noSources: Array<{ name: string; reliability: number; weight: number }> = [];
+    const yesSources: Array<{
+      name: string;
+      reliability: number;
+      weight: number;
+    }> = [];
+    const noSources: Array<{
+      name: string;
+      reliability: number;
+      weight: number;
+    }> = [];
 
     let signalPosts = 0;
 
@@ -163,15 +171,18 @@ export class SignalExtractionService {
       // Get actor reliability
       const actor = actorMap.get(post.authorId);
       if (!actor) continue;
-      
-      const reliability = this.getDefaultReliability(actor.role || null);
-      
+
+      const reliability = SignalExtractionService.getDefaultReliability(actor.role || null);
+
       // Use sentiment as a proxy for signal direction
       // Positive sentiment = YES signal, Negative sentiment = NO signal
-      const sentiment = post.sentiment === 'positive' ? 0.8 : 
-                       post.sentiment === 'negative' ? -0.8 :
-                       post.biasScore || 0;
-      
+      const sentiment =
+        post.sentiment === 'positive'
+          ? 0.8
+          : post.sentiment === 'negative'
+            ? -0.8
+            : post.biasScore || 0;
+
       // Only count posts with clear signal (abs sentiment > 0.3)
       if (Math.abs(sentiment) < 0.3) {
         continue; // Neutral posts don't provide signal
@@ -181,11 +192,18 @@ export class SignalExtractionService {
 
       // Default clue strength based on post type and day
       const dayNum = post.dayNumber || 1;
-      const clueStrength = post.type === 'article' ? 0.8 :  // Articles are stronger signal
-                          dayNum > 20 ? 0.7 :                // Late game posts stronger
-                          dayNum > 10 ? 0.5 :                // Mid game moderate
-                          0.3;                               // Early game weak
-      
+      const clueStrength =
+        post.type === 'article'
+          ? 0.8
+          : // Articles are stronger signal
+            dayNum > 20
+            ? 0.7
+            : // Late game posts stronger
+              dayNum > 10
+              ? 0.5
+              : // Mid game moderate
+                0.3; // Early game weak
+
       // Calculate signal weight (reliability × clue strength × sentiment strength)
       const weight = reliability * clueStrength * Math.abs(sentiment);
 
@@ -233,7 +251,7 @@ export class SignalExtractionService {
     const totalPosts = posts.length;
     const noisePosts = totalPosts - signalPosts;
     const signalRatio = totalPosts > 0 ? signalPosts / totalPosts : 0;
-    
+
     const netSignal = yesSignal - noSignal;
     const totalSignal = yesSignal + noSignal;
     const signalStrength = totalSignal > 0 ? Math.abs(netSignal) / totalSignal : 0;
@@ -252,15 +270,19 @@ export class SignalExtractionService {
     yesSources.sort((a, b) => b.weight - a.weight);
     noSources.sort((a, b) => b.weight - a.weight);
 
-    logger.info('Signal extraction complete', {
-      questionNumber,
-      yesSignal: yesSignal.toFixed(2),
-      noSignal: noSignal.toFixed(2),
-      netSignal: netSignal.toFixed(2),
-      signalRatio: (signalRatio * 100).toFixed(1) + '%',
-      suggestedOutcome,
-      confidence: (confidence * 100).toFixed(1) + '%',
-    }, 'SignalExtractionService');
+    logger.info(
+      'Signal extraction complete',
+      {
+        questionNumber,
+        yesSignal: yesSignal.toFixed(2),
+        noSignal: noSignal.toFixed(2),
+        netSignal: netSignal.toFixed(2),
+        signalRatio: `${(signalRatio * 100).toFixed(1)}%`,
+        suggestedOutcome,
+        confidence: `${(confidence * 100).toFixed(1)}%`,
+      },
+      'SignalExtractionService'
+    );
 
     return {
       marketId: question.id,
@@ -287,44 +309,6 @@ export class SignalExtractionService {
   }
 
   /**
-   * Get default reliability score based on actor role
-   * TODO: Replace with actual tracked reliability from database
-   */
-  private static getDefaultReliability(role: string | null): number {
-    if (!role) return 0.5;
-
-    const roleLower = role.toLowerCase();
-    
-    // Insiders and whistleblowers are most reliable
-    if (roleLower.includes('insider') || roleLower.includes('whistleblower')) {
-      return 0.9;
-    }
-    
-    // Experts are moderately reliable
-    if (roleLower.includes('expert') || roleLower.includes('analyst')) {
-      return 0.7;
-    }
-    
-    // Journalists are somewhat reliable
-    if (roleLower.includes('journalist') || roleLower.includes('reporter')) {
-      return 0.6;
-    }
-    
-    // Politicians are less reliable
-    if (roleLower.includes('politician') || roleLower.includes('senator')) {
-      return 0.3;
-    }
-    
-    // Deceivers and conspiracy theorists are unreliable
-    if (roleLower.includes('deceiver') || roleLower.includes('conspiracy')) {
-      return 0.1;
-    }
-    
-    // Default moderate reliability
-    return 0.5;
-  }
-
-  /**
    * Get simplified signal summary for quick agent consumption
    */
   static async getQuickSignal(questionNumber: number): Promise<{
@@ -333,8 +317,8 @@ export class SignalExtractionService {
     yesEvidence: number;
     noEvidence: number;
   }> {
-    const analysis = await this.extractMarketSignal(questionNumber);
-    
+    const analysis = await SignalExtractionService.extractMarketSignal(questionNumber);
+
     return {
       outcome: analysis.suggestedOutcome,
       confidence: analysis.confidence,
@@ -343,4 +327,3 @@ export class SignalExtractionService {
     };
   }
 }
-

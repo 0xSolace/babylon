@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating rumors and unconfirmed information for game world.
- * 
+ *
  * Creates speculative rumors circulating in the game world about events,
  * actors, or market movements. Adds intrigue and uncertainty while
  * maintaining narrative consistency.
- * 
+ *
  * Returns XML with rumor content.
  */
 export const rumor = definePrompt({
@@ -43,5 +43,5 @@ Respond with XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

@@ -6,9 +6,9 @@
  * and takes 1-5 minutes to run due to game generation.
  */
 
-import { describe, test, expect, beforeAll, setDefaultTimeout } from 'bun:test';
-import { GameGenerator } from '../GameGenerator';
+import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { GeneratedGame } from '../GameGenerator';
+import { GameGenerator } from '../GameGenerator';
 
 // Set timeout to 10 minutes for LLM-based generation
 // Retry loops when LLM returns invalid JSON can cause 6-7 minute runs
@@ -37,7 +37,7 @@ describe('Game Output Validation', () => {
 
     test('has all 30 days in timeline', () => {
       expect(game.timeline.length).toBe(30);
-      
+
       // Verify days are 1-30
       game.timeline.forEach((day, i) => {
         expect(day.day).toBe(i + 1);
@@ -69,7 +69,7 @@ describe('Game Output Validation', () => {
     });
 
     test('all questions have outcomes', () => {
-      game.setup.questions.forEach(q => {
+      game.setup.questions.forEach((q) => {
         expect(typeof q.outcome).toBe('boolean');
       });
     });
@@ -78,14 +78,14 @@ describe('Game Output Validation', () => {
   describe('Content Validation', () => {
     test('events reference valid actors', () => {
       const allActorIds = [
-        ...game.setup.mainActors.map(a => a.id),
-        ...game.setup.supportingActors.map(a => a.id),
-        ...game.setup.extras.map(a => a.id),
+        ...game.setup.mainActors.map((a) => a.id),
+        ...game.setup.supportingActors.map((a) => a.id),
+        ...game.setup.extras.map((a) => a.id),
       ];
 
-      game.timeline.forEach(day => {
-        day.events.forEach(event => {
-          event.actors.forEach(actorId => {
+      game.timeline.forEach((day) => {
+        day.events.forEach((event) => {
+          event.actors.forEach((actorId) => {
             expect(allActorIds).toContain(actorId);
           });
         });
@@ -93,21 +93,21 @@ describe('Game Output Validation', () => {
     });
 
     test('each day has events', () => {
-      game.timeline.forEach(day => {
+      game.timeline.forEach((day) => {
         expect(day.events.length).toBeGreaterThan(0);
       });
     });
 
     test('group chats have valid members', () => {
       const allActorIds = [
-        ...game.setup.mainActors.map(a => a.id),
-        ...game.setup.supportingActors.map(a => a.id),
-        ...game.setup.extras.map(a => a.id),
+        ...game.setup.mainActors.map((a) => a.id),
+        ...game.setup.supportingActors.map((a) => a.id),
+        ...game.setup.extras.map((a) => a.id),
       ];
 
-      game.setup.groupChats.forEach(chat => {
+      game.setup.groupChats.forEach((chat) => {
         expect(chat.members.length).toBeGreaterThan(0);
-        chat.members.forEach(memberId => {
+        chat.members.forEach((memberId) => {
           expect(allActorIds).toContain(memberId);
         });
       });
@@ -115,9 +115,9 @@ describe('Game Output Validation', () => {
 
     test('events have unique IDs', () => {
       const eventIds = new Set<string>();
-      
-      game.timeline.forEach(day => {
-        day.events.forEach(event => {
+
+      game.timeline.forEach((day) => {
+        day.events.forEach((event) => {
           expect(eventIds.has(event.id)).toBe(false);
           eventIds.add(event.id);
         });
@@ -132,23 +132,23 @@ describe('Game Output Validation', () => {
 
   describe('Narrative Coherence', () => {
     test('scenarios connect to questions', () => {
-      game.setup.questions.forEach(q => {
+      game.setup.questions.forEach((q) => {
         expect(q.scenario).toBeGreaterThanOrEqual(1);
         expect(q.scenario).toBeLessThanOrEqual(3);
       });
     });
 
     test('events distributed across days', () => {
-      const eventCounts = game.timeline.map(d => d.events.length);
+      const eventCounts = game.timeline.map((d) => d.events.length);
       const total = eventCounts.reduce((sum, c) => sum + c, 0);
-      
+
       expect(total).toBeGreaterThan(30); // At least 1 per day
     });
 
     test('has resolution for all questions', () => {
       expect(game.resolution.outcomes.length).toBe(3);
-      
-      game.resolution.outcomes.forEach(outcome => {
+
+      game.resolution.outcomes.forEach((outcome) => {
         expect(typeof outcome.answer).toBe('boolean');
         expect(outcome.explanation).toBeDefined();
       });
@@ -159,7 +159,7 @@ describe('Game Output Validation', () => {
     test('early days have fewer events than late days', () => {
       const earlyEvents = game.timeline.slice(0, 10).reduce((sum, d) => sum + d.events.length, 0);
       const lateEvents = game.timeline.slice(20, 25).reduce((sum, d) => sum + d.events.length, 0);
-      
+
       // Generally true, but not strict requirement
       expect(earlyEvents).toBeGreaterThan(0);
       expect(lateEvents).toBeGreaterThan(0);
@@ -168,9 +168,8 @@ describe('Game Output Validation', () => {
     test('file size is reasonable (<10MB)', () => {
       const json = JSON.stringify(game);
       const sizeInMB = json.length / (1024 * 1024);
-      
+
       expect(sizeInMB).toBeLessThan(10);
     });
   });
 });
-

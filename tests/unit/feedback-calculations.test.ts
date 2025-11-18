@@ -2,13 +2,13 @@
  * Unit tests for feedback calculation functions
  */
 
-import { describe, it, expect } from 'bun:test'
 import {
-  calculateGameScore,
-  calculateTradeScore,
   type GameMetrics,
   type TradeMetrics,
-} from '@/lib/reputation/reputation-service'
+  calculateGameScore,
+  calculateTradeScore,
+} from '@/lib/reputation/reputation-service';
+import { describe, expect, it } from 'bun:test';
 
 describe('Feedback Calculations', () => {
   describe('calculateTradeScore', () => {
@@ -19,12 +19,12 @@ describe('Feedback Calculations', () => {
         holdingPeriod: 24, // 24 hours
         timingScore: 0.9, // Excellent timing
         riskScore: 0.8, // Good risk management
-      }
+      };
 
-      const score = calculateTradeScore(metrics)
-      expect(score).toBeGreaterThan(70)
-      expect(score).toBeLessThanOrEqual(100)
-    })
+      const score = calculateTradeScore(metrics);
+      expect(score).toBeGreaterThan(70);
+      expect(score).toBeLessThanOrEqual(100);
+    });
 
     it('should calculate low score for unprofitable trade', () => {
       const metrics: TradeMetrics = {
@@ -33,12 +33,12 @@ describe('Feedback Calculations', () => {
         holdingPeriod: 48,
         timingScore: 0.3,
         riskScore: 0.4,
-      }
+      };
 
-      const score = calculateTradeScore(metrics)
-      expect(score).toBeLessThan(50)
-      expect(score).toBeGreaterThanOrEqual(0)
-    })
+      const score = calculateTradeScore(metrics);
+      expect(score).toBeLessThan(50);
+      expect(score).toBeGreaterThanOrEqual(0);
+    });
 
     it('should handle edge case: perfect trade', () => {
       const metrics: TradeMetrics = {
@@ -47,11 +47,11 @@ describe('Feedback Calculations', () => {
         holdingPeriod: 1,
         timingScore: 1.0, // Perfect timing
         riskScore: 1.0, // Perfect risk management
-      }
+      };
 
-      const score = calculateTradeScore(metrics)
-      expect(score).toBe(100)
-    })
+      const score = calculateTradeScore(metrics);
+      expect(score).toBe(100);
+    });
 
     it('should handle edge case: worst trade', () => {
       const metrics: TradeMetrics = {
@@ -60,12 +60,12 @@ describe('Feedback Calculations', () => {
         holdingPeriod: 168,
         timingScore: 0.0,
         riskScore: 0.0,
-      }
+      };
 
-      const score = calculateTradeScore(metrics)
-      expect(score).toBeGreaterThanOrEqual(0)
-      expect(score).toBeLessThan(20)
-    })
+      const score = calculateTradeScore(metrics);
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThan(20);
+    });
 
     it('should normalize ROI correctly', () => {
       const metrics1: TradeMetrics = {
@@ -74,7 +74,7 @@ describe('Feedback Calculations', () => {
         holdingPeriod: 24,
         timingScore: 0.5,
         riskScore: 0.5,
-      }
+      };
 
       const metrics2: TradeMetrics = {
         profitable: true,
@@ -82,14 +82,14 @@ describe('Feedback Calculations', () => {
         holdingPeriod: 24,
         timingScore: 0.5,
         riskScore: 0.5,
-      }
+      };
 
-      const score1 = calculateTradeScore(metrics1)
-      const score2 = calculateTradeScore(metrics2)
-      
-      expect(score2).toBeGreaterThan(score1)
-    })
-  })
+      const score1 = calculateTradeScore(metrics1);
+      const score2 = calculateTradeScore(metrics2);
+
+      expect(score2).toBeGreaterThan(score1);
+    });
+  });
 
   describe('calculateGameScore', () => {
     it('should calculate high score for winning game with good decisions', () => {
@@ -102,12 +102,12 @@ describe('Feedback Calculations', () => {
         decisionsCorrect: 8,
         decisionsTotal: 10,
         riskManagement: 0.8,
-      }
+      };
 
-      const score = calculateGameScore(metrics)
-      expect(score).toBeGreaterThan(60)
-      expect(score).toBeLessThanOrEqual(100)
-    })
+      const score = calculateGameScore(metrics);
+      expect(score).toBeGreaterThan(60);
+      expect(score).toBeLessThanOrEqual(100);
+    });
 
     it('should calculate lower score for losing game', () => {
       const metrics: GameMetrics = {
@@ -119,12 +119,12 @@ describe('Feedback Calculations', () => {
         decisionsCorrect: 3,
         decisionsTotal: 10,
         riskManagement: 0.3,
-      }
+      };
 
-      const score = calculateGameScore(metrics)
-      expect(score).toBeLessThan(50)
-      expect(score).toBeGreaterThanOrEqual(0)
-    })
+      const score = calculateGameScore(metrics);
+      expect(score).toBeLessThan(50);
+      expect(score).toBeGreaterThanOrEqual(0);
+    });
 
     it('should reward perfect decision-making', () => {
       const metrics: GameMetrics = {
@@ -136,11 +136,11 @@ describe('Feedback Calculations', () => {
         decisionsCorrect: 10,
         decisionsTotal: 10, // 100% correct
         riskManagement: 0.9,
-      }
+      };
 
-      const score = calculateGameScore(metrics)
-      expect(score).toBeGreaterThan(70)
-    })
+      const score = calculateGameScore(metrics);
+      expect(score).toBeGreaterThan(70);
+    });
 
     it('should handle zero decisions gracefully', () => {
       const metrics: GameMetrics = {
@@ -152,12 +152,11 @@ describe('Feedback Calculations', () => {
         decisionsCorrect: 0,
         decisionsTotal: 0,
         riskManagement: 0.5, // Defaults to 0.5
-      }
+      };
 
-      const score = calculateGameScore(metrics)
-      expect(score).toBeGreaterThanOrEqual(0)
-      expect(score).toBeLessThanOrEqual(100)
-    })
-  })
-})
-
+      const score = calculateGameScore(metrics);
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(100);
+    });
+  });
+});

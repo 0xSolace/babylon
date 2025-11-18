@@ -1,13 +1,13 @@
 import type { Experience } from '../types';
 import { ExperienceType, OutcomeType } from '../types';
 
-export interface ExperienceAnalysis {
+export type ExperienceAnalysis = {
   isSignificant: boolean;
   learning?: string;
   confidence: number;
   relatedExperiences?: string[];
   actionableInsights?: string[];
-}
+};
 
 export async function analyzeExperience(
   partialExperience: Partial<Experience>,
@@ -100,11 +100,11 @@ function similarContext(context1: string, context2: string): boolean {
   return commonWords.length / Math.max(words1.length, words2.length) > 0.5;
 }
 
-interface FailurePattern {
+type FailurePattern = {
   learning: string;
   relatedIds: string[];
   insights: string[];
-}
+};
 
 function detectFailurePattern(
   partial: Partial<Experience>,
@@ -217,9 +217,8 @@ export async function detectPatterns(experiences: Experience[]): Promise<
       }
       timeDiffs.push(previous.createdAt - current.createdAt);
     }
-    const avgTimeBetweenLearning = timeDiffs.length > 0 
-      ? timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length 
-      : 0;
+    const avgTimeBetweenLearning =
+      timeDiffs.length > 0 ? timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length : 0;
 
     patterns.push({
       description: `Learning new things every ${Math.round(avgTimeBetweenLearning / 60000)} minutes on average`,

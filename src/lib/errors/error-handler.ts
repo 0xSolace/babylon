@@ -2,16 +2,16 @@
  * Global error handler and middleware for API routes
  */
 
-import type { NextRequest} from 'next/server';
+import { isAuthenticationError } from '@/lib/api/auth-middleware';
+import { logger } from '@/lib/logger';
+import { trackServerError } from '@/lib/posthog/server';
+import type { JsonValue } from '@/types/common';
+import { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/nextjs';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { BabylonError } from './base.errors';
-import { logger } from '@/lib/logger';
-import { Prisma } from '@prisma/client';
-import { isAuthenticationError } from '@/lib/api/auth-middleware';
-import { trackServerError } from '@/lib/posthog/server';
-import * as Sentry from '@sentry/nextjs';
-import type { JsonValue } from '@/types/common';
 
 /**
  * Main error handler that processes all errors and returns appropriate responses
@@ -22,22 +22,22 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
     url: request.url,
     method: request.method,
     headers: Object.fromEntries(request.headers.entries()),
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 
   // Handle unknown errors
   if (!(error instanceof Error)) {
     logger.error('Unknown error type', {
       error: String(error),
-      ...errorContext
+      ...errorContext,
     });
 
     return NextResponse.json(
       {
         error: {
           message: 'An unexpected error occurred',
-          code: 'UNKNOWN_ERROR'
-        }
+          code: 'UNKNOWN_ERROR',
+        },
       },
       { status: 500 }
     );
@@ -48,19 +48,19 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
     // Skip logging for test tokens to reduce noise in test output
     const authHeader = request.headers.get('authorization');
     const isTestToken = authHeader?.includes('test-token');
-    
+
     // Log authentication failures at warn level (expected behavior for unauthenticated requests)
     // But skip logging for test tokens
     if (!isTestToken) {
       logger.warn('Authentication failed', {
         error: error.message,
-        ...errorContext
+        ...errorContext,
       });
     }
 
     return NextResponse.json(
       {
-        error: error.message || 'Authentication required'
+        error: error.message || 'Authentication required',
       },
       { status: 401 }
     );
@@ -71,7 +71,7 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
     // Skip logging for test tokens to reduce noise in test output
     const authHeader = request.headers.get('authorization');
     const isTestToken = authHeader?.includes('test-token');
-    
+
     // Log validation errors at warn level (expected behavior for invalid client input)
     // But skip logging for test requests
     if (!isTestToken) {
@@ -79,17 +79,17 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
         error: error.message,
         issues: error.issues,
         name: error.name,
-        ...errorContext
+        ...errorContext,
       });
     }
 
     return NextResponse.json(
       {
         error: 'Validation failed',
-        details: error.issues.map(err => ({
+        details: error.issues.map((err) => ({
           field: err.path.join('.'),
-          message: err.message
-        }))
+          message: err.message,
+        })),
       },
       { status: 400 }
     );
@@ -103,7 +103,7 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
       code: error.code,
       statusCode: error.statusCode,
       name: error.name,
-      ...errorContext
+      ...errorContext,
     });
   } else {
     // Log unexpected errors at ERROR level
@@ -111,14 +111,15 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
       error: error.message,
       stack: error.stack,
       name: error.name,
-      ...errorContext
+      ...errorContext,
     });
   }
 
   // Track error with PostHog (async, don't await to avoid slowing down response)
   // Skip tracking authentication errors, validation errors, and 4xx client errors as they're expected behavior
   const userId = request.headers.get('x-user-id') || null;
-  const isClientError = error instanceof BabylonError && error.statusCode >= 400 && error.statusCode < 500;
+  const isClientError =
+    error instanceof BabylonError && error.statusCode >= 400 && error.statusCode < 500;
   if (!isAuthenticationError(error) && !(error instanceof ZodError) && !isClientError) {
     void trackServerError(userId, error, {
       endpoint: new URL(request.url).pathname,
@@ -128,7 +129,7 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
 
   // Capture error in Sentry (only for server errors, not client errors like validation)
   // Skip capturing validation errors, authentication errors, and known operational errors
-  const shouldCaptureInSentry = 
+  const shouldCaptureInSentry =
     error instanceof Error &&
     !(error instanceof ZodError) &&
     !(error instanceof BabylonError && error.isOperational && error.statusCode < 500) &&
@@ -162,26 +163,24 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
 
   // Handle Babylon errors (our custom errors)
   if (error instanceof BabylonError) {
-    const errorData: Record<string, JsonValue> = { error: error.message }
+    const errorData: Record<string, JsonValue> = { error: error.message };
     if (error.context?.details) {
-      errorData.details = error.context.details as JsonValue
+      errorData.details = error.context.details as JsonValue;
     }
     if (process.env.NODE_ENV === 'development') {
-      errorData.code = error.code
+      errorData.code = error.code;
       if (error.stack) {
-        errorData.stack = error.stack
+        errorData.stack = error.stack;
       }
     }
-    
-    return NextResponse.json(
-      errorData,
-      {
-        status: error.statusCode,
-        headers: error.code === 'RATE_LIMIT' && error.context?.retryAfter
+
+    return NextResponse.json(errorData, {
+      status: error.statusCode,
+      headers:
+        error.code === 'RATE_LIMIT' && error.context?.retryAfter
           ? { 'Retry-After': String(error.context.retryAfter) }
-          : undefined
-      }
-    );
+          : undefined,
+    });
   }
 
   // Handle Prisma errors
@@ -190,11 +189,13 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
   }
 
   if (error instanceof Prisma.PrismaClientValidationError) {
-    const errorData: Record<string, JsonValue> = { error: 'Invalid database query' }
+    const errorData: Record<string, JsonValue> = {
+      error: 'Invalid database query',
+    };
     if (process.env.NODE_ENV === 'development') {
-      errorData.details = error.message
+      errorData.details = error.message;
     }
-    
+
     return NextResponse.json(errorData, { status: 400 });
   }
 
@@ -202,7 +203,7 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
   if (error.name === 'SyntaxError') {
     return NextResponse.json(
       {
-        error: 'Invalid JSON in request body'
+        error: 'Invalid JSON in request body',
       },
       { status: 400 }
     );
@@ -211,9 +212,8 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
   if (error.name === 'TypeError') {
     return NextResponse.json(
       {
-        error: process.env.NODE_ENV === 'production'
-          ? 'An unexpected error occurred'
-          : error.message
+        error:
+          process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : error.message,
       },
       { status: 500 }
     );
@@ -221,15 +221,13 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
 
   // Default error response
   const errorData: Record<string, JsonValue> = {
-    error: process.env.NODE_ENV === 'production'
-      ? 'An unexpected error occurred'
-      : error.message
-  }
-  
+    error: process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : error.message,
+  };
+
   if (process.env.NODE_ENV === 'development' && error.stack) {
-    errorData.stack = error.stack
+    errorData.stack = error.stack;
   }
-  
+
   return NextResponse.json(errorData, { status: 500 });
 }
 
@@ -238,29 +236,35 @@ export function errorHandler(error: Error | unknown, request: NextRequest): Next
  */
 function handlePrismaError(error: Prisma.PrismaClientKnownRequestError): NextResponse {
   switch (error.code) {
-    case 'P2002':
+    case 'P2002': {
       // Unique constraint violation
       const fields = error.meta?.target as string[] | undefined;
-      const errorData: Record<string, JsonValue> = { error: `Duplicate entry for field(s): ${fields?.join(', ') || 'unknown'}` }
-      if (fields) errorData.fields = fields
+      const errorData: Record<string, JsonValue> = {
+        error: `Duplicate entry for field(s): ${fields?.join(', ') || 'unknown'}`,
+      };
+      if (fields) errorData.fields = fields;
       return NextResponse.json(errorData, { status: 409 });
+    }
 
     case 'P2025':
       // Record not found
       return NextResponse.json({ error: 'Record not found' }, { status: 404 });
 
-    case 'P2003':
+    case 'P2003': {
       // Foreign key constraint failure
       const field = error.meta?.field_name as string | undefined;
-      const fkErrorData: Record<string, JsonValue> = { error: `Foreign key constraint failed on field: ${field || 'unknown'}` }
-      if (field) fkErrorData.field = field
+      const fkErrorData: Record<string, JsonValue> = {
+        error: `Foreign key constraint failed on field: ${field || 'unknown'}`,
+      };
+      if (field) fkErrorData.field = field;
       return NextResponse.json(fkErrorData, { status: 400 });
+    }
 
     case 'P2014':
       // Relation violation
       return NextResponse.json(
         {
-          error: 'The change you are trying to make would violate the required relation'
+          error: 'The change you are trying to make would violate the required relation',
         },
         { status: 400 }
       );
@@ -269,19 +273,22 @@ function handlePrismaError(error: Prisma.PrismaClientKnownRequestError): NextRes
       // Query interpretation error
       return NextResponse.json(
         {
-          error: 'Query interpretation error'
+          error: 'Query interpretation error',
         },
         { status: 400 }
       );
 
-    default:
+    default: {
       // Generic database error
-      const dbErrorData: Record<string, JsonValue> = { error: 'Database operation failed' }
+      const dbErrorData: Record<string, JsonValue> = {
+        error: 'Database operation failed',
+      };
       if (process.env.NODE_ENV === 'development') {
-        dbErrorData.prismaCode = error.code
-        dbErrorData.meta = error.meta as JsonValue
+        dbErrorData.prismaCode = error.code;
+        dbErrorData.meta = error.meta as JsonValue;
       }
       return NextResponse.json(dbErrorData, { status: 500 });
+    }
   }
 }
 
@@ -289,9 +296,9 @@ function handlePrismaError(error: Prisma.PrismaClientKnownRequestError): NextRes
  * Route handler context type for Next.js API routes
  * Supports both sync and async (Promise) params for Next.js 14+
  */
-export interface RouteContext {
+export type RouteContext = {
   params?: Record<string, string | string[]> | Promise<Record<string, string | string[]>>;
-}
+};
 
 /**
  * Higher-order function wrapper for API routes with error handling
@@ -305,22 +312,16 @@ export function withErrorHandling(
 
 // Overload 2: Handler with context (for routes with dynamic params)
 export function withErrorHandling<TContext extends RouteContext = RouteContext>(
-  handler: (
-    req: NextRequest,
-    context: TContext
-  ) => Promise<NextResponse> | NextResponse
+  handler: (req: NextRequest, context: TContext) => Promise<NextResponse> | NextResponse
 ): (req: NextRequest, context: TContext) => Promise<NextResponse>;
 
 // Implementation
 export function withErrorHandling<TContext extends RouteContext = RouteContext>(
-  handler: (
-    req: NextRequest,
-    context?: TContext
-  ) => Promise<NextResponse> | NextResponse
+  handler: (req: NextRequest, context?: TContext) => Promise<NextResponse> | NextResponse
 ): (req: NextRequest, context?: TContext) => Promise<NextResponse> {
   return async (req: NextRequest, context?: TContext): Promise<NextResponse> => {
     try {
-      const response = await handler(req, context!);
+      const response = await handler(req, context);
       return response;
     } catch (error) {
       return errorHandler(error, req);
@@ -347,7 +348,7 @@ export function asyncHandler<TContext extends RouteContext = RouteContext>(
     if (!handler) {
       throw new Error('Handler function is required');
     }
-    
+
     try {
       const response = await handler(req, context);
 
@@ -380,8 +381,8 @@ export function errorResponse(
       error: {
         message,
         code,
-        ...details
-      }
+        ...details,
+      },
     },
     { status: statusCode }
   );

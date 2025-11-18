@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'bun:test';
-import { aggregateTradeImpacts } from '../market-impact-service';
+import { describe, expect, it } from 'bun:test';
 import type { TradeImpactInput } from '../market-impact-service';
+import { aggregateTradeImpacts } from '../market-impact-service';
 
 describe('aggregateTradeImpacts', () => {
   it('aggregates perp trades into net sentiment', () => {

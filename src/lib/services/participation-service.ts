@@ -11,18 +11,17 @@
  * - Last activity timestamp
  */
 
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma';
 
-
-export interface ParticipationStats {
-  postsCreated: number
-  commentsMade: number
-  sharesMade: number
-  reactionsGiven: number
-  marketsParticipated: number
-  totalActivity: number
-  lastActivityAt: Date
-}
+export type ParticipationStats = {
+  postsCreated: number;
+  commentsMade: number;
+  sharesMade: number;
+  reactionsGiven: number;
+  marketsParticipated: number;
+  totalActivity: number;
+  lastActivityAt: Date;
+};
 
 export class ParticipationService {
   /**
@@ -123,7 +122,7 @@ export class ParticipationService {
           createdAt: true,
         },
       }),
-    ])
+    ]);
 
     // Calculate total activity score
     // Weighted scoring: posts=10, comments=5, shares=3, reactions=1, markets=5
@@ -132,7 +131,7 @@ export class ParticipationService {
       commentsMade * 5 +
       sharesMade * 3 +
       reactionsGiven * 1 +
-      marketsParticipated * 5
+      marketsParticipated * 5;
 
     // Find the most recent activity timestamp
     const activityTimestamps = [
@@ -141,12 +140,12 @@ export class ParticipationService {
       lastShare?.createdAt,
       lastReaction?.createdAt,
       lastPosition?.createdAt,
-    ].filter((date): date is Date => date !== null && date !== undefined)
+    ].filter((date): date is Date => date !== null && date !== undefined);
 
     const lastActivityAt =
       activityTimestamps.length > 0
         ? new Date(Math.max(...activityTimestamps.map((d) => d.getTime())))
-        : new Date() // Default to now if no activity
+        : new Date(); // Default to now if no activity
 
     return {
       postsCreated,
@@ -156,7 +155,6 @@ export class ParticipationService {
       marketsParticipated,
       totalActivity,
       lastActivityAt,
-    }
+    };
   }
 }
-

@@ -1,11 +1,11 @@
 /**
  * Integration Tests: Swagger/OpenAPI Documentation
- * 
+ *
  * Tests that Swagger documentation is properly generated and accessible.
  * Requires server to be running.
  */
 
-import { describe, test, expect, beforeAll } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 
 const BASE_URL = process.env.TEST_API_URL || process.env.TEST_BASE_URL || 'http://localhost:3000';
 let serverAvailable = false;
@@ -103,6 +103,3 @@ describe('Swagger/OpenAPI Documentation', () => {
     expect(response.headers.get('content-type')).toContain('text/html');
   });
 });
-
-
-

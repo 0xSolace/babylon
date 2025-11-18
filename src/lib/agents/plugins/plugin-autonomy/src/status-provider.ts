@@ -1,10 +1,10 @@
-import { type IAgentRuntime, type Memory, type Provider, type State } from '@elizaos/core';
+import type { IAgentRuntime, Memory, Provider, State } from '@elizaos/core';
 
-interface AutonomyService {
+type AutonomyService = {
   getAutonomousRoomId?: () => string | undefined;
   isLoopRunning?: () => boolean;
   getLoopInterval?: () => number;
-}
+};
 
 /**
  * Autonomy Status Provider - shows autonomy status in regular conversations

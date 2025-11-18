@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Comprehensive Swagger Verification Script
- * 
+ *
  * Verifies that Swagger/OpenAPI is 100% functional:
  * - Auto-generator works
  * - All routes are documented
@@ -15,7 +15,7 @@ async function verifySwagger() {
   console.log('🔍 Comprehensive Swagger Verification\n');
 
   try {
-    const spec = await generateAutoSpec() as {
+    const spec = (await generateAutoSpec()) as {
       openapi?: string;
       swagger?: string;
       info?: { title?: string; version?: string; description?: string };
@@ -146,7 +146,7 @@ async function verifySwagger() {
     }
 
     // Final summary
-    console.log('\n' + '='.repeat(50));
+    console.log(`\n${'='.repeat(50)}`);
     console.log('✅ SWAGGER VERIFICATION COMPLETE');
     console.log('='.repeat(50));
     console.log(`   OpenAPI: ${spec.openapi || spec.swagger}`);
@@ -171,5 +171,3 @@ async function verifySwagger() {
 }
 
 verifySwagger();
-
-

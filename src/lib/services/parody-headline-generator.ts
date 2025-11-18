@@ -1,25 +1,25 @@
 /**
  * Parody Headline Generator
- * 
+ *
  * Transforms real news headlines into satirical parody versions set in
  * the futuristic AI world with parody characters.
- * 
+ *
  * @module services/parody-headline-generator
  */
 
-import { BabylonLLMClient } from '@/generator/llm/openai-client';
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
-import type { RSSHeadline, ParodyHeadline } from '@prisma/client';
+import { BabylonLLMClient } from '@/generator/llm/openai-client';
+import type { ParodyHeadline, RSSHeadline } from '@prisma/client';
 import { characterMappingService } from './character-mapping-service';
 
-export interface GeneratedParody {
+export type GeneratedParody = {
   parodyTitle: string;
   parodyContent?: string;
   characterMappings: Record<string, string>;
   organizationMappings: Record<string, string>;
-}
+};
 
 /**
  * Parody Headline Generator
@@ -54,15 +54,18 @@ export class ParodyHeadlineGenerator {
     );
 
     // Generate parody using LLM
-    const response = await this.llm.generateJSON<{
-      parodyTitle: string;
-      parodyContent?: string;
-    } | {
-      response: {
-        parodyTitle: string;
-        parodyContent?: string;
-      }
-    }>(
+    const response = await this.llm.generateJSON<
+      | {
+          parodyTitle: string;
+          parodyContent?: string;
+        }
+      | {
+          response: {
+            parodyTitle: string;
+            parodyContent?: string;
+          };
+        }
+    >(
       prompt,
       {
         properties: {
@@ -80,9 +83,10 @@ export class ParodyHeadlineGenerator {
     );
 
     // Handle XML structure
-    const parodyData = 'response' in response && response.response
-      ? response.response
-      : response as { parodyTitle: string; parodyContent?: string };
+    const parodyData =
+      'response' in response && response.response
+        ? response.response
+        : (response as { parodyTitle: string; parodyContent?: string });
 
     // Post-process LLM output to fix any real names that slipped through
     const processedTitle = await characterMappingService.transformText(parodyData.parodyTitle);
@@ -116,11 +120,7 @@ export class ParodyHeadlineGenerator {
   /**
    * Build LLM prompt for parody generation
    */
-  private buildParodyPrompt(
-    title: string,
-    content?: string,
-    sourceName?: string
-  ): string {
+  private buildParodyPrompt(title: string, content?: string, sourceName?: string): string {
     return `You are a satirical news writer for a futuristic world where everyone is actually an AI.
 Your job is to transform real news headlines into over-the-top, comical, satirical versions.
 
@@ -175,7 +175,9 @@ Generate the parody now.`;
   /**
    * Process multiple headlines into parodies
    */
-  async processHeadlines(headlines: Array<RSSHeadline & { source?: { name: string } | null }>): Promise<ParodyHeadline[]> {
+  async processHeadlines(
+    headlines: Array<RSSHeadline & { source?: { name: string } | null }>
+  ): Promise<ParodyHeadline[]> {
     const parodies: ParodyHeadline[] = [];
 
     for (const headline of headlines) {
@@ -276,18 +278,20 @@ Generate the parody now.`;
       if (!byDay.has(day)) {
         byDay.set(day, []);
       }
-      byDay.get(day)!.push(parody);
+      byDay.get(day)?.push(parody);
     }
 
     // Format by day
     const dayEntries = Array.from(byDay.entries());
-    const formattedDays = dayEntries.map(([day, parodies]) => {
-      const headlines = parodies
-        .slice(0, 3) // Max 3 per day
-        .map(p => `  • ${p.parodyTitle}`)
-        .join('\n');
-      return `${day}:\n${headlines}`;
-    }).join('\n\n');
+    const formattedDays = dayEntries
+      .map(([day, parodies]) => {
+        const headlines = parodies
+          .slice(0, 3) // Max 3 per day
+          .map((p) => `  • ${p.parodyTitle}`)
+          .join('\n');
+        return `${day}:\n${headlines}`;
+      })
+      .join('\n\n');
 
     return `📰 NEWS FROM THE LAST 7 DAYS:\n\n${formattedDays}\n\n(These are satirical parodies of real-world news headlines, transformed for our futuristic AI world where everyone is an AI agent)`;
   }
@@ -300,4 +304,3 @@ export function createParodyHeadlineGenerator(): ParodyHeadlineGenerator {
   const llm = new BabylonLLMClient(undefined, undefined, 'groq');
   return new ParodyHeadlineGenerator(llm);
 }
-

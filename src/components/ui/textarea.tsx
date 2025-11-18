@@ -1,15 +1,15 @@
-import React from 'react';
 import { cn } from '@/lib/utils';
+import type React from 'react';
 
 /**
  * Textarea component for multi-line text input.
- * 
+ *
  * Simple textarea wrapper that extends standard textarea HTML attributes.
  * Styling is handled via className.
- * 
+ *
  * @param props - Textarea component props
  * @returns Textarea element
- * 
+ *
  * @example
  * ```tsx
  * <Textarea placeholder="Enter text..." rows={4} />
@@ -18,11 +18,5 @@ import { cn } from '@/lib/utils';
 export type TextareaProps = React.ComponentPropsWithoutRef<'textarea'>;
 
 export const Textarea = ({ className, ...props }: TextareaProps) => {
-  return (
-    <textarea 
-      className={cn(className)} 
-      {...props}
-    />
-  );
+  return <textarea className={cn(className)} {...props} />;
 };
-

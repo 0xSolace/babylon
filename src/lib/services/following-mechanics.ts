@@ -1,11 +1,11 @@
 /**
  * Following Mechanics Service
- * 
+ *
  * Determines when NPCs follow players based on:
  * - Reply consistency (streak of hourly replies)
  * - Quality of replies (average quality score)
  * - Time invested (total number of quality replies)
- * 
+ *
  * Following probability increases with:
  * - Longer streaks (5+ hourly replies in a row)
  * - Higher quality scores (0.7+)
@@ -17,8 +17,7 @@ import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
 import { notifyFollow } from './notification-service';
 
-
-export interface FollowingChance {
+export type FollowingChance = {
   willFollow: boolean;
   probability: number; // 0-1
   reasons: string[];
@@ -27,18 +26,9 @@ export interface FollowingChance {
     quality: number;
     volume: number;
   };
-}
+};
 
 export class FollowingMechanics {
-  // Following probability factors
-  private static readonly MIN_STREAK_FOR_FOLLOW = 5; // 5 consecutive hourly replies
-  private static readonly MIN_QUALITY_SCORE = 0.7;
-  private static readonly MIN_TOTAL_REPLIES = 10;
-
-  // Base probabilities
-  private static readonly BASE_FOLLOW_PROBABILITY = 0.05; // 5% base chance
-  private static readonly MAX_FOLLOW_PROBABILITY = 0.80; // 80% max chance
-
   /**
    * Calculate if NPC should follow player after a reply
    */
@@ -51,7 +41,7 @@ export class FollowingMechanics {
     // Use currentQualityScore to calculate following probability
     // Higher quality interactions increase following chance
     const qualityMultiplier = Math.min(currentQualityScore * 1.5, 2.0); // Cap at 2x
-    
+
     // Check if already following
     const existingFollow = await prisma.followStatus.findUnique({
       where: {
@@ -62,7 +52,7 @@ export class FollowingMechanics {
       },
     });
 
-    if (existingFollow && existingFollow.isActive) {
+    if (existingFollow?.isActive) {
       return {
         willFollow: false,
         probability: 0,
@@ -84,49 +74,51 @@ export class FollowingMechanics {
 
     const totalReplies = interactions.length;
     const averageQuality =
-      interactions.reduce((sum, i) => sum + i.qualityScore, 0) /
-      Math.max(interactions.length, 1);
+      interactions.reduce((sum, i) => sum + i.qualityScore, 0) / Math.max(interactions.length, 1);
 
     // Calculate factor scores (0-1)
-    const streakFactor = Math.min(currentStreak / this.MIN_STREAK_FOR_FOLLOW, 1);
-    const qualityFactor = Math.min(averageQuality / this.MIN_QUALITY_SCORE, 1);
-    const volumeFactor = Math.min(totalReplies / this.MIN_TOTAL_REPLIES, 1);
+    const streakFactor = Math.min(currentStreak / FollowingMechanics.MIN_STREAK_FOR_FOLLOW, 1);
+    const qualityFactor = Math.min(averageQuality / FollowingMechanics.MIN_QUALITY_SCORE, 1);
+    const volumeFactor = Math.min(totalReplies / FollowingMechanics.MIN_TOTAL_REPLIES, 1);
 
     // Calculate weighted probability
     // Streak is most important (50%), quality (30%), volume (20%)
     // Apply qualityMultiplier to boost probability for high-quality interactions
-    const baseProbability = this.BASE_FOLLOW_PROBABILITY +
-      (this.MAX_FOLLOW_PROBABILITY - this.BASE_FOLLOW_PROBABILITY) *
+    const baseProbability =
+      FollowingMechanics.BASE_FOLLOW_PROBABILITY +
+      (FollowingMechanics.MAX_FOLLOW_PROBABILITY - FollowingMechanics.BASE_FOLLOW_PROBABILITY) *
         (streakFactor * 0.5 + qualityFactor * 0.3 + volumeFactor * 0.2);
-    
+
     const probability = Math.min(
       baseProbability * qualityMultiplier,
-      this.MAX_FOLLOW_PROBABILITY
+      FollowingMechanics.MAX_FOLLOW_PROBABILITY
     );
 
     // Reasons for following (or not)
     const reasons: string[] = [];
 
-    if (currentStreak >= this.MIN_STREAK_FOR_FOLLOW) {
+    if (currentStreak >= FollowingMechanics.MIN_STREAK_FOR_FOLLOW) {
       reasons.push(`Consistent streak: ${currentStreak} hourly replies`);
     } else {
       reasons.push(
-        `Need ${this.MIN_STREAK_FOR_FOLLOW - currentStreak} more consecutive hourly replies`
+        `Need ${FollowingMechanics.MIN_STREAK_FOR_FOLLOW - currentStreak} more consecutive hourly replies`
       );
     }
 
-    if (averageQuality >= this.MIN_QUALITY_SCORE) {
+    if (averageQuality >= FollowingMechanics.MIN_QUALITY_SCORE) {
       reasons.push(`High quality: ${(averageQuality * 100).toFixed(0)}% avg`);
     } else {
       reasons.push(
-        `Improve quality to ${(this.MIN_QUALITY_SCORE * 100).toFixed(0)}%+ for better chances`
+        `Improve quality to ${(FollowingMechanics.MIN_QUALITY_SCORE * 100).toFixed(0)}%+ for better chances`
       );
     }
 
-    if (totalReplies >= this.MIN_TOTAL_REPLIES) {
+    if (totalReplies >= FollowingMechanics.MIN_TOTAL_REPLIES) {
       reasons.push(`Engaged: ${totalReplies} quality replies`);
     } else {
-      reasons.push(`Post ${this.MIN_TOTAL_REPLIES - totalReplies} more quality replies`);
+      reasons.push(
+        `Post ${FollowingMechanics.MIN_TOTAL_REPLIES - totalReplies} more quality replies`
+      );
     }
 
     // Roll the dice
@@ -147,11 +139,7 @@ export class FollowingMechanics {
   /**
    * Record an NPC following a player
    */
-  static async recordFollow(
-    userId: string,
-    npcId: string,
-    reason: string
-  ): Promise<void> {
+  static async recordFollow(userId: string, npcId: string, reason: string): Promise<void> {
     await prisma.followStatus.upsert({
       where: {
         userId_npcId: {
@@ -226,14 +214,14 @@ export class FollowingMechanics {
   /**
    * Unfollow (if quality drops or streak breaks badly)
    */
-  static async unfollow(
-    userId: string,
-    npcId: string,
-    reason: string
-  ): Promise<void> {
+  static async unfollow(userId: string, npcId: string, reason: string): Promise<void> {
     // Log unfollow reason for analytics/debugging
-    logger.info(`User ${userId} unfollowed ${npcId}. Reason: ${reason}`, undefined, 'FollowingMechanics');
-    
+    logger.info(
+      `User ${userId} unfollowed ${npcId}. Reason: ${reason}`,
+      undefined,
+      'FollowingMechanics'
+    );
+
     await prisma.followStatus.updateMany({
       where: {
         userId,
@@ -266,8 +254,7 @@ export class FollowingMechanics {
 
     // Check for sustained low quality
     const recentQuality =
-      interactions.reduce((sum, i) => sum + (i.qualityScore ?? 0), 0) /
-      interactions.length;
+      interactions.reduce((sum, i) => sum + (i.qualityScore ?? 0), 0) / interactions.length;
 
     if (recentQuality < 0.4) {
       return true; // Quality dropped too low
@@ -281,8 +268,7 @@ export class FollowingMechanics {
     if (!lastInteraction) {
       return false; // No valid interaction timestamp
     }
-    const hoursSinceLastReply =
-      (Date.now() - lastInteraction.getTime()) / (1000 * 60 * 60);
+    const hoursSinceLastReply = (Date.now() - lastInteraction.getTime()) / (1000 * 60 * 60);
 
     if (hoursSinceLastReply > 24) {
       return true; // Stopped engaging
@@ -291,5 +277,3 @@ export class FollowingMechanics {
     return false;
   }
 }
-
-

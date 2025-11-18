@@ -1,18 +1,18 @@
 /**
  * Batch Operations Utility
- * 
+ *
  * Provides utilities for batching async operations with concurrency control
  * to prevent connection pool exhaustion.
  */
 
 /**
  * Execute async operations in batches with controlled concurrency
- * 
+ *
  * @param items - Array of items to process
  * @param batchSize - Number of items to process concurrently (default: 10)
  * @param operation - Async function to execute for each item
  * @returns Promise that resolves when all operations complete
- * 
+ *
  * @example
  * ```ts
  * await batchExecute(
@@ -30,20 +30,18 @@ export async function batchExecute<T>(
   // Process items in batches
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
-    await Promise.allSettled(
-      batch.map(item => operation(item))
-    );
+    await Promise.allSettled(batch.map((item) => operation(item)));
   }
 }
 
 /**
  * Execute async operations in batches with controlled concurrency and return results
- * 
+ *
  * @param items - Array of items to process
  * @param batchSize - Number of items to process concurrently (default: 10)
  * @param operation - Async function to execute for each item
  * @returns Promise that resolves with array of PromiseSettledResult
- * 
+ *
  * @example
  * ```ts
  * const results = await batchExecuteWithResults(
@@ -59,16 +57,13 @@ export async function batchExecuteWithResults<T, R>(
   operation: (item: T) => Promise<R>
 ): Promise<PromiseSettledResult<R>[]> {
   const allResults: PromiseSettledResult<R>[] = [];
-  
+
   // Process items in batches
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
-    const batchResults = await Promise.allSettled(
-      batch.map(item => operation(item))
-    );
+    const batchResults = await Promise.allSettled(batch.map((item) => operation(item)));
     allResults.push(...batchResults);
   }
-  
+
   return allResults;
 }
-

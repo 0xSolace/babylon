@@ -1,44 +1,53 @@
 'use client';
 
-import { useState } from 'react';
-import { XAxis, YAxis, CartesianGrid, Area, AreaChart, ReferenceLine, ReferenceArea, Brush } from 'recharts';
 import type { ChartConfig } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { useState } from 'react';
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart';
+  Area,
+  AreaChart,
+  Brush,
+  CartesianGrid,
+  ReferenceArea,
+  ReferenceLine,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
-interface PricePoint {
+type PricePoint = {
   time: number;
   yesPrice: number;
   noPrice: number;
   volume: number;
-}
+};
 
-interface PredictionProbabilityChartProps {
+type PredictionProbabilityChartProps = {
   data: PricePoint[];
   marketId: string;
   showBrush?: boolean;
-}
+};
 
 const chartConfig = {
   probability: {
-    label: "YES Probability",
-    color: "#16a34a",
+    label: 'YES Probability',
+    color: '#16a34a',
   },
   noProbability: {
-    label: "NO Probability",
-    color: "#dc2626",
+    label: 'NO Probability',
+    color: '#dc2626',
   },
 } satisfies ChartConfig;
 
-export function PredictionProbabilityChart({ data, marketId, showBrush = false }: PredictionProbabilityChartProps) {
+export function PredictionProbabilityChart({
+  data,
+  marketId,
+  showBrush = false,
+}: PredictionProbabilityChartProps) {
   const [zoomDomain, setZoomDomain] = useState<[number, number] | undefined>(undefined);
 
   if (data.length === 0) {
     return (
-      <div className="h-[400px] flex items-center justify-center text-muted-foreground">
+      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
         <div className="text-center">
           <div className="text-sm">Loading chart data...</div>
         </div>
@@ -48,7 +57,7 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
 
   // Format data for recharts - convert to percentages
   // Include both YES and NO for better visualization
-  const chartData = data.map(point => ({
+  const chartData = data.map((point) => ({
     timestamp: point.time,
     probability: point.yesPrice * 100,
     noProbability: point.noPrice * 100,
@@ -76,7 +85,7 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
   const currentProbability = chartData[chartData.length - 1]?.probability ?? 50;
   const isYesFavored = currentProbability >= 50;
   const lineColor = isYesFavored ? '#16a34a' : '#dc2626'; // Green if YES favored, red if NO favored
-  
+
   // Reset zoom handler
   const handleResetZoom = () => {
     setZoomDomain(undefined);
@@ -88,25 +97,26 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
       <div className="flex items-center justify-between px-3">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-green-600"></div>
-            <span className="text-sm font-medium">YES {currentProbability.toFixed(1)}%</span>
+            <div className="h-3 w-3 rounded-full bg-green-600"></div>
+            <span className="font-medium text-sm">YES {currentProbability.toFixed(1)}%</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-600"></div>
-            <span className="text-sm font-medium">NO {(100 - currentProbability).toFixed(1)}%</span>
+            <div className="h-3 w-3 rounded-full bg-red-600"></div>
+            <span className="font-medium text-sm">NO {(100 - currentProbability).toFixed(1)}%</span>
           </div>
         </div>
         {zoomDomain && (
           <button
+            type="button"
             onClick={handleResetZoom}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground text-xs transition-colors hover:text-foreground"
           >
             Reset Zoom
           </button>
         )}
       </div>
-      
-      <div className="bg-muted/20 rounded-lg p-3">
+
+      <div className="rounded-lg bg-muted/20 p-3">
         <ChartContainer config={chartConfig} className="aspect-auto h-[400px] w-full">
           <AreaChart
             accessibilityLayer
@@ -120,28 +130,12 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
           >
             <defs>
               <linearGradient id={`fillProbabilityYes-${marketId}`} x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="#16a34a"
-                  stopOpacity={0.8}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="#16a34a"
-                  stopOpacity={0.05}
-                />
+                <stop offset="5%" stopColor="#16a34a" stopOpacity={0.8} />
+                <stop offset="95%" stopColor="#16a34a" stopOpacity={0.05} />
               </linearGradient>
               <linearGradient id={`fillProbabilityNo-${marketId}`} x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="#dc2626"
-                  stopOpacity={0.8}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="#dc2626"
-                  stopOpacity={0.05}
-                />
+                <stop offset="5%" stopColor="#dc2626" stopOpacity={0.8} />
+                <stop offset="95%" stopColor="#dc2626" stopOpacity={0.05} />
               </linearGradient>
               {/* YES zone gradient (green, top half) */}
               <linearGradient id={`yesZone-${marketId}`} x1="0" y1="0" x2="0" y2="1">
@@ -154,11 +148,11 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
                 <stop offset="100%" stopColor="#dc2626" stopOpacity={0.05} />
               </linearGradient>
             </defs>
-            
+
             {/* Background zones for YES (>50%) and NO (<50%) */}
             <ReferenceArea y1={50} y2={100} fill={`url(#yesZone-${marketId})`} fillOpacity={1} />
             <ReferenceArea y1={0} y2={50} fill={`url(#noZone-${marketId})`} fillOpacity={1} />
-            
+
             <CartesianGrid
               horizontal={true}
               vertical={false}
@@ -184,7 +178,7 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
               tickLine={false}
               tickMargin={12}
               strokeWidth={1.5}
-              className="text-xs fill-muted-foreground"
+              className="fill-muted-foreground text-xs"
             />
             <YAxis
               orientation="right"
@@ -192,7 +186,7 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
               axisLine={false}
               tickMargin={0}
               tickCount={6}
-              className="text-xs fill-muted-foreground"
+              className="fill-muted-foreground text-xs"
               tickFormatter={(value) => `${value.toFixed(0)}%`}
               domain={[0, 100]}
             />
@@ -215,31 +209,44 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
               name="NO"
             />
             <ChartTooltip
-              cursor={{ stroke: lineColor, strokeWidth: 1, strokeDasharray: '4 4' }}
+              cursor={{
+                stroke: lineColor,
+                strokeWidth: 1,
+                strokeDasharray: '4 4',
+              }}
               content={
                 <ChartTooltipContent
                   indicator="dot"
                   className="min-w-[200px] px-3 py-2"
                   labelFormatter={(_, items) => {
                     const first = Array.isArray(items) && items.length > 0 ? items[0] : undefined;
-                    const p = first && typeof first === 'object' && 'payload' in first ? (first.payload as { date?: string }) : undefined;
+                    const p =
+                      first && typeof first === 'object' && 'payload' in first
+                        ? (first.payload as { date?: string })
+                        : undefined;
                     return p?.date ?? '';
                   }}
                   formatter={(value, name) => {
                     if (typeof value !== 'number') return value;
-                    const displayName = name === 'probability' ? 'YES' : name === 'noProbability' ? 'NO' : name;
+                    const displayName =
+                      name === 'probability' ? 'YES' : name === 'noProbability' ? 'NO' : name;
                     const color = displayName === 'YES' ? '#16a34a' : '#dc2626';
                     return (
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }}></div>
-                        <span>{displayName}: {value.toFixed(1)}%</span>
+                        <div
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: color }}
+                        ></div>
+                        <span>
+                          {displayName}: {value.toFixed(1)}%
+                        </span>
                       </div>
                     );
                   }}
                 />
               }
             />
-            
+
             {/* 50% reference line */}
             <ReferenceLine
               y={50}
@@ -255,7 +262,7 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
                 fontWeight: 'bold',
               }}
             />
-            
+
             <Area
               dataKey="probability"
               type="monotone"
@@ -267,7 +274,7 @@ export function PredictionProbabilityChart({ data, marketId, showBrush = false }
               activeDot={{ r: 5, strokeWidth: 2 }}
               isAnimationActive={false}
             />
-            
+
             {showBrush && (
               <Brush
                 dataKey="timestamp"

@@ -1,16 +1,16 @@
 /**
  * Simulation A2A Interface
- * 
+ *
  * Provides A2A-compatible interface for agents to interact with simulation.
  * Wraps SimulationEngine to make it behave like a real game server.
- * 
+ *
  * Agents can use standard A2A methods like:
  * - a2a.getPredictions
  * - a2a.buyShares
  * - a2a.openPosition
  * - a2a.getFeed
  * etc.
- * 
+ *
  * @example
  * ```typescript
  * const interface = new SimulationA2AInterface(engine, 'agent-123');
@@ -18,35 +18,35 @@
  * ```
  */
 
-import type { SimulationEngine } from './SimulationEngine';
 import { logger } from '@/lib/logger';
+import type { SimulationEngine } from './SimulationEngine';
 
 /**
  * Parameters for buying prediction market shares
  */
-export interface BuySharesParams {
+export type BuySharesParams = {
   /** Market ID to buy shares in */
   marketId: string;
   /** Outcome to buy (YES or NO) */
   outcome: 'YES' | 'NO';
   /** Amount to invest */
   amount: number;
-}
+};
 
 /**
  * Parameters for selling prediction market shares
  */
-interface SellSharesParams {
+type SellSharesParams = {
   /** Market ID to sell shares from */
   marketId: string;
   /** Number of shares to sell */
   shares: number;
-}
+};
 
 /**
  * Parameters for opening a perpetual position
  */
-interface OpenPositionParams {
+type OpenPositionParams = {
   /** Ticker symbol */
   ticker: string;
   /** Position side (LONG or SHORT) */
@@ -55,38 +55,38 @@ interface OpenPositionParams {
   size: number;
   /** Leverage multiplier */
   leverage: number;
-}
+};
 
 /**
  * Parameters for closing a perpetual position
  */
-interface ClosePositionParams {
+type ClosePositionParams = {
   /** Position ID to close */
   positionId: string;
-}
+};
 
 /**
  * Parameters for creating a post
  */
-interface CreatePostParams {
+type CreatePostParams = {
   /** Post content */
   content: string;
   /** Optional market ID to associate with post */
   marketId?: string;
-}
+};
 
 /**
  * Parameters for joining a group chat
  */
-interface JoinGroupParams {
+type JoinGroupParams = {
   /** Group chat ID */
   groupId: string;
-}
+};
 
 /**
  * Prediction market data structure
  */
-interface PredictionMarket {
+type PredictionMarket = {
   id: string;
   question: string;
   yesShares: number;
@@ -98,12 +98,12 @@ interface PredictionMarket {
   createdAt: number;
   resolveAt: number;
   resolved: boolean;
-}
+};
 
 /**
  * Perpetual market data structure
  */
-interface PerpetualMarket {
+type PerpetualMarket = {
   ticker: string;
   price: number;
   priceChange24h?: number;
@@ -111,12 +111,12 @@ interface PerpetualMarket {
   openInterest: number;
   fundingRate: number;
   nextFundingTime?: number;
-}
+};
 
 /**
  * Feed post data structure
  */
-interface FeedPost {
+type FeedPost = {
   id: string;
   authorId: string;
   authorName: string;
@@ -125,12 +125,12 @@ interface FeedPost {
   likes: number;
   comments: number;
   marketId?: string;
-}
+};
 
 /**
  * Group chat data structure
  */
-interface GroupChat {
+type GroupChat = {
   id: string;
   name: string;
   memberIds: string[];
@@ -144,15 +144,15 @@ interface GroupChat {
     content: string;
     timestamp: number;
   }>;
-}
+};
 
 export class SimulationA2AInterface {
   private engine: SimulationEngine;
   private agentId: string;
-  
+
   /**
    * Create a new SimulationA2AInterface instance
-   * 
+   *
    * @param engine - Simulation engine to wrap
    * @param agentId - Agent identifier for this interface instance
    */
@@ -160,18 +160,18 @@ export class SimulationA2AInterface {
     this.engine = engine;
     this.agentId = agentId;
   }
-  
+
   /**
    * Send A2A request (JSON-RPC style)
-   * 
+   *
    * Routes requests to appropriate handler methods based on method name.
    * All methods are logged and timed for debugging.
-   * 
+   *
    * @param method - A2A method name (e.g., 'a2a.getPredictions')
    * @param params - Optional parameters for the method
    * @returns Method-specific result (type depends on method)
    * @throws Error if method is unknown or handler fails
-   * 
+   *
    * @example
    * ```typescript
    * const result = await interface.sendRequest('a2a.getPredictions');
@@ -184,102 +184,104 @@ export class SimulationA2AInterface {
    */
   async sendRequest(method: string, params?: unknown): Promise<unknown> {
     logger.debug('Simulation A2A request', { method, params });
-    
+
     const actionStart = Date.now();
-    
+
     try {
       let result: unknown;
-      
+
       // Route to appropriate handler
       switch (method) {
         case 'a2a.getPredictions':
           result = this.handleGetPredictions(params);
           break;
-          
+
         case 'a2a.buyShares':
           result = await this.handleBuyShares(params);
           break;
-          
+
         case 'a2a.sellShares':
           result = await this.handleSellShares(params);
           break;
-          
+
         case 'a2a.getPerpetuals':
           result = this.handleGetPerpetuals(params);
           break;
-          
+
         case 'a2a.openPosition':
           result = await this.handleOpenPosition(params);
           break;
-          
+
         case 'a2a.closePosition':
           result = await this.handleClosePosition(params);
           break;
-          
+
         case 'a2a.getFeed':
           result = this.handleGetFeed(params);
           break;
-          
+
         case 'a2a.createPost':
           result = await this.handleCreatePost(params);
           break;
-          
+
         case 'a2a.getChats':
           result = this.handleGetChats(params);
           break;
-          
+
         case 'a2a.joinGroup':
           result = await this.handleJoinGroup(params);
           break;
-          
+
         case 'a2a.getBalance':
           result = this.handleGetBalance(params);
           break;
-          
+
         case 'a2a.getPortfolio':
           result = this.handleGetPortfolio(params);
           break;
-          
+
         case 'a2a.getPositions':
           result = this.handleGetPositions(params);
           break;
-          
+
         case 'a2a.getDashboard':
           result = this.handleGetDashboard(params);
           break;
-          
+
         case 'a2a.getTrendingTags':
           result = this.handleGetTrendingTags(params);
           break;
-          
+
         default:
           throw new Error(`Unknown A2A method: ${method}`);
       }
-      
+
       // NOTE: Don't auto-advance tick here - let the benchmark runner control the tick progression
       // This allows the agent to make multiple A2A calls within a single tick
-      
+
       const duration = Date.now() - actionStart;
       logger.debug('Simulation A2A response', { method, duration });
-      
+
       return result;
     } catch (error) {
       logger.error('Simulation A2A error', { method, error });
       throw error;
     }
   }
-  
+
   /**
    * Get prediction markets
-   * 
+   *
    * Returns all unresolved prediction markets from the simulation state.
-   * 
+   *
    * @param _params - Unused (kept for interface consistency)
    * @returns Object containing array of prediction markets
    */
-  private handleGetPredictions(_params: unknown): { predictions: Omit<PredictionMarket, 'resolved'>[] } {
+  private handleGetPredictions(_params: unknown): {
+    predictions: Omit<PredictionMarket, 'resolved'>[];
+  } {
     const state = this.engine.getGameState();
-    
+
     const predictions = state.predictionMarkets
       .filter((m: PredictionMarket) => !m.resolved)
       .map((m: PredictionMarket) => ({
@@ -294,26 +296,28 @@ export class SimulationA2AInterface {
         createdAt: m.createdAt,
         resolveAt: m.resolveAt,
       }));
-    
+
     return { predictions };
   }
-  
+
   /**
    * Buy prediction market shares
-   * 
+   *
    * Executes a buy action through the simulation engine and returns the result.
-   * 
+   *
    * @param params - Buy shares parameters
    * @returns Object with shares purchased, average price, and position ID
    * @throws Error if buy action fails
    */
-  private async handleBuyShares(params: unknown): Promise<{ shares: number; avgPrice: number; positionId: string }> {
+  private async handleBuyShares(
+    params: unknown
+  ): Promise<{ shares: number; avgPrice: number; positionId: string }> {
     if (!params || typeof params !== 'object') {
       throw new Error('Invalid params: must be an object');
     }
-    
+
     const { marketId, outcome, amount } = params as BuySharesParams;
-    
+
     if (!marketId || typeof marketId !== 'string') {
       throw new Error('Invalid params: marketId must be a non-empty string');
     }
@@ -323,31 +327,34 @@ export class SimulationA2AInterface {
     if (typeof amount !== 'number' || amount <= 0) {
       throw new Error('Invalid params: amount must be a positive number');
     }
-    
+
     const result = await this.engine.performAction('buy_prediction', {
       marketId,
       outcome,
       amount,
     });
-    
+
     if (!result.success) {
       throw new Error(result.error || 'Failed to buy shares');
     }
-    
-    const { positionId, shares } = result.result as { positionId: string; shares: number };
-    
+
+    const { positionId, shares } = result.result as {
+      positionId: string;
+      shares: number;
+    };
+
     const state = this.engine.getGameState();
     const market = state.predictionMarkets.find((m: { id: string }) => m.id === marketId);
     const avgPrice = market ? (outcome === 'YES' ? market.yesPrice : market.noPrice) : 0.5;
-    
+
     return { shares, avgPrice, positionId };
   }
-  
+
   /**
    * Sell prediction market shares
-   * 
+   *
    * Calculates proceeds from selling shares based on current market prices.
-   * 
+   *
    * @param params - Sell shares parameters
    * @returns Object with proceeds from sale
    * @throws Error if market not found
@@ -356,42 +363,44 @@ export class SimulationA2AInterface {
     if (!params || typeof params !== 'object') {
       throw new Error('Invalid params: must be an object');
     }
-    
+
     const { marketId, shares } = params as SellSharesParams;
-    
+
     if (!marketId || typeof marketId !== 'string') {
       throw new Error('Invalid params: marketId must be a non-empty string');
     }
     if (typeof shares !== 'number' || shares <= 0) {
       throw new Error('Invalid params: shares must be a positive number');
     }
-    
+
     // Simplified: calculate proceeds based on current market price
     const state = this.engine.getGameState();
     const market = state.predictionMarkets.find((m: { id: string }) => m.id === marketId);
-    
+
     if (!market) {
       throw new Error(`Market ${marketId} not found`);
     }
-    
+
     // Use average of yes and no prices as sell price
     const avgPrice = (market.yesPrice + market.noPrice) / 2;
     const proceeds = shares * avgPrice;
-    
+
     return { proceeds };
   }
-  
+
   /**
    * Get perpetual markets
-   * 
+   *
    * Returns all perpetual markets from the simulation state.
-   * 
+   *
    * @param _params - Unused (kept for interface consistency)
    * @returns Object containing array of perpetual markets
    */
-  private handleGetPerpetuals(_params: unknown): { perpetuals: PerpetualMarket[] } {
+  private handleGetPerpetuals(_params: unknown): {
+    perpetuals: PerpetualMarket[];
+  } {
     const state = this.engine.getGameState();
-    
+
     const perpetuals = state.perpetualMarkets.map((m: PerpetualMarket) => ({
       ticker: m.ticker,
       price: m.price,
@@ -401,26 +410,28 @@ export class SimulationA2AInterface {
       fundingRate: m.fundingRate,
       nextFundingTime: m.nextFundingTime,
     }));
-    
+
     return { perpetuals };
   }
-  
+
   /**
    * Open perpetual position
-   * 
+   *
    * Executes an open position action through the simulation engine.
-   * 
+   *
    * @param params - Open position parameters
    * @returns Object with position ID and entry price
    * @throws Error if open action fails
    */
-  private async handleOpenPosition(params: unknown): Promise<{ positionId: string; entryPrice: number }> {
+  private async handleOpenPosition(
+    params: unknown
+  ): Promise<{ positionId: string; entryPrice: number }> {
     if (!params || typeof params !== 'object') {
       throw new Error('Invalid params: must be an object');
     }
-    
+
     const { ticker, side, size, leverage } = params as OpenPositionParams;
-    
+
     if (!ticker || typeof ticker !== 'string') {
       throw new Error('Invalid params: ticker must be a non-empty string');
     }
@@ -433,34 +444,34 @@ export class SimulationA2AInterface {
     if (typeof leverage !== 'number' || leverage < 1) {
       throw new Error('Invalid params: leverage must be >= 1');
     }
-    
+
     const result = await this.engine.performAction('open_perp', {
       ticker,
       side,
       size,
       leverage,
     });
-    
+
     if (!result.success) {
       throw new Error(result.error || 'Failed to open position');
     }
-    
+
     const { positionId } = result.result as { positionId: string };
-    
+
     const state = this.engine.getGameState();
     const market = state.perpetualMarkets.find((m: { ticker: string }) => m.ticker === ticker);
-    
+
     return {
       positionId,
       entryPrice: market?.price || 0,
     };
   }
-  
+
   /**
    * Close perpetual position
-   * 
+   *
    * Executes a close position action through the simulation engine.
-   * 
+   *
    * @param params - Close position parameters
    * @returns Object with P&L and exit price
    * @throws Error if close action fails
@@ -469,40 +480,40 @@ export class SimulationA2AInterface {
     if (!params || typeof params !== 'object') {
       throw new Error('Invalid params: must be an object');
     }
-    
+
     const { positionId } = params as ClosePositionParams;
-    
+
     if (!positionId || typeof positionId !== 'string') {
       throw new Error('Invalid params: positionId must be a non-empty string');
     }
-    
+
     const result = await this.engine.performAction('close_perp', {
       positionId,
     });
-    
+
     if (!result.success) {
       throw new Error(result.error || 'Failed to close position');
     }
-    
+
     const { pnl } = result.result as { pnl: number };
-    
+
     return {
       pnl,
       exitPrice: 0, // Simplified
     };
   }
-  
+
   /**
    * Get social feed
-   * 
+   *
    * Returns the last 20 posts from the simulation state.
-   * 
+   *
    * @param _params - Unused (kept for interface consistency)
    * @returns Object containing array of feed posts
    */
   private handleGetFeed(_params: unknown): { posts: FeedPost[] } {
     const state = this.engine.getGameState();
-    
+
     const posts = (state.posts || [])
       .slice(-20) // Last 20 posts
       .map((p: FeedPost) => ({
@@ -515,15 +526,15 @@ export class SimulationA2AInterface {
         comments: p.comments,
         marketId: p.marketId,
       }));
-    
+
     return { posts };
   }
-  
+
   /**
    * Create post
-   * 
+   *
    * Executes a create post action through the simulation engine.
-   * 
+   *
    * @param params - Create post parameters
    * @returns Object with created post ID
    * @throws Error if create action fails
@@ -532,41 +543,43 @@ export class SimulationA2AInterface {
     if (!params || typeof params !== 'object') {
       throw new Error('Invalid params: must be an object');
     }
-    
+
     const { content, marketId } = params as CreatePostParams;
-    
+
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
       throw new Error('Invalid params: content must be a non-empty string');
     }
     if (marketId !== undefined && (typeof marketId !== 'string' || marketId.trim().length === 0)) {
       throw new Error('Invalid params: marketId must be a non-empty string if provided');
     }
-    
+
     const result = await this.engine.performAction('create_post', {
       content,
       marketId,
     });
-    
+
     if (!result.success) {
       throw new Error(result.error || 'Failed to create post');
     }
-    
+
     const { postId } = result.result as { postId: string };
-    
+
     return { postId };
   }
-  
+
   /**
    * Get group chats
-   * 
+   *
    * Returns all group chats from the simulation state.
-   * 
+   *
    * @param _params - Unused (kept for interface consistency)
    * @returns Object containing array of group chats
    */
-  private handleGetChats(_params: unknown): { chats: Array<Omit<GroupChat, 'memberIds'> & { memberCount: number; invited: boolean }> } {
+  private handleGetChats(_params: unknown): {
+    chats: Array<Omit<GroupChat, 'memberIds'> & { memberCount: number; invited: boolean }>;
+  } {
     const state = this.engine.getGameState();
-    
+
     const chats = (state.groupChats || []).map((g: GroupChat) => ({
       id: g.id,
       name: g.name,
@@ -576,15 +589,15 @@ export class SimulationA2AInterface {
       invited: g.invitedAgent || false,
       messages: g.messages || [],
     }));
-    
+
     return { chats };
   }
-  
+
   /**
    * Join group chat
-   * 
+   *
    * Executes a join group action through the simulation engine.
-   * 
+   *
    * @param params - Join group parameters
    * @returns Object indicating success status
    */
@@ -592,28 +605,28 @@ export class SimulationA2AInterface {
     if (!params || typeof params !== 'object') {
       throw new Error('Invalid params: must be an object');
     }
-    
+
     const { groupId } = params as JoinGroupParams;
-    
+
     if (!groupId || typeof groupId !== 'string') {
       throw new Error('Invalid params: groupId must be a non-empty string');
     }
-    
+
     const result = await this.engine.performAction('join_group', {
       groupId,
     });
-    
+
     return { success: result.success };
   }
-  
+
   /**
    * Get agent balance
-   * 
+   *
    * Returns the agent's current balance.
-   * 
+   *
    * @param _params - Unused (kept for interface consistency)
    * @returns Object with balance amount
-   * 
+   *
    * @remarks
    * Currently returns a fixed balance. Can be enhanced to track actual balance.
    */
@@ -621,227 +634,286 @@ export class SimulationA2AInterface {
     // Simplified: return fixed balance
     return { balance: 10000 };
   }
-  
+
   /**
    * Get portfolio (balance, positions, P&L)
-   * 
+   *
    * Returns comprehensive portfolio information including balance, positions, and P&L.
-   * 
+   *
    * @param _params - Unused (kept for interface consistency)
    * @returns Object with balance, positions array, and total P&L
    */
-  private handleGetPortfolio(_params: unknown): { balance: number; positions: Array<Record<string, unknown>>; pnl: number } {
+  private handleGetPortfolio(_params: unknown): {
+    balance: number;
+    positions: Array<Record<string, unknown>>;
+    pnl: number;
+  } {
     const state = this.engine.getGameState();
     const agent = state.agents.find((a: { id: string }) => a.id === this.agentId);
-    
+
     // Calculate positions from agent's state
     const positions: Array<Record<string, unknown>> = [];
-    
+
     // Calculate P&L from agent's totalPnl
     const pnl = (agent as { totalPnl?: number } | undefined)?.totalPnl || 0;
     const balance = 10000 + pnl; // Starting balance + P&L
-    
+
     return {
       balance,
       positions,
-      pnl
+      pnl,
     };
   }
-  
+
   /**
    * Get positions (prediction market + perp positions)
-   * 
+   *
    * Returns all active positions for the agent.
-   * 
+   *
    * @param _params - Unused (kept for interface consistency)
    * @returns Object with prediction and perpetual position arrays
-   * 
+   *
    * @remarks
    * Currently returns empty arrays. Can be enhanced to track actual positions.
    */
-  private handleGetPositions(_params: unknown): { predictionPositions: Array<Record<string, unknown>>; perpPositions: Array<Record<string, unknown>> } {
+  private handleGetPositions(_params: unknown): {
+    predictionPositions: Array<Record<string, unknown>>;
+    perpPositions: Array<Record<string, unknown>>;
+  } {
     // Return empty arrays for simulation
     // In a real benchmark, we'd track actual positions made by the agent
     return {
       predictionPositions: [],
-      perpPositions: []
+      perpPositions: [],
     };
   }
-  
+
   /**
    * Get dashboard data (balance, recent activity, etc)
-   * 
+   *
    * Returns comprehensive dashboard information for the agent.
-   * 
+   *
    * @param _params - Unused (kept for interface consistency)
    * @returns Object with balance, reputation, total P&L, and active positions count
    */
-  private handleGetDashboard(_params: unknown): { balance: number; reputation: number; totalPnl: number; activePositions: number } {
+  private handleGetDashboard(_params: unknown): {
+    balance: number;
+    reputation: number;
+    totalPnl: number;
+    activePositions: number;
+  } {
     const state = this.engine.getGameState();
     const agent = state.agents.find((a: { id: string }) => a.id === this.agentId);
-    
+
     const pnl = (agent as { totalPnl?: number } | undefined)?.totalPnl || 0;
     const balance = 10000 + pnl;
-    
+
     return {
       balance,
       reputation: 1000,
       totalPnl: pnl,
-      activePositions: 0
+      activePositions: 0,
     };
   }
-  
+
   /**
    * Get trending tags
-   * 
+   *
    * Returns trending topic tags with counts and trend directions.
-   * 
+   *
    * @param _params - Unused (kept for interface consistency)
    * @returns Object with array of trending tags
-   * 
+   *
    * @remarks
    * Currently returns dummy data. Can be enhanced to track actual trends.
    */
-  private handleGetTrendingTags(_params: unknown): { tags: Array<{ tag: string; count: number; trend: string }> } {
+  private handleGetTrendingTags(_params: unknown): {
+    tags: Array<{ tag: string; count: number; trend: string }>;
+  } {
     // Return some dummy trending tags for simulation
     return {
       tags: [
         { tag: 'crypto', count: 150, trend: 'up' },
         { tag: 'ai', count: 120, trend: 'up' },
         { tag: 'markets', count: 90, trend: 'stable' },
-      ]
+      ],
     };
   }
-  
+
   /**
    * Check if connected (always true for simulation)
-   * 
+   *
    * @returns Always true for simulation interface
    */
   isConnected(): boolean {
     return true;
   }
-  
+
   // ===== Wrapper methods to match BabylonA2AClient interface =====
-  
+
   /**
    * Buy shares in prediction market
-   * 
+   *
    * Convenience wrapper for buyShares A2A method.
-   * 
+   *
    * @param marketId - Market ID to buy shares in
    * @param outcome - Outcome to buy (YES or NO)
    * @param amount - Amount to invest
    * @returns Result object with shares, avgPrice, and positionId
    */
-  async buyShares(marketId: string, outcome: 'YES' | 'NO', amount: number): Promise<Record<string, unknown>> {
-    return await this.sendRequest('a2a.buyShares', { marketId, outcome, amount }) as Record<string, unknown>;
+  async buyShares(
+    marketId: string,
+    outcome: 'YES' | 'NO',
+    amount: number
+  ): Promise<Record<string, unknown>> {
+    return (await this.sendRequest('a2a.buyShares', {
+      marketId,
+      outcome,
+      amount,
+    })) as Record<string, unknown>;
   }
-  
+
   /**
    * Sell shares from prediction market
-   * 
+   *
    * Convenience wrapper for sellShares A2A method.
-   * 
+   *
    * @param marketId - Market ID to sell shares from
    * @param shares - Number of shares to sell
    * @returns Result object with proceeds
    */
   async sellShares(marketId: string, shares: number): Promise<Record<string, unknown>> {
-    const result = await this.sendRequest('a2a.sellShares', { marketId, shares }) as { proceeds: number };
+    const result = (await this.sendRequest('a2a.sellShares', {
+      marketId,
+      shares,
+    })) as { proceeds: number };
     return { proceeds: result.proceeds };
   }
-  
+
   /**
    * Open perp position
-   * 
+   *
    * Convenience wrapper for openPosition A2A method.
-   * 
+   *
    * @param ticker - Ticker symbol
    * @param side - Position side (long or short)
    * @param size - Position size
    * @param leverage - Leverage multiplier
    * @returns Result object with positionId and entryPrice
    */
-  async openPosition(ticker: string, side: 'long' | 'short', size: number, leverage: number): Promise<Record<string, unknown>> {
-    return await this.sendRequest('a2a.openPosition', { ticker, side, size, leverage }) as Record<string, unknown>;
+  async openPosition(
+    ticker: string,
+    side: 'long' | 'short',
+    size: number,
+    leverage: number
+  ): Promise<Record<string, unknown>> {
+    return (await this.sendRequest('a2a.openPosition', {
+      ticker,
+      side,
+      size,
+      leverage,
+    })) as Record<string, unknown>;
   }
-  
+
   /**
    * Close perp position
-   * 
+   *
    * Convenience wrapper for closePosition A2A method.
-   * 
+   *
    * @param positionId - Position ID to close
    * @returns Result object with pnl and exitPrice
    */
   async closePosition(positionId: string): Promise<Record<string, unknown>> {
-    return await this.sendRequest('a2a.closePosition', { positionId }) as Record<string, unknown>;
+    return (await this.sendRequest('a2a.closePosition', {
+      positionId,
+    })) as Record<string, unknown>;
   }
-  
+
   /**
    * Create post
-   * 
+   *
    * Convenience wrapper for createPost A2A method.
-   * 
+   *
    * @param content - Post content
    * @param type - Post type (defaults to 'post')
    * @returns Result object with postId
    */
   async createPost(content: string, type: string = 'post'): Promise<Record<string, unknown>> {
-    return await this.sendRequest('a2a.createPost', { content, type }) as Record<string, unknown>;
+    return (await this.sendRequest('a2a.createPost', {
+      content,
+      type,
+    })) as Record<string, unknown>;
   }
-  
+
   /**
    * Create comment
-   * 
+   *
    * Convenience wrapper for createComment A2A method.
-   * 
+   *
    * @param postId - Post ID to comment on
    * @param content - Comment content
    * @returns Result object with commentId
    */
   async createComment(postId: string, content: string): Promise<Record<string, unknown>> {
-    return await this.sendRequest('a2a.createComment', { postId, content }) as Record<string, unknown>;
+    return (await this.sendRequest('a2a.createComment', {
+      postId,
+      content,
+    })) as Record<string, unknown>;
   }
-  
+
   /**
    * Get portfolio (balance, positions, P&L)
-   * 
+   *
    * Convenience wrapper for getPortfolio A2A method.
-   * 
+   *
    * @returns Portfolio object with balance, positions, and P&L
    */
-  async getPortfolio(): Promise<{ balance: number; positions: Array<Record<string, unknown>>; pnl: number }> {
-    return await this.sendRequest('a2a.getPortfolio') as { balance: number; positions: Array<Record<string, unknown>>; pnl: number };
-  }
-  
-  /**
-   * Get markets
-   * 
-   * Returns both prediction markets and perpetual markets.
-   * 
-   * @returns Object with predictions and perps arrays
-   */
-  async getMarkets(): Promise<{ predictions: Array<Record<string, unknown>>; perps: Array<Record<string, unknown>> }> {
-    const predictions = await this.sendRequest('a2a.getPredictions', { status: 'active' }) as { predictions: Array<Record<string, unknown>> };
-    const perpetuals = await this.sendRequest('a2a.getPerpetuals', {}) as { perpetuals: Array<Record<string, unknown>> };
-    return {
-      predictions: predictions.predictions || [],
-      perps: perpetuals.perpetuals || []
+  async getPortfolio(): Promise<{
+    balance: number;
+    positions: Array<Record<string, unknown>>;
+    pnl: number;
+  }> {
+    return (await this.sendRequest('a2a.getPortfolio')) as {
+      balance: number;
+      positions: Array<Record<string, unknown>>;
+      pnl: number;
     };
   }
-  
+
+  /**
+   * Get markets
+   *
+   * Returns both prediction markets and perpetual markets.
+   *
+   * @returns Object with predictions and perps arrays
+   */
+  async getMarkets(): Promise<{
+    predictions: Array<Record<string, unknown>>;
+    perps: Array<Record<string, unknown>>;
+  }> {
+    const predictions = (await this.sendRequest('a2a.getPredictions', {
+      status: 'active',
+    })) as { predictions: Array<Record<string, unknown>> };
+    const perpetuals = (await this.sendRequest('a2a.getPerpetuals', {})) as {
+      perpetuals: Array<Record<string, unknown>>;
+    };
+    return {
+      predictions: predictions.predictions || [],
+      perps: perpetuals.perpetuals || [],
+    };
+  }
+
   /**
    * Get feed
-   * 
+   *
    * Convenience wrapper for getFeed A2A method.
-   * 
+   *
    * @param limit - Maximum number of posts to return (default: 20)
    * @returns Object with posts array
    */
   async getFeed(limit = 20): Promise<{ posts: Array<Record<string, unknown>> }> {
-    return await this.sendRequest('a2a.getFeed', { limit, offset: 0 }) as { posts: Array<Record<string, unknown>> };
+    return (await this.sendRequest('a2a.getFeed', { limit, offset: 0 })) as {
+      posts: Array<Record<string, unknown>>;
+    };
   }
 }
-

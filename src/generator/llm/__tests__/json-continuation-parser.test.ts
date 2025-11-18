@@ -3,16 +3,16 @@
  * Tests various edge cases for merging truncated LLM responses
  */
 
-import { describe, it, expect } from 'bun:test';
+import type { JsonValue } from '@/types/common';
+import { describe, expect, it } from 'bun:test';
 import {
-  cleanMarkdownCodeBlocks,
-  extractJsonFromText,
-  extractJsonArrays,
   attemptJsonRepair,
+  cleanMarkdownCodeBlocks,
+  extractJsonArrays,
+  extractJsonFromText,
   mergeJsonArrays,
   parseContinuationContent,
 } from '../json-continuation-parser';
-import type { JsonValue } from '@/types/common';
 
 describe('cleanMarkdownCodeBlocks', () => {
   it('should remove markdown code fences', () => {
@@ -101,14 +101,20 @@ describe('attemptJsonRepair', () => {
     const input = '[{"id": 1}, {"id": 2}';
     const result = attemptJsonRepair(input);
     expect(result).toBe('[{"id": 1}, {"id": 2}]');
-    expect(() => JSON.parse(result!)).not.toThrow();
+    if (!result) {
+      throw new Error('Expected repair result');
+    }
+    expect(() => JSON.parse(result)).not.toThrow();
   });
 
   it('should close unclosed object in array', () => {
     const input = '[{"id": 1}, {"id": 2, "name": "test"';
     const result = attemptJsonRepair(input);
     expect(result).not.toBeNull();
-    expect(() => JSON.parse(result!)).not.toThrow();
+    if (!result) {
+      throw new Error('Expected repair result');
+    }
+    expect(() => JSON.parse(result)).not.toThrow();
   });
 
   it('should remove trailing comma', () => {
@@ -121,7 +127,10 @@ describe('attemptJsonRepair', () => {
     const input = '[{"id": 1, "name": "test';
     const result = attemptJsonRepair(input);
     expect(result).not.toBeNull();
-    expect(() => JSON.parse(result!)).not.toThrow();
+    if (!result) {
+      throw new Error('Expected repair result');
+    }
+    expect(() => JSON.parse(result)).not.toThrow();
   });
 
   it('should handle nested objects and arrays', () => {
@@ -252,7 +261,7 @@ And here's more:
 [
   {"npcId": "bob", "action": "open_long", "ticker": "TECH", "amount": 500},
   {"npcId": "charlie", "action":`;
-    
+
     const result = parseContinuationContent(input);
     expect(Array.isArray(result)).toBe(true);
     // Should get at least the complete arrays (alice + bob = 2 items minimum)
@@ -290,18 +299,17 @@ And here's more:
       action: 'hold',
       reasoning: 'Testing',
     }));
-    
+
     const part2 = Array.from({ length: 25 }, (_, i) => ({
       npcId: `npc-${i + 30}`,
       action: 'buy_yes',
       amount: 100,
     }));
-    
+
     const input = `${JSON.stringify(part1)} ${JSON.stringify(part2)}`;
     const result = parseContinuationContent(input);
-    
+
     expect(Array.isArray(result)).toBe(true);
     expect((result as JsonValue[]).length).toBe(55);
   });
 });
-

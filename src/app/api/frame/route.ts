@@ -1,13 +1,13 @@
 /**
  * Farcaster Frame API
- * 
+ *
  * @route POST /api/frame - Handle Frame action
  * @access Public
- * 
+ *
  * @description
  * Handles Farcaster Frame actions and returns Frame responses. Processes
  * button clicks and user interactions within Farcaster frames.
- * 
+ *
  * @openapi
  * /api/frame:
  *   post:
@@ -43,7 +43,7 @@
  *                   type: string
  *                 image:
  *                   type: string
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/frame', {
@@ -53,27 +53,31 @@
  * ```
  */
 
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server'
-import { logger } from '@/lib/logger'
+import { logger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  const body = await request.json()
-  
-  logger.info('Frame action received', { body }, 'FrameAPI')
+  const body = await request.json();
 
-  const { untrustedData } = body
+  logger.info('Frame action received', { body }, 'FrameAPI');
 
-  const buttonIndex = untrustedData.buttonIndex
-  const fid = untrustedData.fid
+  const { untrustedData } = body;
 
-  logger.info('Processing frame action', { 
-    buttonIndex, 
-    fid,
-    castId: untrustedData.castId 
-  }, 'FrameAPI')
+  const buttonIndex = untrustedData.buttonIndex;
+  const fid = untrustedData.fid;
+
+  logger.info(
+    'Processing frame action',
+    {
+      buttonIndex,
+      fid,
+      castId: untrustedData.castId,
+    },
+    'FrameAPI'
+  );
 
   const frameResponse = {
     version: 'next',
@@ -85,9 +89,9 @@ export async function POST(request: NextRequest) {
         target: `https://babylon.market?fid=${fid}&fc_frame=true`,
       },
     ],
-  }
+  };
 
-  return NextResponse.json(frameResponse)
+  return NextResponse.json(frameResponse);
 }
 
 export async function GET() {
@@ -115,6 +119,5 @@ export async function GET() {
         'content-type': 'text/html',
       },
     }
-  )
+  );
 }
-

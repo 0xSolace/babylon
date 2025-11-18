@@ -3,9 +3,9 @@
  * Converts P&L from trading into earned points
  */
 
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { generateSnowflakeId } from '@/lib/snowflake'
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
 
 export class EarnedPointsService {
   /**
@@ -15,9 +15,9 @@ export class EarnedPointsService {
    * This encourages trading but limits downside risk
    */
   static pnlToPoints(pnl: number): number {
-    const points = Math.floor(pnl / 10)
+    const points = Math.floor(pnl / 10);
     // Cap negative points at -100 to avoid extreme penalties
-    return Math.max(points, -100)
+    return Math.max(points, -100);
   }
 
   /**
@@ -34,24 +34,24 @@ export class EarnedPointsService {
         bonusPoints: true,
         reputationPoints: true,
       },
-    })
+    });
 
     if (!user) {
-      throw new Error(`User not found: ${userId}`)
+      throw new Error(`User not found: ${userId}`);
     }
 
-    const lifetimePnL = Number(user.lifetimePnL)
-    const newEarnedPoints = this.pnlToPoints(lifetimePnL)
+    const lifetimePnL = Number(user.lifetimePnL);
+    const newEarnedPoints = EarnedPointsService.pnlToPoints(lifetimePnL);
 
     // Only update if earned points have changed
     if (newEarnedPoints === user.earnedPoints) {
-      return
+      return;
     }
 
     // Calculate new total reputation points
     // Total = Invite Points + Earned Points + Bonus Points + Base (100)
-    const basePoints = 100
-    const newReputationPoints = basePoints + user.invitePoints + newEarnedPoints + user.bonusPoints
+    const basePoints = 100;
+    const newReputationPoints = basePoints + user.invitePoints + newEarnedPoints + user.bonusPoints;
 
     await prisma.user.update({
       where: { id: userId },
@@ -59,14 +59,18 @@ export class EarnedPointsService {
         earnedPoints: newEarnedPoints,
         reputationPoints: newReputationPoints,
       },
-    })
+    });
 
-    logger.info('Updated earned points from P&L', {
-      userId,
-      lifetimePnL,
-      earnedPoints: newEarnedPoints,
-      totalPoints: newReputationPoints,
-    }, 'EarnedPointsService')
+    logger.info(
+      'Updated earned points from P&L',
+      {
+        userId,
+        lifetimePnL,
+        earnedPoints: newEarnedPoints,
+        totalPoints: newReputationPoints,
+      },
+      'EarnedPointsService'
+    );
   }
 
   /**
@@ -80,8 +84,8 @@ export class EarnedPointsService {
     tradeType: string,
     relatedId?: string
   ): Promise<number> {
-    const previousPoints = this.pnlToPoints(previousLifetimePnL)
-    const computedEarnedPoints = this.pnlToPoints(newLifetimePnL)
+    const previousPoints = EarnedPointsService.pnlToPoints(previousLifetimePnL);
+    const computedEarnedPoints = EarnedPointsService.pnlToPoints(newLifetimePnL);
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -91,29 +95,29 @@ export class EarnedPointsService {
         bonusPoints: true,
         reputationPoints: true,
       },
-    })
+    });
 
     if (!user) {
-      throw new Error(`User not found: ${userId}`)
+      throw new Error(`User not found: ${userId}`);
     }
 
-    const currentEarnedPoints = user.earnedPoints
-    const earnedPointsDelta = computedEarnedPoints - currentEarnedPoints
+    const currentEarnedPoints = user.earnedPoints;
+    const earnedPointsDelta = computedEarnedPoints - currentEarnedPoints;
 
     // Detect sync issues - fail fast if earned points don't match computed value
     if (previousPoints !== currentEarnedPoints && earnedPointsDelta !== 0) {
       throw new Error(
         `Earned points out of sync! Previous P&L $${previousLifetimePnL} should give ${previousPoints} points, but user has ${currentEarnedPoints} earned points`
-      )
+      );
     }
 
     if (earnedPointsDelta === 0) {
-      return 0
+      return 0;
     }
 
-    const newEarnedPoints = computedEarnedPoints
-    const basePoints = 100
-    const newReputationPoints = basePoints + user.invitePoints + newEarnedPoints + user.bonusPoints
+    const newEarnedPoints = computedEarnedPoints;
+    const basePoints = 100;
+    const newReputationPoints = basePoints + user.invitePoints + newEarnedPoints + user.bonusPoints;
 
     // Update user and create transaction
     await prisma.$transaction(async (tx) => {
@@ -123,7 +127,7 @@ export class EarnedPointsService {
           earnedPoints: newEarnedPoints,
           reputationPoints: newReputationPoints,
         },
-      })
+      });
 
       await tx.pointsTransaction.create({
         data: {
@@ -145,19 +149,23 @@ export class EarnedPointsService {
             earnedPointsDelta,
           }),
         },
-      })
-    })
+      });
+    });
 
-    logger.info('Awarded earned points for P&L', {
-      userId,
-      previousLifetimePnL,
-      newLifetimePnL,
-      earnedPointsDelta,
-      totalEarnedPoints: newEarnedPoints,
-      totalReputationPoints: newReputationPoints,
-    }, 'EarnedPointsService')
+    logger.info(
+      'Awarded earned points for P&L',
+      {
+        userId,
+        previousLifetimePnL,
+        newLifetimePnL,
+        earnedPointsDelta,
+        totalEarnedPoints: newEarnedPoints,
+        totalReputationPoints: newReputationPoints,
+      },
+      'EarnedPointsService'
+    );
 
-    return earnedPointsDelta
+    return earnedPointsDelta;
   }
 
   /**
@@ -165,29 +173,35 @@ export class EarnedPointsService {
    * Useful for migration or recalculation
    * Note: Individual user errors are caught to allow continuation
    */
-  static async bulkSyncAllUsers(): Promise<{ success: number; errors: number }> {
+  static async bulkSyncAllUsers(): Promise<{
+    success: number;
+    errors: number;
+  }> {
     const users = await prisma.user.findMany({
       where: { isActor: false },
       select: { id: true },
-    })
+    });
 
-    logger.info(`Syncing earned points for ${users.length} users`, {}, 'EarnedPointsService')
+    logger.info(`Syncing earned points for ${users.length} users`, {}, 'EarnedPointsService');
 
-    let successCount = 0
-    const errorCount = 0
+    let successCount = 0;
+    const errorCount = 0;
 
     for (const user of users) {
-      await this.syncEarnedPointsFromPnL(user.id)
-      successCount++
+      await EarnedPointsService.syncEarnedPointsFromPnL(user.id);
+      successCount++;
     }
 
-    logger.info(`Bulk sync complete`, {
-      total: users.length,
-      success: successCount,
-      errors: errorCount,
-    }, 'EarnedPointsService')
+    logger.info(
+      `Bulk sync complete`,
+      {
+        total: users.length,
+        success: successCount,
+        errors: errorCount,
+      },
+      'EarnedPointsService'
+    );
 
-    return { success: successCount, errors: errorCount }
+    return { success: successCount, errors: errorCount };
   }
 }
-

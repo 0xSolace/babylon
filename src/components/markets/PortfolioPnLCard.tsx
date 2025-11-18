@@ -1,23 +1,23 @@
-import { type PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL'
-import { Share2, Sparkles } from 'lucide-react'
+import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL';
+import { Share2, Sparkles } from 'lucide-react';
 
-interface PortfolioPnLCardProps {
-  data: PortfolioPnLSnapshot | null
-  loading: boolean
-  error: string | null
-  onShare: () => void
-  setShowBuyPointsModal: (show: boolean) => void
-}
+type PortfolioPnLCardProps = {
+  data: PortfolioPnLSnapshot | null;
+  loading: boolean;
+  error: string | null;
+  onShare: () => void;
+  setShowBuyPointsModal: (show: boolean) => void;
+};
 
 const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   maximumFractionDigits: 2,
-})
+});
 
 function formatCurrency(value: number | null | undefined) {
-  const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : 0
-  return formatter.format(safeValue)
+  const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return formatter.format(safeValue);
 }
 
 export function PortfolioPnLCard({
@@ -25,12 +25,12 @@ export function PortfolioPnLCard({
   loading,
   error,
   onShare,
-  setShowBuyPointsModal
+  setShowBuyPointsModal,
 }: PortfolioPnLCardProps) {
   return (
     <>
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <h2 className="text-md font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="font-semibold text-md text-muted-foreground uppercase tracking-wide">
           Your Portfolio
         </h2>
         <div className="flex items-center gap-3">
@@ -47,58 +47,57 @@ export function PortfolioPnLCard({
             type="button"
             onClick={onShare}
             disabled={loading || !data}
-            className="inline-flex items-center gap-3 rounded-lg bg-white/90 px-3 py-3 text-sm font-semibold text-[#0B1C3D] shadow transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-3 rounded-lg bg-white/90 px-3 py-3 font-semibold text-[#0B1C3D] text-sm shadow transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Share2 className="h-4 w-4" />
             Share P&amp;L
           </button>
           <button
+            type="button"
             onClick={() => setShowBuyPointsModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-yellow-500 to-amber-600 text-primary-foreground font-medium rounded-lg hover:from-yellow-600 hover:to-amber-700 transition-all shadow-md hover:shadow-lg"
+            className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-yellow-500 to-amber-600 px-4 py-2.5 font-medium text-primary-foreground shadow-md transition-all hover:from-yellow-600 hover:to-amber-700 hover:shadow-lg"
           >
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="h-4 w-4" />
             <span className="hidden sm:inline">Buy Points</span>
           </button>
         </div>
       </div>
-          <section className="mt-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-purple-500/10 to-primary/5 px-4 py-3 sm:px-5 sm:py-4 shadow-sm">
-
-      {loading ? (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-4">
-            <div className="h-3 w-24 animate-pulse rounded bg-white/40" />
-            <div className="mt-2 h-9 w-32 animate-pulse rounded bg-white/60" />
-          </div>
-          <div className="p-4">
-            <div className="h-3 w-32 animate-pulse rounded bg-white/40" />
-            <div className="mt-2 h-9 w-32 animate-pulse rounded bg-white/60" />
-          </div>
-        </div>
-      ) : error ? (
-        <div className="mt-6 rounded-lg bg-white/10 px-4 py-3 text-sm text-foreground/80">
-          <p className="font-medium text-foreground">Unable to load portfolio</p>
-          <p className="mt-1 text-foreground/80">{error}</p>
-        </div>
-      ) : (
-        data && (
+      <section className="mt-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-purple-500/10 to-primary/5 px-4 py-3 shadow-sm sm:px-5 sm:py-4">
+        {loading ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="p-4">
-              <dt className="text-xs uppercase text-foreground/70">Total Points</dt>
-              <dd className="mt-2 text-3xl font-bold text-foreground">
-                {formatCurrency(data.accountEquity)}
-              </dd>
+              <div className="h-3 w-24 animate-pulse rounded bg-white/40" />
+              <div className="mt-2 h-9 w-32 animate-pulse rounded bg-white/60" />
             </div>
             <div className="p-4">
-              <dt className="text-xs uppercase text-foreground/70">Available to Invest</dt>
-              <dd className="mt-2 text-3xl font-bold text-foreground">
-                {formatCurrency(data.availableBalance)}
-              </dd>
+              <div className="h-3 w-32 animate-pulse rounded bg-white/40" />
+              <div className="mt-2 h-9 w-32 animate-pulse rounded bg-white/60" />
             </div>
           </div>
-        )
-      )}
-    </section>
+        ) : error ? (
+          <div className="mt-6 rounded-lg bg-white/10 px-4 py-3 text-foreground/80 text-sm">
+            <p className="font-medium text-foreground">Unable to load portfolio</p>
+            <p className="mt-1 text-foreground/80">{error}</p>
+          </div>
+        ) : (
+          data && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-4">
+                <dt className="text-foreground/70 text-xs uppercase">Total Points</dt>
+                <dd className="mt-2 font-bold text-3xl text-foreground">
+                  {formatCurrency(data.accountEquity)}
+                </dd>
+              </div>
+              <div className="p-4">
+                <dt className="text-foreground/70 text-xs uppercase">Available to Invest</dt>
+                <dd className="mt-2 font-bold text-3xl text-foreground">
+                  {formatCurrency(data.availableBalance)}
+                </dd>
+              </div>
+            </div>
+          )
+        )}
+      </section>
     </>
-  )
+  );
 }
-

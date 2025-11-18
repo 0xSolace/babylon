@@ -3,42 +3,41 @@
  * Agent-to-Agent communication types following JSON-RPC 2.0 spec
  */
 
-import { z } from 'zod';
-import type { JsonValue, JsonRpcParams, JsonRpcResult } from '@/types/common';
-import { JsonValueSchema } from '@/types/common';
+import type { IAgent0Client, IAgentDiscoveryService } from '@/agents/agent0/types';
 import type { RegistryClient, X402Manager } from '@/types/a2a-server';
-import type { IAgent0Client } from '@/agents/agent0/types';
-import type { IAgentDiscoveryService } from '@/agents/agent0/types';
+import type { JsonRpcParams, JsonRpcResult, JsonValue } from '@/types/common';
+import { JsonValueSchema } from '@/types/common';
+import { z } from 'zod';
 
 // Re-export common types
 export type { JsonRpcParams, JsonRpcResult, JsonValue };
 
 // JSON-RPC 2.0 Base Types
-export interface JsonRpcRequest {
-  jsonrpc: '2.0'
-  method: string
-  params?: JsonRpcParams
-  id: string | number
-}
+export type JsonRpcRequest = {
+  jsonrpc: '2.0';
+  method: string;
+  params?: JsonRpcParams;
+  id: string | number;
+};
 
-export interface JsonRpcResponse {
-  jsonrpc: '2.0'
-  result?: JsonRpcResult
-  error?: JsonRpcError
-  id: string | number | null
-}
+export type JsonRpcResponse = {
+  jsonrpc: '2.0';
+  result?: JsonRpcResult;
+  error?: JsonRpcError;
+  id: string | number | null;
+};
 
-export interface JsonRpcError {
-  code: number
-  message: string
-  data?: JsonValue
-}
+export type JsonRpcError = {
+  code: number;
+  message: string;
+  data?: JsonValue;
+};
 
-export interface JsonRpcNotification {
-  jsonrpc: '2.0'
-  method: string
-  params?: JsonRpcParams
-}
+export type JsonRpcNotification = {
+  jsonrpc: '2.0';
+  method: string;
+  params?: JsonRpcParams;
+};
 
 // A2A Protocol Methods
 export enum A2AMethod {
@@ -74,7 +73,7 @@ export enum A2AMethod {
   CREATE_COMMENT = 'a2a.createComment',
   DELETE_COMMENT = 'a2a.deleteComment',
   LIKE_COMMENT = 'a2a.likeComment',
-  
+
   // User Management
   GET_USER_PROFILE = 'a2a.getUserProfile',
   UPDATE_PROFILE = 'a2a.updateProfile',
@@ -141,13 +140,13 @@ export enum A2AMethod {
   GET_MUTES = 'a2a.getMutes',
   CHECK_BLOCK_STATUS = 'a2a.checkBlockStatus',
   CHECK_MUTE_STATUS = 'a2a.checkMuteStatus',
-  
+
   // Moderation Escrow (Admin only)
   CREATE_ESCROW_PAYMENT = 'a2a.createEscrowPayment',
   VERIFY_ESCROW_PAYMENT = 'a2a.verifyEscrowPayment',
   REFUND_ESCROW_PAYMENT = 'a2a.refundEscrowPayment',
   LIST_ESCROW_PAYMENTS = 'a2a.listEscrowPayments',
-  
+
   // Ban Appeal with Escrow
   APPEAL_BAN = 'a2a.appealBan',
   APPEAL_BAN_WITH_ESCROW = 'a2a.appealBanWithEscrow',
@@ -159,16 +158,16 @@ export enum A2AMethod {
   FAVORITE_PROFILE = 'a2a.favoriteProfile',
   UNFAVORITE_PROFILE = 'a2a.unfavoriteProfile',
   GET_FAVORITES = 'a2a.getFavorites',
-  GET_FAVORITE_POSTS = 'a2a.getFavoritePosts'
+  GET_FAVORITE_POSTS = 'a2a.getFavoritePosts',
 }
 
 // Agent Connection Types
-export interface AgentCredentials {
-  address: string // Ethereum address
-  tokenId: number // ERC-8004 token ID
-  signature: string // Signed message proving ownership
-  timestamp: number
-}
+export type AgentCredentials = {
+  address: string; // Ethereum address
+  tokenId: number; // ERC-8004 token ID
+  signature: string; // Signed message proving ownership
+  timestamp: number;
+};
 
 export const GameNetworkInfoSchema = z.object({
   chainId: z.number(),
@@ -177,7 +176,6 @@ export const GameNetworkInfoSchema = z.object({
   marketAddress: z.string().optional(),
 });
 export type GameNetworkInfo = z.infer<typeof GameNetworkInfoSchema>;
-
 
 export const AgentCapabilitiesSchema = z.object({
   strategies: z.array(z.string()).optional().default([]),
@@ -191,66 +189,66 @@ export const AgentCapabilitiesSchema = z.object({
 });
 export type AgentCapabilities = z.infer<typeof AgentCapabilitiesSchema>;
 
-export interface AgentProfile {
-  agentId?: string // Optional agent ID for registry tracking
-  tokenId: number
-  address: string
-  name: string
-  endpoint: string
-  capabilities: AgentCapabilities
-  reputation: AgentReputation
-  isActive: boolean
-}
+export type AgentProfile = {
+  agentId?: string; // Optional agent ID for registry tracking
+  tokenId: number;
+  address: string;
+  name: string;
+  endpoint: string;
+  capabilities: AgentCapabilities;
+  reputation: AgentReputation;
+  isActive: boolean;
+};
 
-export interface AgentReputation {
-  totalBets: number
-  winningBets: number
-  accuracyScore: number
-  trustScore: number
-  totalVolume: string
-  profitLoss: number
-  isBanned: boolean
-}
+export type AgentReputation = {
+  totalBets: number;
+  winningBets: number;
+  accuracyScore: number;
+  trustScore: number;
+  totalVolume: string;
+  profitLoss: number;
+  isBanned: boolean;
+};
 
-export interface AgentConnection {
-  agentId: string
-  address: string
-  tokenId: number
-  capabilities: AgentCapabilities
-  authenticated: boolean
-  connectedAt: number
-  lastActivity: number
-}
+export type AgentConnection = {
+  agentId: string;
+  address: string;
+  tokenId: number;
+  capabilities: AgentCapabilities;
+  authenticated: boolean;
+  connectedAt: number;
+  lastActivity: number;
+};
 
 // Market Data Types
-export interface MarketData {
-  marketId: string
-  question: string
-  outcomes: string[]
-  prices: number[]
-  volume: string
-  liquidity: string
-  resolveAt: number
-  resolved: boolean
-  winningOutcome?: number
-}
+export type MarketData = {
+  marketId: string;
+  question: string;
+  outcomes: string[];
+  prices: number[];
+  volume: string;
+  liquidity: string;
+  resolveAt: number;
+  resolved: boolean;
+  winningOutcome?: number;
+};
 
-export interface MarketSubscription {
-  marketId: string
-  agentId: string
-  subscribedAt: number
-}
+export type MarketSubscription = {
+  marketId: string;
+  agentId: string;
+  subscribedAt: number;
+};
 
 // x402 Micropayment Types
-export interface PaymentRequest {
-  requestId: string
-  from: string
-  to: string
-  amount: string // in wei
-  service: string
-  metadata?: Record<string, JsonValue>
-  expiresAt: number
-}
+export type PaymentRequest = {
+  requestId: string;
+  from: string;
+  to: string;
+  amount: string; // in wei
+  service: string;
+  metadata?: Record<string, JsonValue>;
+  expiresAt: number;
+};
 
 export const PaymentRequestSchema = z.object({
   requestId: z.string(),
@@ -262,43 +260,43 @@ export const PaymentRequestSchema = z.object({
   expiresAt: z.number(),
 });
 
-export interface PaymentReceipt {
-  requestId: string
-  txHash: string
-  from: string
-  to: string
-  amount: string
-  timestamp: number
-  confirmed: boolean
-}
+export type PaymentReceipt = {
+  requestId: string;
+  txHash: string;
+  from: string;
+  to: string;
+  amount: string;
+  timestamp: number;
+  confirmed: boolean;
+};
 
 // WebSocket Message Types
-export interface HandshakeRequest {
-  credentials: AgentCredentials
-  capabilities: AgentCapabilities
-  endpoint: string
-}
+export type HandshakeRequest = {
+  credentials: AgentCredentials;
+  capabilities: AgentCapabilities;
+  endpoint: string;
+};
 
-export interface HandshakeResponse {
-  agentId: string
-  sessionToken: string
-  serverCapabilities: string[]
-  expiresAt: number
-}
+export type HandshakeResponse = {
+  agentId: string;
+  sessionToken: string;
+  serverCapabilities: string[];
+  expiresAt: number;
+};
 
-export interface DiscoverRequest {
+export type DiscoverRequest = {
   filters?: {
-    strategies?: string[]
-    minReputation?: number
-    markets?: string[]
-  }
-  limit?: number
-}
+    strategies?: string[];
+    minReputation?: number;
+    markets?: string[];
+  };
+  limit?: number;
+};
 
-export interface DiscoverResponse {
-  agents: AgentProfile[]
-  total: number
-}
+export type DiscoverResponse = {
+  agents: AgentProfile[];
+  total: number;
+};
 
 // Error Codes (following JSON-RPC 2.0 spec + custom)
 export enum ErrorCode {
@@ -319,56 +317,57 @@ export enum ErrorCode {
   PAYMENT_FAILED = -32005,
   RATE_LIMIT_EXCEEDED = -32006,
   INVALID_SIGNATURE = -32007,
-  EXPIRED_REQUEST = -32008
+  EXPIRED_REQUEST = -32008,
 }
 
 // Server Configuration
-export interface A2AServerConfig {
-  port: number
-  host?: string
-  maxConnections?: number
-  messageRateLimit?: number
-  authTimeout?: number
-  enableX402?: boolean
-  enableCoalitions?: boolean
-  logLevel?: 'debug' | 'info' | 'warn' | 'error'
-  registryClient?: RegistryClient
-  agent0Client?: IAgent0Client // Agent0Client - optional for external agent support
-  agentDiscovery?: IAgentDiscoveryService // AgentDiscoveryService - optional for enhanced discovery
-}
+export type A2AServerConfig = {
+  port: number;
+  host?: string;
+  maxConnections?: number;
+  messageRateLimit?: number;
+  authTimeout?: number;
+  enableX402?: boolean;
+  enableCoalitions?: boolean;
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  registryClient?: RegistryClient;
+  agent0Client?: IAgent0Client; // Agent0Client - optional for external agent support
+  agentDiscovery?: IAgentDiscoveryService; // AgentDiscoveryService - optional for enhanced discovery
+};
 
 // Server Options (used internally by websocket-server)
-export interface A2AServerOptions extends Omit<A2AServerConfig, 'registryClient' | 'agent0Client' | 'agentDiscovery'> {
-  registryClient?: RegistryClient
-  x402Manager?: X402Manager
-  agent0Client?: IAgent0Client // Agent0Client - optional for external agent support
-  agentDiscovery?: IAgentDiscoveryService // AgentDiscoveryService - optional for enhanced discovery
+export interface A2AServerOptions
+  extends Omit<A2AServerConfig, 'registryClient' | 'agent0Client' | 'agentDiscovery'> {
+  registryClient?: RegistryClient;
+  x402Manager?: X402Manager;
+  agent0Client?: IAgent0Client; // Agent0Client - optional for external agent support
+  agentDiscovery?: IAgentDiscoveryService; // AgentDiscoveryService - optional for enhanced discovery
 }
 
 // Client Configuration
-export interface A2AClientConfig {
-  endpoint: string
+export type A2AClientConfig = {
+  endpoint: string;
   credentials: {
-    address: string
-    privateKey: string
-    tokenId?: number
-  }
-  capabilities: AgentCapabilities
-  autoReconnect?: boolean
-  reconnectInterval?: number
-  heartbeatInterval?: number
-}
+    address: string;
+    privateKey: string;
+    tokenId?: number;
+  };
+  capabilities: AgentCapabilities;
+  autoReconnect?: boolean;
+  reconnectInterval?: number;
+  heartbeatInterval?: number;
+};
 
 // Event Types
-export interface A2AEvent {
-  type: string
-  data: JsonValue | Record<string, JsonValue>
-  timestamp: number
-}
+export type A2AEvent = {
+  type: string;
+  data: JsonValue | Record<string, JsonValue>;
+  timestamp: number;
+};
 
 export enum A2AEventType {
   AGENT_CONNECTED = 'agent.connected',
   AGENT_DISCONNECTED = 'agent.disconnected',
   MARKET_UPDATE = 'market.update',
-  PAYMENT_RECEIVED = 'payment.received'
+  PAYMENT_RECEIVED = 'payment.received',
 }

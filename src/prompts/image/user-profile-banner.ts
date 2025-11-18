@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating humorous profile banners for new users.
- * 
+ *
  * Creates landscape-format banner images with memetic, internet-culture
  * aesthetics including vaporwave, Y2K nostalgia, glitch art, retro gaming,
  * and surreal dreamscapes. Designed to be funny, aesthetic, and trendy.
- * 
+ *
  * Returns image generation prompt for user profile banner.
  */
 export const userProfileBanner = definePrompt({
@@ -48,5 +48,5 @@ IMPORTANT:
 - Should look good as a banner/header image
 - Avoid specific people or copyrighted characters
 - Focus on aesthetic and vibe over detailed elements
-`.trim()
+`.trim(),
 });

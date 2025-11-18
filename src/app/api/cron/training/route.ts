@@ -1,14 +1,14 @@
 /**
  * Training Status Cron Job API
- * 
+ *
  * @route GET /api/cron/training - Check training readiness
  * @access Cron (CRON_SECRET required)
- * 
+ *
  * @description
  * Daily cron job that checks training system readiness, reports status, and logs
  * metrics. Training is triggered by GitHub Actions; this endpoint monitors readiness.
  * Max execution time: 60s.
- * 
+ *
  * @openapi
  * /api/cron/training:
  *   get:
@@ -37,7 +37,7 @@
  *                   type: object
  *       401:
  *         description: Invalid or missing CRON_SECRET
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/cron/training', {
@@ -45,13 +45,13 @@
  * });
  * const { ready, stats } = await response.json();
  * ```
- * 
+ *
  * @see {@link /lib/training/AutomationPipeline} Automation pipeline
  */
 
-import { NextResponse } from 'next/server';
-import { automationPipeline } from '@/lib/training/AutomationPipeline';
 import { logger } from '@/lib/logger';
+import { automationPipeline } from '@/lib/training/AutomationPipeline';
+import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 1 minute
@@ -65,49 +65,63 @@ export async function GET() {
 
     // 1. Check if ready to train
     const readiness = await automationPipeline.checkTrainingReadiness();
-    
+
     // 2. Get overall system status
     const status = await automationPipeline.getStatus();
-    
+
     // 3. Log readiness status
     if (readiness.ready) {
-      logger.info('✅ System ready for training', {
-        trajectories: readiness.stats.totalTrajectories,
-        scenarioGroups: readiness.stats.scenarioGroups,
-        dataQuality: readiness.stats.dataQuality
-      }, 'TrainingStatusCron');
+      logger.info(
+        '✅ System ready for training',
+        {
+          trajectories: readiness.stats.totalTrajectories,
+          scenarioGroups: readiness.stats.scenarioGroups,
+          dataQuality: readiness.stats.dataQuality,
+        },
+        'TrainingStatusCron'
+      );
     } else {
-      logger.info('⏳ System not ready for training', {
-        reason: readiness.reason,
-        stats: readiness.stats
-      }, 'TrainingStatusCron');
+      logger.info(
+        '⏳ System not ready for training',
+        {
+          reason: readiness.reason,
+          stats: readiness.stats,
+        },
+        'TrainingStatusCron'
+      );
     }
-    
+
     // 4. Log recent activity
-    logger.info('Training system metrics', {
-      dataCollection: status.dataCollection,
-      latestModel: status.models.latest,
-      deployedModels: status.models.deployed,
-      lastTraining: status.training.lastCompleted
-    }, 'TrainingStatusCron');
+    logger.info(
+      'Training system metrics',
+      {
+        dataCollection: status.dataCollection,
+        latestModel: status.models.latest,
+        deployedModels: status.models.deployed,
+        lastTraining: status.training.lastCompleted,
+      },
+      'TrainingStatusCron'
+    );
 
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
       readiness,
       status,
-      message: readiness.ready 
+      message: readiness.ready
         ? '✅ Ready for training - will run via GitHub Actions at 2 AM UTC'
-        : `⏳ Not ready: ${readiness.reason}`
+        : `⏳ Not ready: ${readiness.reason}`,
     });
-
   } catch (error) {
     logger.error('Training status check failed', error, 'TrainingStatusCron');
-    
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    }, { status: 500 });
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 }
+    );
   }
 }

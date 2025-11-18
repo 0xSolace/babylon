@@ -1,13 +1,13 @@
 /**
  * Farcaster Frame Metadata API
- * 
+ *
  * @route GET /api/frame/metadata - Get Frame metadata
  * @access Public
- * 
+ *
  * @description
  * Returns Frame metadata for Farcaster apps including name, icon, splash
  * image, and home URL. Used for Frame discovery and configuration.
- * 
+ *
  * @openapi
  * /api/frame/metadata:
  *   get:
@@ -38,16 +38,16 @@
  *                   format: uri
  *                 version:
  *                   type: string
- * 
+ *
  * @example
  * ```typescript
  * const metadata = await fetch('/api/frame/metadata').then(r => r.json());
  * ```
  */
 
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const metadata = {
@@ -57,12 +57,11 @@ export async function GET() {
     splashBackgroundColor: '#0a0a0a',
     homeUrl: 'https://babylon.market',
     version: 'next',
-  }
+  };
 
   return NextResponse.json(metadata, {
     headers: {
       'Cache-Control': 'public, max-age=3600',
     },
-  })
+  });
 }
-

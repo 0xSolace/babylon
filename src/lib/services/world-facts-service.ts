@@ -1,18 +1,18 @@
 /**
  * World Facts Service
- * 
+ *
  * Manages world facts that provide context for game generation.
  * Includes crypto prices, political state, AI developments, etc.
- * 
+ *
  * @module services/world-facts-service
  */
 
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
-import type { WorldFact } from '@prisma/client';
 import { generateSnowflakeId } from '@/lib/snowflake';
+import type { WorldFact } from '@prisma/client';
 
-export interface WorldFactsContext {
+export type WorldFactsContext = {
   crypto: string;
   politics: string;
   economy: string;
@@ -20,7 +20,7 @@ export interface WorldFactsContext {
   general: string;
   timestamp: string;
   headlines?: string;
-}
+};
 
 /**
  * World Facts Service
@@ -110,7 +110,7 @@ export class WorldFactsService {
       if (!byCategory[fact.category]) {
         byCategory[fact.category] = [];
       }
-      const categoryArray = byCategory[fact.category]
+      const categoryArray = byCategory[fact.category];
       if (categoryArray) {
         categoryArray.push(fact);
       }
@@ -120,14 +120,12 @@ export class WorldFactsService {
     const formatCategory = (category: string) => {
       const categoryFacts = byCategory[category] || [];
       if (categoryFacts.length === 0) return 'No information available';
-      
-      return categoryFacts
-        .map(f => `- ${f.label}: ${f.value}`)
-        .join('\n');
+
+      return categoryFacts.map((f) => `- ${f.label}: ${f.value}`).join('\n');
     };
 
     // Get recent headlines if requested
-    let headlinesContext = undefined;
+    let headlinesContext: string | undefined;
     if (includeHeadlines) {
       const { createParodyHeadlineGenerator } = await import('./parody-headline-generator');
       const generator = createParodyHeadlineGenerator();
@@ -202,14 +200,16 @@ This context reflects the current state of the world. Use these facts to make yo
   /**
    * Bulk update facts
    */
-  async bulkUpdateFacts(updates: Array<{
-    category: string;
-    key: string;
-    label: string;
-    value: string;
-    source?: string;
-    priority?: number;
-  }>): Promise<void> {
+  async bulkUpdateFacts(
+    updates: Array<{
+      category: string;
+      key: string;
+      label: string;
+      value: string;
+      source?: string;
+      priority?: number;
+    }>
+  ): Promise<void> {
     for (const update of updates) {
       await this.setFact(
         update.category,
@@ -231,5 +231,3 @@ This context reflects the current state of the world. Use these facts to make yo
 
 // Singleton instance
 export const worldFactsService = new WorldFactsService();
-
-

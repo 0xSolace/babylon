@@ -5,10 +5,10 @@
  * Tests that the manifest is properly configured and accessible
  */
 
-import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
-interface MiniAppManifest {
+type MiniAppManifest = {
   miniapp: {
     version: string;
     name: string;
@@ -32,7 +32,7 @@ interface MiniAppManifest {
     payload: string;
     signature: string;
   };
-}
+};
 
 async function validateManifest(): Promise<void> {
   console.log('🔍 Validating Farcaster Mini App Manifest...\n');
@@ -77,13 +77,7 @@ async function validateManifest(): Promise<void> {
     }
 
     // Check URLs are valid
-    const urlFields = [
-      'iconUrl',
-      'splashImageUrl',
-      'homeUrl',
-      'heroImageUrl',
-      'ogImageUrl',
-    ];
+    const urlFields = ['iconUrl', 'splashImageUrl', 'homeUrl', 'heroImageUrl', 'ogImageUrl'];
 
     for (const field of urlFields) {
       const url = manifest.miniapp[field as keyof typeof manifest.miniapp];
@@ -130,7 +124,7 @@ async function validateManifest(): Promise<void> {
     }
 
     // Print results
-    console.log('\n' + '='.repeat(60));
+    console.log(`\n${'='.repeat(60)}`);
     console.log('\n📊 Validation Results:\n');
 
     if (errors.length === 0) {
@@ -139,15 +133,19 @@ async function validateManifest(): Promise<void> {
       console.log('✅ Manifest structure correct');
     } else {
       console.log('❌ Errors found:');
-      errors.forEach((error) => console.log(`   - ${error}`));
+      for (const error of errors) {
+        console.log(`   - ${error}`);
+      }
     }
 
     if (warnings.length > 0) {
       console.log('\n⚠️  Warnings:');
-      warnings.forEach((warning) => console.log(`   - ${warning}`));
+      for (const warning of warnings) {
+        console.log(`   - ${warning}`);
+      }
     }
 
-    console.log('\n' + '='.repeat(60));
+    console.log(`\n${'='.repeat(60)}`);
 
     // Print next steps
     console.log('\n📋 Next Steps:\n');
@@ -165,7 +163,7 @@ async function validateManifest(): Promise<void> {
     }
 
     // Test local server if running
-    console.log('\n' + '='.repeat(60));
+    console.log(`\n${'='.repeat(60)}`);
     console.log('\n🌐 Testing Local Server...\n');
 
     try {
@@ -178,12 +176,12 @@ async function validateManifest(): Promise<void> {
         console.log('⚠️  Local server returned:', response.status);
         console.log('💡 Make sure dev server is running: bun run dev');
       }
-    } catch (error) {
+    } catch (_error) {
       console.log('ℹ️  Local server not running (this is OK for production)');
       console.log('💡 To test locally: bun run dev');
     }
 
-    console.log('\n' + '='.repeat(60) + '\n');
+    console.log(`\n${'='.repeat(60)}\n`);
   } catch (error) {
     console.error('❌ Error:', error instanceof Error ? error.message : String(error));
     process.exit(1);
@@ -195,4 +193,3 @@ validateManifest().catch((error) => {
   console.error('❌ Fatal error:', error);
   process.exit(1);
 });
-

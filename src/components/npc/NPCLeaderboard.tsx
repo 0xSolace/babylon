@@ -7,109 +7,104 @@
  * Pattern based on: ReputationLeaderboard.tsx
  */
 
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { Trophy, TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils';
+import { Activity, DollarSign, TrendingDown, TrendingUp, Trophy } from 'lucide-react';
+import Image from 'next/image';
+import { useEffect, useState } from 'react';
 
-interface PerformanceMetrics {
-  totalValue: number
-  roi: number
-  unrealizedPnL: number
-  positionCount: number
-  utilization: number
-}
+type PerformanceMetrics = {
+  totalValue: number;
+  roi: number;
+  unrealizedPnL: number;
+  positionCount: number;
+  utilization: number;
+};
 
-interface LeaderboardEntry {
-  rank: number
-  actorId: string
-  actorName: string
-  personality: string | null
-  profileImageUrl: string | null
-  poolId: string
-  performance: PerformanceMetrics
-}
+type LeaderboardEntry = {
+  rank: number;
+  actorId: string;
+  actorName: string;
+  personality: string | null;
+  profileImageUrl: string | null;
+  poolId: string;
+  performance: PerformanceMetrics;
+};
 
-interface LeaderboardData {
-  success: boolean
-  leaderboard: LeaderboardEntry[]
+type LeaderboardData = {
+  success: boolean;
+  leaderboard: LeaderboardEntry[];
   metadata: {
-    count: number
-    limit: number
-    minValue: number
-  }
-}
+    count: number;
+    limit: number;
+    minValue: number;
+  };
+};
 
-interface NPCLeaderboardProps {
-  limit?: number
-  minValue?: number
-  className?: string
-}
+type NPCLeaderboardProps = {
+  limit?: number;
+  minValue?: number;
+  className?: string;
+};
 
-export function NPCLeaderboard({
-  limit = 50,
-  minValue = 0,
-  className = '',
-}: NPCLeaderboardProps) {
-  const [data, setData] = useState<LeaderboardData | null>(null)
-  const [loading, setLoading] = useState(true)
+export function NPCLeaderboard({ limit = 50, minValue = 0, className = '' }: NPCLeaderboardProps) {
+  const [data, setData] = useState<LeaderboardData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
-      setLoading(true)
+      setLoading(true);
       const response = await fetch(
         `/api/npc/performance/leaderboard?limit=${limit}&minValue=${minValue}`
-      )
-      const result = await response.json()
+      );
+      const result = await response.json();
 
       if (result.success) {
-        setData(result)
+        setData(result);
       }
-      setLoading(false)
-    }
+      setLoading(false);
+    };
 
-    fetchLeaderboard()
+    fetchLeaderboard();
 
     // Refresh every 30 seconds
-    const interval = setInterval(fetchLeaderboard, 30000)
-    return () => clearInterval(interval)
-  }, [limit, minValue])
+    const interval = setInterval(fetchLeaderboard, 30000);
+    return () => clearInterval(interval);
+  }, [limit, minValue]);
 
   if (loading) {
     return (
-      <div className={cn('bg-sidebar rounded-lg p-4', className)}>
-        <div className="text-sm text-muted-foreground">Loading leaderboard...</div>
+      <div className={cn('rounded-lg bg-sidebar p-4', className)}>
+        <div className="text-muted-foreground text-sm">Loading leaderboard...</div>
       </div>
-    )
+    );
   }
 
   if (!data || data.leaderboard.length === 0) {
     return (
-      <div className={cn('bg-sidebar rounded-lg p-4', className)}>
-        <div className="text-sm text-muted-foreground">No leaderboard data available</div>
+      <div className={cn('rounded-lg bg-sidebar p-4', className)}>
+        <div className="text-muted-foreground text-sm">No leaderboard data available</div>
       </div>
-    )
+    );
   }
 
   const getRankMedalColor = (rank: number) => {
-    if (rank === 1) return 'text-yellow-500'
-    if (rank === 2) return 'text-gray-400'
-    if (rank === 3) return 'text-orange-600'
-    return 'text-muted-foreground'
-  }
+    if (rank === 1) return 'text-yellow-500';
+    if (rank === 2) return 'text-gray-400';
+    if (rank === 3) return 'text-orange-600';
+    return 'text-muted-foreground';
+  };
 
   return (
-    <div className={cn('bg-sidebar rounded-lg p-4 space-y-4', className)}>
+    <div className={cn('space-y-4 rounded-lg bg-sidebar p-4', className)}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-yellow-500" />
+        <h3 className="flex items-center gap-2 font-bold text-foreground text-lg">
+          <Trophy className="h-5 w-5 text-yellow-500" />
           NPC Performance Leaderboard
         </h3>
-        <div className="text-xs text-muted-foreground">
-          Top {data.metadata.count} NPCs
-        </div>
+        <div className="text-muted-foreground text-xs">Top {data.metadata.count} NPCs</div>
       </div>
 
       {/* Leaderboard Entries */}
@@ -118,30 +113,33 @@ export function NPCLeaderboard({
           <div
             key={entry.actorId}
             className={cn(
-              'bg-muted/30 rounded-lg p-3 flex items-center gap-3 hover:bg-muted/50 transition-colors',
+              'flex items-center gap-3 rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50',
               entry.rank <= 3 && 'border border-border/50'
             )}
           >
             {/* Rank */}
-            <div className="shrink-0 w-8 text-center">
+            <div className="w-8 shrink-0 text-center">
               {entry.rank <= 3 ? (
-                <Trophy className={cn('w-6 h-6', getRankMedalColor(entry.rank))} />
+                <Trophy className={cn('h-6 w-6', getRankMedalColor(entry.rank))} />
               ) : (
-                <span className="text-sm font-bold text-muted-foreground">#{entry.rank}</span>
+                <span className="font-bold text-muted-foreground text-sm">#{entry.rank}</span>
               )}
             </div>
 
             {/* Profile Image */}
             <div className="shrink-0">
               {entry.profileImageUrl ? (
-                <img
+                <Image
                   src={entry.profileImageUrl}
                   alt={entry.actorName}
-                  className="w-10 h-10 rounded-full object-cover"
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 rounded-full object-cover"
+                  unoptimized
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                  <span className="text-xs font-bold text-muted-foreground">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                  <span className="font-bold text-muted-foreground text-xs">
                     {entry.actorName.charAt(0).toUpperCase()}
                   </span>
                 </div>
@@ -149,72 +147,72 @@ export function NPCLeaderboard({
             </div>
 
             {/* Actor Info */}
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-foreground truncate">
-                {entry.actorName}
-              </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium text-foreground">{entry.actorName}</div>
               {entry.personality && (
-                <div className="text-xs text-muted-foreground truncate">
-                  {entry.personality}
-                </div>
+                <div className="truncate text-muted-foreground text-xs">{entry.personality}</div>
               )}
             </div>
 
             {/* Performance Stats */}
-            <div className="flex items-center gap-4 shrink-0">
+            <div className="flex shrink-0 items-center gap-4">
               {/* Portfolio Value */}
               <div className="text-right">
-                <div className="flex items-center gap-1 text-sm font-bold text-foreground">
-                  <DollarSign className="w-3 h-3" />
+                <div className="flex items-center gap-1 font-bold text-foreground text-sm">
+                  <DollarSign className="h-3 w-3" />
                   {entry.performance.totalValue.toLocaleString()}
                 </div>
-                <div className="text-xs text-muted-foreground">Value</div>
+                <div className="text-muted-foreground text-xs">Value</div>
               </div>
 
               {/* ROI */}
-              <div className="text-right hidden sm:block">
-                <div className={cn(
-                  'flex items-center gap-1 text-sm font-medium',
-                  entry.performance.roi >= 0 ? 'text-green-500' : 'text-red-500'
-                )}>
+              <div className="hidden text-right sm:block">
+                <div
+                  className={cn(
+                    'flex items-center gap-1 font-medium text-sm',
+                    entry.performance.roi >= 0 ? 'text-green-500' : 'text-red-500'
+                  )}
+                >
                   {entry.performance.roi >= 0 ? (
-                    <TrendingUp className="w-3 h-3" />
+                    <TrendingUp className="h-3 w-3" />
                   ) : (
-                    <TrendingDown className="w-3 h-3" />
+                    <TrendingDown className="h-3 w-3" />
                   )}
                   {entry.performance.roi >= 0 ? '+' : ''}
                   {entry.performance.roi.toFixed(1)}%
                 </div>
-                <div className="text-xs text-muted-foreground">ROI</div>
+                <div className="text-muted-foreground text-xs">ROI</div>
               </div>
 
               {/* Unrealized PnL */}
-              <div className="text-right hidden md:block">
-                <div className={cn(
-                  'text-sm font-medium',
-                  entry.performance.unrealizedPnL >= 0 ? 'text-green-500' : 'text-red-500'
-                )}>
-                  {entry.performance.unrealizedPnL >= 0 ? '+' : ''}
-                  ${Math.abs(entry.performance.unrealizedPnL).toLocaleString()}
+              <div className="hidden text-right md:block">
+                <div
+                  className={cn(
+                    'font-medium text-sm',
+                    entry.performance.unrealizedPnL >= 0 ? 'text-green-500' : 'text-red-500'
+                  )}
+                >
+                  {entry.performance.unrealizedPnL >= 0 ? '+' : ''}$
+                  {Math.abs(entry.performance.unrealizedPnL).toLocaleString()}
                 </div>
-                <div className="text-xs text-muted-foreground">Unrealized</div>
+                <div className="text-muted-foreground text-xs">Unrealized</div>
               </div>
 
               {/* Positions */}
-              <div className="text-right hidden lg:block">
-                <div className="flex items-center gap-1 text-sm font-medium text-blue-500">
-                  <Activity className="w-3 h-3" />
+              <div className="hidden text-right lg:block">
+                <div className="flex items-center gap-1 font-medium text-blue-500 text-sm">
+                  <Activity className="h-3 w-3" />
                   {entry.performance.positionCount}
                 </div>
-                <div className="text-xs text-muted-foreground">Positions</div>
+                <div className="text-muted-foreground text-xs">Positions</div>
               </div>
 
               {/* Utilization */}
-              <div className="text-right hidden xl:block">
-                <div className="text-sm font-medium text-foreground">
+              <div className="hidden text-right xl:block">
+                <div className="font-medium text-foreground text-sm">
                   {entry.performance.utilization.toFixed(0)}%
                 </div>
-                <div className="text-xs text-muted-foreground">Utilization</div>
+                <div className="text-muted-foreground text-xs">Utilization</div>
               </div>
             </div>
           </div>
@@ -223,10 +221,11 @@ export function NPCLeaderboard({
 
       {/* Footer */}
       {data.leaderboard.length === data.metadata.limit && (
-        <div className="text-xs text-muted-foreground text-center pt-2 border-t border-border">
-          Showing top {data.metadata.limit} NPCs. Minimum portfolio value: ${data.metadata.minValue.toLocaleString()}
+        <div className="border-border border-t pt-2 text-center text-muted-foreground text-xs">
+          Showing top {data.metadata.limit} NPCs. Minimum portfolio value: $
+          {data.metadata.minValue.toLocaleString()}
         </div>
       )}
     </div>
-  )
+  );
 }

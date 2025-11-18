@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating direct reactions from parties involved in events.
- * 
+ *
  * Creates reaction posts from actors directly involved in or affected
  * by events. Captures immediate, personal responses that reflect
  * character stakes and emotional investment.
- * 
+ *
  * Returns XML with direct reaction post and metadata.
  */
 export const directReaction = definePrompt({
@@ -57,5 +57,5 @@ Respond with ONLY this XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

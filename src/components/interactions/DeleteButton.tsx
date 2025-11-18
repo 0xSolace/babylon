@@ -1,21 +1,21 @@
 'use client';
 
+import { logger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { logger } from '@/lib/logger';
 
 /**
  * Delete button component for post deletion.
- * 
+ *
  * Displays a delete button that only shows for the post author.
  * Includes confirmation modal before deletion. Refreshes the page
  * after successful deletion to remove the post from view.
- * 
+ *
  * @param props - DeleteButton component props
  * @returns Delete button element or null if user is not the author
- * 
+ *
  * @example
  * ```tsx
  * <DeleteButton
@@ -25,13 +25,13 @@ import { logger } from '@/lib/logger';
  * />
  * ```
  */
-interface DeleteButtonProps {
+type DeleteButtonProps = {
   postId: string;
   postAuthorId: string;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   onDeleted?: () => void;
-}
+};
 
 const sizeClasses = {
   sm: 'h-8 px-2 text-xs gap-1',
@@ -79,7 +79,7 @@ export function DeleteButton({
     }
 
     logger.info('Post deleted successfully', { postId, userId: user.id }, 'DeleteButton');
-    
+
     // Call callback if provided
     if (onDeleted) {
       onDeleted();
@@ -100,9 +100,9 @@ export function DeleteButton({
         onClick={handleClick}
         disabled={isDeleting}
         className={cn(
-          'flex items-center bg-transparent hover:text-red-500 transition-all duration-200',
+          'flex items-center bg-transparent transition-all duration-200 hover:text-red-500',
           sizeClasses[size],
-          isDeleting && 'opacity-50 cursor-not-allowed',
+          isDeleting && 'cursor-not-allowed opacity-50',
           className
         )}
         title="Delete post"
@@ -112,38 +112,41 @@ export function DeleteButton({
 
       {/* Confirmation Modal */}
       {showConfirmation && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setShowConfirmation(false)}
-        >
-          <div
-            className="bg-background border border-border rounded-lg p-6 max-w-sm mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold mb-2">Delete Post?</h3>
-            <p className="text-muted-foreground mb-4">
-              This post will be permanently deleted. This action cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowConfirmation(false)}
-                className="px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
-                disabled={isDeleting}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-primary-foreground transition-colors disabled:opacity-50"
-              >
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </button>
+        <>
+          <button
+            type="button"
+            aria-label="Close delete confirmation"
+            className="fixed inset-0 z-50 bg-black/50"
+            onClick={() => setShowConfirmation(false)}
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="mx-4 max-w-sm rounded-lg border border-border bg-background p-6">
+              <h3 className="mb-2 font-semibold text-lg">Delete Post?</h3>
+              <p className="mb-4 text-muted-foreground">
+                This post will be permanently deleted. This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmation(false)}
+                  className="rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="rounded-lg bg-red-500 px-4 py-2 text-primary-foreground transition-colors hover:bg-red-600 disabled:opacity-50"
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </>
   );
 }
-

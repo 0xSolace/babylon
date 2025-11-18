@@ -1,29 +1,29 @@
 /**
  * Points Leaderboard API
- * 
+ *
  * @description
  * Returns platform-wide leaderboard ranking users by reputation points,
  * earned points, or referral points. Provides paginated results with
  * comprehensive user statistics and rankings.
- * 
+ *
  * **Leaderboard Types:**
  * - **all:** Total reputation points (default)
  * - **earned:** Points earned through activity
  * - **referral:** Points earned from referrals
- * 
+ *
  * **Features:**
  * - Configurable minimum points threshold
  * - Pagination support
  * - Multiple sorting categories
  * - User statistics and metadata
  * - Real-time rankings
- * 
+ *
  * **User Stats Include:**
  * - Total points and breakdown
  * - Profile information
  * - Activity metrics
  * - Rank position
- * 
+ *
  * @openapi
  * /api/leaderboard:
  *   get:
@@ -101,31 +101,31 @@
  *                   type: integer
  *                 pointsCategory:
  *                   type: string
- * 
+ *
  * @example
  * ```typescript
  * // Get top 50 users by reputation
  * const response = await fetch('/api/leaderboard?page=1&pageSize=50');
  * const { leaderboard, pagination } = await response.json();
- * 
+ *
  * // Get referral leaders
  * const referralLeaders = await fetch('/api/leaderboard?pointsType=referral&minPoints=1000');
- * 
+ *
  * // Display leaderboard
  * leaderboard.forEach(user => {
  *   console.log(`#${user.rank}: ${user.displayName} - ${user.points} points`);
  * });
  * ```
- * 
+ *
  * @see {@link /lib/services/points-service} Points calculation
  * @see {@link /src/app/leaderboard/page.tsx} Leaderboard UI
  */
 
-import type { NextRequest } from 'next/server'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { LeaderboardQuerySchema } from '@/lib/validation/schemas/common'
-import { PointsService } from '@/lib/services/points-service'
-import { logger } from '@/lib/logger'
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { PointsService } from '@/lib/services/points-service';
+import { LeaderboardQuerySchema } from '@/lib/validation/schemas/common';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/leaderboard
@@ -136,30 +136,34 @@ import { logger } from '@/lib/logger'
  *  - minPoints: number (default 500)
  */
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const { searchParams } = new URL(request.url)
+  const { searchParams } = new URL(request.url);
 
   // Parse and validate query parameters
-  const queryParams = Object.fromEntries(searchParams.entries())
-  const validationResult = LeaderboardQuerySchema.safeParse(queryParams)
-  
+  const queryParams = Object.fromEntries(searchParams.entries());
+  const validationResult = LeaderboardQuerySchema.safeParse(queryParams);
+
   if (!validationResult.success) {
     // Throw ZodError so error handler can catch it and return 400
-    throw validationResult.error
+    throw validationResult.error;
   }
-  
-  const { page, pageSize, minPoints, pointsType } = validationResult.data
 
-  const pointsCategory = (pointsType ?? 'all') as 'all' | 'earned' | 'referral'
+  const { page, pageSize, minPoints, pointsType } = validationResult.data;
 
-  const leaderboard = await PointsService.getLeaderboard(page, pageSize, minPoints, pointsCategory)
+  const pointsCategory = (pointsType ?? 'all') as 'all' | 'earned' | 'referral';
 
-  logger.info('Leaderboard fetched successfully', {
-    page,
-    pageSize,
-    minPoints,
-    pointsCategory,
-    totalCount: leaderboard.totalCount
-  }, 'GET /api/leaderboard')
+  const leaderboard = await PointsService.getLeaderboard(page, pageSize, minPoints, pointsCategory);
+
+  logger.info(
+    'Leaderboard fetched successfully',
+    {
+      page,
+      pageSize,
+      minPoints,
+      pointsCategory,
+      totalCount: leaderboard.totalCount,
+    },
+    'GET /api/leaderboard'
+  );
 
   return successResponse({
     leaderboard: leaderboard.users,
@@ -171,6 +175,5 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
     minPoints: pointsCategory === 'all' ? minPoints : 0,
     pointsCategory: leaderboard.pointsCategory,
-  })
+  });
 });
-

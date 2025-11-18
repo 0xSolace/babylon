@@ -3,8 +3,8 @@
  * Ensures all required fields are present and no unused fields remain
  */
 
-import { describe, it, expect, beforeAll } from 'bun:test';
-import type { ActorsDataFile, ActorData, OrganizationData } from '../types/test-types';
+import { beforeAll, describe, expect, it } from 'bun:test';
+import type { ActorData, ActorsDataFile, OrganizationData } from '../types/test-types';
 
 describe('Actors.json Data Integrity', () => {
   let actorsData: ActorsDataFile;
@@ -87,15 +87,15 @@ describe('Actors.json Data Integrity', () => {
     });
 
     it('all actors should have originalFirstName', () => {
-      const missing = actorsData.actors.filter((a: ActorData) => 
-        a.originalFirstName === undefined || a.originalFirstName === null
+      const missing = actorsData.actors.filter(
+        (a: ActorData) => a.originalFirstName === undefined || a.originalFirstName === null
       );
       expect(missing).toHaveLength(0);
     });
 
     it('all actors should have originalLastName (can be empty string)', () => {
-      const missing = actorsData.actors.filter((a: ActorData) => 
-        a.originalLastName === undefined || a.originalLastName === null
+      const missing = actorsData.actors.filter(
+        (a: ActorData) => a.originalLastName === undefined || a.originalLastName === null
       );
       expect(missing).toHaveLength(0);
     });
@@ -133,12 +133,16 @@ describe('Actors.json Data Integrity', () => {
     });
 
     it('all organizations should have postExample array', () => {
-      const missing = actorsData.organizations.filter((o: OrganizationData) => !Array.isArray(o.postExample));
+      const missing = actorsData.organizations.filter(
+        (o: OrganizationData) => !Array.isArray(o.postExample)
+      );
       expect(missing).toHaveLength(0);
     });
 
     it('all organizations should have initialPrice (number)', () => {
-      const missing = actorsData.organizations.filter((o: OrganizationData) => typeof o.initialPrice !== 'number');
+      const missing = actorsData.organizations.filter(
+        (o: OrganizationData) => typeof o.initialPrice !== 'number'
+      );
       expect(missing).toHaveLength(0);
     });
 
@@ -155,27 +159,37 @@ describe('Actors.json Data Integrity', () => {
 
   describe('Unused Fields Removed', () => {
     it('no actors should have "nickname" field', () => {
-      const withNickname = actorsData.actors.filter((a) => 'nickname' in (a as unknown as Record<string, unknown>));
+      const withNickname = actorsData.actors.filter(
+        (a) => 'nickname' in (a as unknown as Record<string, unknown>)
+      );
       expect(withNickname).toHaveLength(0);
     });
 
     it('no actors should have "aliases" field', () => {
-      const withAliases = actorsData.actors.filter((a) => 'aliases' in (a as unknown as Record<string, unknown>));
+      const withAliases = actorsData.actors.filter(
+        (a) => 'aliases' in (a as unknown as Record<string, unknown>)
+      );
       expect(withAliases).toHaveLength(0);
     });
 
     it('no actors should have "quirks" field', () => {
-      const withQuirks = actorsData.actors.filter((a) => 'quirks' in (a as unknown as Record<string, unknown>));
+      const withQuirks = actorsData.actors.filter(
+        (a) => 'quirks' in (a as unknown as Record<string, unknown>)
+      );
       expect(withQuirks).toHaveLength(0);
     });
 
     it('no actors should have "canPostFeed" field', () => {
-      const withCanPostFeed = actorsData.actors.filter((a) => 'canPostFeed' in (a as unknown as Record<string, unknown>));
+      const withCanPostFeed = actorsData.actors.filter(
+        (a) => 'canPostFeed' in (a as unknown as Record<string, unknown>)
+      );
       expect(withCanPostFeed).toHaveLength(0);
     });
 
     it('no actors should have "canPostGroups" field', () => {
-      const withCanPostGroups = actorsData.actors.filter((a) => 'canPostGroups' in (a as unknown as Record<string, unknown>));
+      const withCanPostGroups = actorsData.actors.filter(
+        (a) => 'canPostGroups' in (a as unknown as Record<string, unknown>)
+      );
       expect(withCanPostGroups).toHaveLength(0);
     });
   });
@@ -194,7 +208,9 @@ describe('Actors.json Data Integrity', () => {
     });
 
     it('organization names should be parodied', () => {
-      const notParodied = actorsData.organizations.filter((o: OrganizationData) => o.name === o.originalName);
+      const notParodied = actorsData.organizations.filter(
+        (o: OrganizationData) => o.name === o.originalName
+      );
       expect(notParodied).toHaveLength(0);
     });
   });
@@ -214,7 +230,7 @@ describe('Actors.json Data Integrity', () => {
 
     it('actor affiliations should reference valid organization IDs', () => {
       const orgIds = new Set(actorsData.organizations.map((o: OrganizationData) => o.id));
-      
+
       for (const actor of actorsData.actors) {
         if (actor.affiliations && Array.isArray(actor.affiliations)) {
           for (const affiliation of actor.affiliations) {
@@ -247,4 +263,3 @@ describe('Actors.json Data Integrity', () => {
     });
   });
 });
-

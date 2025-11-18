@@ -1,52 +1,52 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { X, CheckCircle, XCircle, Clock } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useAuth } from '@/hooks/useAuth'
-import { toast } from 'sonner'
-import { PredictionPricing, calculateExpectedPayout } from '@/lib/prediction-pricing'
+import { PredictionPricing, calculateExpectedPayout } from '@/lib/prediction-pricing';
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
+import { CheckCircle, Clock, X, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 /**
  * Represents a prediction market question.
  */
-interface PredictionMarket {
-  id: number | string
-  text: string
-  status: 'active' | 'resolved' | 'cancelled'
-  createdDate?: string
-  resolutionDate?: string
-  resolvedOutcome?: boolean
-  scenario: number
-  yesShares?: number
-  noShares?: number
-}
+type PredictionMarket = {
+  id: number | string;
+  text: string;
+  status: 'active' | 'resolved' | 'cancelled';
+  createdDate?: string;
+  resolutionDate?: string;
+  resolvedOutcome?: boolean;
+  scenario: number;
+  yesShares?: number;
+  noShares?: number;
+};
 
 /**
  * Props for the PredictionTradingModal component.
  */
-interface PredictionTradingModalProps {
+type PredictionTradingModalProps = {
   /** The prediction market question to trade */
-  question: PredictionMarket
+  question: PredictionMarket;
   /** Whether the modal is currently open */
-  isOpen: boolean
+  isOpen: boolean;
   /** Callback when modal should be closed */
-  onClose: () => void
+  onClose: () => void;
   /** Optional callback when trade succeeds */
-  onSuccess?: () => void
-}
+  onSuccess?: () => void;
+};
 
 /**
  * Modal component for trading prediction market shares.
- * 
+ *
  * Provides a full-featured trading interface for buying and selling
  * YES/NO shares in prediction markets. Shows current prices, expected
  * payouts, and handles trade execution with loading states and error
  * handling.
- * 
+ *
  * @param props - PredictionTradingModal component props
  * @returns Trading modal element
- * 
+ *
  * @example
  * ```tsx
  * <PredictionTradingModal
@@ -63,110 +63,109 @@ export function PredictionTradingModal({
   onClose,
   onSuccess,
 }: PredictionTradingModalProps) {
-  const { user } = useAuth()
-  const [side, setSide] = useState<'yes' | 'no'>('yes')
-  const [amount, setAmount] = useState('10')
-  const [loading, setLoading] = useState(false)
+  const { user } = useAuth();
+  const [side, setSide] = useState<'yes' | 'no'>('yes');
+  const [amount, setAmount] = useState('10');
+  const [loading, setLoading] = useState(false);
 
   // Handle escape key and body scroll lock
   useEffect(() => {
     if (!isOpen) {
-      document.body.style.overflow = ''
-      return
+      document.body.style.overflow = '';
+      return;
     }
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !loading) {
-        onClose()
+        onClose();
       }
-    }
+    };
 
-    document.addEventListener('keydown', handleEscape)
-    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'hidden';
 
     return () => {
-      document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = ''
-    }
-  }, [isOpen, onClose, loading])
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, onClose, loading]);
 
   // Cleanup on unmount (for HMR)
   useEffect(() => {
     return () => {
-      document.body.style.overflow = ''
-    }
-  }, [])
+      document.body.style.overflow = '';
+    };
+  }, []);
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
-  const amountNum = parseFloat(amount) || 0
-  
+  const amountNum = parseFloat(amount) || 0;
+
   // Use AMM to calculate current prices and shares
-  const yesShares = question.yesShares || 500
-  const noShares = question.noShares || 500
-  
-  const currentYesPrice = PredictionPricing.getCurrentPrice(yesShares, noShares, 'yes')
-  const currentNoPrice = PredictionPricing.getCurrentPrice(yesShares, noShares, 'no')
-  
+  const yesShares = question.yesShares || 500;
+  const noShares = question.noShares || 500;
+
+  const currentYesPrice = PredictionPricing.getCurrentPrice(yesShares, noShares, 'yes');
+  const currentNoPrice = PredictionPricing.getCurrentPrice(yesShares, noShares, 'no');
+
   // Calculate what would happen if user buys
-  const calculation = amountNum > 0
-    ? PredictionPricing.calculateBuy(yesShares, noShares, side, amountNum)
-    : null
+  const calculation =
+    amountNum > 0 ? PredictionPricing.calculateBuy(yesShares, noShares, side, amountNum) : null;
 
   const expectedPayout = calculation
     ? calculateExpectedPayout(calculation.sharesBought, calculation.avgPrice)
-    : 0
-  const expectedProfit = expectedPayout - amountNum
+    : 0;
+  const expectedProfit = expectedPayout - amountNum;
 
   const getDaysUntilResolution = () => {
-    if (!question.resolutionDate) return null
-    const now = new Date()
-    const resolution = new Date(question.resolutionDate)
-    const diffDays = Math.ceil((resolution.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    return Math.max(0, diffDays)
-  }
+    if (!question.resolutionDate) return null;
+    const now = new Date();
+    const resolution = new Date(question.resolutionDate);
+    const diffDays = Math.ceil((resolution.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
+  };
 
-  const daysLeft = getDaysUntilResolution()
+  const daysLeft = getDaysUntilResolution();
 
   const handleSubmit = async () => {
-    if (!user) return
+    if (!user) return;
 
     if (amountNum < 1) {
-      toast.error('Minimum bet is $1')
-      return
+      toast.error('Minimum bet is $1');
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
 
-    const token = typeof window !== 'undefined' ? window.__privyAccessToken : null
+    const token = typeof window !== 'undefined' ? window.__privyAccessToken : null;
     if (!token) {
-      toast.error('Authentication required. Please log in.')
-      setLoading(false)
-      return
+      toast.error('Authentication required. Please log in.');
+      setLoading(false);
+      return;
     }
 
     const response = await fetch(`/api/markets/predictions/${question.id}/buy`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         side,
         amount: amountNum,
       }),
-    })
+    });
 
-    await response.json()
+    await response.json();
 
     toast.success(`Bought ${side.toUpperCase()} shares!`, {
       description: `${calculation?.sharesBought.toFixed(2)} shares at ${(calculation?.avgPrice || 0).toFixed(3)} each`,
-    })
+    });
 
-    onClose()
-    if (onSuccess) onSuccess()
-    setLoading(false)
-  }
+    onClose();
+    if (onSuccess) onSuccess();
+    setLoading(false);
+  };
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -174,26 +173,28 @@ export function PredictionTradingModal({
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(price)
-  }
+    }).format(price);
+  };
 
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50"
+      <button
+        type="button"
+        aria-label="Close prediction trading modal"
+        className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg">
-        <div className="bg-popover rounded shadow-xl px-4 py-3 sm:px-6 sm:py-4 m-4 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+      <div className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-full max-w-lg">
+        <div className="fade-in zoom-in-95 m-4 max-h-[90vh] animate-in overflow-y-auto rounded bg-popover px-4 py-3 shadow-xl duration-200 sm:px-6 sm:py-4">
           {/* Header */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold text-foreground">Prediction Market</h2>
+              <h2 className="font-bold text-foreground text-xl">Prediction Market</h2>
               {daysLeft !== null && (
-                <span className="flex items-center gap-1 text-sm text-muted-foreground bg-muted px-2 py-1 rounded">
+                <span className="flex items-center gap-1 rounded bg-muted px-2 py-1 text-muted-foreground text-sm">
                   <Clock size={14} />
                   {daysLeft}d left
                 </span>
@@ -202,39 +203,40 @@ export function PredictionTradingModal({
             <button
               type="button"
               onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors p-2"
+              className="p-2 text-muted-foreground transition-colors hover:text-foreground"
             >
               <X size={20} />
             </button>
           </div>
 
           {/* Question */}
-          <div className="mb-6 px-4 py-3 bg-muted rounded">
-            <p className="text-foreground font-medium text-sm sm:text-base">{question.text}</p>
+          <div className="mb-6 rounded bg-muted px-4 py-3">
+            <p className="font-medium text-foreground text-sm sm:text-base">{question.text}</p>
           </div>
 
           {/* Current Odds */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="p-3 bg-green-600/15 rounded">
-              <div className="text-xs text-green-600 mb-1">YES</div>
-              <div className="text-2xl font-bold text-green-600">
+          <div className="mb-6 grid grid-cols-2 gap-3">
+            <div className="rounded bg-green-600/15 p-3">
+              <div className="mb-1 text-green-600 text-xs">YES</div>
+              <div className="font-bold text-2xl text-green-600">
                 {(currentYesPrice * 100).toFixed(1)}%
               </div>
             </div>
-            <div className="p-3 bg-red-600/15 rounded">
-              <div className="text-xs text-red-600 mb-1">NO</div>
-              <div className="text-2xl font-bold text-red-600">
+            <div className="rounded bg-red-600/15 p-3">
+              <div className="mb-1 text-red-600 text-xs">NO</div>
+              <div className="font-bold text-2xl text-red-600">
                 {(currentNoPrice * 100).toFixed(1)}%
               </div>
             </div>
           </div>
 
           {/* YES/NO Tabs */}
-          <div className="flex gap-3 mb-6">
+          <div className="mb-6 flex gap-3">
             <button
+              type="button"
               onClick={() => setSide('yes')}
               className={cn(
-                'flex-1 py-3 rounded font-bold transition-all flex items-center justify-center gap-3 text-sm sm:text-base cursor-pointer',
+                'flex flex-1 cursor-pointer items-center justify-center gap-3 rounded py-3 font-bold text-sm transition-all sm:text-base',
                 side === 'yes'
                   ? 'bg-green-600 text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted'
@@ -244,9 +246,10 @@ export function PredictionTradingModal({
               BUY YES
             </button>
             <button
+              type="button"
               onClick={() => setSide('no')}
               className={cn(
-                'flex-1 py-3 rounded font-bold transition-all flex items-center justify-center gap-3 text-sm sm:text-base cursor-pointer',
+                'flex flex-1 cursor-pointer items-center justify-center gap-3 rounded py-3 font-bold text-sm transition-all sm:text-base',
                 side === 'no'
                   ? 'bg-red-600 text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted'
@@ -259,37 +262,48 @@ export function PredictionTradingModal({
 
           {/* Amount Input */}
           <div className="mb-6">
-            <label className="text-sm text-muted-foreground mb-2 block">Amount (USD)</label>
+            <label htmlFor="prediction-amount" className="mb-2 block text-muted-foreground text-sm">
+              Amount (USD)
+            </label>
             <input
+              id="prediction-amount"
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               min="1"
               step="1"
-              className="w-full px-4 py-3 rounded bg-muted/50 text-foreground text-base sm:text-lg font-medium focus:outline-none focus:bg-muted focus:ring-2 focus:ring-[#0066FF]/30"
+              className="w-full rounded bg-muted/50 px-4 py-3 font-medium text-base text-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 sm:text-lg"
               placeholder="Min: $1"
             />
           </div>
 
           {/* Trade Preview */}
           {calculation && (
-            <div className="bg-muted p-4 rounded mb-6 space-y-2">
-              <div className="text-sm font-bold text-foreground mb-2">Trade Preview</div>
-              
+            <div className="mb-6 space-y-2 rounded bg-muted p-4">
+              <div className="mb-2 font-bold text-foreground text-sm">Trade Preview</div>
+
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Shares Received</span>
-                <span className="font-bold text-foreground">{calculation.sharesBought.toFixed(2)}</span>
+                <span className="font-bold text-foreground">
+                  {calculation.sharesBought.toFixed(2)}
+                </span>
               </div>
 
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Avg Price/Share</span>
-                <span className="font-medium text-foreground">{formatPrice(calculation.avgPrice)}</span>
+                <span className="font-medium text-foreground">
+                  {formatPrice(calculation.avgPrice)}
+                </span>
               </div>
 
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">New {side.toUpperCase()} Price</span>
                 <span className="font-medium text-foreground">
-                  {(side === 'yes' ? calculation.newYesPrice : calculation.newNoPrice * 100).toFixed(1)}%
+                  {(side === 'yes'
+                    ? calculation.newYesPrice
+                    : calculation.newNoPrice * 100
+                  ).toFixed(1)}
+                  %
                 </span>
               </div>
 
@@ -300,18 +314,21 @@ export function PredictionTradingModal({
                 </span>
               </div>
 
-              <div className="border-t border-border pt-2 mt-2">
+              <div className="mt-2 border-border border-t pt-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">If {side.toUpperCase()} Wins</span>
                   <span className="font-bold text-green-600">{formatPrice(expectedPayout)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Profit</span>
-                  <span className={cn(
-                    "font-bold",
-                    expectedProfit >= 0 ? "text-green-600" : "text-red-600"
-                  )}>
-                    {expectedProfit >= 0 ? '+' : ''}{formatPrice(expectedProfit)}
+                  <span
+                    className={cn(
+                      'font-bold',
+                      expectedProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                    )}
+                  >
+                    {expectedProfit >= 0 ? '+' : ''}
+                    {formatPrice(expectedProfit)}
                   </span>
                 </div>
               </div>
@@ -320,20 +337,17 @@ export function PredictionTradingModal({
 
           {/* Submit Button */}
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={loading || amountNum < 1}
             className={cn(
-              'w-full py-3 sm:py-4 rounded font-bold text-foreground transition-all text-base sm:text-lg cursor-pointer',
-              side === 'yes'
-                ? 'bg-green-600 hover:bg-green-700'
-                : 'bg-red-600 hover:bg-red-700',
-              (loading || amountNum < 1) && 'opacity-50 cursor-not-allowed'
+              'w-full cursor-pointer rounded py-3 font-bold text-base text-foreground transition-all sm:py-4 sm:text-lg',
+              side === 'yes' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700',
+              (loading || amountNum < 1) && 'cursor-not-allowed opacity-50'
             )}
           >
             {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                Buying Shares...
-              </span>
+              <span className="flex items-center justify-center gap-2">Buying Shares...</span>
             ) : (
               `BUY ${side.toUpperCase()} - ${formatPrice(amountNum)}`
             )}
@@ -341,14 +355,15 @@ export function PredictionTradingModal({
 
           {/* Cancel */}
           <button
+            type="button"
             onClick={onClose}
             disabled={loading}
-            className="w-full mt-3 py-2.5 sm:py-3 rounded font-medium text-muted-foreground hover:bg-muted transition-all cursor-pointer disabled:cursor-not-allowed"
+            className="mt-3 w-full cursor-pointer rounded py-2.5 font-medium text-muted-foreground transition-all hover:bg-muted disabled:cursor-not-allowed sm:py-3"
           >
             Cancel
           </button>
         </div>
       </div>
     </>
-  )
+  );
 }

@@ -1,11 +1,13 @@
-'use client'
+'use client';
 
-import { LoginButton } from '@/components/auth/LoginButton'
-import { Avatar } from '@/components/shared/Avatar'
-import { PageContainer } from '@/components/shared/PageContainer'
-import { Separator } from '@/components/shared/Separator'
-import { ChatListSkeleton, Skeleton } from '@/components/shared/Skeleton'
-import { TaggedText } from '@/components/shared/TaggedText'
+import { LoginButton } from '@/components/auth/LoginButton';
+import { CreateGroupModal } from '@/components/groups/CreateGroupModal';
+import { GroupManagementModal } from '@/components/groups/GroupManagementModal';
+import { Avatar } from '@/components/shared/Avatar';
+import { PageContainer } from '@/components/shared/PageContainer';
+import { Separator } from '@/components/shared/Separator';
+import { ChatListSkeleton, Skeleton } from '@/components/shared/Skeleton';
+import { TaggedText } from '@/components/shared/TaggedText';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,152 +17,164 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { useA2A } from '@/hooks/useA2A'
-import { useAuth } from '@/hooks/useAuth'
-import { useChatMessages } from '@/hooks/useChatMessages'
-import { useChatParam } from '@/hooks/useChatParam'
-import { usePullToRefresh } from '@/hooks/usePullToRefresh'
-import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/authStore'
-import { usePrivy } from '@privy-io/react-auth'
-import { AlertCircle, ArrowLeft, Check, Loader2, LogOut, MessageCircle, MoreVertical, Plus, Search, Send, Settings, Users, X } from 'lucide-react'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { CreateGroupModal } from '@/components/groups/CreateGroupModal'
-import { GroupManagementModal } from '@/components/groups/GroupManagementModal'
+} from '@/components/ui/alert-dialog';
+import { Button, buttonVariants } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import { useA2A } from '@/hooks/useA2A';
+import { useAuth } from '@/hooks/useAuth';
+import { useChatMessages } from '@/hooks/useChatMessages';
+import { useChatParam } from '@/hooks/useChatParam';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { useAuthStore } from '@/stores/authStore';
+import { usePrivy } from '@privy-io/react-auth';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Check,
+  Loader2,
+  LogOut,
+  MessageCircle,
+  MoreVertical,
+  Plus,
+  Search,
+  Send,
+  Settings,
+  Users,
+  X,
+} from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-type ChatFilter = 'all' | 'dms' | 'groups'
+type ChatFilter = 'all' | 'dms' | 'groups';
 
-interface Chat {
-  id: string
-  name: string
-  isGroup: boolean
+type Chat = {
+  id: string;
+  name: string;
+  isGroup: boolean;
   lastMessage?: {
-    id: string
-    content: string
-    createdAt: string
-  } | null
-  messageCount?: number
-  qualityScore?: number
-  participants?: number
-  updatedAt: string
+    id: string;
+    content: string;
+    createdAt: string;
+  } | null;
+  messageCount?: number;
+  qualityScore?: number;
+  participants?: number;
+  updatedAt: string;
   otherUser?: {
-    id: string
-    displayName: string | null
-    username: string | null
-    profileImageUrl: string | null
-  }
-}
+    id: string;
+    displayName: string | null;
+    username: string | null;
+    profileImageUrl: string | null;
+  };
+};
 
-interface Message {
-  id: string
-  content: string
-  senderId: string
-  createdAt: string
-}
+type Message = {
+  id: string;
+  content: string;
+  senderId: string;
+  createdAt: string;
+};
 
-interface ChatDetails {
+type ChatDetails = {
   chat: {
-    id: string
-    name: string | null
-    isGroup: boolean
-    createdAt: string
-    updatedAt: string
-  }
-  messages: Message[]
+    id: string;
+    name: string | null;
+    isGroup: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+  messages: Message[];
   participants: Array<{
-    id: string
-    displayName: string
-    username?: string
-    profileImageUrl?: string
-  }>
-}
+    id: string;
+    displayName: string;
+    username?: string;
+    profileImageUrl?: string;
+  }>;
+};
 
 export default function ChatsPage() {
-  const { ready, authenticated } = useAuth()
-  const { user } = useAuthStore()
-  const { getAccessToken } = usePrivy()
-  useA2A()
-  useChatParam()
-  
-  const [activeFilter, setActiveFilter] = useState<ChatFilter>('all')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
-  const [allChats, setAllChats] = useState<Chat[]>([])
-  const [chatDetails, setChatDetails] = useState<ChatDetails | null>(null)
-  const [messageInput, setMessageInput] = useState('')
-  const [_loading, setLoading] = useState(true)
-  const [loadingChat, setLoadingChat] = useState(false)
-  const [sending, setSending] = useState(false)
-  const [sendError, setSendError] = useState<string | null>(null)
-  const [sendSuccess, setSendSuccess] = useState(false)
-  const [isLeaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
-  const [isLeavingChat, setIsLeavingChat] = useState(false)
-  const [leaveChatError, setLeaveChatError] = useState<string | null>(null)
+  const { ready, authenticated } = useAuth();
+  const { user } = useAuthStore();
+  const { getAccessToken } = usePrivy();
+  useA2A();
+  useChatParam();
+
+  const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [allChats, setAllChats] = useState<Chat[]>([]);
+  const [chatDetails, setChatDetails] = useState<ChatDetails | null>(null);
+  const [messageInput, setMessageInput] = useState('');
+  const [_loading, setLoading] = useState(true);
+  const [loadingChat, setLoadingChat] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState(false);
+  const [isLeaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [isLeavingChat, setIsLeavingChat] = useState(false);
+  const [leaveChatError, setLeaveChatError] = useState<string | null>(null);
   // Group modals
-  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false)
-  const [isGroupManagementModalOpen, setIsGroupManagementModalOpen] = useState(false)
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const chatContainerRef = useRef<HTMLDivElement | null>(null)
-  const topSentinelRef = useRef<HTMLDivElement | null>(null)
-  const pendingScrollAdjustRef = useRef<{ previousHeight: number; previousTop: number } | null>(null)
-  
+  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+  const [isGroupManagementModalOpen, setIsGroupManagementModalOpen] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollAdjustRef = useRef<{
+    previousHeight: number;
+    previousTop: number;
+  } | null>(null);
+
   // Use SSE for real-time messages with pagination
-  const { 
-    messages: realtimeMessages, 
+  const {
+    messages: realtimeMessages,
     isConnected: _sseConnected,
     isLoadingMore,
     hasMore,
-    loadMore
-  } = useChatMessages(selectedChatId)
-  
+    loadMore,
+  } = useChatMessages(selectedChatId);
+
   // Pull-to-refresh state
-  const {
-    pullDistance,
-    containerRef: setPullToRefreshRef,
-  } = usePullToRefresh({
+  const { pullDistance, containerRef: setPullToRefreshRef } = usePullToRefresh({
     onRefresh: async () => {
-      if (!selectedChatId) return
+      if (!selectedChatId) return;
       await loadChatDetails(selectedChatId).catch((error: Error) => {
-        console.error('Error refreshing chat details:', error)
-      })
+        console.error('Error refreshing chat details:', error);
+      });
     },
-  })
+  });
 
   const setRefs = useCallback(
     (node: HTMLDivElement | null) => {
-      chatContainerRef.current = node
-      setPullToRefreshRef(node)
+      chatContainerRef.current = node;
+      setPullToRefreshRef(node);
     },
     [setPullToRefreshRef]
-  )
+  );
 
   // Intersection observer to detect when user scrolls near the top
   useEffect(() => {
-    const container = chatContainerRef.current
-    const sentinel = topSentinelRef.current
+    const container = chatContainerRef.current;
+    const sentinel = topSentinelRef.current;
 
-    if (!container || !sentinel || !selectedChatId) return
+    if (!container || !sentinel || !selectedChatId) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0]
-        if (!entry) return
-        if (
-          entry.isIntersecting &&
-          container.scrollTop < 200 &&
-          hasMore &&
-          !isLoadingMore
-        ) {
-          console.log('[ChatsPage] Sentinel intersected, loading more messages…')
+        const entry = entries[0];
+        if (!entry) return;
+        if (entry.isIntersecting && container.scrollTop < 200 && hasMore && !isLoadingMore) {
+          console.log('[ChatsPage] Sentinel intersected, loading more messages…');
           pendingScrollAdjustRef.current = {
             previousHeight: container.scrollHeight,
             previousTop: container.scrollTop,
-          }
-          loadMore()
+          };
+          loadMore();
         }
       },
       {
@@ -168,45 +182,47 @@ export default function ChatsPage() {
         rootMargin: '0px 0px 0px 0px',
         threshold: 0.1,
       }
-    )
+    );
 
-    observer.observe(sentinel)
+    observer.observe(sentinel);
 
-    return () => observer.disconnect()
-  }, [selectedChatId, hasMore, isLoadingMore, loadMore])
+    return () => observer.disconnect();
+  }, [selectedChatId, hasMore, isLoadingMore, loadMore]);
 
   // Maintain scroll position after loading older messages
   useEffect(() => {
-    if (isLoadingMore || !pendingScrollAdjustRef.current) return
-    const container = chatContainerRef.current
-    if (!container) return
+    if (isLoadingMore || !pendingScrollAdjustRef.current) return;
+    const container = chatContainerRef.current;
+    if (!container) return;
 
-    const { previousHeight, previousTop } = pendingScrollAdjustRef.current
-    const newHeight = container.scrollHeight
-    const delta = newHeight - previousHeight
-    container.scrollTop = previousTop + delta
-    pendingScrollAdjustRef.current = null
-  }, [isLoadingMore, realtimeMessages.length])
+    const { previousHeight, previousTop } = pendingScrollAdjustRef.current;
+    const newHeight = container.scrollHeight;
+    const delta = newHeight - previousHeight;
+    container.scrollTop = previousTop + delta;
+    pendingScrollAdjustRef.current = null;
+  }, [isLoadingMore]);
 
   // Debug mode: enabled in localhost
-  const isDebugMode = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  
+  const isDebugMode =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
   // Function declarations (before useEffects that use them)
   const loadChats = useCallback(async () => {
-    console.log('[ChatsPage] loadChats called, isDebugMode:', isDebugMode)
-    setLoading(true)
+    console.log('[ChatsPage] loadChats called, isDebugMode:', isDebugMode);
+    setLoading(true);
 
     try {
-      const token = await getAccessToken()
-      console.log('[ChatsPage] Got access token:', token ? 'yes' : 'no')
+      const token = await getAccessToken();
+      console.log('[ChatsPage] Got access token:', token ? 'yes' : 'no');
       if (!token) {
-        console.error('Failed to get access token for loadChats')
-        setLoading(false)
-        return
+        console.error('Failed to get access token for loadChats');
+        setLoading(false);
+        return;
       }
 
       // Fetch both personal chats (with DMs) AND game chats
-      console.log('[ChatsPage] Fetching personal chats and game chats')
+      console.log('[ChatsPage] Fetching personal chats and game chats');
       const [personalResponse, gameResponse] = await Promise.all([
         fetch('/api/chats', {
           headers: {
@@ -214,25 +230,27 @@ export default function ChatsPage() {
           },
         }),
         isDebugMode ? fetch('/api/chats?all=true') : Promise.resolve(null),
-      ])
+      ]);
 
       if (!personalResponse.ok) {
-        throw new Error('Failed to fetch personal chats')
+        throw new Error('Failed to fetch personal chats');
       }
 
-      console.log('[ChatsPage] Personal response status:', personalResponse.status)
-      const personalData = await personalResponse.json()
-      console.log('[ChatsPage] Personal response data:', personalData)
+      console.log('[ChatsPage] Personal response status:', personalResponse.status);
+      const personalData = await personalResponse.json();
+      console.log('[ChatsPage] Personal response data:', personalData);
 
-      let gameChats: Chat[] = []
+      let gameChats: Chat[] = [];
       if (gameResponse) {
         if (!gameResponse.ok) {
-          console.warn('[ChatsPage] Failed to fetch game chats, continuing with personal chats only')
+          console.warn(
+            '[ChatsPage] Failed to fetch game chats, continuing with personal chats only'
+          );
         } else {
-          console.log('[ChatsPage] Game response status:', gameResponse.status)
-          const gameData = await gameResponse.json()
-          console.log('[ChatsPage] Game response data:', gameData)
-          gameChats = gameData.chats || []
+          console.log('[ChatsPage] Game response status:', gameResponse.status);
+          const gameData = await gameResponse.json();
+          console.log('[ChatsPage] Game response data:', gameData);
+          gameChats = gameData.chats || [];
         }
       }
 
@@ -243,136 +261,143 @@ export default function ChatsPage() {
         ...gameChats,
       ].sort((a, b) => {
         // Sort by last message time (most recent first)
-        const aTime = a.lastMessage?.createdAt || a.updatedAt
-        const bTime = b.lastMessage?.createdAt || b.updatedAt
-        return new Date(bTime).getTime() - new Date(aTime).getTime()
-      })
-      
-      console.log('[ChatsPage] Combined chats (personal + game):', combined)
-      setAllChats(combined)
+        const aTime = a.lastMessage?.createdAt || a.updatedAt;
+        const bTime = b.lastMessage?.createdAt || b.updatedAt;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      });
+
+      console.log('[ChatsPage] Combined chats (personal + game):', combined);
+      setAllChats(combined);
     } catch (err) {
-      console.error('[ChatsPage] Failed to load chats:', err)
+      console.error('[ChatsPage] Failed to load chats:', err);
       // Keep existing chats on error
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [getAccessToken, isDebugMode])
+  }, [getAccessToken, isDebugMode]);
 
   // Define loadChatDetails BEFORE it's used in handleGroupUpdated
-  const loadChatDetails = useCallback(async (chatId: string) => {
-    setLoadingChat(true)
-    
-    if (isDebugMode) {
-      const response = await fetch(`/api/chats/${chatId}?debug=true`)
-      const data = await response.json()
-      setChatDetails({
-        ...data,
-        chat: data.chat || null,
-        messages: data.messages || [],
-        participants: data.participants || [],
-      })
-      setLoadingChat(false)
-      return
-    }
+  const loadChatDetails = useCallback(
+    async (chatId: string) => {
+      setLoadingChat(true);
 
-    const token = await getAccessToken()
-    if (!token) {
-      console.error('Failed to get access token for loadChatDetails')
-      setLoadingChat(false)
-      return
-    }
+      if (isDebugMode) {
+        const response = await fetch(`/api/chats/${chatId}?debug=true`);
+        const data = await response.json();
+        setChatDetails({
+          ...data,
+          chat: data.chat || null,
+          messages: data.messages || [],
+          participants: data.participants || [],
+        });
+        setLoadingChat(false);
+        return;
+      }
 
-    try {
-      const response = await fetch(`/api/chats/${chatId}`, {
+      const token = await getAccessToken();
+      if (!token) {
+        console.error('Failed to get access token for loadChatDetails');
+        setLoadingChat(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/chats/${chatId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        // If chat doesn't exist yet (404), it's a new DM that hasn't been persisted
+        if (response.status === 404) {
+          // Chat will be created when first message is sent
+          setLoadingChat(false);
+          return;
+        }
+
+        if (!response.ok) {
+          console.error('Failed to load chat details');
+          setLoadingChat(false);
+          return;
+        }
+
+        const data = await response.json();
+        setChatDetails({
+          ...data,
+          chat: data.chat || null,
+          messages: data.messages || [],
+          participants: data.participants || [],
+        });
+      } catch (err) {
+        console.error('Failed to load chat details:', err);
+      } finally {
+        setLoadingChat(false);
+      }
+    },
+    [getAccessToken, isDebugMode]
+  );
+
+  const handleGroupCreated = useCallback(
+    async (groupId: string, chatId: string) => {
+      console.log('[ChatsPage] Group created:', groupId, chatId);
+
+      // Reload chats to show the new group
+      await loadChats();
+
+      // Wait a moment for state to update
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Select the new chat
+      setSelectedChatId(chatId);
+
+      // Load the chat details immediately
+      await loadChatDetails(chatId);
+
+      console.log('[ChatsPage] Group created and loaded successfully');
+    },
+    [loadChats, loadChatDetails]
+  );
+
+  const handleGroupUpdated = useCallback(async () => {
+    console.log('[ChatsPage] Group updated, reloading chats');
+    await loadChats();
+    // Reload chat details if currently viewing
+    if (selectedChatId) {
+      await loadChatDetails(selectedChatId);
+    }
+  }, [loadChats, selectedChatId, loadChatDetails]);
+
+  const loadNewDMChat = useCallback(
+    async (chatId: string, targetUserId: string) => {
+      setLoadingChat(true);
+
+      const token = await getAccessToken();
+      if (!token) {
+        console.error('Failed to get access token');
+        setLoadingChat(false);
+        return;
+      }
+
+      // Fetch target user info
+      const response = await fetch(`/api/users/${targetUserId}/profile`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      })
-      
-      // If chat doesn't exist yet (404), it's a new DM that hasn't been persisted
-      if (response.status === 404) {
-        // Chat will be created when first message is sent
-        setLoadingChat(false)
-        return
-      }
-      
+      }).catch(() => {
+        console.error('Failed to load user info');
+        setLoadingChat(false);
+        throw new Error('Failed to load user info');
+      });
+
       if (!response.ok) {
-        console.error('Failed to load chat details')
-        setLoadingChat(false)
-        return
+        console.error('Failed to load user info');
+        setLoadingChat(false);
+        return;
       }
-      
-      const data = await response.json()
-      setChatDetails({
-        ...data,
-        chat: data.chat || null,
-        messages: data.messages || [],
-        participants: data.participants || [],
-      })
-    } catch (err) {
-      console.error('Failed to load chat details:', err)
-    } finally {
-      setLoadingChat(false)
-    }
-  }, [getAccessToken, isDebugMode])
 
-  const handleGroupCreated = useCallback(async (groupId: string, chatId: string) => {
-    console.log('[ChatsPage] Group created:', groupId, chatId)
-    
-    // Reload chats to show the new group
-    await loadChats()
-    
-    // Wait a moment for state to update
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    // Select the new chat
-    setSelectedChatId(chatId)
-    
-    // Load the chat details immediately
-    await loadChatDetails(chatId)
-    
-    console.log('[ChatsPage] Group created and loaded successfully')
-  }, [loadChats, loadChatDetails])
+      const userData = await response.json();
+      const targetUser = userData.user;
 
-  const handleGroupUpdated = useCallback(async () => {
-    console.log('[ChatsPage] Group updated, reloading chats')
-    await loadChats()
-    // Reload chat details if currently viewing
-    if (selectedChatId) {
-      await loadChatDetails(selectedChatId)
-    }
-  }, [loadChats, selectedChatId, loadChatDetails])
-
-  const loadNewDMChat = useCallback(async (chatId: string, targetUserId: string) => {
-    setLoadingChat(true)
-    
-    const token = await getAccessToken()
-    if (!token) {
-      console.error('Failed to get access token')
-      setLoadingChat(false)
-      return
-    }
-
-    // Fetch target user info
-    const response = await fetch(`/api/users/${targetUserId}/profile`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }).catch(() => {
-      console.error('Failed to load user info')
-      setLoadingChat(false)
-      throw new Error('Failed to load user info')
-    })
-    
-    if (!response.ok) {
-      console.error('Failed to load user info')
-      setLoadingChat(false)
-      return
-    }
-
-    const userData = await response.json()
-    const targetUser = userData.user
-      
       // Create a virtual chat details object for new DM
       setChatDetails({
         chat: {
@@ -385,10 +410,10 @@ export default function ChatsPage() {
         messages: [],
         participants: [
           {
-            id: user!.id,
-            displayName: user!.displayName || user!.username || 'You',
-            username: user!.username,
-            profileImageUrl: user!.profileImageUrl,
+            id: user?.id,
+            displayName: user?.displayName || user?.username || 'You',
+            username: user?.username,
+            profileImageUrl: user?.profileImageUrl,
           },
           {
             id: targetUser.id,
@@ -397,8 +422,8 @@ export default function ChatsPage() {
             profileImageUrl: targetUser.profileImageUrl,
           },
         ],
-      })
-      
+      });
+
       // Add to chat list immediately so it shows up
       const newChat: Chat = {
         id: chatId,
@@ -412,82 +437,84 @@ export default function ChatsPage() {
           username: targetUser.username,
           profileImageUrl: targetUser.profileImageUrl,
         },
-      }
-      
-      setAllChats(prev => {
+      };
+
+      setAllChats((prev) => {
         // Check if chat already exists
-        if (prev.some(c => c.id === chatId)) {
-          return prev
+        if (prev.some((c) => c.id === chatId)) {
+          return prev;
         }
-        return [newChat, ...prev]
-      })
-      
-      setLoadingChat(false)
-  }, [getAccessToken, user])
-  
+        return [newChat, ...prev];
+      });
+
+      setLoadingChat(false);
+    },
+    [getAccessToken, user]
+  );
+
   // Check for chat ID in URL query params
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      const chatParam = params.get('chat')
-      const newDMParam = params.get('newDM')
-      
+      const params = new URLSearchParams(window.location.search);
+      const chatParam = params.get('chat');
+      const newDMParam = params.get('newDM');
+
       if (chatParam && chatParam !== selectedChatId) {
-        setSelectedChatId(chatParam)
-        
+        setSelectedChatId(chatParam);
+
         // If this is a new DM, load the target user info
         if (newDMParam && chatParam.startsWith('dm-')) {
-          loadNewDMChat(chatParam, newDMParam)
+          loadNewDMChat(chatParam, newDMParam);
         }
-        
+
         // Clean up URL
-        window.history.replaceState({}, '', '/chats')
+        window.history.replaceState({}, '', '/chats');
       }
     }
-  }, [selectedChatId, loadNewDMChat])
-  
+  }, [selectedChatId, loadNewDMChat]);
+
   // Load user's chats from database
   useEffect(() => {
     if (authenticated || isDebugMode) {
-      loadChats()
+      loadChats();
     }
-  }, [authenticated, isDebugMode, loadChats])
+  }, [authenticated, isDebugMode, loadChats]);
 
   // Load selected chat details from database
   useEffect(() => {
     if (selectedChatId) {
-      loadChatDetails(selectedChatId)
+      loadChatDetails(selectedChatId);
     }
-  }, [selectedChatId, loadChatDetails])
+  }, [selectedChatId, loadChatDetails]);
 
   // Update chatDetails with realtime messages
   useEffect(() => {
     if (chatDetails && realtimeMessages.length > 0) {
-      setChatDetails(prev => {
-        if (!prev) return prev
+      setChatDetails((prev) => {
+        if (!prev) return prev;
         return {
           ...prev,
-          messages: realtimeMessages
-        }
-      })
+          messages: realtimeMessages,
+        };
+      });
     }
-  }, [realtimeMessages, chatDetails])
+  }, [realtimeMessages, chatDetails]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatDetails?.messages])
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   const handleLeaveChat = async () => {
-    if (!selectedChatId) return
-    setIsLeavingChat(true)
-    setLeaveChatError(null)
+    if (!selectedChatId) return;
+    setIsLeavingChat(true);
+    setLeaveChatError(null);
 
-    const accessToken = await getAccessToken()
+    const accessToken = await getAccessToken();
     if (!accessToken) {
-      setLeaveChatError('Authentication failed. Please try again.')
-      setIsLeavingChat(false)
-      return
+      setLeaveChatError('Authentication failed. Please try again.');
+      setIsLeavingChat(false);
+      return;
     }
 
     const response = await fetch(`/api/chats/${selectedChatId}/participants/me`, {
@@ -496,24 +523,24 @@ export default function ChatsPage() {
         Authorization: `Bearer ${accessToken}`,
       },
     }).catch((error: Error) => {
-      setLeaveChatError(error.message)
-      setIsLeavingChat(false)
-      throw error
-    })
+      setLeaveChatError(error.message);
+      setIsLeavingChat(false);
+      throw error;
+    });
 
     if (!response.ok) {
-      const errorData = await response.json()
-      const errorMessage = errorData.message || 'Failed to leave chat'
-      setLeaveChatError(errorMessage)
-      setIsLeavingChat(false)
-      throw new Error(errorMessage)
+      const errorData = await response.json();
+      const errorMessage = errorData.message || 'Failed to leave chat';
+      setLeaveChatError(errorMessage);
+      setIsLeavingChat(false);
+      throw new Error(errorMessage);
     }
 
-    setLeaveConfirmOpen(false)
-    setSelectedChatId(null)
-    await loadChats() // Refresh the chat list
-    setIsLeavingChat(false)
-  }
+    setLeaveConfirmOpen(false);
+    setSelectedChatId(null);
+    await loadChats(); // Refresh the chat list
+    setIsLeavingChat(false);
+  };
 
   // Invite users handler (currently disabled)
   /*
@@ -546,233 +573,233 @@ export default function ChatsPage() {
   */
 
   const sendMessage = async () => {
-    if (!selectedChatId || !messageInput.trim() || sending) return
+    if (!selectedChatId || !messageInput.trim() || sending) return;
 
-    setSending(true)
-    setSendError(null)
-    setSendSuccess(false)
+    setSending(true);
+    setSendError(null);
+    setSendSuccess(false);
 
-    const token = await getAccessToken()
+    const token = await getAccessToken();
     if (!token) {
-      console.error('Failed to get access token for sendMessage')
-      setSendError('Authentication required. Please log in again.')
-      setSending(false)
-      return
+      console.error('Failed to get access token for sendMessage');
+      setSendError('Authentication required. Please log in again.');
+      setSending(false);
+      return;
     }
 
     const response = await fetch(`/api/chats/${selectedChatId}/message`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ content: messageInput.trim() }),
     }).catch((error: Error) => {
-      setSendError('Failed to send message. Please try again.')
-      console.error('Send message error:', error)
-      setSending(false)
-      throw error
-    })
+      setSendError('Failed to send message. Please try again.');
+      console.error('Send message error:', error);
+      setSending(false);
+      throw error;
+    });
 
-    const data = await response.json()
+    const data = await response.json();
 
     if (data.warnings && data.warnings.length > 0) {
-      setSendError(data.warnings.join('. '))
-      setTimeout(() => setSendError(null), 5000)
+      setSendError(data.warnings.join('. '));
+      setTimeout(() => setSendError(null), 5000);
     } else {
-      setSendSuccess(true)
-      setTimeout(() => setSendSuccess(false), 2000)
+      setSendSuccess(true);
+      setTimeout(() => setSendSuccess(false), 2000);
     }
 
     // SSE will handle adding the message in real-time
-    setMessageInput('')
-    void loadChats() // Refresh chat list to update last message
-    
-    setSending(false)
-  }
+    setMessageInput('');
+    void loadChats(); // Refresh chat list to update last message
+
+    setSending(false);
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
+      e.preventDefault();
+      sendMessage();
     }
-  }
+  };
 
   // Filter chats based on active filter
-  const filteredByType = activeFilter === 'all' 
-    ? allChats 
-    : activeFilter === 'dms'
-      ? allChats.filter(c => !c.isGroup)
-      : allChats.filter(c => c.isGroup)
+  const filteredByType =
+    activeFilter === 'all'
+      ? allChats
+      : activeFilter === 'dms'
+        ? allChats.filter((c) => !c.isGroup)
+        : allChats.filter((c) => c.isGroup);
 
   // Apply search filter
   const filteredChats = searchQuery
-    ? filteredByType.filter((chat) =>
-        chat.name.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : filteredByType
+    ? filteredByType.filter((chat) => chat.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : filteredByType;
 
   // No games loaded state
   if (!ready && !authenticated) {
     return (
       <PageContainer noPadding className="flex flex-col">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="max-w-md mx-auto p-8 text-center">
-            <MessageCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-xl font-bold mb-2 text-foreground">No Chats Yet</h2>
-            <p className="text-muted-foreground mb-4">
+        <div className="flex flex-1 items-center justify-center">
+          <div className="mx-auto max-w-md p-8 text-center">
+            <MessageCircle className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+            <h2 className="mb-2 font-bold text-foreground text-xl">No Chats Yet</h2>
+            <p className="mb-4 text-muted-foreground">
               Game is auto-generating in the background...
             </p>
-            <div className="text-sm text-muted-foreground space-y-2">
+            <div className="space-y-2 text-muted-foreground text-sm">
               <p>This happens automatically on first run.</p>
               <p>Check the terminal logs for progress.</p>
-              <p className="font-mono text-xs bg-muted p-2 rounded">
+              <p className="rounded bg-muted p-2 font-mono text-xs">
                 First generation takes 3-5 minutes
               </p>
             </div>
           </div>
         </div>
       </PageContainer>
-    )
+    );
   }
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          .chat-card {
-            box-shadow: inset 5px 5px 5px rgba(0, 0, 0, 0.1), inset -5px -5px 5px rgba(255, 255, 255, 0.05);
-          }
+      <style jsx global>{`
+        .chat-card {
+          box-shadow: inset 5px 5px 5px rgba(0, 0, 0, 0.1), inset -5px -5px 5px rgba(255, 255, 255, 0.05);
+        }
 
-          .chat-button {
-            box-shadow: inset 3px 3px 3px rgba(0, 0, 0, 0.1), inset -3px -3px 3px rgba(255, 255, 255, 0.05);
-            transition: all 0.3s ease;
-          }
+        .chat-button {
+          box-shadow: inset 3px 3px 3px rgba(0, 0, 0, 0.1), inset -3px -3px 3px rgba(255, 255, 255, 0.05);
+          transition: all 0.3s ease;
+        }
 
-          .chat-button:hover:not(:disabled) {
-            box-shadow: none;
-          }
+        .chat-button:hover:not(:disabled) {
+          box-shadow: none;
+        }
 
-          .message-input {
-            box-shadow: inset 3px 3px 5px rgba(0, 0, 0, 0.15), inset -3px -3px 5px rgba(255, 255, 255, 0.05);
-            transition: all 0.3s ease;
-          }
+        .message-input {
+          box-shadow: inset 3px 3px 5px rgba(0, 0, 0, 0.15), inset -3px -3px 5px rgba(255, 255, 255, 0.05);
+          transition: all 0.3s ease;
+        }
 
-          .message-input:focus {
-            box-shadow: inset 3px 3px 5px rgba(28, 156, 240, 0.2), inset -3px -3px 5px rgba(28, 156, 240, 0.1);
-          }
+        .message-input:focus {
+          box-shadow: inset 3px 3px 5px rgba(28, 156, 240, 0.2), inset -3px -3px 5px rgba(28, 156, 240, 0.1);
+        }
 
-          .message-bubble {
-            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.15), -3px -3px 8px rgba(255, 255, 255, 0.05);
-          }
+        .message-bubble {
+          box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.15), -3px -3px 8px rgba(255, 255, 255, 0.05);
+        }
 
-          .chat-tab {
-            box-shadow: inset 3px 3px 5px rgba(0, 0, 0, 0.1), inset -3px -3px 5px rgba(255, 255, 255, 0.05);
-            transition: all 0.3s ease;
-          }
+        .chat-tab {
+          box-shadow: inset 3px 3px 5px rgba(0, 0, 0, 0.1), inset -3px -3px 5px rgba(255, 255, 255, 0.05);
+          transition: all 0.3s ease;
+        }
 
-          .chat-tab-active {
-            box-shadow: inset 3px 3px 5px rgba(28, 156, 240, 0.3), inset -3px -3px 5px rgba(28, 156, 240, 0.1);
-          }
-        `
-      }} />
+        .chat-tab:hover:not(:disabled) {
+          box-shadow: none;
+        }
+      `}</style>
       <PageContainer noPadding className="flex flex-col">
         {/* Desktop: Two Column Layout */}
-        <div className="hidden xl:flex flex-1 flex-col overflow-hidden">
+        <div className="hidden flex-1 flex-col overflow-hidden xl:flex">
           <div className="flex-1 overflow-hidden">
             <div className="flex h-full">
               {/* Left Column: Chat List with Filters */}
-              <div className="w-96 flex flex-col bg-background">
+              <div className="flex w-96 flex-col bg-background">
                 {/* Header with Filters */}
                 <div className="px-4 py-3">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-foreground">Messages</h2>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="font-bold text-foreground text-xl">Messages</h2>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => setIsCreateGroupModalOpen(true)}
                       title="Create Group"
                     >
-                      <Plus className="w-5 h-5" />
+                      <Plus className="h-5 w-5" />
                     </Button>
                   </div>
-                  
+
                   {/* Filter Tabs */}
-                  <div className="flex items-center border-b border-border mb-4">
+                  <div className="mb-4 flex items-center border-border border-b">
                     <button
+                      type="button"
                       onClick={() => setActiveFilter('all')}
                       className={cn(
-                        'flex-1 py-3.5 font-semibold transition-all relative hover:bg-muted/20',
+                        'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
                         activeFilter === 'all' ? 'text-foreground' : 'text-muted-foreground'
                       )}
                     >
                       All
                     </button>
                     <button
+                      type="button"
                       onClick={() => setActiveFilter('dms')}
                       className={cn(
-                        'flex-1 py-3.5 font-semibold transition-all relative hover:bg-muted/20',
+                        'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
                         activeFilter === 'dms' ? 'text-foreground' : 'text-muted-foreground'
                       )}
                     >
                       DMs
                     </button>
                     <button
+                      type="button"
                       onClick={() => setActiveFilter('groups')}
                       className={cn(
-                        'flex-1 py-3.5 font-semibold transition-all relative hover:bg-muted/20',
+                        'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
                         activeFilter === 'groups' ? 'text-foreground' : 'text-muted-foreground'
                       )}
                     >
                       Groups
                     </button>
                   </div>
-                  
+
                   {/* Search Bar */}
                   <div className="relative mb-2">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
                     <input
                       type="text"
                       placeholder="Search conversations..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className={cn(
-                        'w-full pl-9 pr-9 py-2 rounded-lg text-sm',
-                        'bg-sidebar-accent/50 message-input',
+                        'w-full rounded-lg py-2 pr-9 pl-9 text-sm',
+                        'message-input bg-sidebar-accent/50',
                         'text-foreground placeholder:text-muted-foreground',
                         'outline-none'
                       )}
                     />
                     {searchQuery && (
                       <button
+                        type="button"
                         onClick={() => setSearchQuery('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded-md flex items-center justify-center hover:bg-muted-foreground/20 transition-colors"
+                        className="-translate-y-1/2 absolute top-1/2 right-2 flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-muted-foreground/20"
                       >
-                        <X className="w-4 h-4 text-foreground" />
+                        <X className="h-4 w-4 text-foreground" />
                       </button>
                     )}
                   </div>
                 </div>
 
                 {/* Chat List */}
-                <div className="flex-1 overflow-y-auto mt-2">
+                <div className="mt-2 flex-1 overflow-y-auto">
                   {_loading ? (
                     <ChatListSkeleton count={10} />
                   ) : filteredChats.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-12 px-4">
-                      <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <div className="px-4 py-12 text-center text-muted-foreground">
+                      <MessageCircle className="mx-auto mb-3 h-12 w-12 opacity-50" />
                       <p className="text-sm">
-                        {searchQuery 
-                          ? 'No conversations found' 
+                        {searchQuery
+                          ? 'No conversations found'
                           : activeFilter === 'all'
                             ? 'No conversations yet'
                             : activeFilter === 'dms'
                               ? 'No direct messages yet'
-                              : 'No group chats yet'
-                        }
+                              : 'No group chats yet'}
                       </p>
                       {!searchQuery && activeFilter === 'dms' && (
-                        <p className="text-xs text-muted-foreground mt-2">
+                        <p className="mt-2 text-muted-foreground text-xs">
                           Visit a user&apos;s profile to start a DM
                         </p>
                       )}
@@ -780,45 +807,46 @@ export default function ChatsPage() {
                   ) : (
                     filteredChats.map((chat, idx) => (
                       <React.Fragment key={chat.id}>
-                        <div
+                        <button
+                          type="button"
                           onClick={() => setSelectedChatId(chat.id)}
+                          aria-pressed={selectedChatId === chat.id}
                           className={cn(
-                            'px-4 py-3 cursor-pointer transition-all duration-300',
+                            'w-full px-4 py-3 text-left transition-all duration-300',
                             selectedChatId === chat.id
-                              ? 'bg-sidebar-accent/50 border-l-4'
-                              : 'hover:bg-sidebar-accent/30',
+                              ? 'border-l-4 bg-sidebar-accent/50'
+                              : 'hover:bg-sidebar-accent/30'
                           )}
                           style={{
-                            borderLeftColor:
-                              selectedChatId === chat.id
-                                ? '#b82323'
-                                : 'transparent',
+                            borderLeftColor: selectedChatId === chat.id ? '#b82323' : 'transparent',
                           }}
                         >
                           <div className="flex items-center gap-3">
                             {chat.isGroup ? (
-                              <div className="w-10 h-10 rounded-full bg-sidebar-accent/50 flex items-center justify-center shrink-0 chat-button">
-                                <Users className="w-5 h-5" style={{ color: '#b82323' }} />
+                              <div className="chat-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-accent/50">
+                                <Users className="h-5 w-5" style={{ color: '#b82323' }} />
                               </div>
                             ) : (
                               <Avatar
                                 id={chat.otherUser?.id || ''}
-                                name={chat.otherUser?.displayName || chat.otherUser?.username || 'User'}
+                                name={
+                                  chat.otherUser?.displayName || chat.otherUser?.username || 'User'
+                                }
                                 type="user"
                                 size="md"
                                 imageUrl={chat.otherUser?.profileImageUrl || undefined}
                               />
                             )}
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-sm truncate text-foreground">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-semibold text-foreground text-sm">
                                 {chat.name}
                               </div>
-                              <div className="text-xs text-muted-foreground truncate">
+                              <div className="truncate text-muted-foreground text-xs">
                                 {chat.lastMessage?.content || 'No messages yet'}
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </button>
                         {idx < filteredChats.length - 1 && <Separator />}
                       </React.Fragment>
                     ))
@@ -830,87 +858,97 @@ export default function ChatsPage() {
               <Separator orientation="vertical" className="shrink-0" />
 
               {/* Right Column: Chat View */}
-              <div className="flex-1 flex flex-col bg-background">
+              <div className="flex flex-1 flex-col bg-background">
                 {selectedChatId && chatDetails ? (
                   <>
                     {/* Chat Header */}
-                    <div className="px-4 py-4 bg-background flex items-center justify-between">
+                    <div className="flex items-center justify-between bg-background px-4 py-4">
                       <div className="flex items-center gap-3">
                         {chatDetails.chat.isGroup ? (
-                          <div className="w-10 h-10 rounded-full bg-sidebar-accent/50 flex items-center justify-center">
-                            <Users className="w-5 h-5" style={{ color: '#b82323' }} />
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50">
+                            <Users className="h-5 w-5" style={{ color: '#b82323' }} />
                           </div>
                         ) : (
                           <Avatar
-                            id={chatDetails.participants.find(p => p.id !== user?.id)?.id || ''}
-                            name={chatDetails.participants.find(p => p.id !== user?.id)?.displayName || 'User'}
+                            id={chatDetails.participants.find((p) => p.id !== user?.id)?.id || ''}
+                            name={
+                              chatDetails.participants.find((p) => p.id !== user?.id)
+                                ?.displayName || 'User'
+                            }
                             type="user"
                             size="md"
-                            imageUrl={chatDetails.participants.find(p => p.id !== user?.id)?.profileImageUrl}
+                            imageUrl={
+                              chatDetails.participants.find((p) => p.id !== user?.id)
+                                ?.profileImageUrl
+                            }
                           />
                         )}
                         <div>
-                          <h3 className="text-lg font-bold text-foreground">
-                            {chatDetails.chat.name || 
-                             chatDetails.participants.find(p => p.id !== user?.id)?.displayName ||
-                             'Chat'}
+                          <h3 className="font-bold text-foreground text-lg">
+                            {chatDetails.chat.name ||
+                              chatDetails.participants.find((p) => p.id !== user?.id)
+                                ?.displayName ||
+                              'Chat'}
                           </h3>
                           {chatDetails.chat.isGroup && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-muted-foreground text-xs">
                               {chatDetails.participants.length} participants
                             </p>
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-2">
-                      {chatDetails.chat.isGroup && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={async () => {
-                              // Fetch the group ID from the chat
-                              const token = await getAccessToken()
-                              const response = await fetch(`/api/chats/${chatDetails.chat.id}/group`, {
-                                headers: {
-                                  Authorization: `Bearer ${token}`,
-                                },
-                              }).catch((error: Error) => {
-                                console.error('Error fetching group ID:', error)
-                                throw error
-                              })
-                              
-                              if (response.ok) {
-                                const data = await response.json()
-                                setSelectedGroupId(data.groupId)
-                                setIsGroupManagementModalOpen(true)
-                              } else {
-                                console.error('Failed to get group ID')
-                              }
-                            }}
-                            title="Manage Group"
-                          >
-                            <Settings className="h-5 w-5" />
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreVertical className="h-5 w-5" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => setLeaveConfirmOpen(true)}
-                                className="text-red-500"
-                              >
-                                <LogOut className="mr-2 h-4 w-4" />
-                                <span>Leave Chat</span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </>
-                      )}
+                        {chatDetails.chat.isGroup && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={async () => {
+                                // Fetch the group ID from the chat
+                                const token = await getAccessToken();
+                                const response = await fetch(
+                                  `/api/chats/${chatDetails.chat.id}/group`,
+                                  {
+                                    headers: {
+                                      Authorization: `Bearer ${token}`,
+                                    },
+                                  }
+                                ).catch((error: Error) => {
+                                  console.error('Error fetching group ID:', error);
+                                  throw error;
+                                });
+
+                                if (response.ok) {
+                                  const data = await response.json();
+                                  setSelectedGroupId(data.groupId);
+                                  setIsGroupManagementModalOpen(true);
+                                } else {
+                                  console.error('Failed to get group ID');
+                                }
+                              }}
+                              title="Manage Group"
+                            >
+                              <Settings className="h-5 w-5" />
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreVertical className="h-5 w-5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => setLeaveConfirmOpen(true)}
+                                  className="text-red-500"
+                                >
+                                  <LogOut className="mr-2 h-4 w-4" />
+                                  <span>Leave Chat</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -920,26 +958,26 @@ export default function ChatsPage() {
                     </div>
 
                     {/* Messages */}
-                    <div 
+                    <div
                       ref={setRefs}
-                      className="flex-1 overflow-y-auto px-4 py-3 space-y-4 relative"
+                      className="relative flex-1 space-y-4 overflow-y-auto px-4 py-3"
                     >
                       {/* Gradient overlay to hint more messages */}
                       {hasMore && (
-                        <div className="pointer-events-none absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-background via-background/90 to-transparent z-10" />
+                        <div className="pointer-events-none absolute top-0 right-0 left-0 z-10 h-8 bg-gradient-to-b from-background via-background/90 to-transparent" />
                       )}
 
                       {/* Pull-to-refresh indicator */}
                       {pullDistance > 0 && (
-                        <div 
-                          className="absolute top-0 left-0 right-0 flex items-center justify-center py-2 transition-opacity"
+                        <div
+                          className="absolute top-0 right-0 left-0 flex items-center justify-center py-2 transition-opacity"
                           style={{ opacity: Math.min(pullDistance / 80, 1) }}
                         >
-                          <Loader2 
+                          <Loader2
                             className={cn(
-                              "w-6 h-6 text-primary",
-                              pullDistance > 80 ? "animate-spin" : ""
-                            )} 
+                              'h-6 w-6 text-primary',
+                              pullDistance > 80 ? 'animate-spin' : ''
+                            )}
                           />
                         </div>
                       )}
@@ -950,36 +988,36 @@ export default function ChatsPage() {
                       {/* Loading more messages indicator */}
                       {isLoadingMore && (
                         <div className="sticky top-2 z-20 flex justify-center">
-                          <div className="flex items-center gap-2 rounded-full bg-background/85 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
+                          <div className="flex items-center gap-2 rounded-full bg-background/85 px-3 py-1 font-medium text-muted-foreground text-xs shadow-sm backdrop-blur">
                             <Loader2 className="h-4 w-4 animate-spin text-primary" />
                             <span>Loading previous messages…</span>
                           </div>
                         </div>
                       )}
-                      
+
                       {loadingChat ? (
-                        <div className="flex items-center justify-center h-full">
-                          <div className="space-y-3 w-full max-w-md">
+                        <div className="flex h-full items-center justify-center">
+                          <div className="w-full max-w-md space-y-3">
                             <Skeleton className="h-16 w-full" />
                             <Skeleton className="h-16 w-full" />
                             <Skeleton className="h-16 w-full" />
                           </div>
                         </div>
                       ) : (
-                        (chatDetails?.messages || []).map((msg, i) => {
-                          const msgDate = new Date(msg.createdAt)
+                        (chatDetails?.messages || []).map((msg, _i) => {
+                          const msgDate = new Date(msg.createdAt);
                           const sender = chatDetails?.participants?.find(
-                            (p) => p.id === msg.senderId,
-                          )
-                          const senderName = sender?.displayName || 'Unknown'
-                          const isCurrentUser = user?.id && msg.senderId === user.id
+                            (p) => p.id === msg.senderId
+                          );
+                          const senderName = sender?.displayName || 'Unknown';
+                          const isCurrentUser = user?.id && msg.senderId === user.id;
 
                           return (
                             <div
-                              key={i}
+                              key={msg.id}
                               className={cn(
                                 'flex gap-3',
-                                isCurrentUser ? 'justify-end' : 'items-start',
+                                isCurrentUser ? 'justify-end' : 'items-start'
                               )}
                             >
                               {!isCurrentUser && (
@@ -993,22 +1031,20 @@ export default function ChatsPage() {
                               )}
                               <div
                                 className={cn(
-                                  'max-w-[70%] flex flex-col',
-                                  isCurrentUser ? 'items-end' : 'items-start',
+                                  'flex max-w-[70%] flex-col',
+                                  isCurrentUser ? 'items-end' : 'items-start'
                                 )}
                               >
-                                <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                <div className="mb-1 flex flex-wrap items-center gap-3">
                                   {!isCurrentUser && (
-                                    <span className="font-bold text-sm text-foreground">
+                                    <span className="font-bold text-foreground text-sm">
                                       {senderName}
                                     </span>
                                   )}
                                   {!isCurrentUser && (
-                                    <span className="text-muted-foreground">
-                                      ·
-                                    </span>
+                                    <span className="text-muted-foreground">·</span>
                                   )}
-                                  <span className="text-xs text-muted-foreground">
+                                  <span className="text-muted-foreground text-xs">
                                     {msgDate.toLocaleDateString('en-US', {
                                       month: 'short',
                                       day: 'numeric',
@@ -1022,10 +1058,8 @@ export default function ChatsPage() {
                                 </div>
                                 <div
                                   className={cn(
-                                    'px-4 py-3 rounded-2xl message-bubble text-sm whitespace-pre-wrap break-words',
-                                    isCurrentUser
-                                      ? 'rounded-tr-sm'
-                                      : 'rounded-tl-sm',
+                                    'message-bubble whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm',
+                                    isCurrentUser ? 'rounded-tr-sm' : 'rounded-tl-sm'
                                   )}
                                   style={{
                                     backgroundColor: isCurrentUser
@@ -1041,19 +1075,17 @@ export default function ChatsPage() {
                                 </div>
                               </div>
                             </div>
-                          )
+                          );
                         })
                       )}
 
                       {(chatDetails?.messages || []).length === 0 && !loadingChat && (
-                        <div className="flex items-center justify-center h-full">
-                          <div className="text-center text-muted-foreground max-w-md p-8">
-                            <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                            <p className="mb-2 text-foreground">
-                              No messages yet
-                            </p>
+                        <div className="flex h-full items-center justify-center">
+                          <div className="max-w-md p-8 text-center text-muted-foreground">
+                            <MessageCircle className="mx-auto mb-3 h-12 w-12 opacity-50" />
+                            <p className="mb-2 text-foreground">No messages yet</p>
                             {authenticated && (
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-muted-foreground text-xs">
                                 Be the first to send a message!
                               </p>
                             )}
@@ -1067,15 +1099,28 @@ export default function ChatsPage() {
                     {authenticated && (sendError || sendSuccess) && (
                       <div className="px-4">
                         {sendError && (
-                          <div className="flex items-center gap-2 p-2 rounded-lg bg-sidebar-accent/30 mb-2 border-2" style={{ borderColor: '#f59e0b' }}>
-                            <AlertCircle className="w-4 h-4 shrink-0" style={{ color: '#f59e0b' }} />
-                            <span className="text-xs" style={{ color: '#f59e0b' }}>{sendError}</span>
+                          <div
+                            className="mb-2 flex items-center gap-2 rounded-lg border-2 bg-sidebar-accent/30 p-2"
+                            style={{ borderColor: '#f59e0b' }}
+                          >
+                            <AlertCircle
+                              className="h-4 w-4 shrink-0"
+                              style={{ color: '#f59e0b' }}
+                            />
+                            <span className="text-xs" style={{ color: '#f59e0b' }}>
+                              {sendError}
+                            </span>
                           </div>
                         )}
                         {sendSuccess && (
-                          <div className="flex items-center gap-2 p-2 rounded-lg bg-sidebar-accent/30 mb-2 border-2" style={{ borderColor: '#10b981' }}>
-                            <Check className="w-4 h-4 shrink-0" style={{ color: '#10b981' }} />
-                            <span className="text-xs" style={{ color: '#10b981' }}>Message sent!</span>
+                          <div
+                            className="mb-2 flex items-center gap-2 rounded-lg border-2 bg-sidebar-accent/30 p-2"
+                            style={{ borderColor: '#10b981' }}
+                          >
+                            <Check className="h-4 w-4 shrink-0" style={{ color: '#10b981' }} />
+                            <span className="text-xs" style={{ color: '#10b981' }}>
+                              Message sent!
+                            </span>
                           </div>
                         )}
                       </div>
@@ -1088,7 +1133,7 @@ export default function ChatsPage() {
 
                     {/* Message Input */}
                     {authenticated ? (
-                      <div className="px-4 py-3 bg-background">
+                      <div className="bg-background px-4 py-3">
                         <div className="flex gap-3">
                           <input
                             type="text"
@@ -1098,48 +1143,49 @@ export default function ChatsPage() {
                             placeholder="Type a message..."
                             disabled={sending}
                             className={cn(
-                              'flex-1 px-4 py-3 rounded-lg text-sm',
-                              'bg-sidebar-accent/50 message-input',
+                              'flex-1 rounded-lg px-4 py-3 text-sm',
+                              'message-input bg-sidebar-accent/50',
                               'text-foreground placeholder:text-muted-foreground',
                               'outline-none',
-                              'disabled:opacity-50 disabled:cursor-not-allowed'
+                              'disabled:cursor-not-allowed disabled:opacity-50'
                             )}
                           />
                           <button
+                            type="button"
                             onClick={sendMessage}
                             disabled={!messageInput.trim() || sending}
                             className={cn(
-                              'px-4 py-3 rounded-lg font-semibold flex items-center gap-3',
-                              'bg-sidebar-accent/50 chat-button',
+                              'flex items-center gap-3 rounded-lg px-4 py-3 font-semibold',
+                              'chat-button bg-sidebar-accent/50',
                               'transition-all duration-300',
-                              'disabled:opacity-50 disabled:cursor-not-allowed'
+                              'disabled:cursor-not-allowed disabled:opacity-50'
                             )}
                             style={{ color: '#0066FF' }}
                           >
-                          {sending ? (
-                            <Skeleton className="h-5 w-5 rounded" />
-                          ) : (
-                            <Send className="w-5 h-5" />
-                          )}
+                            {sending ? (
+                              <Skeleton className="h-5 w-5 rounded" />
+                            ) : (
+                              <Send className="h-5 w-5" />
+                            )}
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <div className="px-4 py-3 bg-background">
+                      <div className="bg-background px-4 py-3">
                         <div className="text-center">
-                          <p className="text-sm text-muted-foreground mb-3">Log in to send messages</p>
+                          <p className="mb-3 text-muted-foreground text-sm">
+                            Log in to send messages
+                          </p>
                           <LoginButton />
                         </div>
                       </div>
                     )}
                   </>
                 ) : (
-                  <div className="flex-1 flex items-center justify-center">
-                    <div className="text-center text-muted-foreground max-w-md p-8">
-                      <MessageCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                      <h3 className="text-xl font-bold mb-2 text-foreground">
-                        Select a chat
-                      </h3>
+                  <div className="flex flex-1 items-center justify-center">
+                    <div className="max-w-md p-8 text-center text-muted-foreground">
+                      <MessageCircle className="mx-auto mb-4 h-16 w-16 opacity-50" />
+                      <h3 className="mb-2 font-bold text-foreground text-xl">Select a chat</h3>
                       <p className="text-sm">
                         Choose a conversation from the list to view messages
                       </p>
@@ -1152,54 +1198,57 @@ export default function ChatsPage() {
         </div>
 
         {/* Mobile/Tablet: Responsive Layout */}
-        <div className="flex xl:hidden flex-col flex-1 overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden xl:hidden">
           <div className="flex-1 overflow-hidden">
             <div className="flex h-full">
               {/* Chat List (full screen on mobile, side panel on tablet when chat selected) */}
               <div
                 className={cn(
                   'w-full flex-col bg-background',
-                  selectedChatId ? 'hidden lg:flex lg:w-96' : 'flex',
+                  selectedChatId ? 'hidden lg:flex lg:w-96' : 'flex'
                 )}
               >
                 {/* Mobile Header with Tabs */}
                 <div className="px-4 py-3">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-foreground">Messages</h2>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="font-bold text-foreground text-xl">Messages</h2>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => setIsCreateGroupModalOpen(true)}
                       title="Create Group"
                     >
-                      <Plus className="w-5 h-5" />
+                      <Plus className="h-5 w-5" />
                     </Button>
                   </div>
-                  
+
                   {/* Filter Tabs */}
-                  <div className="flex items-center border-b border-border mb-4">
+                  <div className="mb-4 flex items-center border-border border-b">
                     <button
+                      type="button"
                       onClick={() => setActiveFilter('all')}
                       className={cn(
-                        'flex-1 py-3.5 font-semibold transition-all relative hover:bg-muted/20',
+                        'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
                         activeFilter === 'all' ? 'text-foreground' : 'text-muted-foreground'
                       )}
                     >
                       All
                     </button>
                     <button
+                      type="button"
                       onClick={() => setActiveFilter('dms')}
                       className={cn(
-                        'flex-1 py-3.5 font-semibold transition-all relative hover:bg-muted/20',
+                        'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
                         activeFilter === 'dms' ? 'text-foreground' : 'text-muted-foreground'
                       )}
                     >
                       DMs
                     </button>
                     <button
+                      type="button"
                       onClick={() => setActiveFilter('groups')}
                       className={cn(
-                        'flex-1 py-3.5 font-semibold transition-all relative hover:bg-muted/20',
+                        'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
                         activeFilter === 'groups' ? 'text-foreground' : 'text-muted-foreground'
                       )}
                     >
@@ -1209,49 +1258,49 @@ export default function ChatsPage() {
 
                   {/* Search Bar */}
                   <div className="relative mb-2">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
                     <input
                       type="text"
                       placeholder="Search conversations..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className={cn(
-                        'w-full pl-9 pr-9 py-2 rounded-lg text-sm',
-                        'bg-sidebar-accent/50 message-input',
+                        'w-full rounded-lg py-2 pr-9 pl-9 text-sm',
+                        'message-input bg-sidebar-accent/50',
                         'text-foreground placeholder:text-muted-foreground',
                         'outline-none'
                       )}
                     />
                     {searchQuery && (
                       <button
+                        type="button"
                         onClick={() => setSearchQuery('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        className="-translate-y-1/2 absolute top-1/2 right-3 text-muted-foreground hover:text-foreground"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="h-4 w-4" />
                       </button>
                     )}
                   </div>
                 </div>
 
                 {/* Chat List */}
-                <div className="flex-1 overflow-y-auto mt-2">
+                <div className="mt-2 flex-1 overflow-y-auto">
                   {_loading ? (
                     <ChatListSkeleton count={10} />
                   ) : filteredChats.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-12 px-4">
-                      <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <div className="px-4 py-12 text-center text-muted-foreground">
+                      <MessageCircle className="mx-auto mb-3 h-12 w-12 opacity-50" />
                       <p className="text-sm">
-                        {searchQuery 
-                          ? 'No conversations found' 
+                        {searchQuery
+                          ? 'No conversations found'
                           : activeFilter === 'all'
                             ? 'No conversations yet'
                             : activeFilter === 'dms'
                               ? 'No direct messages yet'
-                              : 'No group chats yet'
-                        }
+                              : 'No group chats yet'}
                       </p>
                       {!searchQuery && activeFilter === 'dms' && (
-                        <p className="text-xs text-muted-foreground mt-2">
+                        <p className="mt-2 text-muted-foreground text-xs">
                           Visit a user&apos;s profile to start a DM
                         </p>
                       )}
@@ -1259,45 +1308,46 @@ export default function ChatsPage() {
                   ) : (
                     filteredChats.map((chat, idx) => (
                       <React.Fragment key={chat.id}>
-                        <div
+                        <button
+                          type="button"
                           onClick={() => setSelectedChatId(chat.id)}
+                          aria-pressed={selectedChatId === chat.id}
                           className={cn(
-                            'px-4 py-3 cursor-pointer transition-all duration-300',
+                            'w-full px-4 py-3 text-left transition-all duration-300',
                             selectedChatId === chat.id
-                              ? 'bg-sidebar-accent/50 border-l-4'
-                              : 'hover:bg-sidebar-accent/30',
+                              ? 'border-l-4 bg-sidebar-accent/50'
+                              : 'hover:bg-sidebar-accent/30'
                           )}
                           style={{
-                            borderLeftColor:
-                              selectedChatId === chat.id
-                                ? '#b82323'
-                                : 'transparent',
+                            borderLeftColor: selectedChatId === chat.id ? '#b82323' : 'transparent',
                           }}
                         >
                           <div className="flex items-center gap-3">
                             {chat.isGroup ? (
-                              <div className="w-10 h-10 rounded-full bg-sidebar-accent/50 flex items-center justify-center shrink-0 chat-button">
-                                <Users className="w-5 h-5" style={{ color: '#b82323' }} />
+                              <div className="chat-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-accent/50">
+                                <Users className="h-5 w-5" style={{ color: '#b82323' }} />
                               </div>
                             ) : (
                               <Avatar
                                 id={chat.otherUser?.id || ''}
-                                name={chat.otherUser?.displayName || chat.otherUser?.username || 'User'}
+                                name={
+                                  chat.otherUser?.displayName || chat.otherUser?.username || 'User'
+                                }
                                 type="user"
                                 size="md"
                                 imageUrl={chat.otherUser?.profileImageUrl || undefined}
                               />
                             )}
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-sm truncate text-foreground">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-semibold text-foreground text-sm">
                                 {chat.name}
                               </div>
-                              <div className="text-xs text-muted-foreground truncate">
+                              <div className="truncate text-muted-foreground text-xs">
                                 {chat.lastMessage?.content || 'No messages yet'}
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </button>
                         {idx < filteredChats.length - 1 && <Separator />}
                       </React.Fragment>
                     ))
@@ -1307,7 +1357,7 @@ export default function ChatsPage() {
 
               {/* Vertical Separator for Tablet */}
               {selectedChatId && (
-                <Separator orientation="vertical" className="hidden lg:block shrink-0" />
+                <Separator orientation="vertical" className="hidden shrink-0 lg:block" />
               )}
 
               {/* Chat View (full screen on mobile, shared on tablet) */}
@@ -1315,45 +1365,51 @@ export default function ChatsPage() {
                 <div
                   className={cn(
                     'flex-1 flex-col bg-background',
-                    !selectedChatId ? 'hidden lg:flex' : 'flex',
+                    !selectedChatId ? 'hidden lg:flex' : 'flex'
                   )}
                 >
                   {/* Mobile/Tablet Header with Back Button */}
-                  <div className="px-4 py-4 bg-background">
+                  <div className="bg-background px-4 py-4">
                     <div className="flex items-center gap-3">
                       <button
+                        type="button"
                         onClick={() => setSelectedChatId(null)}
-                        className="lg:hidden flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-sidebar-accent/50 transition-colors text-foreground"
+                        className="flex items-center gap-2 rounded-md px-3 py-1.5 font-medium text-foreground text-sm transition-colors hover:bg-sidebar-accent/50 lg:hidden"
                       >
-                        <ArrowLeft className="w-4 h-4" />
+                        <ArrowLeft className="h-4 w-4" />
                         Back
                       </button>
                       {chatDetails.chat.isGroup ? (
-                        <div className="w-10 h-10 rounded-full bg-sidebar-accent/50 flex items-center justify-center">
-                          <Users className="w-5 h-5" style={{ color: '#b82323' }} />
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50">
+                          <Users className="h-5 w-5" style={{ color: '#b82323' }} />
                         </div>
                       ) : (
                         <Avatar
-                          id={chatDetails.participants.find(p => p.id !== user?.id)?.id || ''}
-                          name={chatDetails.participants.find(p => p.id !== user?.id)?.displayName || 'User'}
+                          id={chatDetails.participants.find((p) => p.id !== user?.id)?.id || ''}
+                          name={
+                            chatDetails.participants.find((p) => p.id !== user?.id)?.displayName ||
+                            'User'
+                          }
                           type="user"
                           size="md"
-                          imageUrl={chatDetails.participants.find(p => p.id !== user?.id)?.profileImageUrl}
+                          imageUrl={
+                            chatDetails.participants.find((p) => p.id !== user?.id)?.profileImageUrl
+                          }
                         />
                       )}
                       <div className="flex-1">
-                        <h3 className="text-lg font-bold text-foreground">
-                          {chatDetails.chat.name || 
-                           chatDetails.participants.find(p => p.id !== user?.id)?.displayName ||
-                           'Chat'}
+                        <h3 className="font-bold text-foreground text-lg">
+                          {chatDetails.chat.name ||
+                            chatDetails.participants.find((p) => p.id !== user?.id)?.displayName ||
+                            'Chat'}
                         </h3>
                         {chatDetails.chat.isGroup && (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-muted-foreground text-xs">
                             {chatDetails.participants.length} participants
                           </p>
                         )}
                       </div>
-                      
+
                       {chatDetails.chat.isGroup && (
                         <>
                           <Button
@@ -1361,22 +1417,25 @@ export default function ChatsPage() {
                             size="icon"
                             onClick={async () => {
                               // Fetch the group ID from the chat
-                              const token = await getAccessToken()
-                              const response = await fetch(`/api/chats/${chatDetails.chat.id}/group`, {
-                                headers: {
-                                  Authorization: `Bearer ${token}`,
-                                },
-                              }).catch((error: Error) => {
-                                console.error('Error fetching group ID:', error)
-                                throw error
-                              })
-                              
+                              const token = await getAccessToken();
+                              const response = await fetch(
+                                `/api/chats/${chatDetails.chat.id}/group`,
+                                {
+                                  headers: {
+                                    Authorization: `Bearer ${token}`,
+                                  },
+                                }
+                              ).catch((error: Error) => {
+                                console.error('Error fetching group ID:', error);
+                                throw error;
+                              });
+
                               if (response.ok) {
-                                const data = await response.json()
-                                setSelectedGroupId(data.groupId)
-                                setIsGroupManagementModalOpen(true)
+                                const data = await response.json();
+                                setSelectedGroupId(data.groupId);
+                                setIsGroupManagementModalOpen(true);
                               } else {
-                                console.error('Failed to get group ID')
+                                console.error('Failed to get group ID');
                               }
                             }}
                             title="Manage Group"
@@ -1410,30 +1469,30 @@ export default function ChatsPage() {
                   </div>
 
                   {/* Messages */}
-                  <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+                  <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3">
                     {loadingChat ? (
-                      <div className="flex items-center justify-center h-full">
-                        <div className="space-y-3 w-full max-w-md">
+                      <div className="flex h-full items-center justify-center">
+                        <div className="w-full max-w-md space-y-3">
                           <Skeleton className="h-16 w-full" />
                           <Skeleton className="h-16 w-full" />
                           <Skeleton className="h-16 w-full" />
                         </div>
                       </div>
                     ) : (
-                      (chatDetails?.messages || []).map((msg, i) => {
-                        const msgDate = new Date(msg.createdAt)
+                      (chatDetails?.messages || []).map((msg, _i) => {
+                        const msgDate = new Date(msg.createdAt);
                         const sender = chatDetails?.participants?.find(
-                          (p) => p.id === msg.senderId,
-                        )
-                        const senderName = sender?.displayName || 'Unknown'
-                        const isCurrentUser = user?.id && msg.senderId === user.id
+                          (p) => p.id === msg.senderId
+                        );
+                        const senderName = sender?.displayName || 'Unknown';
+                        const isCurrentUser = user?.id && msg.senderId === user.id;
 
                         return (
                           <div
-                            key={i}
+                            key={msg.id}
                             className={cn(
                               'flex gap-3',
-                              isCurrentUser ? 'justify-end' : 'items-start',
+                              isCurrentUser ? 'justify-end' : 'items-start'
                             )}
                           >
                             {!isCurrentUser && (
@@ -1447,22 +1506,18 @@ export default function ChatsPage() {
                             )}
                             <div
                               className={cn(
-                                'max-w-[70%] flex flex-col',
-                                isCurrentUser ? 'items-end' : 'items-start',
+                                'flex max-w-[70%] flex-col',
+                                isCurrentUser ? 'items-end' : 'items-start'
                               )}
                             >
-                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <div className="mb-1 flex flex-wrap items-center gap-2">
                                 {!isCurrentUser && (
-                                  <span className="font-bold text-sm text-foreground">
+                                  <span className="font-bold text-foreground text-sm">
                                     {senderName}
                                   </span>
                                 )}
-                                {!isCurrentUser && (
-                                  <span className="text-muted-foreground">
-                                    ·
-                                  </span>
-                                )}
-                                <span className="text-xs text-muted-foreground">
+                                {!isCurrentUser && <span className="text-muted-foreground">·</span>}
+                                <span className="text-muted-foreground text-xs">
                                   {msgDate.toLocaleDateString('en-US', {
                                     month: 'short',
                                     day: 'numeric',
@@ -1476,10 +1531,8 @@ export default function ChatsPage() {
                               </div>
                               <div
                                 className={cn(
-                                  'px-4 py-2 rounded-2xl message-bubble text-sm whitespace-pre-wrap break-words',
-                                  isCurrentUser
-                                    ? 'rounded-tr-sm'
-                                    : 'rounded-tl-sm',
+                                  'message-bubble whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm',
+                                  isCurrentUser ? 'rounded-tr-sm' : 'rounded-tl-sm'
                                 )}
                                 style={{
                                   backgroundColor: isCurrentUser
@@ -1495,19 +1548,17 @@ export default function ChatsPage() {
                               </div>
                             </div>
                           </div>
-                        )
+                        );
                       })
                     )}
 
                     {(chatDetails?.messages || []).length === 0 && !loadingChat && (
-                      <div className="flex items-center justify-center h-full">
-                        <div className="text-center text-muted-foreground max-w-md p-8">
-                          <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                          <p className="mb-2 text-foreground">
-                            No messages yet
-                          </p>
+                      <div className="flex h-full items-center justify-center">
+                        <div className="max-w-md p-8 text-center text-muted-foreground">
+                          <MessageCircle className="mx-auto mb-3 h-12 w-12 opacity-50" />
+                          <p className="mb-2 text-foreground">No messages yet</p>
                           {authenticated && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-muted-foreground text-xs">
                               Be the first to send a message!
                             </p>
                           )}
@@ -1521,15 +1572,25 @@ export default function ChatsPage() {
                   {authenticated && (sendError || sendSuccess) && (
                     <div className="px-4">
                       {sendError && (
-                        <div className="flex items-center gap-2 p-2 rounded-lg bg-sidebar-accent/30 mb-2 border-2" style={{ borderColor: '#f59e0b' }}>
-                          <AlertCircle className="w-4 h-4 shrink-0" style={{ color: '#f59e0b' }} />
-                          <span className="text-xs" style={{ color: '#f59e0b' }}>{sendError}</span>
+                        <div
+                          className="mb-2 flex items-center gap-2 rounded-lg border-2 bg-sidebar-accent/30 p-2"
+                          style={{ borderColor: '#f59e0b' }}
+                        >
+                          <AlertCircle className="h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
+                          <span className="text-xs" style={{ color: '#f59e0b' }}>
+                            {sendError}
+                          </span>
                         </div>
                       )}
                       {sendSuccess && (
-                        <div className="flex items-center gap-2 p-2 rounded-lg bg-sidebar-accent/30 mb-2 border-2" style={{ borderColor: '#10b981' }}>
-                          <Check className="w-4 h-4 shrink-0" style={{ color: '#10b981' }} />
-                          <span className="text-xs" style={{ color: '#10b981' }}>Message sent!</span>
+                        <div
+                          className="mb-2 flex items-center gap-2 rounded-lg border-2 bg-sidebar-accent/30 p-2"
+                          style={{ borderColor: '#10b981' }}
+                        >
+                          <Check className="h-4 w-4 shrink-0" style={{ color: '#10b981' }} />
+                          <span className="text-xs" style={{ color: '#10b981' }}>
+                            Message sent!
+                          </span>
                         </div>
                       )}
                     </div>
@@ -1542,7 +1603,7 @@ export default function ChatsPage() {
 
                   {/* Message Input */}
                   {authenticated ? (
-                    <div className="px-4 py-3 bg-background">
+                    <div className="bg-background px-4 py-3">
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -1552,36 +1613,39 @@ export default function ChatsPage() {
                           placeholder="Type a message..."
                           disabled={sending}
                           className={cn(
-                            'flex-1 px-4 py-3 rounded-lg text-sm',
-                            'bg-sidebar-accent/50 message-input',
+                            'flex-1 rounded-lg px-4 py-3 text-sm',
+                            'message-input bg-sidebar-accent/50',
                             'text-foreground placeholder:text-muted-foreground',
                             'outline-none',
-                            'disabled:opacity-50 disabled:cursor-not-allowed'
+                            'disabled:cursor-not-allowed disabled:opacity-50'
                           )}
                         />
                         <button
+                          type="button"
                           onClick={sendMessage}
                           disabled={!messageInput.trim() || sending}
                           className={cn(
-                            'px-4 py-3 rounded-lg font-semibold flex items-center gap-2',
-                            'bg-sidebar-accent/50 chat-button',
+                            'flex items-center gap-2 rounded-lg px-4 py-3 font-semibold',
+                            'chat-button bg-sidebar-accent/50',
                             'transition-all duration-300',
-                            'disabled:opacity-50 disabled:cursor-not-allowed'
+                            'disabled:cursor-not-allowed disabled:opacity-50'
                           )}
                           style={{ color: '#0066FF' }}
                         >
                           {sending ? (
                             <Skeleton className="h-5 w-5 rounded" />
                           ) : (
-                            <Send className="w-5 h-5" />
+                            <Send className="h-5 w-5" />
                           )}
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div className="px-4 py-3 bg-background">
+                    <div className="bg-background px-4 py-3">
                       <div className="text-center">
-                        <p className="text-sm text-muted-foreground mb-3">Log in to send messages</p>
+                        <p className="mb-3 text-muted-foreground text-sm">
+                          Log in to send messages
+                        </p>
                         <LoginButton />
                       </div>
                     </div>
@@ -1592,24 +1656,33 @@ export default function ChatsPage() {
           </div>
         </div>
       </PageContainer>
-      
+
       {/* Leave Chat Confirmation Dialog */}
       <AlertDialog open={isLeaveConfirmOpen} onOpenChange={setLeaveConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Leave Chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 Are you sure you want to leave this chat?
               </p>
-              {leaveChatError && (
-                <p className="text-sm text-red-500 mt-2">{leaveChatError}</p>
-              )}
+              {leaveChatError && <p className="mt-2 text-red-500 text-sm">{leaveChatError}</p>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => { setLeaveConfirmOpen(false); setLeaveChatError(null); }}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleLeaveChat} className={buttonVariants()} disabled={isLeavingChat}>
+            <AlertDialogCancel
+              onClick={() => {
+                setLeaveConfirmOpen(false);
+                setLeaveChatError(null);
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLeaveChat}
+              className={buttonVariants()}
+              disabled={isLeavingChat}
+            >
               {isLeavingChat && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Leave
             </AlertDialogAction>
@@ -1623,17 +1696,16 @@ export default function ChatsPage() {
         onClose={() => setIsCreateGroupModalOpen(false)}
         onGroupCreated={handleGroupCreated}
       />
-      
+
       <GroupManagementModal
         isOpen={isGroupManagementModalOpen}
         onClose={() => {
-          setIsGroupManagementModalOpen(false)
-          setSelectedGroupId(null)
+          setIsGroupManagementModalOpen(false);
+          setSelectedGroupId(null);
         }}
         groupId={selectedGroupId}
         onGroupUpdated={handleGroupUpdated}
       />
-
     </>
-  )
+  );
 }

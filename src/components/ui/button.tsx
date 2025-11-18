@@ -1,5 +1,5 @@
-import React from 'react';
 import { cn } from '@/lib/utils';
+import type React from 'react';
 
 /**
  * Props for the Button component.
@@ -13,13 +13,13 @@ export interface ButtonProps extends React.ComponentPropsWithoutRef<'button'> {
 
 /**
  * Button component for user interactions.
- * 
+ *
  * A flexible button component that extends native button functionality
  * with variant and size options. Accepts all standard button props.
- * 
+ *
  * @param props - Button component props
  * @returns Button element
- * 
+ *
  * @example
  * ```tsx
  * <Button variant="default" size="lg" onClick={handleClick}>
@@ -27,12 +27,15 @@ export interface ButtonProps extends React.ComponentPropsWithoutRef<'button'> {
  * </Button>
  * ```
  */
-export const Button = ({ children, variant: _variant, size: _size, className, ...props }: ButtonProps) => {
+export const Button = ({
+  children,
+  variant: _variant,
+  size: _size,
+  className,
+  ...props
+}: ButtonProps) => {
   return (
-    <button 
-      className={cn(className)} 
-      {...props}
-    >
+    <button type="button" className={cn(className)} {...props}>
       {children}
     </button>
   );

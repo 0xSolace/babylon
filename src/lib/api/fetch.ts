@@ -14,7 +14,7 @@ export interface ApiFetchOptions extends RequestInit {
  */
 async function getPrivyAccessToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
-  
+
   // Use the Privy hook's getAccessToken if available (preferred - gets fresh token)
   if (window.__privyGetAccessToken) {
     const token = await window.__privyGetAccessToken();
@@ -22,7 +22,7 @@ async function getPrivyAccessToken(): Promise<string | null> {
     window.__privyAccessToken = token;
     return token;
   }
-  
+
   // Fallback to cached token
   return window.__privyAccessToken ?? null;
 }
@@ -32,7 +32,7 @@ async function getPrivyAccessToken(): Promise<string | null> {
  * Privy access token stored on window. Centralising this logic avoids
  * sprinkling direct window lookups across the codebase and keeps future
  * Privy integration changes localised.
- * 
+ *
  * Automatically retries requests with a fresh token if a 401 error is received.
  */
 export async function apiFetch(input: RequestInfo, init: ApiFetchOptions = {}) {
@@ -56,11 +56,11 @@ export async function apiFetch(input: RequestInfo, init: ApiFetchOptions = {}) {
   // If we get a 401 and auto-retry is enabled, try to refresh the token and retry
   if (response.status === 401 && auth && autoRetryOn401) {
     const freshToken = await getPrivyAccessToken();
-    
+
     if (freshToken) {
       const retryHeaders = new Headers(headers ?? {});
       retryHeaders.set('Authorization', `Bearer ${freshToken}`);
-      
+
       response = await fetch(input, {
         ...rest,
         headers: retryHeaders,

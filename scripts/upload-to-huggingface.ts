@@ -1,28 +1,28 @@
 /**
  * Upload to HuggingFace (GitHub Actions Version)
- * 
+ *
  * Uploads collected game data to HuggingFace Hub.
  * Designed to run in GitHub Actions with longer timeouts.
- * 
+ *
  * Uploads:
  * - Complete game worlds (organized by month)
  * - Agent trajectories
  * - Benchmark results
- * 
+ *
  * Usage (in GitHub Actions):
  *   bun run scripts/upload-to-huggingface.ts
  */
 
-import { promises as fs } from 'fs';
-import * as path from 'path';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 import { logger } from '../src/lib/logger';
 
-interface UploadResult {
+type UploadResult = {
   success: boolean;
   filesUploaded: number;
   datasetUrl?: string;
   error?: string;
-}
+};
 
 async function uploadToHuggingFace(): Promise<UploadResult> {
   try {
@@ -32,37 +32,39 @@ async function uploadToHuggingFace(): Promise<UploadResult> {
     }
 
     const dataDir = path.join(process.cwd(), 'exports', 'huggingface', 'latest');
-    
+
     // Check if data exists
     const summaryPath = path.join(dataDir, 'summary.json');
     const summary = JSON.parse(await fs.readFile(summaryPath, 'utf-8'));
-    
+
     logger.info('Uploading to HuggingFace', { summary });
-    
+
     const datasetName = process.env.HF_DATASET_NAME || 'elizaos/babylon-game-data';
-    
+
     // Generate README for dataset
     await generateDatasetCard(dataDir, summary, datasetName);
-    
+
     // Upload using huggingface-cli (most reliable in GitHub Actions)
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
+    const { exec } = await import('node:child_process');
+    const { promisify } = await import('node:util');
     const execAsync = promisify(exec);
-    
+
     // Set token
     process.env.HUGGINGFACE_HUB_TOKEN = token;
-    
+
     console.log(`\n📤 Uploading to ${datasetName}...`);
-    
+
     try {
       // Try to create repo first
-      await execAsync(`huggingface-cli repo create ${datasetName} --type dataset --private=false || true`);
+      await execAsync(
+        `huggingface-cli repo create ${datasetName} --type dataset --private=false || true`
+      );
       logger.info('Repository ensured');
     } catch (error) {
       // Repo might already exist
       logger.info('Repository may already exist', { error });
     }
-    
+
     // Upload only the main JSONL files (consistent schemas)
     // Upload metadata separately to avoid schema conflicts
     const filesToUpload = [
@@ -72,7 +74,7 @@ async function uploadToHuggingFace(): Promise<UploadResult> {
       'trajectories.jsonl',
       'benchmarks.jsonl',
     ];
-    
+
     console.log('Uploading main dataset files...');
     for (const file of filesToUpload) {
       const filePath = path.join(dataDir, file);
@@ -85,7 +87,7 @@ async function uploadToHuggingFace(): Promise<UploadResult> {
         logger.warn(`Failed to upload ${file}`, { error });
       }
     }
-    
+
     // Upload monthly files to subdirectory (won't conflict with auto-detection)
     console.log('Uploading monthly data files...');
     const monthsDir = path.join(dataDir, 'by-month');
@@ -101,12 +103,12 @@ async function uploadToHuggingFace(): Promise<UploadResult> {
     } catch (error) {
       logger.warn('Could not upload monthly files', { error });
     }
-    
+
     logger.info('Upload complete');
-    
+
     // Count files uploaded
     let fileCount = filesToUpload.length;
-    
+
     // Count month files
     try {
       const monthFiles = await fs.readdir(monthsDir);
@@ -114,7 +116,7 @@ async function uploadToHuggingFace(): Promise<UploadResult> {
     } catch {
       // No monthly files yet
     }
-    
+
     return {
       success: true,
       filesUploaded: fileCount,
@@ -281,9 +283,9 @@ async function main() {
   console.log('\n╔════════════════════════════════════════════════════════╗');
   console.log('║    UPLOADING TO HUGGINGFACE                            ║');
   console.log('╚════════════════════════════════════════════════════════╝\n');
-  
+
   const result = await uploadToHuggingFace();
-  
+
   if (result.success) {
     console.log('\n✅ UPLOAD SUCCESSFUL!\n');
     console.log(`Dataset URL: ${result.datasetUrl}`);
@@ -296,9 +298,7 @@ async function main() {
   }
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
-
-

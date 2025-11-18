@@ -1,4 +1,5 @@
-import { type AuthenticatedUser } from '@/lib/api/auth-middleware';
+import type { AuthenticatedUser } from '@/lib/api/auth-middleware';
+import { cachedDb } from '@/lib/cached-database-service';
 import { FEE_CONFIG } from '@/lib/config/fees';
 import { asUser } from '@/lib/db/context';
 import {
@@ -9,7 +10,6 @@ import {
   NotFoundError,
 } from '@/lib/errors';
 import { logger } from '@/lib/logger';
-import { cachedDb } from '@/lib/cached-database-service';
 import { getReadyPerpsEngine } from '@/lib/perps-service';
 import { prisma } from '@/lib/prisma';
 import { FeeService } from '@/lib/services/fee-service';
@@ -17,19 +17,18 @@ import type { TradeImpactInput } from '@/lib/services/market-impact-service';
 import { applyPerpTradeImpacts } from '@/lib/services/perp-price-impact-service';
 import { WalletService } from '@/lib/services/wallet-service';
 import { generateSnowflakeId } from '@/lib/snowflake';
-
 import type { PerpPosition } from '@/shared/perps-types';
 
 type TradeSide = 'long' | 'short';
 
-export interface OpenPerpPositionInput {
+export type OpenPerpPositionInput = {
   ticker: string;
   side: TradeSide;
   size: number;
   leverage: number;
-}
+};
 
-export interface OpenPerpPositionResult {
+export type OpenPerpPositionResult = {
   position: PerpPosition;
   marginPaid: number;
   fee: {
@@ -39,9 +38,9 @@ export interface OpenPerpPositionResult {
     referrerId: string | null;
   };
   newBalance: number;
-}
+};
 
-export interface ClosePerpPositionResult {
+export type ClosePerpPositionResult = {
   position: PerpPosition;
   realizedPnL: number;
   marginReturned: number;
@@ -55,7 +54,7 @@ export interface ClosePerpPositionResult {
     referrerId: string | null;
   };
   newBalance: number;
-}
+};
 
 export function resolveExitPrice(options: {
   enginePrice?: number | null;
@@ -115,17 +114,10 @@ export class PerpTradeService {
     const feeCalc = FeeService.calculateFee(size);
     const totalCost = marginRequired + feeCalc.feeAmount;
 
-    const hasFunds = await WalletService.hasSufficientBalance(
-      authUser.userId,
-      totalCost
-    );
+    const hasFunds = await WalletService.hasSufficientBalance(authUser.userId, totalCost);
     if (!hasFunds) {
       const balance = await WalletService.getBalance(authUser.userId);
-      throw new InsufficientFundsError(
-        totalCost,
-        Number(balance.balance),
-        'USD'
-      );
+      throw new InsufficientFundsError(totalCost, Number(balance.balance), 'USD');
     }
 
     const position = perpsEngine.openPosition(authUser.userId, {
@@ -229,8 +221,7 @@ export class PerpTradeService {
 
     await applyPerpTradeImpacts([tradeImpact]);
 
-    const newBalance = (await WalletService.getBalance(authUser.userId))
-      .balance;
+    const newBalance = (await WalletService.getBalance(authUser.userId)).balance;
 
     return {
       position,
@@ -261,11 +252,10 @@ export class PerpTradeService {
     }
 
     if (dbPosition.closedAt) {
-      throw new BusinessLogicError(
-        'Position already closed',
-        'POSITION_CLOSED',
-        { positionId, closedAt: dbPosition.closedAt }
-      );
+      throw new BusinessLogicError('Position already closed', 'POSITION_CLOSED', {
+        positionId,
+        closedAt: dbPosition.closedAt,
+      });
     }
 
     if (!perpsEngine.hasPosition(positionId)) {
@@ -300,9 +290,7 @@ export class PerpTradeService {
       organizationPrice: latestOrganization?.currentPrice
         ? Number(latestOrganization.currentPrice)
         : null,
-      positionPrice: dbPosition.currentPrice
-        ? Number(dbPosition.currentPrice)
-        : null,
+      positionPrice: dbPosition.currentPrice ? Number(dbPosition.currentPrice) : null,
       entryPrice: Number(dbPosition.entryPrice),
     });
 
@@ -314,19 +302,14 @@ export class PerpTradeService {
       );
     }
 
-    const { position, realizedPnL } = perpsEngine.closePosition(
-      positionId,
-      exitPrice
-    );
+    const { position, realizedPnL } = perpsEngine.closePosition(positionId, exitPrice);
 
     logger.debug(
       'Resolved exit price for perp close',
       {
         positionId,
         enginePrice: enginePosition?.currentPrice ?? null,
-        prismaPositionPrice: dbPosition.currentPrice
-          ? Number(dbPosition.currentPrice)
-          : null,
+        prismaPositionPrice: dbPosition.currentPrice ? Number(dbPosition.currentPrice) : null,
         organizationPrice: latestOrganization?.currentPrice
           ? Number(latestOrganization.currentPrice)
           : null,
@@ -365,12 +348,7 @@ export class PerpTradeService {
       );
     }
 
-    await WalletService.recordPnL(
-      authUser.userId,
-      realizedPnL,
-      'perp_close',
-      position.id
-    );
+    await WalletService.recordPnL(authUser.userId, realizedPnL, 'perp_close', position.id);
 
     await asUser(authUser, async (db) => {
       try {
@@ -426,8 +404,7 @@ export class PerpTradeService {
 
     await applyPerpTradeImpacts([closingImpact]);
 
-    const newBalance = (await WalletService.getBalance(authUser.userId))
-      .balance;
+    const newBalance = (await WalletService.getBalance(authUser.userId)).balance;
 
     return {
       position,

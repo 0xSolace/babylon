@@ -1,14 +1,14 @@
 /**
  * Moderation Reports API
- * 
+ *
  * @route GET /api/moderation/reports - Get user's reports
  * @route POST /api/moderation/reports - Create report
  * @access Authenticated
- * 
+ *
  * @description
  * Manages user reports. GET returns reports created by current user.
  * POST creates a new report with AI evaluation. Includes duplicate detection.
- * 
+ *
  * @openapi
  * /api/moderation/reports:
  *   get:
@@ -84,7 +84,7 @@
  *         description: Unauthorized
  *       404:
  *         description: Reported user/post/comment not found
- * 
+ *
  * @example
  * ```typescript
  * // Create report
@@ -100,15 +100,15 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/api/auth-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { prisma } from '@/lib/prisma';
-import { CreateReportSchema, GetReportsSchema } from '@/lib/validation/schemas/moderation';
-import { logger } from '@/lib/logger';
 import { BusinessLogicError, NotFoundError } from '@/lib/errors';
-import { generateSnowflakeId } from '@/lib/snowflake';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
 import { evaluateReport, storeEvaluationResult } from '@/lib/moderation/report-evaluation';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import { CreateReportSchema, GetReportsSchema } from '@/lib/validation/schemas/moderation';
+import type { NextRequest } from 'next/server';
 
 /**
  * POST /api/moderation/reports
@@ -116,15 +116,19 @@ import { evaluateReport, storeEvaluationResult } from '@/lib/moderation/report-e
  */
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
-  
+
   const body = await request.json();
   const data = CreateReportSchema.parse(body);
 
-  logger.info(`Creating report`, { 
-    reporterId: authUser.userId,
-    reportType: data.reportType,
-    category: data.category,
-  }, 'POST /api/moderation/reports');
+  logger.info(
+    `Creating report`,
+    {
+      reporterId: authUser.userId,
+      reportType: data.reportType,
+      category: data.category,
+    },
+    'POST /api/moderation/reports'
+  );
 
   // Validate reported user exists if reporting a user
   if (data.reportedUserId) {
@@ -232,13 +236,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     },
   });
 
-  logger.info(`Report created successfully`, { 
-    reportId: report.id,
-    reporterId: authUser.userId,
-    reportType: data.reportType,
-    category: data.category,
-    priority,
-  }, 'POST /api/moderation/reports');
+  logger.info(
+    `Report created successfully`,
+    {
+      reportId: report.id,
+      reporterId: authUser.userId,
+      reportType: data.reportType,
+      category: data.category,
+      priority,
+    },
+    'POST /api/moderation/reports'
+  );
 
   // Automatically evaluate and process the report
   // This ensures fully automated moderation - no human review needed unless user stakes $10 for appeal
@@ -248,25 +256,27 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
     // If evaluation indicates valid scammer/CSAM report with high confidence, automatically ban
     // Check if recommendedActions suggest banning or if reasoning indicates scamming/CSAM
-    const shouldAutoBan = 
+    const shouldAutoBan =
       evaluation.outcome === 'valid_report' &&
       evaluation.confidence >= 0.8 &&
       report.reportedUserId !== null &&
-      (evaluation.recommendedActions.includes('ban_user') || 
-       evaluation.recommendedActions.includes('ban') ||
-       evaluation.recommendedActions.includes('mark_scammer') ||
-       evaluation.recommendedActions.includes('mark_csam') ||
-       evaluation.reasoning.toLowerCase().includes('scam') ||
-       evaluation.reasoning.toLowerCase().includes('csam') ||
-       evaluation.reasoning.toLowerCase().includes('child sexual abuse'))
+      (evaluation.recommendedActions.includes('ban_user') ||
+        evaluation.recommendedActions.includes('ban') ||
+        evaluation.recommendedActions.includes('mark_scammer') ||
+        evaluation.recommendedActions.includes('mark_csam') ||
+        evaluation.reasoning.toLowerCase().includes('scam') ||
+        evaluation.reasoning.toLowerCase().includes('csam') ||
+        evaluation.reasoning.toLowerCase().includes('child sexual abuse'));
 
     if (shouldAutoBan && report.reportedUserId) {
       // Determine if scammer or CSAM based on evaluation
-      const isScammer = evaluation.recommendedActions.includes('mark_scammer') || 
-                        evaluation.reasoning.toLowerCase().includes('scam')
-      const isCSAM = evaluation.recommendedActions.includes('mark_csam') ||
-                     evaluation.reasoning.toLowerCase().includes('csam') ||
-                     evaluation.reasoning.toLowerCase().includes('child sexual abuse')
+      const isScammer =
+        evaluation.recommendedActions.includes('mark_scammer') ||
+        evaluation.reasoning.toLowerCase().includes('scam');
+      const isCSAM =
+        evaluation.recommendedActions.includes('mark_csam') ||
+        evaluation.reasoning.toLowerCase().includes('csam') ||
+        evaluation.reasoning.toLowerCase().includes('child sexual abuse');
 
       // Automatically ban the reported user
       if (report.reportedUserId) {
@@ -294,12 +304,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         },
       });
 
-      logger.info('User automatically banned from report', {
-        reportId: report.id,
-        reportedUserId: report.reportedUserId,
-        evaluationOutcome: evaluation.outcome,
-        confidence: evaluation.confidence,
-      }, 'POST /api/moderation/reports');
+      logger.info(
+        'User automatically banned from report',
+        {
+          reportId: report.id,
+          reportedUserId: report.reportedUserId,
+          evaluationOutcome: evaluation.outcome,
+          confidence: evaluation.confidence,
+        },
+        'POST /api/moderation/reports'
+      );
     } else {
       // Store evaluation but don't auto-ban (low confidence or not scammer/CSAM)
       await prisma.report.update({
@@ -312,10 +326,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     }
   } catch (error) {
     // Don't fail report creation if evaluation fails - log and continue
-    logger.error('Failed to automatically evaluate report', {
-      reportId: report.id,
-      error: error instanceof Error ? error.message : String(error),
-    }, 'POST /api/moderation/reports');
+    logger.error(
+      'Failed to automatically evaluate report',
+      {
+        reportId: report.id,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'POST /api/moderation/reports'
+    );
   }
 
   return successResponse({
@@ -331,7 +349,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
  */
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
-  
+
   const { searchParams } = new URL(request.url);
   const params = GetReportsSchema.parse({
     limit: searchParams.get('limit') || '50',
@@ -386,5 +404,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-
-

@@ -1,21 +1,14 @@
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
+import { type TradeImpactInput, aggregateTradeImpacts } from './market-impact-service';
+import { type PriceUpdateInput, PriceUpdateService } from './price-update-service';
 
-import {
-  type TradeImpactInput,
-  aggregateTradeImpacts,
-} from './market-impact-service';
-import {
-  type PriceUpdateInput,
-  PriceUpdateService,
-} from './price-update-service';
-
-interface OrganizationTicker {
+type OrganizationTicker = {
   id: string;
   ticker: string;
   currentPrice: number | null;
   initialPrice: number | null;
-}
+};
 
 async function buildTickerMap(): Promise<Map<string, OrganizationTicker>> {
   const organizations = await prisma.organization.findMany({
@@ -30,7 +23,7 @@ async function buildTickerMap(): Promise<Map<string, OrganizationTicker>> {
 
   // Map both raw org IDs and tickers to handle both formats
   const map = new Map<string, OrganizationTicker>();
-  
+
   for (const org of organizations) {
     const ticker = org.ticker || org.id.toUpperCase().replace(/-/g, '');
     const entry = {
@@ -39,20 +32,20 @@ async function buildTickerMap(): Promise<Map<string, OrganizationTicker>> {
       initialPrice: org.initialPrice,
       ticker,
     };
-    
+
     // Add mapping for org ID
     map.set(org.id, entry);
-    
+
     // Add mapping for ticker (primary way to reference)
     map.set(ticker, entry);
-    
+
     // Also add mapping for transformed ticker for backwards compatibility
     const transformedTicker = org.id.toUpperCase().replace(/-/g, '');
     if (transformedTicker !== ticker) {
       map.set(transformedTicker, entry);
     }
   }
-  
+
   return map;
 }
 
@@ -60,14 +53,10 @@ async function buildTickerMap(): Promise<Map<string, OrganizationTicker>> {
  * Apply price impacts for user-generated perp trades.
  * Mirrors the logic used by GameEngine for NPC trades.
  */
-export async function applyPerpTradeImpacts(
-  trades: TradeImpactInput[]
-): Promise<void> {
+export async function applyPerpTradeImpacts(trades: TradeImpactInput[]): Promise<void> {
   if (trades.length === 0) return;
 
-  const perpTrades = trades.filter(
-    (trade) => trade.marketType === 'perp' && trade.ticker
-  );
+  const perpTrades = trades.filter((trade) => trade.marketType === 'perp' && trade.ticker);
   if (perpTrades.length === 0) return;
 
   const impacts = aggregateTradeImpacts(perpTrades);
@@ -79,9 +68,7 @@ export async function applyPerpTradeImpacts(
     const ticker = rawTicker.toUpperCase();
     const orgEntry = tickerMap.get(ticker);
     if (!orgEntry) {
-      logger.warn(
-        `applyPerpTradeImpacts: no organization for ticker ${ticker}`
-      );
+      logger.warn(`applyPerpTradeImpacts: no organization for ticker ${ticker}`);
       continue;
     }
 

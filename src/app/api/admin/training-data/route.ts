@@ -1,13 +1,13 @@
 /**
  * Admin Training Data Status API
- * 
+ *
  * @route GET /api/admin/training-data - Get training data status
  * @access Admin
- * 
+ *
  * @description
  * Returns training data statistics and readiness information including
  * trajectory counts, window statistics, and training readiness metrics.
- * 
+ *
  * @openapi
  * /api/admin/training-data:
  *   get:
@@ -35,7 +35,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const status = await fetch('/api/admin/training-data', {
@@ -44,10 +44,10 @@
  * ```
  */
 
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
 
 /**
  * GET /api/admin/training-data
@@ -57,14 +57,16 @@ export async function GET(_req: NextRequest) {
   try {
     // Get total trajectory count
     const totalTrajectories = await prisma.trajectory.count();
-    
+
     // Get trajectories by window
-    const windowStats = await prisma.$queryRaw<Array<{
-      windowId: string;
-      count: bigint;
-      avgSteps: number;
-      avgPnl: number;
-    }>>`
+    const windowStats = await prisma.$queryRaw<
+      Array<{
+        windowId: string;
+        count: bigint;
+        avgSteps: number;
+        avgPnl: number;
+      }>
+    >`
       SELECT 
         "windowId",
         COUNT(*)::bigint as count,
@@ -78,19 +80,19 @@ export async function GET(_req: NextRequest) {
       ORDER BY "windowId" DESC
       LIMIT 50
     `;
-    
+
     // Convert to serializable format
-    const windows = windowStats.map(w => ({
+    const windows = windowStats.map((w) => ({
       windowId: w.windowId,
       trajectoryCount: Number(w.count),
       avgSteps: w.avgSteps || 0,
       avgPnl: w.avgPnl || 0,
     }));
-    
+
     // Find ready windows (>= 3 agents minimum for GRPO)
     const MIN_AGENTS_FOR_TRAINING = 3;
-    const readyWindows = windows.filter(w => w.trajectoryCount >= MIN_AGENTS_FOR_TRAINING);
-    
+    const readyWindows = windows.filter((w) => w.trajectoryCount >= MIN_AGENTS_FOR_TRAINING);
+
     // Get recent trajectories for preview
     const recentTrajectories = await prisma.trajectory.findMany({
       where: {
@@ -111,14 +113,15 @@ export async function GET(_req: NextRequest) {
       },
       take: 10,
     });
-    
+
     // Calculate quality metrics
     const qualityMetrics = {
       avgEpisodeLength: windows.reduce((sum, w) => sum + w.avgSteps, 0) / (windows.length || 1),
       avgPnl: windows.reduce((sum, w) => sum + w.avgPnl, 0) / (windows.length || 1),
-      trainingDataQuality: totalTrajectories > 100 ? 'good' : totalTrajectories > 20 ? 'fair' : 'low',
+      trainingDataQuality:
+        totalTrajectories > 100 ? 'good' : totalTrajectories > 20 ? 'fair' : 'low',
     };
-    
+
     return NextResponse.json({
       success: true,
       data: {
@@ -145,4 +148,3 @@ export async function GET(_req: NextRequest) {
     );
   }
 }
-

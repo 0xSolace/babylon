@@ -1,78 +1,81 @@
-import { describe, test, expect, beforeEach, mock } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 const findUniqueMock = mock(async () => ({
   id: 'agent-1',
   isAgent: true,
-  walletAddress: null as string | null
-}))
+  walletAddress: null as string | null,
+}));
 
 const createWalletMock = mock(async () => ({
   walletAddress: '0xwallet',
   privyUserId: 'privy-user',
-  privyWalletId: 'privy-wallet'
-}))
+  privyWalletId: 'privy-wallet',
+}));
 
-const sdkFromCardMock = mock(async () => new MockA2AClient())
+const sdkFromCardMock = mock(async () => ({}));
 
-class MockA2AClient {
-  static fromCardUrl = sdkFromCardMock
-}
+const MockA2AClient = {
+  fromCardUrl: sdkFromCardMock,
+};
 
 mock.module('@/lib/prisma', () => ({
   prisma: {
     user: {
-      findUnique: findUniqueMock
-    }
-  }
-}))
+      findUnique: findUniqueMock,
+    },
+  },
+}));
 
 mock.module('@/lib/agents/identity/AgentWalletService', () => ({
   agentWalletService: {
-    createAgentEmbeddedWallet: createWalletMock
-  }
-}))
+    createAgentEmbeddedWallet: createWalletMock,
+  },
+}));
 
 mock.module('@a2a-js/sdk/client', () => ({
-  A2AClient: MockA2AClient
-}))
+  A2AClient: MockA2AClient,
+}));
 
 describe('initializeAgentA2AClient wallet provisioning', () => {
   beforeEach(() => {
-  findUniqueMock.mockClear()
-  createWalletMock.mockClear()
-  sdkFromCardMock.mockClear()
-    process.env.AUTO_CREATE_AGENT_WALLETS = 'true'
-    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000'
-  })
+    findUniqueMock.mockClear();
+    createWalletMock.mockClear();
+    sdkFromCardMock.mockClear();
+    process.env.AUTO_CREATE_AGENT_WALLETS = 'true';
+    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
+  });
 
   test('auto-creates wallet when missing', async () => {
     findUniqueMock.mockResolvedValueOnce({
       id: 'agent-1',
       isAgent: true,
-      walletAddress: null
-    })
+      walletAddress: null,
+    });
 
-    const { initializeAgentA2AClient } = await import('@/lib/agents/plugins/babylon/integration-a2a-sdk')
-    await initializeAgentA2AClient('agent-1')
+    const { initializeAgentA2AClient } = await import(
+      '@/lib/agents/plugins/babylon/integration-a2a-sdk'
+    );
+    await initializeAgentA2AClient('agent-1');
 
-    expect(createWalletMock).toHaveBeenCalledTimes(1)
-    expect(sdkFromCardMock).toHaveBeenCalledTimes(1)
-  })
+    expect(createWalletMock).toHaveBeenCalledTimes(1);
+    expect(sdkFromCardMock).toHaveBeenCalledTimes(1);
+  });
 
   test('does not call wallet service when wallet already exists', async () => {
     findUniqueMock.mockResolvedValueOnce({
       id: 'agent-2',
       isAgent: true,
-      walletAddress: '0xexisting'
-    })
+      walletAddress: '0xexisting',
+    });
 
-    const { initializeAgentA2AClient } = await import('@/lib/agents/plugins/babylon/integration-a2a-sdk')
-    await initializeAgentA2AClient('agent-2')
+    const { initializeAgentA2AClient } = await import(
+      '@/lib/agents/plugins/babylon/integration-a2a-sdk'
+    );
+    await initializeAgentA2AClient('agent-2');
 
     // Wallet service should not be called if wallet already exists
-    expect(createWalletMock).not.toHaveBeenCalled()
+    expect(createWalletMock).not.toHaveBeenCalled();
     // SDK should still be initialized
-    expect(sdkFromCardMock).toHaveBeenCalledTimes(1)
-  })
-})
-
+    expect(sdkFromCardMock).toHaveBeenCalledTimes(1);
+  });
+});

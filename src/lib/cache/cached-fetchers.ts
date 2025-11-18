@@ -1,24 +1,25 @@
 /**
  * Cached Server-Side Data Fetchers
- * 
+ *
  * These functions use Next.js 16 'use cache' directives to enable
  * efficient caching at the component level.
  */
 
-import db from '@/lib/database-service'
-import { gameService } from '@/lib/game-service'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { cacheTag, cacheLife } from './cache-polyfill'
-import { cacheMonitoring } from './cache-monitoring'
-import { ReputationService } from '@/lib/services/reputation-service'
+import db from '@/lib/database-service';
+import { gameService } from '@/lib/game-service';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { ReputationService } from '@/lib/services/reputation-service';
+import type { Post } from '@prisma/client';
+import { cacheMonitoring } from './cache-monitoring';
+import { cacheLife, cacheTag } from './cache-polyfill';
 
 /**
  * Calculate 24h trading volume for an organization
  */
 async function calculateVolume24h(organizationId: string): Promise<number> {
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
   const volumeTransactions = await prisma.balanceTransaction.findMany({
     where: {
       type: {
@@ -34,9 +35,9 @@ async function calculateVolume24h(organizationId: string): Promise<number> {
     select: {
       amount: true,
     },
-  })
-  
-  return volumeTransactions.reduce((sum, tx) => sum + Math.abs(Number(tx.amount)), 0)
+  });
+
+  return volumeTransactions.reduce((sum, tx) => sum + Math.abs(Number(tx.amount)), 0);
 }
 
 /**
@@ -46,41 +47,42 @@ async function calculateVolume24h(organizationId: string): Promise<number> {
  * Cache life: 5 minutes (300 seconds)
  */
 export async function getCachedPerpMarkets() {
-  'use cache'
-  
-  const cacheKey = 'markets:perps'
-  const startTime = Date.now()
-  
-  cacheTag(cacheKey)
-  cacheLife({ expire: 300 })
-  
+  'use cache';
+
+  const cacheKey = 'markets:perps';
+  const startTime = Date.now();
+
+  cacheTag(cacheKey);
+  cacheLife({ expire: 300 });
+
   try {
-    const companies = await db().getCompanies()
-    
+    const companies = await db().getCompanies();
+
     const markets = await Promise.all(
       companies.map(async (company) => {
         // Use ticker from company if available, otherwise generate from ID
-        const ticker = company.ticker || company.id.toUpperCase().replace(/-/g, '').substring(0, 12)
-        
-        const currentPrice = company.currentPrice || company.initialPrice || 100
-        const priceHistory = await db().getPriceHistory(company.id, 1440)
-        
-        let change24h = 0
-        let changePercent24h = 0
-        let high24h = currentPrice
-        let low24h = currentPrice
-        
+        const ticker =
+          company.ticker || company.id.toUpperCase().replace(/-/g, '').substring(0, 12);
+
+        const currentPrice = company.currentPrice || company.initialPrice || 100;
+        const priceHistory = await db().getPriceHistory(company.id, 1440);
+
+        let change24h = 0;
+        let changePercent24h = 0;
+        let high24h = currentPrice;
+        let low24h = currentPrice;
+
         if (priceHistory.length > 0) {
-          const price24hAgo = priceHistory[priceHistory.length - 1]
+          const price24hAgo = priceHistory[priceHistory.length - 1];
           if (price24hAgo) {
-            change24h = currentPrice - price24hAgo.price
-            changePercent24h = (change24h / price24hAgo.price) * 100
+            change24h = currentPrice - price24hAgo.price;
+            changePercent24h = (change24h / price24hAgo.price) * 100;
           }
-          
-          high24h = Math.max(...priceHistory.map(p => p.price), currentPrice)
-          low24h = Math.min(...priceHistory.map(p => p.price), currentPrice)
+
+          high24h = Math.max(...priceHistory.map((p) => p.price), currentPrice);
+          low24h = Math.min(...priceHistory.map((p) => p.price), currentPrice);
         }
-        
+
         // Get open positions for open interest calculation
         const positions = await prisma.perpPosition.findMany({
           where: {
@@ -92,25 +94,25 @@ export async function getCachedPerpMarkets() {
             size: true,
             leverage: true,
           },
-        })
-        
+        });
+
         const openInterest = positions.reduce(
-          (sum, p) => sum + (Number(p.size) * Number(p.leverage)),
+          (sum, p) => sum + Number(p.size) * Number(p.leverage),
           0
-        )
-        
-        const longs = positions.filter(p => p.side === 'long')
-        const shorts = positions.filter(p => p.side === 'short')
-        const longSize = longs.reduce((sum, p) => sum + Number(p.size), 0)
-        const shortSize = shorts.reduce((sum, p) => sum + Number(p.size), 0)
-        const totalSize = longSize + shortSize
-        
-        let fundingRate = 0.01
+        );
+
+        const longs = positions.filter((p) => p.side === 'long');
+        const shorts = positions.filter((p) => p.side === 'short');
+        const longSize = longs.reduce((sum, p) => sum + Number(p.size), 0);
+        const shortSize = shorts.reduce((sum, p) => sum + Number(p.size), 0);
+        const totalSize = longSize + shortSize;
+
+        let fundingRate = 0.01;
         if (totalSize > 0) {
-          const imbalance = (longSize - shortSize) / totalSize
-          fundingRate = 0.01 + (imbalance * 0.05)
+          const imbalance = (longSize - shortSize) / totalSize;
+          fundingRate = 0.01 + imbalance * 0.05;
         }
-        
+
         return {
           ticker,
           organizationId: company.id,
@@ -129,28 +131,28 @@ export async function getCachedPerpMarkets() {
           },
           maxLeverage: 100,
           minOrderSize: 10,
-        }
+        };
       })
-    )
-    
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordHit(cacheKey, responseTime)
-    
+    );
+
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordHit(cacheKey, responseTime);
+
     return {
       success: true,
       markets,
       count: markets.length,
-    }
+    };
   } catch (error) {
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordMiss(cacheKey, responseTime)
-    
-    logger.error('Error fetching cached perp markets:', error, 'getCachedPerpMarkets')
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordMiss(cacheKey, responseTime);
+
+    logger.error('Error fetching cached perp markets:', error, 'getCachedPerpMarkets');
     return {
       success: false,
       markets: [],
       count: 0,
-    }
+    };
   }
 }
 
@@ -161,37 +163,37 @@ export async function getCachedPerpMarkets() {
  * Cache life: 1 minute (60 seconds) - stats change frequently
  */
 export async function getCachedStats() {
-  'use cache'
-  
-  const cacheKey = 'stats'
-  const startTime = Date.now()
-  
-  cacheTag(cacheKey)
+  'use cache';
+
+  const cacheKey = 'stats';
+  const startTime = Date.now();
+
+  cacheTag(cacheKey);
   // Cache life: 1 minute - stats change frequently
-  cacheLife({ expire: 60 })
-  
+  cacheLife({ expire: 60 });
+
   try {
-    const stats = await gameService.getStats()
-    const status = gameService.getStatus()
-    
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordHit(cacheKey, responseTime)
-    
+    const stats = await gameService.getStats();
+    const status = gameService.getStatus();
+
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordHit(cacheKey, responseTime);
+
     return {
       success: true,
       stats,
       engineStatus: status,
-    }
+    };
   } catch (error) {
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordMiss(cacheKey, responseTime)
-    
-    logger.error('Error fetching cached stats:', error, 'getCachedStats')
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordMiss(cacheKey, responseTime);
+
+    logger.error('Error fetching cached stats:', error, 'getCachedStats');
     return {
       success: false,
       stats: null,
       engineStatus: null,
-    }
+    };
   }
 }
 
@@ -202,28 +204,28 @@ export async function getCachedStats() {
  * Cache life: 2 minutes (120 seconds) - predictions update frequently
  */
 export async function getCachedPredictions(userId?: string, timeframe?: string) {
-  'use cache: remote'
-  
-  const cacheKey = `markets:predictions${userId ? `:${userId}` : ''}`
-  const startTime = Date.now()
-  
-  cacheTag('markets:predictions')
+  'use cache: remote';
+
+  const cacheKey = `markets:predictions${userId ? `:${userId}` : ''}`;
+  const startTime = Date.now();
+
+  cacheTag('markets:predictions');
   // Cache life: 2 minutes - predictions update frequently
-  cacheLife({ expire: 120 })
-  
+  cacheLife({ expire: 120 });
+
   try {
-    const questions = await db().getActiveQuestions(timeframe)
-    const marketIds = questions.map(q => String(q.id)) // Convert to string array
-    
+    const questions = await db().getActiveQuestions(timeframe);
+    const marketIds = questions.map((q) => String(q.id)); // Convert to string array
+
     const markets = await prisma.market.findMany({
       where: {
         id: { in: marketIds },
       },
-    })
-    const marketMap = new Map(markets.map(m => [m.id, m]))
-    
+    });
+    const marketMap = new Map(markets.map((m) => [m.id, m]));
+
     // Get user positions if userId provided
-    const userPositionsMap = new Map()
+    const userPositionsMap = new Map();
     if (userId) {
       const positions = await prisma.position.findMany({
         where: {
@@ -233,17 +235,22 @@ export async function getCachedPredictions(userId?: string, timeframe?: string) 
         include: {
           Market: true,
         },
-      })
-      
+      });
+
       for (const p of positions) {
         // Type assertion: Prisma include adds Market property
-        const positionWithMarket = p as typeof p & { Market: { yesShares: number | string; noShares: number | string } | null }
+        const positionWithMarket = p as typeof p & {
+          Market: {
+            yesShares: number | string;
+            noShares: number | string;
+          } | null;
+        };
         if (!positionWithMarket.Market) continue; // Skip if market not loaded
-        const market = positionWithMarket.Market
-        const totalShares = Number(market.yesShares) + Number(market.noShares)
-        const currentYesPrice = totalShares > 0 ? Number(market.yesShares) / totalShares : 0.5
-        const currentNoPrice = totalShares > 0 ? Number(market.noShares) / totalShares : 0.5
-        
+        const market = positionWithMarket.Market;
+        const totalShares = Number(market.yesShares) + Number(market.noShares);
+        const currentYesPrice = totalShares > 0 ? Number(market.yesShares) / totalShares : 0.5;
+        const currentNoPrice = totalShares > 0 ? Number(market.noShares) / totalShares : 0.5;
+
         userPositionsMap.set(p.marketId, {
           id: p.id,
           side: p.side ? 'YES' : 'NO',
@@ -252,18 +259,20 @@ export async function getCachedPredictions(userId?: string, timeframe?: string) 
           currentPrice: p.side ? currentYesPrice : currentNoPrice,
           currentValue: Number(p.shares) * (p.side ? currentYesPrice : currentNoPrice),
           costBasis: Number(p.shares) * Number(p.avgPrice),
-          unrealizedPnL: (Number(p.shares) * (p.side ? currentYesPrice : currentNoPrice)) - (Number(p.shares) * Number(p.avgPrice)),
-        })
+          unrealizedPnL:
+            Number(p.shares) * (p.side ? currentYesPrice : currentNoPrice) -
+            Number(p.shares) * Number(p.avgPrice),
+        });
       }
     }
-    
+
     return {
       success: true,
-      questions: questions.map(q => {
-        const marketId = String(q.id)
-        const market = marketMap.get(marketId)
-        const userPosition = userPositionsMap.get(marketId)
-        
+      questions: questions.map((q) => {
+        const marketId = String(q.id);
+        const market = marketMap.get(marketId);
+        const userPosition = userPositionsMap.get(marketId);
+
         return {
           id: marketId, // Ensure id is string
           questionNumber: q.questionNumber,
@@ -277,20 +286,20 @@ export async function getCachedPredictions(userId?: string, timeframe?: string) 
           yesShares: market ? Number(market.yesShares) : 0,
           noShares: market ? Number(market.noShares) : 0,
           userPosition: userPosition || null,
-        }
+        };
       }),
       count: questions.length,
-    }
+    };
   } catch (error) {
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordMiss(cacheKey, responseTime)
-    
-    logger.error('Error fetching cached predictions:', error, 'getCachedPredictions')
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordMiss(cacheKey, responseTime);
+
+    logger.error('Error fetching cached predictions:', error, 'getCachedPredictions');
     return {
       success: false,
       questions: [],
       count: 0,
-    }
+    };
   }
 }
 
@@ -300,19 +309,23 @@ export async function getCachedPredictions(userId?: string, timeframe?: string) 
  * Cache tag: 'posts:latest' for granular invalidation
  * Cache life: 30 seconds - posts are very dynamic
  */
-export async function getCachedLatestPosts(limit: number = 100, offset: number = 0, actorId?: string) {
-  'use cache: remote'
-  
-  const cacheKey = `posts:latest:${limit}:${offset}:${actorId || 'all'}`
-  const startTime = Date.now()
-  
-  cacheTag('posts:latest')
+export async function getCachedLatestPosts(
+  limit: number = 100,
+  offset: number = 0,
+  actorId?: string
+) {
+  'use cache: remote';
+
+  const cacheKey = `posts:latest:${limit}:${offset}:${actorId || 'all'}`;
+  const startTime = Date.now();
+
+  cacheTag('posts:latest');
   // Cache life: 30 seconds - posts are very dynamic
-  cacheLife({ expire: 30 })
-  
+  cacheLife({ expire: 30 });
+
   try {
     // Prefer realtime history when available
-    const realtimeResult = await gameService.getRealtimePosts(limit, offset, actorId || undefined)
+    const realtimeResult = await gameService.getRealtimePosts(limit, offset, actorId || undefined);
     if (realtimeResult && realtimeResult.posts.length > 0) {
       const result = {
         success: true,
@@ -321,45 +334,45 @@ export async function getCachedLatestPosts(limit: number = 100, offset: number =
         limit,
         offset,
         source: 'realtime',
-      }
-      
-      const responseTime = Date.now() - startTime
-      cacheMonitoring.recordHit(cacheKey, responseTime)
-      
-      return result
+      };
+
+      const responseTime = Date.now() - startTime;
+      cacheMonitoring.recordHit(cacheKey, responseTime);
+
+      return result;
     }
-    
-    let posts
+
+    let posts: Post[];
     if (actorId) {
-      posts = await gameService.getPostsByActor(actorId, limit)
+      posts = await gameService.getPostsByActor(actorId, limit);
     } else {
-      posts = await gameService.getRecentPosts(limit, offset)
+      posts = await gameService.getRecentPosts(limit, offset);
     }
-    
+
     const result = {
       success: true,
       posts,
       total: posts.length,
       limit,
       offset,
-    }
-    
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordHit(cacheKey, responseTime)
-    
-    return result
+    };
+
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordHit(cacheKey, responseTime);
+
+    return result;
   } catch (error) {
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordMiss(cacheKey, responseTime)
-    
-    logger.error('Error fetching cached latest posts:', error, 'getCachedLatestPosts')
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordMiss(cacheKey, responseTime);
+
+    logger.error('Error fetching cached latest posts:', error, 'getCachedLatestPosts');
     return {
       success: false,
       posts: [],
       total: 0,
       limit,
       offset,
-    }
+    };
   }
 }
 
@@ -370,27 +383,29 @@ export async function getCachedLatestPosts(limit: number = 100, offset: number =
  * Cache life: 3 minutes (180 seconds) - registry changes less frequently
  */
 export async function getCachedRegistry(filters: {
-  onChainOnly?: boolean
-  sortBy?: 'username' | 'createdAt' | 'nftTokenId'
-  sortOrder?: 'asc' | 'desc'
-  limit?: number
-  offset?: number
+  onChainOnly?: boolean;
+  sortBy?: 'username' | 'createdAt' | 'nftTokenId';
+  sortOrder?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
 }) {
-  'use cache: remote'
-  
-  const cacheKey = `registry:${JSON.stringify(filters)}`
-  const startTime = Date.now()
-  
-  cacheTag('registry')
+  'use cache: remote';
+
+  const cacheKey = `registry:${JSON.stringify(filters)}`;
+  const startTime = Date.now();
+
+  cacheTag('registry');
   // Cache life: 3 minutes - registry changes less frequently
-  cacheLife({ expire: 180 })
-  
+  cacheLife({ expire: 180 });
+
   try {
-    const where = filters.onChainOnly ? { onChainRegistered: true } : {}
-    const orderBy = filters.sortBy ? {
-      [filters.sortBy]: filters.sortOrder || 'desc',
-    } : { createdAt: 'desc' as const }
-    
+    const where = filters.onChainOnly ? { onChainRegistered: true } : {};
+    const orderBy = filters.sortBy
+      ? {
+          [filters.sortBy]: filters.sortOrder || 'desc',
+        }
+      : { createdAt: 'desc' as const };
+
     const users = await prisma.user.findMany({
       where,
       orderBy,
@@ -418,21 +433,25 @@ export async function getCachedRegistry(filters: {
           },
         },
       },
-    })
-    
-    const totalCount = await prisma.user.count({ where })
-    
+    });
+
+    const totalCount = await prisma.user.count({ where });
+
     const usersWithReputation = await Promise.all(
       users.map(async (user) => {
-        let reputation: number | null = null
+        let reputation: number | null = null;
         if (user.onChainRegistered && user.nftTokenId) {
           try {
-            reputation = await ReputationService.getOnChainReputation(user.id)
+            reputation = await ReputationService.getOnChainReputation(user.id);
           } catch (error) {
-            logger.error(`Failed to fetch reputation for user ${user.id}:`, error, 'getCachedRegistry')
+            logger.error(
+              `Failed to fetch reputation for user ${user.id}:`,
+              error,
+              'getCachedRegistry'
+            );
           }
         }
-        
+
         return {
           id: user.id,
           username: user.username,
@@ -453,10 +472,10 @@ export async function getCachedRegistry(filters: {
             comments: user._count.Comment,
             reactions: user._count.Reaction,
           },
-        }
+        };
       })
-    )
-    
+    );
+
     const result = {
       success: true,
       users: usersWithReputation,
@@ -466,17 +485,17 @@ export async function getCachedRegistry(filters: {
         offset: filters.offset || 0,
         hasMore: (filters.offset || 0) + users.length < totalCount,
       },
-    }
-    
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordHit(cacheKey, responseTime)
-    
-    return result
+    };
+
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordHit(cacheKey, responseTime);
+
+    return result;
   } catch (error) {
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordMiss(cacheKey, responseTime)
-    
-    logger.error('Error fetching cached registry:', error, 'getCachedRegistry')
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordMiss(cacheKey, responseTime);
+
+    logger.error('Error fetching cached registry:', error, 'getCachedRegistry');
     return {
       success: false,
       users: [],
@@ -486,7 +505,7 @@ export async function getCachedRegistry(filters: {
         offset: filters.offset || 0,
         hasMore: false,
       },
-    }
+    };
   }
 }
 
@@ -497,38 +516,38 @@ export async function getCachedRegistry(filters: {
  * Cache life: 5 minutes (300 seconds)
  */
 export async function getCachedMarkets() {
-  'use cache'
-  
-  const cacheKey = 'markets:list'
-  const startTime = Date.now()
-  
-  cacheTag(cacheKey)
+  'use cache';
+
+  const cacheKey = 'markets:list';
+  const startTime = Date.now();
+
+  cacheTag(cacheKey);
   // Cache life: 5 minutes
-  cacheLife({ expire: 300 })
-  
+  cacheLife({ expire: 300 });
+
   try {
-    const markets = await gameService.getAllGames()
-    
+    const markets = await gameService.getAllGames();
+
     const result = {
       success: true,
       markets,
       count: markets.length,
-    }
-    
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordHit(cacheKey, responseTime)
-    
-    return result
+    };
+
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordHit(cacheKey, responseTime);
+
+    return result;
   } catch (error) {
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordMiss(cacheKey, responseTime)
-    
-    logger.error('Error fetching cached markets:', error, 'getCachedMarkets')
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordMiss(cacheKey, responseTime);
+
+    logger.error('Error fetching cached markets:', error, 'getCachedMarkets');
     return {
       success: false,
       markets: [],
       count: 0,
-    }
+    };
   }
 }
 
@@ -539,15 +558,15 @@ export async function getCachedMarkets() {
  * Cache life: 5 minutes (300 seconds) - actor info changes infrequently
  */
 export async function getCachedActor(actorId: string) {
-  'use cache: remote'
-  
-  const cacheKey = `actors:${actorId}`
-  const startTime = Date.now()
-  
-  cacheTag('actors', `actor:${actorId}`)
+  'use cache: remote';
+
+  const cacheKey = `actors:${actorId}`;
+  const startTime = Date.now();
+
+  cacheTag('actors', `actor:${actorId}`);
   // Cache life: 5 minutes - actor info changes infrequently
-  cacheLife({ expire: 300 })
-  
+  cacheLife({ expire: 300 });
+
   try {
     const actor = await prisma.actor.findUnique({
       where: { id: actorId },
@@ -563,15 +582,15 @@ export async function getCachedActor(actorId: string) {
         initialLuck: true,
         postStyle: true,
       },
-    })
-    
+    });
+
     if (!actor) {
       return {
         success: false,
         actor: null,
-      }
+      };
     }
-    
+
     const result = {
       success: true,
       actor: {
@@ -586,21 +605,21 @@ export async function getCachedActor(actorId: string) {
         luck: actor.initialLuck,
         postStyle: actor.postStyle,
       },
-    }
-    
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordHit(cacheKey, responseTime)
-    
-    return result
+    };
+
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordHit(cacheKey, responseTime);
+
+    return result;
   } catch (error) {
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordMiss(cacheKey, responseTime)
-    
-    logger.error('Error fetching cached actor:', error, 'getCachedActor')
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordMiss(cacheKey, responseTime);
+
+    logger.error('Error fetching cached actor:', error, 'getCachedActor');
     return {
       success: false,
       actor: null,
-    }
+    };
   }
 }
 
@@ -611,15 +630,15 @@ export async function getCachedActor(actorId: string) {
  * Cache life: 1 minute (60 seconds) - chat lists change frequently
  */
 export async function getCachedMarketChats() {
-  'use cache: remote'
-  
-  const cacheKey = 'chats:markets'
-  const startTime = Date.now()
-  
-  cacheTag(cacheKey)
+  'use cache: remote';
+
+  const cacheKey = 'chats:markets';
+  const startTime = Date.now();
+
+  cacheTag(cacheKey);
   // Cache life: 1 minute - chat lists change frequently
-  cacheLife({ expire: 60 })
-  
+  cacheLife({ expire: 60 });
+
   try {
     const marketChats = await prisma.chat.findMany({
       where: {
@@ -640,32 +659,31 @@ export async function getCachedMarketChats() {
       orderBy: {
         createdAt: 'asc',
       },
-    })
-    
+    });
+
     const result = {
       success: true,
-      chats: marketChats.map(chat => ({
+      chats: marketChats.map((chat) => ({
         id: chat.id,
         name: chat.name,
         isGroup: chat.isGroup,
         messageCount: chat._count.Message,
         lastMessage: chat.Message[0] || null,
       })),
-    }
-    
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordHit(cacheKey, responseTime)
-    
-    return result
+    };
+
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordHit(cacheKey, responseTime);
+
+    return result;
   } catch (error) {
-    const responseTime = Date.now() - startTime
-    cacheMonitoring.recordMiss(cacheKey, responseTime)
-    
-    logger.error('Error fetching cached market chats:', error, 'getCachedMarketChats')
+    const responseTime = Date.now() - startTime;
+    cacheMonitoring.recordMiss(cacheKey, responseTime);
+
+    logger.error('Error fetching cached market chats:', error, 'getCachedMarketChats');
     return {
       success: false,
       chats: [],
-    }
+    };
   }
 }
-

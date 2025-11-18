@@ -1,14 +1,14 @@
 /**
  * Snowflake ID Generator
- * 
+ *
  * Generates unique 64-bit IDs similar to Twitter's Snowflake system.
- * 
+ *
  * Structure (64 bits total):
  * - 1 bit: Always 0 (sign bit for compatibility)
  * - 41 bits: Timestamp in milliseconds since custom epoch (2024-01-01)
  * - 10 bits: Worker/Machine ID (0-1023)
  * - 12 bits: Sequence number (0-4095)
- * 
+ *
  * This allows for:
  * - 69 years of timestamps (from epoch)
  * - 1024 different workers/machines
@@ -36,7 +36,10 @@ class SnowflakeGenerator {
   private sequence: bigint = 0n;
   private lastTimestamp: bigint = 0n;
   private generating: boolean = false;
-  private queue: Array<{ resolve: (value: string) => void; reject: (error: Error) => void }> = [];
+  private queue: Array<{
+    resolve: (value: string) => void;
+    reject: (error: Error) => void;
+  }> = [];
 
   constructor(workerId: number = 0) {
     if (workerId < 0 || workerId > Number(MAX_WORKER_ID)) {
@@ -64,7 +67,11 @@ class SnowflakeGenerator {
     }
 
     this.generating = true;
-    const request = this.queue.shift()!;
+    const request = this.queue.shift();
+    if (!request) {
+      this.generating = false;
+      return;
+    }
 
     try {
       const id = this.generateSync();
@@ -87,7 +94,7 @@ class SnowflakeGenerator {
     // If same millisecond, increment sequence
     if (timestamp === this.lastTimestamp) {
       this.sequence = (this.sequence + 1n) & MAX_SEQUENCE;
-      
+
       // If sequence overflow, wait for next millisecond
       if (this.sequence === 0n) {
         timestamp = this.waitNextMillis(timestamp);
@@ -105,9 +112,7 @@ class SnowflakeGenerator {
     this.lastTimestamp = timestamp;
 
     // Construct the ID
-    const id = (timestamp << TIMESTAMP_SHIFT) | 
-               (this.workerId << WORKER_SHIFT) | 
-               this.sequence;
+    const id = (timestamp << TIMESTAMP_SHIFT) | (this.workerId << WORKER_SHIFT) | this.sequence;
 
     return id.toString();
   }
@@ -149,7 +154,7 @@ class SnowflakeGenerator {
    */
   static isValid(id: string): boolean {
     const idBigInt = BigInt(id);
-    if (idBigInt < 0n || idBigInt >= (1n << 63n)) {
+    if (idBigInt < 0n || idBigInt >= 1n << 63n) {
       return false;
     }
     SnowflakeGenerator.parse(idBigInt);
@@ -167,9 +172,7 @@ function getGenerator(): SnowflakeGenerator {
   if (!instance) {
     // In production, you might want to use different worker IDs per server
     // For now, we'll use a hash of the hostname or 0
-    const workerId = process.env.WORKER_ID 
-      ? parseInt(process.env.WORKER_ID, 10) 
-      : 0;
+    const workerId = process.env.WORKER_ID ? parseInt(process.env.WORKER_ID, 10) : 0;
     instance = new SnowflakeGenerator(workerId);
   }
   return instance;
@@ -200,4 +203,3 @@ export function isValidSnowflakeId(id: string): boolean {
  * Export the class for advanced usage
  */
 export { SnowflakeGenerator };
-

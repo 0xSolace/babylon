@@ -2,23 +2,25 @@
 
 /**
  * Script to upload issues from CSV to GitHub
- * 
+ *
  * Usage:
  *   GITHUB_TOKEN=your_token bun run scripts/upload-github-issues.ts [csv-path]
- * 
+ *
  * Or set GITHUB_TOKEN in .env.local
- * 
+ *
  * If no csv-path is provided, defaults to ./github-issues-import.csv in the project root.
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { config } from 'dotenv';
-import { resolve, join } from 'path';
 
 // Dynamic import for csv-parse/sync to avoid TypeScript module resolution issues
-const { parseSync } = require('csv-parse/sync') as { parseSync: (input: string, options: Record<string, unknown>) => unknown[] };
+const { parseSync } = require('csv-parse/sync') as {
+  parseSync: (input: string, options: Record<string, unknown>) => unknown[];
+};
 
-interface CSVRow {
+type CSVRow = {
   Title: string;
   Body: string;
   Labels: string;
@@ -27,14 +29,14 @@ interface CSVRow {
   Status: string;
   'Due Date': string;
   Epic: string;
-}
+};
 
-interface GitHubIssue {
+type GitHubIssue = {
   title: string;
   body: string;
   labels?: string[];
   assignees?: string[];
-}
+};
 
 const GITHUB_REPO = 'elizaOS/babylon';
 const GITHUB_API_BASE = 'https://api.github.com';
@@ -46,13 +48,13 @@ async function createGitHubIssue(issue: GitHubIssue): Promise<number | null> {
   }
 
   const url = `${GITHUB_API_BASE}/repos/${GITHUB_REPO}/issues`;
-  
+
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github.v3+json',
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
         'Content-Type': 'application/json',
         'User-Agent': 'Babylon-Issue-Uploader',
       },
@@ -76,7 +78,7 @@ async function createGitHubIssue(issue: GitHubIssue): Promise<number | null> {
 
 function parseCSV(filePath: string): CSVRow[] {
   const content = readFileSync(filePath, 'utf-8');
-  
+
   // Parse CSV with proper handling of multi-line fields
   const records = parseSync(content, {
     columns: true,
@@ -94,64 +96,64 @@ function parseAssignees(assignee: string): string[] {
   if (!assignee || !assignee.trim() || assignee === 'TBD') {
     return [];
   }
-  
+
   // Remove markdown formatting like **Luca** -> Luca
   const cleaned = assignee.replace(/\*\*/g, '');
-  
+
   // Split by comma and clean each assignee
   return cleaned
     .split(',')
-    .map(a => a.trim())
-    .filter(a => a && a !== 'TBD' && a !== '');
+    .map((a) => a.trim())
+    .filter((a) => a && a !== 'TBD' && a !== '');
 }
 
 function parseLabels(labels: string, epic: string): string[] {
   const labelSet = new Set<string>();
-  
+
   // Parse comma-separated labels
   if (labels) {
-    labels.split(',').forEach(label => {
+    labels.split(',').forEach((label) => {
       const cleaned = label.trim();
       if (cleaned) {
         labelSet.add(cleaned);
       }
     });
   }
-  
+
   // Add epic as a label if provided
-  if (epic && epic.trim()) {
+  if (epic?.trim()) {
     labelSet.add(epic.trim());
   }
-  
+
   return Array.from(labelSet);
 }
 
 function formatBody(body: string, row: CSVRow): string {
   let formatted = body;
-  
+
   // Add metadata as a footer
   const metadata: string[] = [];
-  
-  if (row.Priority && row.Priority.trim() && !row.Priority.includes('**')) {
+
+  if (row.Priority?.trim() && !row.Priority.includes('**')) {
     metadata.push(`**Priority:** ${row.Priority.trim()}`);
   }
-  
-  if (row.Status && row.Status.trim() && row.Status !== 'todo') {
+
+  if (row.Status?.trim() && row.Status !== 'todo') {
     metadata.push(`**Status:** ${row.Status.trim()}`);
   }
-  
-  if (row['Due Date'] && row['Due Date'].trim() && !row['Due Date'].includes('**')) {
+
+  if (row['Due Date']?.trim() && !row['Due Date'].includes('**')) {
     metadata.push(`**Due Date:** ${row['Due Date'].trim()}`);
   }
-  
-  if (row.Epic && row.Epic.trim()) {
+
+  if (row.Epic?.trim()) {
     metadata.push(`**Epic:** ${row.Epic.trim()}`);
   }
-  
+
   if (metadata.length > 0) {
-    formatted += '\n\n---\n\n' + metadata.join(' | ');
+    formatted += `\n\n---\n\n${metadata.join(' | ')}`;
   }
-  
+
   return formatted;
 }
 
@@ -159,13 +161,13 @@ async function main() {
   // Load environment variables from .env.local if it exists
   try {
     config({ path: resolve(process.cwd(), '.env.local') });
-  } catch (error) {
+  } catch (_error) {
     // .env.local might not exist, that's okay
   }
 
   // Fix: Replace hardcoded path with relative path
   const csvPath = process.argv[2] || join(process.cwd(), 'github-issues-import.csv');
-  
+
   if (!process.env.GITHUB_TOKEN) {
     console.error('❌ Error: GITHUB_TOKEN environment variable is required');
     console.log('\nUsage:');
@@ -184,12 +186,12 @@ async function main() {
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    
+
     if (!row) {
       console.log(`⏭️  Skipping row ${i + 1}: Row is undefined`);
       continue;
     }
-    
+
     if (!row.Title || !row.Title.trim()) {
       console.log(`⏭️  Skipping row ${i + 1}: No title`);
       continue;
@@ -207,9 +209,9 @@ async function main() {
     }
 
     console.log(`\n📝 Creating issue ${i + 1}/${rows.length}: ${issue.title}`);
-    
+
     const issueNumber = await createGitHubIssue(issue);
-    
+
     if (issueNumber) {
       successCount++;
       createdIssues.push({ number: issueNumber, title: issue.title });
@@ -220,18 +222,18 @@ async function main() {
     // Rate limiting: GitHub allows 5000 requests/hour for authenticated users
     // Adding a small delay to be safe
     if (i < rows.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 
-  console.log('\n' + '='.repeat(60));
+  console.log(`\n${'='.repeat(60)}`);
   console.log(`✅ Successfully created: ${successCount} issues`);
   console.log(`❌ Failed: ${failCount} issues`);
   console.log('='.repeat(60));
 
   if (createdIssues.length > 0) {
     console.log('\n📋 Created issues:');
-    createdIssues.forEach(issue => {
+    createdIssues.forEach((issue) => {
       console.log(`  #${issue.number}: ${issue.title}`);
     });
   }

@@ -1,4 +1,4 @@
-import { type Plugin } from '@elizaos/core';
+import type { Plugin } from '@elizaos/core';
 
 // Note: TrajectoryLoggerService is exported below but not registered as a service
 // since it doesn't fully implement the Service interface yet (placeholder implementation)
@@ -14,16 +14,15 @@ export const trajectoryLoggerPlugin: Plugin = {
 export default trajectoryLoggerPlugin;
 
 // ==========================================
-// CORE TYPES
-// ==========================================
-export * from './types';
-export { TrajectoryLoggerService } from './TrajectoryLoggerService';
-
-// ==========================================
 // PRIMARY: Action-Level Instrumentation
 // Use these for most cases!
 // ==========================================
 export * from './action-interceptor';
+export { TrajectoryLoggerService } from './TrajectoryLoggerService';
+// ==========================================
+// CORE TYPES
+// ==========================================
+export * from './types';
 // Exports:
 // - wrapActionWithLogging()
 // - wrapPluginActions()

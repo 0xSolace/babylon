@@ -1,13 +1,13 @@
 /**
  * Farcaster Authentication Callback API
- * 
+ *
  * @route POST /api/auth/farcaster/callback - Link Farcaster account
  * @access Public (with signature verification)
- * 
+ *
  * @description
  * Handles Farcaster "Sign-In With Farcaster" (SIWF) authentication flow. Verifies
  * signatures via Neynar API, links Farcaster accounts, and awards bonus points.
- * 
+ *
  * @openapi
  * /api/auth/farcaster/callback:
  *   post:
@@ -71,7 +71,7 @@
  *         description: User not found
  *       409:
  *         description: Farcaster account already linked
- * 
+ *
  * @example
  * ```typescript
  * // Link Farcaster account
@@ -88,21 +88,21 @@
  *     state: 'user-123:1234567890'
  *   })
  * });
- * 
+ *
  * const { pointsAwarded, newTotal } = await result.json();
  * console.log(`Earned ${pointsAwarded} points!`);
  * ```
- * 
+ *
  * @see {@link /lib/services/points-service} Points service
  * @see {@link https://docs.neynar.com} Neynar API documentation
  */
 
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { PointsService } from '@/lib/services/points-service'
 import { withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { PointsService } from '@/lib/services/points-service';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 const FarcasterCallbackBodySchema = z.object({
@@ -128,61 +128,43 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const { message, signature, fid, username, displayName, pfpUrl, state } = parsed.data;
 
   // Verify state format and get user ID
-  const stateParts = state.split(':')
+  const stateParts = state.split(':');
   if (stateParts.length < 2) {
-    return NextResponse.json(
-      { error: 'Invalid state format' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'Invalid state format' }, { status: 400 });
   }
 
-  const [userId, timestampStr] = stateParts
+  const [userId, timestampStr] = stateParts;
   if (!userId || !timestampStr) {
-    return NextResponse.json(
-      { error: 'Invalid state format' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'Invalid state format' }, { status: 400 });
   }
 
-  const stateTimestamp = parseInt(timestampStr, 10)
-  if (isNaN(stateTimestamp)) {
-    return NextResponse.json(
-      { error: 'Invalid state timestamp' },
-      { status: 400 }
-    )
+  const stateTimestamp = parseInt(timestampStr, 10);
+  if (Number.isNaN(stateTimestamp)) {
+    return NextResponse.json({ error: 'Invalid state timestamp' }, { status: 400 });
   }
 
-  const now = Date.now()
-  
+  const now = Date.now();
+
   // State expires after 10 minutes
   if (now - stateTimestamp > 10 * 60 * 1000) {
-    return NextResponse.json(
-      { error: 'State expired' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'State expired' }, { status: 400 });
   }
 
   // Verify Farcaster signature
-  const isValid = await verifyFarcasterSignature(message, signature, fid)
-  
+  const isValid = await verifyFarcasterSignature(message, signature, fid);
+
   if (!isValid) {
-    return NextResponse.json(
-      { error: 'Invalid signature' },
-      { status: 401 }
-    )
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 
   // Check if user exists
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true },
-  })
+  });
 
   if (!user) {
-    return NextResponse.json(
-      { error: 'User not found' },
-      { status: 404 }
-    )
+    return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
   // Check if Farcaster account is already linked to another user
@@ -191,13 +173,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       farcasterFid: fid.toString(),
       id: { not: userId },
     },
-  })
+  });
 
   if (existingLink) {
     return NextResponse.json(
       { error: 'Farcaster account already linked to another user' },
       { status: 409 }
-    )
+    );
   }
 
   // Update user with Farcaster info
@@ -211,22 +193,27 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       farcasterPfpUrl: pfpUrl,
       farcasterVerifiedAt: new Date(),
     },
-  })
+  });
 
   // Award points if this is the first time linking Farcaster
-  const pointsResult = await PointsService.awardFarcasterLink(userId, username)
+  const pointsResult = await PointsService.awardFarcasterLink(userId, username);
 
   logger.info(
     'Farcaster account linked successfully',
-    { userId, farcasterUsername: username, fid: fid, pointsAwarded: pointsResult.pointsAwarded },
+    {
+      userId,
+      farcasterUsername: username,
+      fid: fid,
+      pointsAwarded: pointsResult.pointsAwarded,
+    },
     'FarcasterCallback'
-  )
+  );
 
   return NextResponse.json({
     success: true,
     pointsAwarded: pointsResult.pointsAwarded,
     newTotal: pointsResult.newTotal,
-  })
+  });
 });
 
 /**
@@ -237,30 +224,38 @@ async function verifyFarcasterSignature(
   signature: string,
   fid: number
 ): Promise<boolean> {
+  const neynarApiKey = process.env.NEYNAR_API_KEY;
+  if (!neynarApiKey) {
+    throw new Error('NEYNAR_API_KEY is not configured');
+  }
+
   const response = await fetch('https://api.neynar.com/v2/farcaster/verification', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'api_key': process.env.NEYNAR_API_KEY!,
+      api_key: neynarApiKey,
     },
     body: JSON.stringify({
       message,
       signature,
       fid,
     }),
-  })
+  });
 
   if (!response.ok) {
-    const errorText = await response.text()
-    logger.error('Neynar verification failed', { 
-      status: response.status, 
-      error: errorText,
-      fid 
-    }, 'verifyFarcasterSignature')
-    return false
+    const errorText = await response.text();
+    logger.error(
+      'Neynar verification failed',
+      {
+        status: response.status,
+        error: errorText,
+        fid,
+      },
+      'verifyFarcasterSignature'
+    );
+    return false;
   }
 
-  const data = await response.json() as { valid: boolean }
-  return data.valid
+  const data = (await response.json()) as { valid: boolean };
+  return data.valid;
 }
-

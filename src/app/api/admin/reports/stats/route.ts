@@ -1,13 +1,13 @@
 /**
  * Admin Reports Statistics API
- * 
+ *
  * @route GET /api/admin/reports/stats - Get report statistics
  * @access Admin
- * 
+ *
  * @description
  * Returns comprehensive statistics about user reports including counts by
  * status, type breakdown, and recent activity. Admin only.
- * 
+ *
  * @openapi
  * /api/admin/reports/stats:
  *   get:
@@ -37,7 +37,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const stats = await fetch('/api/admin/reports/stats', {
@@ -46,11 +46,11 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { prisma } from '@/lib/prisma';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   await requireAdmin(request);
@@ -58,19 +58,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   logger.info('Admin reports stats requested', {}, 'GET /api/admin/reports/stats');
 
   // Get counts by status
-  const [
-    totalReports,
-    pendingReports,
-    reviewingReports,
-    resolvedReports,
-    dismissedReports,
-  ] = await Promise.all([
-    prisma.report.count(),
-    prisma.report.count({ where: { status: 'pending' } }),
-    prisma.report.count({ where: { status: 'reviewing' } }),
-    prisma.report.count({ where: { status: 'resolved' } }),
-    prisma.report.count({ where: { status: 'dismissed' } }),
-  ]);
+  const [totalReports, pendingReports, reviewingReports, resolvedReports, dismissedReports] =
+    await Promise.all([
+      prisma.report.count(),
+      prisma.report.count({ where: { status: 'pending' } }),
+      prisma.report.count({ where: { status: 'reviewing' } }),
+      prisma.report.count({ where: { status: 'resolved' } }),
+      prisma.report.count({ where: { status: 'dismissed' } }),
+    ]);
 
   // Get counts by category
   const reportsByCategory = await prisma.report.groupBy({
@@ -105,23 +100,43 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Get user details for top reported users
-  const topReportedUsersWithDetails = await Promise.all(
-    topReportedUsers.map(async (item) => {
-      const user = await prisma.user.findUnique({
-        where: { id: item.reportedUserId! },
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          profileImageUrl: true,
-          isBanned: true,
-        },
-      });
-      return {
-        user,
-        reportCount: item._count,
-      };
-    })
+  const topReportedUsersWithDetails = (
+    await Promise.all(
+      topReportedUsers.map(async (item) => {
+        const reportedUserId = item.reportedUserId;
+        if (!reportedUserId) {
+          return null;
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { id: reportedUserId },
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            profileImageUrl: true,
+            isBanned: true,
+          },
+        });
+        return {
+          user,
+          reportCount: item._count,
+        };
+      })
+    )
+  ).filter(
+    (
+      entry
+    ): entry is {
+      user: {
+        id: string;
+        username: string | null;
+        displayName: string | null;
+        profileImageUrl: string | null;
+        isBanned: boolean;
+      } | null;
+      reportCount: (typeof topReportedUsers)[number]['_count'];
+    } => entry !== null
   );
 
   // Get top reporters
@@ -181,11 +196,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       resolved: resolvedReports,
       dismissed: dismissedReports,
     },
-    byCategory: reportsByCategory.map(item => ({
+    byCategory: reportsByCategory.map((item) => ({
       category: item.category,
       count: item._count,
     })),
-    byPriority: reportsByPriority.map(item => ({
+    byPriority: reportsByPriority.map((item) => ({
       priority: item.priority,
       count: item._count,
     })),
@@ -197,5 +212,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-
-

@@ -1,15 +1,11 @@
 import type { PrivyClientConfig } from '@privy-io/react-auth';
-
 import { base, baseSepolia, mainnet, sepolia } from 'viem/chains';
 
 /**
  * Extended Privy client config that includes "system" theme support
  * Privy supports "system" theme at runtime, but the types don't reflect this yet
  */
-type ExtendedAppearance = Omit<
-  NonNullable<PrivyClientConfig['appearance']>,
-  'theme'
-> & {
+type ExtendedAppearance = Omit<NonNullable<PrivyClientConfig['appearance']>, 'theme'> & {
   theme?: 'light' | 'dark' | `#${string}` | 'system';
 };
 
@@ -40,13 +36,7 @@ export const privyConfig: {
       accentColor: '#0066FF',
       logo: '/assets/logos/logo.svg',
       showWalletLoginFirst: false, // Changed to false to prioritize Farcaster
-      walletList: [
-        'metamask',
-        'rabby_wallet',
-        'detected_wallets',
-        'rainbow',
-        'coinbase_wallet',
-      ],
+      walletList: ['metamask', 'rabby_wallet', 'detected_wallets', 'rainbow', 'coinbase_wallet'],
       walletChainType: 'ethereum-only' as const,
     } satisfies ExtendedAppearance,
     // Prioritize Farcaster login for Mini Apps
@@ -68,8 +58,7 @@ export const privyConfig: {
     supportedChains: [base, baseSepolia, mainnet, sepolia],
     // WalletConnect configuration removed - configure NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in .env if needed
     ...(process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID && {
-      walletConnectCloudProjectId:
-        process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
+      walletConnectCloudProjectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
     }),
   },
 };

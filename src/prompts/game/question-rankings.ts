@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for ranking questions by dramatic potential and entertainment value.
- * 
+ *
  * Evaluates and ranks prediction market questions based on their dramatic
  * potential, entertainment value, and narrative impact. Used to select
  * the best questions for gameplay.
- * 
+ *
  * Returns XML with ranked questions (1 = best, N = worst).
  */
 export const questionRankings = definePrompt({
@@ -35,5 +35,5 @@ Return XML with ranks:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

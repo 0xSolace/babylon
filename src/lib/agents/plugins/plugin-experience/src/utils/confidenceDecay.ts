@@ -1,10 +1,10 @@
 import type { Experience } from '../types';
 
-export interface DecayConfig {
+export type DecayConfig = {
   halfLife: number; // Time in milliseconds for confidence to decay by half
   minConfidence: number; // Minimum confidence level (never decays below this)
   decayStartDelay: number; // Time before decay starts (grace period)
-}
+};
 
 const DEFAULT_DECAY_CONFIG: DecayConfig = {
   halfLife: 30 * 24 * 60 * 60 * 1000, // 30 days
@@ -35,7 +35,7 @@ export class ConfidenceDecayManager {
     // Calculate decay based on half-life
     const decayTime = age - specificConfig.decayStartDelay;
     const halfLives = decayTime / specificConfig.halfLife;
-    const decayFactor = Math.pow(0.5, halfLives);
+    const decayFactor = 0.5 ** halfLives;
 
     // Apply decay but respect minimum
     const decayedConfidence = experience.confidence * decayFactor;
@@ -122,7 +122,7 @@ export class ConfidenceDecayManager {
       } else {
         const decayTime = age - specificConfig.decayStartDelay;
         const halfLives = decayTime / specificConfig.halfLife;
-        const decayFactor = Math.pow(0.5, halfLives);
+        const decayFactor = 0.5 ** halfLives;
         confidence = Math.max(specificConfig.minConfidence, experience.confidence * decayFactor);
       }
 

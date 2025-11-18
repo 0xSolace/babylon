@@ -1,20 +1,18 @@
-import { useCallback } from 'react';
-
-import { encodeFunctionData } from 'viem';
-
+import { WALLET_ERROR_MESSAGES } from '@/lib/wallet-utils';
+import { useSmartWallet } from '@/hooks/useSmartWallet';
+import { CHAIN } from '@/constants/chains';
 import {
   CAPABILITIES_HASH,
   getIdentityRegistryAddress,
   identityRegistryAbi,
 } from '@/constants/identity';
-import { useSmartWallet } from '@/hooks/useSmartWallet';
-import { CHAIN } from '@/constants/chains';
-import { WALLET_ERROR_MESSAGES } from '@/lib/wallet-utils';
+import { useCallback } from 'react';
+import { encodeFunctionData } from 'viem';
 
 /**
  * Metadata for updating an agent profile on-chain.
  */
-export interface AgentProfileMetadata {
+export type AgentProfileMetadata = {
   /** Display name */
   name: string;
   /** Username (optional) */
@@ -29,37 +27,37 @@ export interface AgentProfileMetadata {
   type?: 'user' | string;
   /** ISO timestamp of update */
   updated?: string;
-}
+};
 
 /**
  * Input for updating an agent profile.
  */
-interface UpdateAgentProfileInput {
+type UpdateAgentProfileInput = {
   /** Profile metadata to update */
   metadata: AgentProfileMetadata;
   /** Optional custom endpoint URL (defaults to babylon.market/agent/{address}) */
   endpoint?: string;
-}
+};
 
 /**
  * Hook for updating an agent profile on-chain via the identity registry.
- * 
+ *
  * Enables users to update their on-chain agent profile metadata including
  * name, username, bio, and image URLs. Updates are written to the blockchain
  * through the identity registry contract.
- * 
+ *
  * Transactions are executed through the smart wallet, enabling gasless
  * transactions when using an embedded wallet.
- * 
+ *
  * @returns An object containing:
  * - `updateAgentProfile`: Function to update the profile with new metadata
  * - `smartWalletAddress`: The smart wallet address (if available)
  * - `smartWalletReady`: Whether the smart wallet is ready for transactions
- * 
+ *
  * @example
  * ```tsx
  * const { updateAgentProfile, smartWalletReady } = useUpdateAgentProfileTx();
- * 
+ *
  * const handleUpdate = async () => {
  *   const txHash = await updateAgentProfile({
  *     metadata: {
@@ -73,11 +71,7 @@ interface UpdateAgentProfileInput {
  * ```
  */
 export function useUpdateAgentProfileTx() {
-  const {
-    sendSmartWalletTransaction,
-    smartWalletAddress,
-    smartWalletReady,
-  } = useSmartWallet();
+  const { sendSmartWalletTransaction, smartWalletAddress, smartWalletReady } = useSmartWallet();
   const registryAddress = getIdentityRegistryAddress();
 
   const updateAgentProfile = useCallback(
@@ -87,8 +81,7 @@ export function useUpdateAgentProfileTx() {
       }
 
       const targetEndpoint =
-        endpoint ??
-        `https://babylon.market/agent/${smartWalletAddress.toLowerCase()}`;
+        endpoint ?? `https://babylon.market/agent/${smartWalletAddress.toLowerCase()}`;
 
       const metadataJson = JSON.stringify({
         ...metadata,
@@ -109,12 +102,7 @@ export function useUpdateAgentProfileTx() {
         chain: CHAIN,
       });
     },
-    [
-      registryAddress,
-      sendSmartWalletTransaction,
-      smartWalletAddress,
-      smartWalletReady,
-    ]
+    [registryAddress, sendSmartWalletTransaction, smartWalletAddress, smartWalletReady]
   );
 
   return {

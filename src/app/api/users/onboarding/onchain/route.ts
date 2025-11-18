@@ -1,13 +1,13 @@
 /**
  * User On-Chain Onboarding API
- * 
+ *
  * @route POST /api/users/onboarding/onchain - Register user on-chain
  * @access Authenticated
- * 
+ *
  * @description
  * Triggers on-chain registration for a user. Registers user to EIP-8004
  * Identity Registry on Base Sepolia. Supports referral codes.
- * 
+ *
  * @openapi
  * /api/users/onboarding/onchain:
  *   post:
@@ -41,7 +41,7 @@
  *         description: Unauthorized
  *       409:
  *         description: Already registered
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/users/onboarding/onchain', {
@@ -55,20 +55,20 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { prisma } from '@/lib/prisma'
-import { processOnchainRegistration } from '@/lib/onboarding/onchain-service'
-import { logger } from '@/lib/logger'
-import { BusinessLogicError, ConflictError } from '@/lib/errors'
-import type { JsonValue } from '@/types/common'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { BusinessLogicError, ConflictError } from '@/lib/errors';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { processOnchainRegistration } from '@/lib/onboarding/onchain-service';
+import { prisma } from '@/lib/prisma';
+import type { JsonValue } from '@/types/common';
+import type { NextRequest } from 'next/server';
 
-interface OnchainRequestBody {
-  walletAddress?: string | null
-  txHash?: string | null
-  referralCode?: string | null
-}
+type OnchainRequestBody = {
+  walletAddress?: string | null;
+  txHash?: string | null;
+  referralCode?: string | null;
+};
 
 const selectUserForOnchain = {
   id: true,
@@ -82,46 +82,53 @@ const selectUserForOnchain = {
   onChainRegistered: true,
   nftTokenId: true,
   referredBy: true,
-} as const
+} as const;
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  const authUser = await authenticate(request)
-  const body = await request.json() as OnchainRequestBody | Record<string, JsonValue>
+  const authUser = await authenticate(request);
+  const body = (await request.json()) as OnchainRequestBody | Record<string, JsonValue>;
 
   const txHash =
     typeof (body as OnchainRequestBody).txHash === 'string'
-      ? ((body as OnchainRequestBody).txHash?.trim() || null)
-      : null
+      ? (body as OnchainRequestBody).txHash?.trim() || null
+      : null;
   const walletOverride =
     typeof (body as OnchainRequestBody).walletAddress === 'string'
-      ? ((body as OnchainRequestBody).walletAddress?.trim() || null)
-      : null
+      ? (body as OnchainRequestBody).walletAddress?.trim() || null
+      : null;
   const referralCode =
     typeof (body as OnchainRequestBody).referralCode === 'string'
-      ? ((body as OnchainRequestBody).referralCode?.trim() || null)
-      : null
+      ? (body as OnchainRequestBody).referralCode?.trim() || null
+      : null;
 
-  const canonicalUserId = authUser.dbUserId ?? authUser.userId
+  const canonicalUserId = authUser.dbUserId ?? authUser.userId;
 
   const dbUser = await prisma.user.findUnique({
     where: { id: canonicalUserId },
     select: selectUserForOnchain,
-  })
+  });
 
   if (!dbUser) {
-    throw new ConflictError('User record not found. Complete signup before on-chain registration.', 'User')
+    throw new ConflictError(
+      'User record not found. Complete signup before on-chain registration.',
+      'User'
+    );
   }
 
   if (!dbUser.username || !dbUser.displayName) {
     throw new BusinessLogicError(
       'User profile incomplete. Finish signup before on-chain registration.',
       'PROFILE_INCOMPLETE'
-    )
+    );
   }
 
-  const walletAddress = walletOverride?.toLowerCase() ?? dbUser.walletAddress ?? authUser.walletAddress
+  const walletAddress =
+    walletOverride?.toLowerCase() ?? dbUser.walletAddress ?? authUser.walletAddress;
   if (!walletAddress) {
-    throw new BusinessLogicError('Wallet address is required for on-chain registration.', 'WALLET_REQUIRED')
+    throw new BusinessLogicError(
+      'Wallet address is required for on-chain registration.',
+      'WALLET_REQUIRED'
+    );
   }
 
   const onchainResult = await processOnchainRegistration({
@@ -134,7 +141,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     coverImageUrl: dbUser.coverImageUrl ?? undefined,
     referralCode,
     txHash,
-  })
+  });
 
   const refreshedUser = await prisma.user.findUnique({
     where: { id: canonicalUserId },
@@ -151,7 +158,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       reputationPoints: true,
       updatedAt: true,
     },
-  })
+  });
 
   logger.info(
     'User completed on-chain onboarding',
@@ -161,7 +168,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       tokenId: onchainResult.tokenId,
     },
     'POST /api/users/onboarding/onchain'
-  )
+  );
 
   return successResponse(
     {
@@ -174,5 +181,5 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         : null,
     },
     200
-  )
-})
+  );
+});

@@ -1,26 +1,26 @@
 /**
  * Integration Tests: Settings Page
- * 
+ *
  * Tests all functionality on the settings page including:
  * - Profile updates (display name, username, bio)
  * - Theme settings
  * - Security features
  * - Privacy features (data export, account deletion)
  * - Tab navigation
- * 
+ *
  * Prerequisites: Backend server must be running
  */
 
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import type { User } from '@/stores/authStore';
+import { beforeAll, describe, expect, test } from 'bun:test';
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const _BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const API_URL = process.env.API_URL || 'http://localhost:3000/api';
 
 // Test user credentials - you'll need to set these up
 let testUserId: string;
 let testAccessToken: string;
-let testUser: User;
+let _testUser: User;
 
 describe('Settings Page Integration Tests', () => {
   const hasTestCreds = !!(process.env.TEST_USER_ID && process.env.TEST_ACCESS_TOKEN);
@@ -30,20 +30,25 @@ describe('Settings Page Integration Tests', () => {
       console.warn('⚠️  Skipping settings tests - TEST_USER_ID and TEST_ACCESS_TOKEN not set');
       return;
     }
-    
-    testUserId = process.env.TEST_USER_ID!;
-    testAccessToken = process.env.TEST_ACCESS_TOKEN!;
-    
+
+    const envUserId = process.env.TEST_USER_ID;
+    const envAccessToken = process.env.TEST_ACCESS_TOKEN;
+    if (!envUserId || !envAccessToken) {
+      throw new Error('Test credentials are missing even though hasTestCreds is true');
+    }
+    testUserId = envUserId;
+    testAccessToken = envAccessToken;
+
     // Fetch current user data
     const response = await fetch(`${API_URL}/users/me`, {
       headers: {
-        'Authorization': `Bearer ${testAccessToken}`,
+        Authorization: `Bearer ${testAccessToken}`,
       },
     });
-    
+
     expect(response.ok).toBe(true);
     const data = await response.json();
-    testUser = data.user;
+    _testUser = data.user;
   });
 
   describe('Profile Tab', () => {
@@ -54,12 +59,12 @@ describe('Settings Page Integration Tests', () => {
       }
 
       const newDisplayName = `Test User ${Date.now()}`;
-      
+
       const response = await fetch(`${API_URL}/users/${testUserId}/update-profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           displayName: newDisplayName,
@@ -79,12 +84,12 @@ describe('Settings Page Integration Tests', () => {
       }
 
       const newBio = `Test bio updated at ${Date.now()}`;
-      
+
       const response = await fetch(`${API_URL}/users/${testUserId}/update-profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           bio: newBio,
@@ -105,12 +110,12 @@ describe('Settings Page Integration Tests', () => {
 
       // First, try to change username
       const newUsername = `testuser${Date.now()}`;
-      
+
       const firstResponse = await fetch(`${API_URL}/users/${testUserId}/update-profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           username: newUsername,
@@ -123,7 +128,7 @@ describe('Settings Page Integration Tests', () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${testAccessToken}`,
+            Authorization: `Bearer ${testAccessToken}`,
           },
           body: JSON.stringify({
             username: `testuser${Date.now() + 1}`,
@@ -147,7 +152,7 @@ describe('Settings Page Integration Tests', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           username: 'admin', // Likely taken
@@ -169,19 +174,19 @@ describe('Settings Page Integration Tests', () => {
       // Fetch current user to check registration status
       const userResponse = await fetch(`${API_URL}/users/me`, {
         headers: {
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
       });
 
       const userData = await userResponse.json();
-      
+
       if (!userData.user.onChainRegistered) {
         // If not registered, profile updates should fail
         const updateResponse = await fetch(`${API_URL}/users/${testUserId}/update-profile`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${testAccessToken}`,
+            Authorization: `Bearer ${testAccessToken}`,
           },
           body: JSON.stringify({
             displayName: 'Should Fail',
@@ -205,13 +210,13 @@ describe('Settings Page Integration Tests', () => {
 
       const response = await fetch(`${API_URL}/users/export-data`, {
         headers: {
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
       });
 
       expect(response.ok).toBe(true);
       expect(response.headers.get('content-type')).toContain('application/json');
-      
+
       const data = await response.json();
       expect(data.export_info).toBeTruthy();
       expect(data.personal_information).toBeTruthy();
@@ -226,12 +231,12 @@ describe('Settings Page Integration Tests', () => {
 
       const response = await fetch(`${API_URL}/users/export-data`, {
         headers: {
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
       });
 
       const data = await response.json();
-      
+
       // Verify all required sections exist
       expect(data.export_info).toBeTruthy();
       expect(data.personal_information).toBeTruthy();
@@ -255,7 +260,7 @@ describe('Settings Page Integration Tests', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           confirmation: 'wrong confirmation',
@@ -277,7 +282,7 @@ describe('Settings Page Integration Tests', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           reason: 'Testing',
@@ -346,12 +351,12 @@ describe('Settings Page Integration Tests', () => {
 
       // Try to update a different user's profile (use a different ID)
       const otherUserId = 'different-user-id';
-      
+
       const response = await fetch(`${API_URL}/users/${otherUserId}/update-profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           displayName: 'Unauthorized Change',
@@ -372,12 +377,12 @@ describe('Settings Page Integration Tests', () => {
 
       // Try extremely long display name
       const longName = 'a'.repeat(300);
-      
+
       const response = await fetch(`${API_URL}/users/${testUserId}/update-profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           displayName: longName,
@@ -401,12 +406,12 @@ describe('Settings Page Integration Tests', () => {
 
       // Try invalid username with special characters
       const invalidUsername = 'user@#$%^&*()';
-      
+
       const response = await fetch(`${API_URL}/users/${testUserId}/update-profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           username: invalidUsername,
@@ -427,12 +432,12 @@ describe('Settings Page Integration Tests', () => {
 
       // Try extremely long bio
       const longBio = 'a'.repeat(2000);
-      
+
       const response = await fetch(`${API_URL}/users/${testUserId}/update-profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAccessToken}`,
+          Authorization: `Bearer ${testAccessToken}`,
         },
         body: JSON.stringify({
           bio: longBio,
@@ -449,4 +454,3 @@ describe('Settings Page Integration Tests', () => {
     });
   });
 });
-

@@ -1,23 +1,23 @@
 /**
  * System Statistics API
- * 
+ *
  * @description
  * Returns comprehensive system statistics including database metrics,
  * game engine status, and overall platform health. Provides visibility
  * into platform activity and resource utilization.
- * 
+ *
  * **Statistics Included:**
  * - Database entity counts (users, posts, trades, etc.)
  * - Game engine operational status
  * - System health indicators
  * - Performance metrics
- * 
+ *
  * **Used By:**
  * - Admin dashboard for monitoring
  * - Analytics pages
  * - System status displays
  * - Public statistics widgets
- * 
+ *
  * @openapi
  * /api/stats:
  *   get:
@@ -42,7 +42,7 @@
  *                 engineStatus:
  *                   type: object
  *                   description: Game engine operational status
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/stats');
@@ -50,25 +50,24 @@
  * console.log(`Total users: ${stats.totalUsers}`);
  * console.log(`Engine status: ${engineStatus.running ? 'Running' : 'Stopped'}`);
  * ```
- * 
+ *
  * @see {@link /lib/game-service} Game service implementation
  */
 
-import type { NextRequest } from 'next/server'
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { gameService } from '@/lib/game-service';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
 import { logger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (_request: NextRequest) => {
   const stats = await gameService.getStats();
   const status = await gameService.getStatus();
 
-  logger.info('Stats fetched successfully', { stats, engineStatus: status }, 'GET /api/stats')
+  logger.info('Stats fetched successfully', { stats, engineStatus: status }, 'GET /api/stats');
 
   return successResponse({
     success: true,
     stats,
     engineStatus: status,
   });
-})
-
+});

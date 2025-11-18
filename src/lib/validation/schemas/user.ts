@@ -5,31 +5,30 @@
 import { z } from 'zod';
 import {
   EmailSchema,
-  WalletAddressSchema,
-  UsernameSchema,
+  PaginationSchema,
   SnowflakeIdSchema,
-  createTrimmedStringSchema,
   URLSchema,
-  PaginationSchema
+  UsernameSchema,
+  WalletAddressSchema,
+  createTrimmedStringSchema,
 } from './common';
 
 /**
  * Create user schema for registration
  */
-export const CreateUserSchema = z.object({
-  walletAddress: WalletAddressSchema.optional(),
-  email: EmailSchema.optional(),
-  username: UsernameSchema.optional(),
-  displayName: createTrimmedStringSchema(undefined, 100).optional(),
-  bio: createTrimmedStringSchema(undefined, 500).optional(),
-  profileImageUrl: URLSchema.optional(),
-  coverImageUrl: URLSchema.optional()
-}).refine(
-  data => data.walletAddress || data.email,
-  {
-    message: 'Either wallet address or email is required'
-  }
-);
+export const CreateUserSchema = z
+  .object({
+    walletAddress: WalletAddressSchema.optional(),
+    email: EmailSchema.optional(),
+    username: UsernameSchema.optional(),
+    displayName: createTrimmedStringSchema(undefined, 100).optional(),
+    bio: createTrimmedStringSchema(undefined, 500).optional(),
+    profileImageUrl: URLSchema.optional(),
+    coverImageUrl: URLSchema.optional(),
+  })
+  .refine((data) => data.walletAddress || data.email, {
+    message: 'Either wallet address or email is required',
+  });
 
 /**
  * Update user profile schema
@@ -46,7 +45,7 @@ export const UpdateUserSchema = z.object({
   onchainTxHash: z
     .string()
     .regex(/^0x[0-9a-fA-F]{64}$/, 'onchainTxHash must be a valid 32-byte hex string')
-    .optional()
+    .optional(),
 });
 
 /**
@@ -55,14 +54,18 @@ export const UpdateUserSchema = z.object({
 export const ConnectSocialSchema = z.object({
   platform: z.enum(['twitter', 'farcaster']),
   username: z.string().min(1).max(50),
-  verificationToken: z.string().optional() // For verification purposes
+  verificationToken: z.string().optional(), // For verification purposes
 });
 
 /**
  * Referral schema
  */
 export const ReferralSchema = z.object({
-  referralCode: z.string().min(6).max(20).regex(/^[A-Z0-9]+$/, 'Referral code must be alphanumeric uppercase')
+  referralCode: z
+    .string()
+    .min(6)
+    .max(20)
+    .regex(/^[A-Z0-9]+$/, 'Referral code must be alphanumeric uppercase'),
 });
 
 /**
@@ -71,7 +74,7 @@ export const ReferralSchema = z.object({
 export const UserAuthSchema = z.object({
   walletAddress: WalletAddressSchema,
   signature: z.string(),
-  nonce: z.string()
+  nonce: z.string(),
 });
 
 /**
@@ -81,7 +84,7 @@ export const UserBalanceTransactionSchema = z.object({
   amount: z.number().positive(),
   type: z.enum(['deposit', 'withdrawal', 'trade_profit', 'trade_loss', 'fee', 'reward']),
   description: z.string().optional(),
-  transactionHash: z.string().optional()
+  transactionHash: z.string().optional(),
 });
 
 /**
@@ -97,9 +100,9 @@ export const UserPointsTransactionSchema = z.object({
     'wallet_connect',
     'referral',
     'trade',
-    'achievement'
+    'achievement',
   ]),
-  description: z.string()
+  description: z.string(),
 });
 
 /**
@@ -111,21 +114,21 @@ export const UserQuerySchema = z.object({
   minReputation: z.number().optional(),
   maxReputation: z.number().optional(),
   onChainRegistered: z.boolean().optional(),
-  search: z.string().optional()
+  search: z.string().optional(),
 });
 
 /**
  * Follow/unfollow schema
  */
 export const FollowUserSchema = z.object({
-  targetUserId: SnowflakeIdSchema
+  targetUserId: SnowflakeIdSchema,
 });
 
 /**
  * Favorite user schema
  */
 export const FavoriteUserSchema = z.object({
-  targetUserId: SnowflakeIdSchema
+  targetUserId: SnowflakeIdSchema,
 });
 
 /**
@@ -136,7 +139,7 @@ export const CompleteOnboardingSchema = z.object({
   displayName: createTrimmedStringSchema(undefined, 100).optional(),
   bio: createTrimmedStringSchema(undefined, 500).optional(),
   profileImageUrl: URLSchema.optional(),
-  referralCode: z.string().optional()
+  referralCode: z.string().optional(),
 });
 
 /**
@@ -148,16 +151,32 @@ export const OnChainRegistrationSchema = z.object({
   displayName: z.string().min(1).max(100).optional(),
   bio: createTrimmedStringSchema(undefined, 500).optional(),
   // Accept valid URLs or local asset paths (for preset images)
-  profileImageUrl: z.string().refine(
-    (val) => !val || val.startsWith('/assets/') || val.startsWith('http://') || val.startsWith('https://') || val.startsWith('/uploads/'),
-    { message: 'Must be a valid URL or asset path' }
-  ).optional(),
-  coverImageUrl: z.string().refine(
-    (val) => !val || val.startsWith('/assets/') || val.startsWith('http://') || val.startsWith('https://') || val.startsWith('/uploads/'),
-    { message: 'Must be a valid URL or asset path' }
-  ).optional(),
+  profileImageUrl: z
+    .string()
+    .refine(
+      (val) =>
+        !val ||
+        val.startsWith('/assets/') ||
+        val.startsWith('http://') ||
+        val.startsWith('https://') ||
+        val.startsWith('/uploads/'),
+      { message: 'Must be a valid URL or asset path' }
+    )
+    .optional(),
+  coverImageUrl: z
+    .string()
+    .refine(
+      (val) =>
+        !val ||
+        val.startsWith('/assets/') ||
+        val.startsWith('http://') ||
+        val.startsWith('https://') ||
+        val.startsWith('/uploads/'),
+      { message: 'Must be a valid URL or asset path' }
+    )
+    .optional(),
   endpoint: URLSchema.optional(),
-  referralCode: z.string().optional()
+  referralCode: z.string().optional(),
 });
 
 /**
@@ -166,7 +185,7 @@ export const OnChainRegistrationSchema = z.object({
 export const Agent0RegistrationSchema = z.object({
   metadataCID: z.string(), // IPFS CID
   mcpEndpoint: URLSchema.optional(),
-  a2aEndpoint: URLSchema.optional()
+  a2aEndpoint: URLSchema.optional(),
 });
 
 /**
@@ -175,7 +194,7 @@ export const Agent0RegistrationSchema = z.object({
 export const UpdateWalletSchema = z.object({
   walletAddress: WalletAddressSchema,
   signature: z.string(),
-  nonce: z.string()
+  nonce: z.string(),
 });
 
 /**
@@ -202,7 +221,7 @@ export const UserResponseSchema = z.object({
   referralCount: z.number(),
   agent0TrustScore: z.number(),
   createdAt: z.string(), // DateTime as string
-  updatedAt: z.string() // DateTime as string
+  updatedAt: z.string(), // DateTime as string
 });
 
 /**
@@ -212,7 +231,7 @@ export const UserListResponseSchema = z.object({
   users: z.array(UserResponseSchema),
   total: z.number(),
   page: z.number(),
-  limit: z.number()
+  limit: z.number(),
 });
 
 /**
@@ -221,12 +240,12 @@ export const UserListResponseSchema = z.object({
 export const UserPostsQuerySchema = z.object({
   type: z.enum(['posts', 'replies']).default('posts'),
   page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().min(1).max(100).default(100)
+  limit: z.coerce.number().min(1).max(100).default(100),
 });
 
 /**
  * User followers/following query schema
  */
 export const UserFollowersQuerySchema = PaginationSchema.extend({
-  includeMutual: z.coerce.boolean().default(false)
+  includeMutual: z.coerce.boolean().default(false),
 });

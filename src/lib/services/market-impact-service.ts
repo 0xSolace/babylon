@@ -1,27 +1,25 @@
 import type { MarketType } from '@/types/market-decisions';
 
-export interface TradeImpactInput {
+export type TradeImpactInput = {
   marketType: MarketType;
   ticker?: string;
   marketId?: string | number; // Support both Snowflake IDs and question numbers
   side: string;
   size: number;
-}
+};
 
-export interface AggregatedImpact {
+export type AggregatedImpact = {
   longVolume: number;
   shortVolume: number;
   yesVolume: number;
   noVolume: number;
   netSentiment: number;
-}
+};
 
 /**
  * Aggregate trades into per-market impact buckets that capture directional volume
  */
-export function aggregateTradeImpacts(
-  trades: TradeImpactInput[]
-): Map<string, AggregatedImpact> {
+export function aggregateTradeImpacts(trades: TradeImpactInput[]): Map<string, AggregatedImpact> {
   const impacts = new Map<string, AggregatedImpact>();
 
   for (const trade of trades) {
@@ -60,8 +58,7 @@ export function aggregateTradeImpacts(
     const totalPred = impact.yesVolume + impact.noVolume;
 
     if (totalPerp > 0) {
-      impact.netSentiment =
-        (impact.longVolume - impact.shortVolume) / totalPerp;
+      impact.netSentiment = (impact.longVolume - impact.shortVolume) / totalPerp;
     } else if (totalPred > 0) {
       impact.netSentiment = (impact.yesVolume - impact.noVolume) / totalPred;
     }

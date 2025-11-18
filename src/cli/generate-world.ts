@@ -2,11 +2,11 @@
 
 /**
  * @fileoverview Game World Narrative Generator CLI
- * 
+ *
  * Generates complete game narratives with all NPC actions, events, conversations,
  * and social media posts. Creates a detailed timeline of events leading to a
  * predetermined outcome (SUCCESS or FAILURE).
- * 
+ *
  * **Core Features:**
  * - Full narrative generation with NPC behaviors
  * - Day-by-day timeline simulation (default: 30 days)
@@ -14,7 +14,7 @@
  * - Event-driven architecture with detailed logging
  * - JSON export for integration with other systems
  * - Verbose mode for detailed event tracking
- * 
+ *
  * **Generated Content:**
  * - NPC actions and behaviors
  * - Conversations between NPCs
@@ -23,7 +23,7 @@
  * - Clues pointing to outcome
  * - Market developments
  * - Feed posts (news, reactions, threads)
- * 
+ *
  * **Event Types:**
  * - `world:started` - World generation begins
  * - `day:begins` - New day starts
@@ -35,36 +35,36 @@
  * - `development:occurred` - Major development happens
  * - `feed:post` - Social media post created
  * - `outcome:revealed` - Final outcome revealed
- * 
+ *
  * @module cli/generate-world
  * @category CLI - Game Generation
- * 
+ *
  * @example
  * ```bash
  * # Generate with default settings (SUCCESS outcome)
  * bun run src/cli/generate-world.ts
- * 
+ *
  * # Generate with specific outcome
  * bun run src/cli/generate-world.ts --outcome=FAILURE
- * 
+ *
  * # Generate with verbose logging
  * bun run src/cli/generate-world.ts --verbose
- * 
+ *
  * # Save to file
  * bun run src/cli/generate-world.ts --save=world.json
- * 
+ *
  * # Get JSON output only (for piping)
  * bun run src/cli/generate-world.ts --json
  * ```
- * 
+ *
  * @see {@link GameWorld} for world generation implementation
  * @see {@link ../engine/GameWorld.ts} for implementation details
  * @since v0.1.0
  */
 
-import { GameWorld } from '../engine/GameWorld';
-import { writeFile } from 'fs/promises';
 import { logger } from '@/lib/logger';
+import { writeFile } from 'node:fs/promises';
+import { GameWorld } from '../engine/GameWorld';
 
 /**
  * Command-line options for world generation
@@ -74,22 +74,22 @@ import { logger } from '@/lib/logger';
  * @property {boolean} [verbose] - Enable detailed event logging
  * @property {boolean} [json] - Output JSON only (no logs)
  */
-interface CLIOptions {
+type CLIOptions = {
   outcome?: 'SUCCESS' | 'FAILURE';
   save?: string;
   verbose?: boolean;
   json?: boolean;
-}
+};
 
 /**
  * Parses command-line arguments into typed options
- * 
+ *
  * **Supported Arguments:**
  * - `--outcome=SUCCESS` or `--outcome=FAILURE` - Set predetermined outcome
  * - `--save=filename.json` - Save world to JSON file
  * - `--verbose` or `-v` - Enable verbose logging
  * - `--json` - Output JSON only (for piping to other tools)
- * 
+ *
  * @returns {CLIOptions} Parsed command-line options
  * @example
  * ```typescript
@@ -103,7 +103,7 @@ function parseArgs(): CLIOptions {
   const args = process.argv.slice(2);
   const options: CLIOptions = {};
 
-  args.forEach(arg => {
+  args.forEach((arg) => {
     if (arg.startsWith('--outcome=')) {
       options.outcome = arg.split('=')[1] as 'SUCCESS' | 'FAILURE';
     } else if (arg.startsWith('--save=')) {
@@ -120,7 +120,7 @@ function parseArgs(): CLIOptions {
 
 /**
  * Main execution function for world generation CLI
- * 
+ *
  * Creates a complete game world narrative with:
  * 1. Question/scenario setup
  * 2. NPC cast (default: 8 NPCs)
@@ -128,24 +128,24 @@ function parseArgs(): CLIOptions {
  * 4. Event-driven narrative generation
  * 5. Social media feed generation
  * 6. Outcome revelation
- * 
+ *
  * **Verbosity Levels:**
  * - Normal: Basic progress indicators
  * - Verbose: All events, actions, and posts
  * - JSON: Raw output only (no logs)
- * 
+ *
  * **Output Modes:**
  * - Console: Formatted narrative logs
  * - JSON: Machine-readable world data
  * - File: Saved JSON for later use
- * 
+ *
  * @throws {Error} Exits with code 1 if world generation fails
  * @returns {Promise<void>} Exits with code 0 on success
  * @example
  * ```bash
  * # Generate and watch narrative unfold
  * bun run src/cli/generate-world.ts --verbose
- * 
+ *
  * # Output:
  * # GENERATING BABYLON GAME WORLD
  * # =================================
@@ -167,8 +167,8 @@ function parseArgs(): CLIOptions {
  */
 async function main() {
   const options = parseArgs();
-  
-  const outcomeValue = options.outcome === 'FAILURE' ? false : true;
+
+  const outcomeValue = options.outcome !== 'FAILURE';
 
   const world = new GameWorld({
     outcome: outcomeValue,
@@ -218,15 +218,24 @@ async function main() {
     });
 
     world.on('feed:post', (post) => {
-      const emoji = post.type === 'news' ? '📰' : 
-                   post.type === 'reaction' ? '💬' :
-                   post.type === 'thread' ? '🧵' : '📢';
-      
+      const emoji =
+        post.type === 'news'
+          ? '📰'
+          : post.type === 'reaction'
+            ? '💬'
+            : post.type === 'thread'
+              ? '🧵'
+              : '📢';
+
       const prefix = post.replyTo ? '    ↳' : '  ';
       logger.info(`${prefix}${emoji} ${post.author}: ${post.content}`, undefined, 'CLI');
-      
+
       if (post.clueStrength > 0.5) {
-        logger.debug(`${prefix}   [Strong clue: ${post.clueStrength.toFixed(1)}]`, undefined, 'CLI');
+        logger.debug(
+          `${prefix}   [Strong clue: ${post.clueStrength.toFixed(1)}]`,
+          undefined,
+          'CLI'
+        );
       }
     });
 
@@ -242,19 +251,23 @@ async function main() {
   if (options.save) {
     const json = JSON.stringify(finalWorld, null, 2);
     await writeFile(options.save, json);
-    
+
     if (!options.json) {
       logger.info(`World saved to: ${options.save}`, undefined, 'CLI');
     }
   }
 
   if (!options.json) {
-    logger.info('World generation complete', {
-      totalEvents: finalWorld.events.length,
-      npcs: finalWorld.npcs.length,
-      daysSimulated: finalWorld.timeline.length,
-      finalOutcome: finalWorld.outcome ? 'SUCCESS' : 'FAILURE'
-    }, 'CLI');
+    logger.info(
+      'World generation complete',
+      {
+        totalEvents: finalWorld.events.length,
+        npcs: finalWorld.npcs.length,
+        daysSimulated: finalWorld.timeline.length,
+        finalOutcome: finalWorld.outcome ? 'SUCCESS' : 'FAILURE',
+      },
+      'CLI'
+    );
   } else {
     logger.info(JSON.stringify(finalWorld, null, 2), undefined, 'CLI');
   }
@@ -263,11 +276,10 @@ async function main() {
 }
 
 if (import.meta.main) {
-  main().catch(error => {
+  main().catch((error) => {
     logger.error('Error:', error, 'CLI');
     process.exit(1);
   });
 }
 
 export { main };
-

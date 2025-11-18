@@ -1,12 +1,12 @@
 /**
  * Manual Instrumentation Helpers
- * 
+ *
  * Advanced manual control for trajectory logging
  */
 
+import { logger } from '@/lib/logger';
 import type { TrajectoryLoggerService } from './TrajectoryLoggerService';
 import type { EnvironmentState } from './types';
-import { logger } from '@/lib/logger';
 
 /**
  * Start an autonomous tick (creates a new trajectory)
@@ -39,10 +39,14 @@ export function startAutonomousTick(
 
   trajectoryLogger.startStep(trajectoryId, envState);
 
-  logger.info('Started autonomous tick trajectory', {
-    trajectoryId,
-    agentId: context.agentId,
-  }, 'TrajectoryIntegration');
+  logger.info(
+    'Started autonomous tick trajectory',
+    {
+      trajectoryId,
+      agentId: context.agentId,
+    },
+    'TrajectoryIntegration'
+  );
 
   return trajectoryId;
 }
@@ -58,10 +62,14 @@ export async function endAutonomousTick(
 ): Promise<void> {
   await trajectoryLogger.endTrajectory(trajectoryId, status, finalMetrics);
 
-  logger.info('Ended autonomous tick trajectory', {
-    trajectoryId,
-    status,
-  }, 'TrajectoryIntegration');
+  logger.info(
+    'Ended autonomous tick trajectory',
+    {
+      trajectoryId,
+      status,
+    },
+    'TrajectoryIntegration'
+  );
 }
 
 /**
@@ -80,7 +88,12 @@ export async function loggedLLMCall(
     purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
     actionType?: string;
   },
-  llmCallFn: () => Promise<{ text: string; reasoning?: string; tokens?: { prompt?: number; completion?: number }; latencyMs?: number }>
+  llmCallFn: () => Promise<{
+    text: string;
+    reasoning?: string;
+    tokens?: { prompt?: number; completion?: number };
+    latencyMs?: number;
+  }>
 ): Promise<string> {
   const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
   if (!stepId) {
@@ -179,4 +192,3 @@ export function withTrajectoryLogging<T extends (...args: unknown[]) => Promise<
     }
   }) as T;
 }
-

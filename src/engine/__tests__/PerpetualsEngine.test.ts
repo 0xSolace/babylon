@@ -2,12 +2,12 @@
  * PerpetualsEngine Test Suite
  *
  * @module engine/__tests__/PerpetualsEngine.test
- * 
+ *
  * @description
  * Comprehensive test suite for the PerpetualsEngine leveraged trading system.
  * Tests position management, PnL calculations, funding rates, liquidations,
  * and market data tracking.
- * 
+ *
  * **Test Coverage:**
  * - Market initialization from organizations
  * - Position opening (long/short with leverage)
@@ -19,7 +19,7 @@
  * - Price updates and PnL tracking
  * - Daily snapshot recording
  * - Exit price override functionality
- * 
+ *
  * **Key Features Tested:**
  * - Correct liquidation prices for various leverages
  * - Accurate PnL for both long and short positions
@@ -27,17 +27,16 @@
  * - Liquidation triggering at correct prices
  * - Position state synchronization
  * - Market data integrity
- * 
+ *
  * **Testing Approach:**
  * - Unit tests for calculation functions
  * - Integration tests for full position lifecycle
  * - Edge case testing (high leverage, price movements)
  * - State consistency verification
- * 
+ *
  * @see {@link PerpetualsEngine} - Class under test
  * @see {@link /shared/perps-types.ts} - Calculation functions tested
  */
-import { describe, expect, test } from 'bun:test';
 
 import {
   calculateFundingPayment,
@@ -46,7 +45,7 @@ import {
   shouldLiquidate,
 } from '@/shared/perps-types';
 import type { Organization } from '@/shared/types';
-
+import { describe, expect, test } from 'bun:test';
 import { PerpetualsEngine } from '../PerpetualsEngine';
 
 describe('PerpetualsEngine', () => {
@@ -75,7 +74,7 @@ describe('PerpetualsEngine', () => {
 
     const markets = engine.getMarkets();
     expect(markets.length).toBe(1); // Only company, not media
-    expect(markets[0]!.name).toBe('Test Company');
+    expect(markets[0]?.name).toBe('Test Company');
   });
 
   test('opens long position correctly', () => {
@@ -94,7 +93,7 @@ describe('PerpetualsEngine', () => {
 
     engine.initializeMarkets(orgs);
     const markets = engine.getMarkets();
-    const ticker = markets[0]!.ticker;
+    const ticker = markets[0]?.ticker;
 
     const position = engine.openPosition('user-1', {
       ticker,
@@ -179,7 +178,7 @@ describe('PerpetualsEngine', () => {
 
     engine.initializeMarkets(orgs);
     const markets = engine.getMarkets();
-    const ticker = markets[0]!.ticker;
+    const ticker = markets[0]?.ticker;
 
     // Record snapshot
     engine.recordDailySnapshot('2025-10-28');
@@ -187,8 +186,8 @@ describe('PerpetualsEngine', () => {
     // Get snapshots
     const snapshots = engine.getDailySnapshots(ticker);
     expect(snapshots.length).toBe(1);
-    expect(snapshots[0]!.date).toBe('2025-10-28');
-    expect(snapshots[0]!.ticker).toBe(ticker);
+    expect(snapshots[0]?.date).toBe('2025-10-28');
+    expect(snapshots[0]?.ticker).toBe(ticker);
   });
 
   test('updates positions with new prices', () => {
@@ -207,7 +206,7 @@ describe('PerpetualsEngine', () => {
 
     engine.initializeMarkets(orgs);
     const markets = engine.getMarkets();
-    const ticker = markets[0]!.ticker;
+    const ticker = markets[0]?.ticker;
 
     // Open position
     engine.openPosition('user-1', {
@@ -224,8 +223,8 @@ describe('PerpetualsEngine', () => {
 
     // Check PnL updated
     const updatedPositions = engine.getUserPositions('user-1');
-    expect(updatedPositions[0]!.currentPrice).toBe(105);
-    expect(updatedPositions[0]!.unrealizedPnL).toBeGreaterThan(0);
+    expect(updatedPositions[0]?.currentPrice).toBe(105);
+    expect(updatedPositions[0]?.unrealizedPnL).toBeGreaterThan(0);
   });
 
   test('closePosition uses override exit price for PnL', () => {
@@ -243,7 +242,7 @@ describe('PerpetualsEngine', () => {
     ];
 
     engine.initializeMarkets(orgs);
-    const ticker = engine.getMarkets()[0]!.ticker;
+    const ticker = engine.getMarkets()[0]?.ticker;
 
     const position = engine.openPosition('user-override', {
       ticker,
@@ -257,8 +256,7 @@ describe('PerpetualsEngine', () => {
     const result = engine.closePosition(position.id, overridePrice);
 
     const expectedPnl =
-      ((overridePrice - position.entryPrice) / position.entryPrice) *
-      position.size;
+      ((overridePrice - position.entryPrice) / position.entryPrice) * position.size;
     expect(result.realizedPnL).toBeCloseTo(expectedPnl, 6);
     expect(result.position.currentPrice).toBe(overridePrice);
   });
@@ -278,7 +276,7 @@ describe('PerpetualsEngine', () => {
     ];
 
     engine.initializeMarkets(orgs);
-    const ticker = engine.getMarkets()[0]!.ticker;
+    const ticker = engine.getMarkets()[0]?.ticker;
 
     const closingPosition = engine.openPosition('closer', {
       ticker,
@@ -299,8 +297,8 @@ describe('PerpetualsEngine', () => {
     engine.closePosition(closingPosition.id, 130);
 
     const remainingPositions = engine.getUserPositions('holder');
-    expect(remainingPositions[0]!.currentPrice).toBe(130);
-    expect(remainingPositions[0]!.unrealizedPnL).toBeGreaterThan(0);
+    expect(remainingPositions[0]?.currentPrice).toBe(130);
+    expect(remainingPositions[0]?.unrealizedPnL).toBeGreaterThan(0);
   });
 
   test('closes positions and calculates realized PnL', () => {
@@ -319,7 +317,7 @@ describe('PerpetualsEngine', () => {
 
     engine.initializeMarkets(orgs);
     const markets = engine.getMarkets();
-    const ticker = markets[0]!.ticker;
+    const ticker = markets[0]?.ticker;
 
     const position = engine.openPosition('user-1', {
       ticker,

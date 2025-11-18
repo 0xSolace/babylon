@@ -1,3 +1,3 @@
 export default {
-  endpoints: 'All Endpoints'
-}
+  endpoints: 'All Endpoints',
+};

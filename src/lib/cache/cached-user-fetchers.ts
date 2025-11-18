@@ -4,13 +4,13 @@
  * These functions use 'use cache: private' for personalized content
  * that depends on cookies, headers, or user context.
  */
-import { prisma } from '@/lib/prisma';
+
 import { logger } from '@/lib/logger';
 import { getReadyPerpsEngine } from '@/lib/perps-service';
+import { prisma } from '@/lib/prisma';
 import { ParticipationService } from '@/lib/services/participation-service';
 import { ReputationService } from '@/lib/services/reputation-service';
 import { WalletService } from '@/lib/services/wallet-service';
-
 import { cacheMonitoring } from './cache-monitoring';
 import { cacheLife, cacheTag } from './cache-polyfill';
 
@@ -67,7 +67,7 @@ export async function getCachedUserPositions(userId: string) {
     return {
       success: true,
       perpetuals: {
-        positions: perpPositions.map((p: typeof perpPositions[number]) => ({
+        positions: perpPositions.map((p: (typeof perpPositions)[number]) => ({
           id: p.id,
           ticker: p.ticker,
           side: p.side,
@@ -84,7 +84,7 @@ export async function getCachedUserPositions(userId: string) {
         stats: perpStats,
       },
       predictions: {
-        positions: predictionPositions.map((p: typeof predictionPositions[number]) => ({
+        positions: predictionPositions.map((p: (typeof predictionPositions)[number]) => ({
           id: p.id,
           marketId: p.marketId,
           question: p.Market.question,
@@ -92,10 +92,8 @@ export async function getCachedUserPositions(userId: string) {
           shares: Number(p.shares),
           avgPrice: Number(p.avgPrice),
           currentPrice: p.side
-            ? Number(p.Market.yesShares) /
-              (Number(p.Market.yesShares) + Number(p.Market.noShares))
-            : Number(p.Market.noShares) /
-              (Number(p.Market.yesShares) + Number(p.Market.noShares)),
+            ? Number(p.Market.yesShares) / (Number(p.Market.yesShares) + Number(p.Market.noShares))
+            : Number(p.Market.noShares) / (Number(p.Market.yesShares) + Number(p.Market.noShares)),
           resolved: p.Market.resolved,
           resolution: p.Market.resolution,
         })),
@@ -109,11 +107,7 @@ export async function getCachedUserPositions(userId: string) {
     const responseTime = Date.now() - startTime;
     cacheMonitoring.recordMiss(cacheKey, responseTime);
 
-    logger.error(
-      'Error fetching cached user positions:',
-      error,
-      'getCachedUserPositions'
-    );
+    logger.error('Error fetching cached user positions:', error, 'getCachedUserPositions');
     return {
       success: false,
       perpetuals: {
@@ -168,8 +162,8 @@ export async function getCachedFollowingFeed(
       },
     });
 
-    const followedUserIds = userFollows.map((f: typeof userFollows[number]) => f.followingId);
-    const followedActorIds = actorFollows.map((f: typeof actorFollows[number]) => f.npcId);
+    const followedUserIds = userFollows.map((f: (typeof userFollows)[number]) => f.followingId);
+    const followedActorIds = actorFollows.map((f: (typeof actorFollows)[number]) => f.npcId);
     const allFollowedIds = [...followedUserIds, ...followedActorIds];
 
     if (allFollowedIds.length === 0) {
@@ -205,7 +199,7 @@ export async function getCachedFollowingFeed(
     });
 
     // Fetch user details separately since Post doesn't have author relation
-    const authorIds = [...new Set(posts.map((p: typeof posts[number]) => p.authorId))];
+    const authorIds = [...new Set(posts.map((p: (typeof posts)[number]) => p.authorId))];
     const authors = await prisma.user.findMany({
       where: { id: { in: authorIds } },
       select: {
@@ -215,12 +209,12 @@ export async function getCachedFollowingFeed(
         profileImageUrl: true,
       },
     });
-    const authorMap = new Map(authors.map((a: typeof authors[number]) => [a.id, a]));
+    const authorMap = new Map(authors.map((a: (typeof authors)[number]) => [a.id, a]));
 
-    type AuthorType = typeof authors[number];
+    type AuthorType = (typeof authors)[number];
     const result = {
       success: true,
-      posts: posts.map((post: typeof posts[number]) => {
+      posts: posts.map((post: (typeof posts)[number]) => {
         const author = authorMap.get(post.authorId) as AuthorType | undefined;
         return {
           id: post.id,
@@ -252,11 +246,7 @@ export async function getCachedFollowingFeed(
     const responseTime = Date.now() - startTime;
     cacheMonitoring.recordMiss(cacheKey, responseTime);
 
-    logger.error(
-      'Error fetching cached following feed:',
-      error,
-      'getCachedFollowingFeed'
-    );
+    logger.error('Error fetching cached following feed:', error, 'getCachedFollowingFeed');
     return {
       success: false,
       posts: [],
@@ -303,11 +293,7 @@ export async function getCachedUserBalance(userId: string) {
     const responseTime = Date.now() - startTime;
     cacheMonitoring.recordMiss(cacheKey, responseTime);
 
-    logger.error(
-      'Error fetching cached user balance:',
-      error,
-      'getCachedUserBalance'
-    );
+    logger.error('Error fetching cached user balance:', error, 'getCachedUserBalance');
     return {
       success: false,
       balance: 0,
@@ -413,11 +399,7 @@ export async function getCachedUserProfile(userId: string) {
     const responseTime = Date.now() - startTime;
     cacheMonitoring.recordMiss(cacheKey, responseTime);
 
-    logger.error(
-      'Error fetching cached user profile:',
-      error,
-      'getCachedUserProfile'
-    );
+    logger.error('Error fetching cached user profile:', error, 'getCachedUserProfile');
     return {
       success: false,
       user: null,
@@ -454,7 +436,7 @@ export async function getCachedUserChats(userId: string) {
     });
 
     // Get chat details for group chats
-    const groupChatIds = memberships.map((m: typeof memberships[number]) => m.chatId);
+    const groupChatIds = memberships.map((m: (typeof memberships)[number]) => m.chatId);
     const groupChatDetails = await prisma.chat.findMany({
       where: {
         id: { in: groupChatIds },
@@ -467,7 +449,9 @@ export async function getCachedUserChats(userId: string) {
       },
     });
 
-    const chatDetailsMap = new Map(groupChatDetails.map((c: typeof groupChatDetails[number]) => [c.id, c]));
+    const chatDetailsMap = new Map(
+      groupChatDetails.map((c: (typeof groupChatDetails)[number]) => [c.id, c])
+    );
 
     // Get DM chats the user participates in
     const dmParticipants = await prisma.chatParticipant.findMany({
@@ -476,7 +460,7 @@ export async function getCachedUserChats(userId: string) {
       },
     });
 
-    const dmChatIds = dmParticipants.map((p: typeof dmParticipants[number]) => p.chatId);
+    const dmChatIds = dmParticipants.map((p: (typeof dmParticipants)[number]) => p.chatId);
     const dmChatsDetails = await prisma.chat.findMany({
       where: {
         id: { in: dmChatIds },
@@ -492,19 +476,19 @@ export async function getCachedUserChats(userId: string) {
     });
 
     // Format group chats
-    type ChatDetailsType = typeof groupChatDetails[number];
+    type ChatDetailsType = (typeof groupChatDetails)[number];
     type GroupChatType = {
       id: string;
       name: string;
       isGroup: boolean;
-      lastMessage: typeof groupChatDetails[number]['Message'][number] | null;
+      lastMessage: (typeof groupChatDetails)[number]['Message'][number] | null;
       messageCount: number;
       qualityScore: number | null;
       lastMessageAt: Date | null;
       updatedAt: Date;
     };
     const groupChats = memberships
-      .map((membership: typeof memberships[number]): GroupChatType | null => {
+      .map((membership: (typeof memberships)[number]): GroupChatType | null => {
         const chat = chatDetailsMap.get(membership.chatId) as ChatDetailsType | undefined;
         if (!chat) return null;
         return {
@@ -521,7 +505,7 @@ export async function getCachedUserChats(userId: string) {
       .filter((c: GroupChatType | null): c is GroupChatType => c !== null);
 
     // Format DM chats
-    const directChats = dmChatsDetails.map((chat: typeof dmChatsDetails[number]) => ({
+    const directChats = dmChatsDetails.map((chat: (typeof dmChatsDetails)[number]) => ({
       id: chat.id,
       name: chat.name || 'Direct Message',
       isGroup: false,
@@ -545,11 +529,7 @@ export async function getCachedUserChats(userId: string) {
     const responseTime = Date.now() - startTime;
     cacheMonitoring.recordMiss(cacheKey, responseTime);
 
-    logger.error(
-      'Error fetching cached user chats:',
-      error,
-      'getCachedUserChats'
-    );
+    logger.error('Error fetching cached user chats:', error, 'getCachedUserChats');
     return {
       success: false,
       groupChats: [],
@@ -577,8 +557,7 @@ export async function getCachedUserReputation(userId: string) {
 
   try {
     // Get on-chain reputation
-    const onChainReputation =
-      await ReputationService.getOnChainReputation(userId);
+    const onChainReputation = await ReputationService.getOnChainReputation(userId);
 
     // Get off-chain participation stats
     const participationStats = await ParticipationService.getStats(userId);
@@ -593,10 +572,7 @@ export async function getCachedUserReputation(userId: string) {
     }
 
     const baseReputation = onChainReputation ?? 70;
-    const enhancedReputation = Math.min(
-      100,
-      baseReputation + participationBonus
-    );
+    const enhancedReputation = Math.min(100, baseReputation + participationBonus);
 
     // Get recent activity
     const recentActivity = await prisma.balanceTransaction.findMany({
@@ -633,15 +609,14 @@ export async function getCachedUserReputation(userId: string) {
       },
     });
 
-    const resolvedPositions = userPositions.filter((p: typeof userPositions[number]) => p.Market.resolved);
+    const resolvedPositions = userPositions.filter(
+      (p: (typeof userPositions)[number]) => p.Market.resolved
+    );
     const wins = resolvedPositions.filter(
-      (p: typeof resolvedPositions[number]) => p.Market.resolution === p.side
+      (p: (typeof resolvedPositions)[number]) => p.Market.resolution === p.side
     ).length;
     const losses = resolvedPositions.length - wins;
-    const winRate =
-      resolvedPositions.length > 0
-        ? (wins / resolvedPositions.length) * 100
-        : 0;
+    const winRate = resolvedPositions.length > 0 ? (wins / resolvedPositions.length) * 100 : 0;
 
     const result = {
       success: true,
@@ -670,7 +645,7 @@ export async function getCachedUserReputation(userId: string) {
           }
         : null,
       hasNft: onChainReputation !== null,
-      recentActivity: recentActivity.map((activity: typeof recentActivity[number]) => ({
+      recentActivity: recentActivity.map((activity: (typeof recentActivity)[number]) => ({
         id: activity.id,
         description: activity.description,
         amount: Number(activity.amount),
@@ -686,11 +661,7 @@ export async function getCachedUserReputation(userId: string) {
     const responseTime = Date.now() - startTime;
     cacheMonitoring.recordMiss(cacheKey, responseTime);
 
-    logger.error(
-      'Error fetching cached user reputation:',
-      error,
-      'getCachedUserReputation'
-    );
+    logger.error('Error fetching cached user reputation:', error, 'getCachedUserReputation');
     return {
       success: false,
       reputation: null,

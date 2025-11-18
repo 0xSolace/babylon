@@ -1,14 +1,14 @@
 /**
  * Direct Message (DM) Chat API
- * 
+ *
  * @route POST /api/chats/dm
  * @access Authenticated
- * 
+ *
  * @description
  * Creates or retrieves a direct message chat between two users. Implements
  * idempotent chat creation with consistent ID generation based on participant
  * user IDs. Includes validation to prevent self-DMing and NPC interactions.
- * 
+ *
  * @openapi
  * /api/chats/dm:
  *   post:
@@ -55,7 +55,7 @@
  *         description: Target is NPC actor
  *       404:
  *         description: Target user not found
- * 
+ *
  * **DM Chat Features:**
  * - Idempotent creation (same chat for same participants)
  * - Consistent chat ID format: `dm-{userId1}-{userId2}` (sorted)
@@ -63,13 +63,13 @@
  * - Real user validation (no NPCs/actors)
  * - Self-DM prevention
  * - Event tracking for analytics
- * 
+ *
  * **Business Rules:**
  * - Cannot DM yourself
  * - Cannot DM NPC actors (use group chats instead)
  * - Target user must exist
  * - Both participants automatically added
- * 
+ *
  * **Chat ID Generation:**
  * Chat IDs are deterministic based on sorted participant IDs:
  * ```typescript
@@ -77,11 +77,11 @@
  * const chatId = `dm-${sortedIds.join('-')}`;
  * ```
  * This ensures the same chat is always returned for the same two users.
- * 
+ *
  * **POST /api/chats/dm - Create or Get DM Chat**
- * 
+ *
  * @param {string} userId - Target user ID to DM (required)
- * 
+ *
  * @returns {object} DM chat response
  * @property {object} chat - Chat object
  * @property {string} chat.id - Chat ID (deterministic)
@@ -92,49 +92,49 @@
  * @property {string} chat.otherUser.displayName - Display name
  * @property {string} chat.otherUser.username - Username
  * @property {string} chat.otherUser.profileImageUrl - Profile image
- * 
+ *
  * @throws {400} Bad Request - Missing userId or self-DM attempt
  * @throws {401} Unauthorized - Not authenticated
  * @throws {403} Forbidden - Target is NPC actor
  * @throws {404} Not Found - Target user doesn't exist
  * @throws {500} Internal Server Error
- * 
+ *
  * @example
  * ```typescript
  * // Create or get DM with user
  * const response = await fetch('/api/chats/dm', {
  *   method: 'POST',
- *   headers: { 
+ *   headers: {
  *     'Authorization': `Bearer ${token}`,
  *     'Content-Type': 'application/json'
  *   },
  *   body: JSON.stringify({ userId: 'target-user-id' })
  * });
- * 
+ *
  * const { chat } = await response.json();
  * console.log(`DM with ${chat.otherUser.displayName}`);
  * console.log(`Chat ID: ${chat.id}`);
- * 
+ *
  * // Navigate to chat
  * router.push(`/chats/${chat.id}`);
  * ```
- * 
+ *
  * @see {@link /lib/db/context} RLS context management
  * @see {@link /lib/posthog/server} Analytics tracking
  * @see {@link /src/app/chats/page.tsx} Chat list UI
  * @see {@link /src/app/chats/[id]/page.tsx} Chat room UI
  */
 
-import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/api/auth-middleware';
 import { asUser } from '@/lib/db/context';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
 import { BusinessLogicError, NotFoundError } from '@/lib/errors';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
-import { DMChatCreateSchema } from '@/lib/validation/schemas';
+import { hasBlocked } from '@/lib/moderation/filters';
 import { trackServerEvent } from '@/lib/posthog/server';
 import { generateSnowflakeId } from '@/lib/snowflake';
-import { hasBlocked } from '@/lib/moderation/filters';
+import { DMChatCreateSchema } from '@/lib/validation/schemas';
+import type { NextRequest } from 'next/server';
 
 /**
  * POST /api/chats/dm
@@ -157,8 +157,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     // Check if target user exists and is a real user (not an NPC)
     const targetUser = await db.user.findUnique({
       where: { id: targetUserId },
-      select: { 
-        id: true, 
+      select: {
+        id: true,
         isActor: true,
         displayName: true,
         username: true,
@@ -186,10 +186,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     ]);
 
     if (isBlocked || hasBlockedMe) {
-      throw new BusinessLogicError(
-        'Cannot send messages to this user',
-        'BLOCKED_USER'
-      );
+      throw new BusinessLogicError('Cannot send messages to this user', 'BLOCKED_USER');
     }
 
     // Create DM chat ID (consistent format - sort IDs for consistency)
@@ -250,8 +247,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       });
     } else {
       // Chat exists, ensure both participants are added
-      const participantIds = existingChat.ChatParticipant.map(p => p.userId);
-      
+      const participantIds = existingChat.ChatParticipant.map((p) => p.userId);
+
       if (!participantIds.includes(user.userId)) {
         await db.chatParticipant.create({
           data: {
@@ -280,7 +277,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw new Error('Chat creation failed');
   }
 
-  logger.info('DM chat created or retrieved successfully', { chatId: chat.chat.id, userId: user.userId, targetUserId }, 'POST /api/chats/dm');
+  logger.info(
+    'DM chat created or retrieved successfully',
+    { chatId: chat.chat.id, userId: user.userId, targetUserId },
+    'POST /api/chats/dm'
+  );
 
   // Track DM created/opened event
   trackServerEvent(user.userId, 'dm_opened', {
@@ -291,18 +292,20 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     logger.warn('Failed to track dm_opened event', { error });
   });
 
-  return successResponse({
-    chat: {
-      id: chat.chat.id,
-      name: chat.chat.name,
-      isGroup: chat.chat.isGroup,
-      otherUser: {
-        id: chat.targetUser.id,
-        displayName: chat.targetUser.displayName,
-        username: chat.targetUser.username,
-        profileImageUrl: chat.targetUser.profileImageUrl,
+  return successResponse(
+    {
+      chat: {
+        id: chat.chat.id,
+        name: chat.chat.name,
+        isGroup: chat.chat.isGroup,
+        otherUser: {
+          id: chat.targetUser.id,
+          displayName: chat.targetUser.displayName,
+          username: chat.targetUser.username,
+          profileImageUrl: chat.targetUser.profileImageUrl,
+        },
       },
     },
-  }, 201);
+    201
+  );
 });
-

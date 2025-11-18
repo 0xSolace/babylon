@@ -1,15 +1,15 @@
 /**
  * Production Trajectory Recorder
- * 
+ *
  * Records agent decisions with EVERYTHING needed for ART/GRPO/RULER.
  * Integrates directly with Babylon's autonomous agents.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
+import type { Action, EnvironmentState, LLMCall, ProviderAccess, TrajectoryStep } from './types';
 import { getCurrentWindowId } from './window-utils';
-import type { TrajectoryStep, EnvironmentState, ProviderAccess, LLMCall, Action } from './types';
 
 export type { TrajectoryStep, EnvironmentState, ProviderAccess, LLMCall, Action };
 
@@ -17,14 +17,14 @@ export type { TrajectoryStep, EnvironmentState, ProviderAccess, LLMCall, Action 
 export type RecordedLLMCall = LLMCall;
 export type RecordedStep = TrajectoryStep;
 
-interface ActiveTrajectory {
+type ActiveTrajectory = {
   trajectoryId: string;
   agentId: string;
   scenarioId?: string;
   startTime: number;
   steps: TrajectoryStep[];
   currentStep?: Partial<TrajectoryStep>;
-}
+};
 
 export class TrajectoryRecorder {
   private activeTrajectories: Map<string, ActiveTrajectory> = new Map();
@@ -39,23 +39,23 @@ export class TrajectoryRecorder {
     metadata?: Record<string, unknown>;
   }): Promise<string> {
     const trajectoryId = await generateSnowflakeId();
-    
+
     // Ensure window_id is always set (critical for RL training!)
     const windowId = options.windowId || getCurrentWindowId();
-    
+
     this.activeTrajectories.set(trajectoryId, {
       trajectoryId,
       agentId: options.agentId,
       scenarioId: options.scenarioId || windowId, // Use windowId as scenarioId if not provided
       startTime: Date.now(),
-      steps: []
+      steps: [],
     });
 
     logger.info('Started trajectory recording', {
       trajectoryId,
       agentId: options.agentId,
       scenarioId: options.scenarioId,
-      windowId  // Log window_id for debugging
+      windowId, // Log window_id for debugging
     });
 
     return trajectoryId;
@@ -77,18 +77,21 @@ export class TrajectoryRecorder {
       environmentState,
       providerAccesses: [],
       llmCalls: [],
-      reward: 0
+      reward: 0,
     };
   }
 
   /**
    * Log provider access
    */
-  logProviderAccess(trajectoryId: string, access: {
-    providerName: string;
-    data: Record<string, unknown>;
-    purpose: string;
-  }): void {
+  logProviderAccess(
+    trajectoryId: string,
+    access: {
+      providerName: string;
+      data: Record<string, unknown>;
+      purpose: string;
+    }
+  ): void {
     const traj = this.activeTrajectories.get(trajectoryId);
     if (!traj?.currentStep) {
       logger.warn('No current step for provider access', { trajectoryId });
@@ -130,17 +133,23 @@ export class TrajectoryRecorder {
     // Merge correctness from action if present
     const finalAction: Action = {
       ...action,
-      correctness: action.correctness || undefined
+      correctness: action.correctness || undefined,
     };
 
+    const { stepNumber, timestamp, environmentState } = traj.currentStep;
+    if (stepNumber === undefined || !timestamp || !environmentState) {
+      logger.warn('Incomplete step data, skipping completion', { trajectoryId });
+      return;
+    }
+
     const completeStep: TrajectoryStep = {
-      stepNumber: traj.currentStep.stepNumber!,
-      timestamp: traj.currentStep.timestamp!,
-      environmentState: traj.currentStep.environmentState!,
+      stepNumber,
+      timestamp,
+      environmentState,
       providerAccesses: traj.currentStep.providerAccesses || [],
       llmCalls: traj.currentStep.llmCalls || [],
       action: finalAction,
-      reward
+      reward,
     };
 
     traj.steps.push(completeStep);
@@ -150,16 +159,19 @@ export class TrajectoryRecorder {
   /**
    * End trajectory and save to database
    */
-  async endTrajectory(trajectoryId: string, options: {
-    finalBalance?: number;
-    finalPnL?: number;
-    windowId?: string;
-    gameKnowledge?: {
-      trueProbabilities?: Record<string, number>;
-      actualOutcomes?: Record<string, unknown>;
-      futureOutcomes?: Record<string, unknown>;
-    };
-  } = {}): Promise<void> {
+  async endTrajectory(
+    trajectoryId: string,
+    options: {
+      finalBalance?: number;
+      finalPnL?: number;
+      windowId?: string;
+      gameKnowledge?: {
+        trueProbabilities?: Record<string, number>;
+        actualOutcomes?: Record<string, unknown>;
+        futureOutcomes?: Record<string, unknown>;
+      };
+    } = {}
+  ): Promise<void> {
     const traj = this.activeTrajectories.get(trajectoryId);
     if (!traj) {
       logger.warn('Trajectory not found for end', { trajectoryId });
@@ -171,19 +183,17 @@ export class TrajectoryRecorder {
     const totalReward = traj.steps.reduce((sum, step) => sum + step.reward, 0);
 
     // Calculate metrics
-    const tradesExecuted = traj.steps.filter(s => 
-      s.action.actionType.includes('BUY') || s.action.actionType.includes('SELL')
+    const tradesExecuted = traj.steps.filter(
+      (s) => s.action.actionType.includes('BUY') || s.action.actionType.includes('SELL')
     ).length;
 
-    const postsCreated = traj.steps.filter(s => 
-      s.action.actionType.includes('POST')
-    ).length;
+    const postsCreated = traj.steps.filter((s) => s.action.actionType.includes('POST')).length;
 
-    const errorCount = traj.steps.filter(s => !s.action.success).length;
+    const errorCount = traj.steps.filter((s) => !s.action.success).length;
 
     // Auto-generate window ID if not provided
     const windowId = options.windowId || getCurrentWindowId();
-    
+
     // Save to database with error handling
     try {
       await prisma.trajectory.create({
@@ -198,10 +208,12 @@ export class TrajectoryRecorder {
           episodeId: traj.scenarioId ? `${traj.scenarioId}-${Date.now()}` : undefined,
           windowId,
           windowHours: 1,
-          
+
           // JSON data
           stepsJson: JSON.stringify(traj.steps),
-          rewardComponentsJson: JSON.stringify({ environmentReward: totalReward }),
+          rewardComponentsJson: JSON.stringify({
+            environmentReward: totalReward,
+          }),
           metricsJson: JSON.stringify({
             episodeLength: traj.steps.length,
             finalStatus: errorCount > 0 ? 'completed_with_errors' : 'completed',
@@ -209,13 +221,13 @@ export class TrajectoryRecorder {
             finalPnL: options.finalPnL,
             tradesExecuted,
             postsCreated,
-            errorCount
+            errorCount,
           }),
           metadataJson: JSON.stringify({
             isTrainingData: true,
-            gameKnowledge: options.gameKnowledge || {}
+            gameKnowledge: options.gameKnowledge || {},
           }),
-          
+
           // Quick access
           totalReward,
           episodeLength: traj.steps.length,
@@ -226,15 +238,15 @@ export class TrajectoryRecorder {
           postsCreated,
           isTrainingData: true,
           isEvaluation: false,
-          usedInTraining: false
-        }
+          usedInTraining: false,
+        },
       });
     } catch (error) {
       logger.error('Failed to save trajectory to database', {
         trajectoryId,
         agentId: traj.agentId,
         error: error instanceof Error ? error.message : String(error),
-        errorCode: (error as { code?: string })?.code
+        errorCode: (error as { code?: string })?.code,
       });
       throw error; // Re-throw to let caller handle
     }
@@ -258,16 +270,16 @@ export class TrajectoryRecorder {
               userPrompt: llmCall.userPrompt,
               messagesJson: JSON.stringify([
                 { role: 'system', content: llmCall.systemPrompt },
-                { role: 'user', content: llmCall.userPrompt }
+                { role: 'user', content: llmCall.userPrompt },
               ]),
               response: llmCall.response,
               reasoning: llmCall.reasoning,
               temperature: llmCall.temperature,
               maxTokens: llmCall.maxTokens,
               metadata: JSON.stringify({
-                modelVersion: llmCall.modelVersion // Store model version in metadata
-              })
-            }
+                modelVersion: llmCall.modelVersion, // Store model version in metadata
+              }),
+            },
           });
         }
       }
@@ -275,7 +287,7 @@ export class TrajectoryRecorder {
       // Log but don't fail - trajectory is already saved
       logger.warn('Failed to save some LLM call logs', {
         trajectoryId,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
     }
 
@@ -285,7 +297,7 @@ export class TrajectoryRecorder {
       trajectoryId,
       steps: traj.steps.length,
       reward: totalReward,
-      duration: durationMs
+      duration: durationMs,
     });
   }
 
@@ -299,4 +311,3 @@ export class TrajectoryRecorder {
 
 // Singleton instance
 export const trajectoryRecorder = new TrajectoryRecorder();
-

@@ -1,15 +1,17 @@
 /**
  * Market Outcomes Tracker
- * 
+ *
  * Tracks market outcomes per time window for context-rich RULER judging.
  * This gives RULER the ground truth to evaluate agent decisions.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
 
-export interface WindowOutcomes {
+type MarketOutcomeRow = Awaited<ReturnType<typeof prisma.market_outcomes.findMany>>[number];
+
+export type WindowOutcomes = {
   windowId: string;
   stocks: Array<{
     ticker: string;
@@ -25,7 +27,7 @@ export interface WindowOutcomes {
     outcome: string;
     finalProbability: number;
   }>;
-}
+};
 
 export class MarketOutcomesTracker {
   /**
@@ -43,29 +45,29 @@ export class MarketOutcomesTracker {
       where: {
         openedAt: {
           gte: windowStart,
-          lte: windowEnd
-        }
+          lte: windowEnd,
+        },
       },
       select: {
         ticker: true,
         entryPrice: true,
         currentPrice: true,
-        closedAt: true
-      }
+        closedAt: true,
+      },
     });
 
     // Group by ticker and calculate movements
     const stockMovements = new Map<string, { start: number; end: number; count: number }>();
-    
+
     for (const trade of perpTrades) {
       if (!trade.ticker) continue;
-      
+
       const existing = stockMovements.get(trade.ticker);
       if (!existing) {
         stockMovements.set(trade.ticker, {
           start: Number(trade.entryPrice),
           end: Number(trade.currentPrice),
-          count: 1
+          count: 1,
         });
       } else {
         // Average the prices
@@ -77,7 +79,7 @@ export class MarketOutcomesTracker {
     // Save stock outcomes
     for (const [ticker, data] of stockMovements.entries()) {
       const changePercent = ((data.end - data.start) / data.start) * 100;
-      
+
       await prisma.market_outcomes.create({
         data: {
           id: await generateSnowflakeId(),
@@ -86,8 +88,8 @@ export class MarketOutcomesTracker {
           startPrice: data.start,
           endPrice: data.end,
           changePercent,
-          sentiment: changePercent > 0 ? 'BULLISH' : 'BEARISH'
-        }
+          sentiment: changePercent > 0 ? 'BULLISH' : 'BEARISH',
+        },
       });
     }
 
@@ -97,16 +99,16 @@ export class MarketOutcomesTracker {
         resolved: true,
         updatedAt: {
           gte: windowStart,
-          lte: windowEnd
-        }
+          lte: windowEnd,
+        },
       },
       select: {
         id: true,
         question: true,
         resolution: true,
         yesShares: true,
-        noShares: true
-      }
+        noShares: true,
+      },
     });
 
     // Save prediction outcomes
@@ -121,14 +123,14 @@ export class MarketOutcomesTracker {
           predictionMarketId: market.id,
           question: market.question,
           outcome: market.resolution ? 'YES' : 'NO',
-          finalProbability: finalProb
-        }
+          finalProbability: finalProb,
+        },
       });
     }
 
     logger.info(`Tracked outcomes for ${windowId}`, {
       stocks: stockMovements.size,
-      predictions: resolvedMarkets.length
+      predictions: resolvedMarkets.length,
     });
   }
 
@@ -145,11 +147,11 @@ export class MarketOutcomesTracker {
       const windowStart = new Date(now.getTime() - i * 60 * 60 * 1000);
       // Round to hour
       const roundedHour = Math.floor(windowStart.getTime() / (60 * 60 * 1000)) * (60 * 60 * 1000);
-      const windowId = new Date(roundedHour).toISOString().slice(0, 13) + ":00";
+      const windowId = `${new Date(roundedHour).toISOString().slice(0, 13)}:00`;
 
       // Check if already tracked
       const existing = await prisma.market_outcomes.findFirst({
-        where: { windowId }
+        where: { windowId },
       });
 
       if (!existing) {
@@ -171,41 +173,44 @@ export class MarketOutcomesTracker {
    */
   async getWindowOutcomes(windowId: string): Promise<WindowOutcomes | null> {
     const outcomes = await prisma.market_outcomes.findMany({
-      where: { windowId }
+      where: { windowId },
     });
 
     if (outcomes.length === 0) {
       return null;
     }
 
-    const stocks = outcomes
-      .filter(o => o.stockTicker)
-      .map(o => ({
-        ticker: o.stockTicker!,
-        startPrice: Number(o.startPrice),
-        endPrice: Number(o.endPrice),
-        changePercent: Number(o.changePercent),
-        sentiment: o.sentiment || undefined,
-        news: o.newsEvents as string[] | undefined
-      }));
+    const hasTicker = (
+      outcome: MarketOutcomeRow
+    ): outcome is MarketOutcomeRow & { stockTicker: string } => Boolean(outcome.stockTicker);
+    const hasPredictionMarketId = (
+      outcome: MarketOutcomeRow
+    ): outcome is MarketOutcomeRow & { predictionMarketId: string } =>
+      Boolean(outcome.predictionMarketId);
 
-    const predictions = outcomes
-      .filter(o => o.predictionMarketId)
-      .map(o => ({
-        marketId: o.predictionMarketId!,
-        question: o.question || '',
-        outcome: o.outcome || 'UNRESOLVED',
-        finalProbability: Number(o.finalProbability || 0)
-      }));
+    const stocks = outcomes.filter(hasTicker).map((o) => ({
+      ticker: o.stockTicker,
+      startPrice: Number(o.startPrice),
+      endPrice: Number(o.endPrice),
+      changePercent: Number(o.changePercent),
+      sentiment: o.sentiment || undefined,
+      news: o.newsEvents as string[] | undefined,
+    }));
+
+    const predictions = outcomes.filter(hasPredictionMarketId).map((o) => ({
+      marketId: o.predictionMarketId,
+      question: o.question || '',
+      outcome: o.outcome || 'UNRESOLVED',
+      finalProbability: Number(o.finalProbability || 0),
+    }));
 
     return {
       windowId,
       stocks,
-      predictions
+      predictions,
     };
   }
 }
 
 // NOTE: Test agent spawning code commented out - requires STRATEGIES and simulateAgent implementations
 // See git history to restore when ready
-

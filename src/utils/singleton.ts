@@ -1,14 +1,14 @@
 /**
  * Singleton Utility
- * 
+ *
  * Provides a reusable singleton pattern for server instances.
  * Prevents double initialization and handles cleanup.
  */
 
 // Type for the global object used for singleton storage
-interface GlobalSingletonStorage {
+type GlobalSingletonStorage = {
   [key: string]: unknown;
-}
+};
 
 // Helper to get typed global object
 function getGlobalStorage(): GlobalSingletonStorage {
@@ -40,9 +40,7 @@ export function createSingleton<T>(): {
  * Creates a global singleton that survives hot module reloads
  * Uses Node.js global object to persist across module reloads
  */
-export function createGlobalSingleton<T>(
-  globalKey: string
-): {
+export function createGlobalSingleton<T>(globalKey: string): {
   getInstance: () => T | null;
   setInstance: (instance: T) => void;
   clearInstance: () => void;
@@ -81,12 +79,12 @@ export function createPortSingleton<T>(
     getInstance: (port?: number) => {
       const existing = globalObj[globalKey] as T | undefined;
       const existingPort = globalObj[portKey] as number | undefined;
-      
+
       // If port is specified, only return if it matches
       if (port !== undefined && existingPort !== port) {
         return null;
       }
-      
+
       return existing || null;
     },
     setInstance: (instance: T, port?: number) => {
@@ -101,4 +99,3 @@ export function createPortSingleton<T>(
     },
   };
 }
-

@@ -1,13 +1,13 @@
 /**
  * NPC Performance Leaderboard API
- * 
+ *
  * @route GET /api/npc/performance/leaderboard - Get NPC leaderboard
  * @access Public
- * 
+ *
  * @description
  * Returns ranked list of NPC actors by portfolio performance. Includes
  * filtering options for minimum portfolio value and result limit.
- * 
+ *
  * @openapi
  * /api/npc/performance/leaderboard:
  *   get:
@@ -45,7 +45,7 @@
  *                         type: number
  *                       pnl:
  *                         type: number
- * 
+ *
  * @example
  * ```typescript
  * const { leaderboard } = await fetch('/api/npc/performance/leaderboard?limit=10')
@@ -53,37 +53,37 @@
  * ```
  */
 
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import type { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
+import { NextResponse } from 'next/server';
 
 // Type for pool with included relations
 type PoolWithRelations = Prisma.PoolGetPayload<{
   include: {
     Actor: {
       select: {
-        id: true
-        name: true
-        profileImageUrl: true
-        personality: true
-      }
-    }
+        id: true;
+        name: true;
+        profileImageUrl: true;
+        personality: true;
+      };
+    };
     PoolPosition: {
       select: {
-        unrealizedPnL: true
-      }
-    }
-  }
-}>
+        unrealizedPnL: true;
+      };
+    };
+  };
+}>;
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
+  const { searchParams } = new URL(request.url);
 
-  const limitParam = searchParams.get('limit')
-  const minValueParam = searchParams.get('minValue')
+  const limitParam = searchParams.get('limit');
+  const minValueParam = searchParams.get('minValue');
 
-  const limit = limitParam ? parseInt(limitParam, 10) : 50
-  const minValue = minValueParam ? parseFloat(minValueParam) : 0
+  const limit = limitParam ? parseInt(limitParam, 10) : 50;
+  const minValue = minValueParam ? parseFloat(minValueParam) : 0;
 
   const pools: PoolWithRelations[] = await prisma.pool.findMany({
     where: {
@@ -110,28 +110,28 @@ export async function GET(request: Request) {
       totalValue: 'desc',
     },
     take: limit,
-  })
+  });
 
   const leaderboard = pools.map((pool, index) => {
-    const totalValue = parseFloat(pool.totalValue!.toString())
-    const availableBalance = parseFloat(pool.availableBalance!.toString())
-    const initialValue = parseFloat(pool.totalDeposits!.toString())
+    const totalValue = parseFloat(pool.totalValue?.toString());
+    const availableBalance = parseFloat(pool.availableBalance?.toString());
+    const initialValue = parseFloat(pool.totalDeposits?.toString());
 
     const unrealizedPnL = pool.PoolPosition.reduce((sum: number, pos) => {
-      return sum + parseFloat(pos.unrealizedPnL!.toString())
-    }, 0)
+      return sum + parseFloat(pos.unrealizedPnL?.toString());
+    }, 0);
 
-    const roi = ((totalValue - initialValue) / initialValue) * 100
+    const roi = ((totalValue - initialValue) / initialValue) * 100;
 
-    const invested = totalValue - availableBalance
-    const utilization = (invested / totalValue) * 100
+    const invested = totalValue - availableBalance;
+    const utilization = (invested / totalValue) * 100;
 
     return {
       rank: index + 1,
-      actorId: pool.Actor!.id,
-      actorName: pool.Actor!.name,
-      personality: pool.Actor!.personality,
-      profileImageUrl: pool.Actor!.profileImageUrl,
+      actorId: pool.Actor?.id,
+      actorName: pool.Actor?.name,
+      personality: pool.Actor?.personality,
+      profileImageUrl: pool.Actor?.profileImageUrl,
       poolId: pool.id,
       performance: {
         totalValue: Math.round(totalValue),
@@ -140,8 +140,8 @@ export async function GET(request: Request) {
         positionCount: pool.PoolPosition.length,
         utilization: parseFloat(utilization.toFixed(1)),
       },
-    }
-  })
+    };
+  });
 
   return NextResponse.json({
     success: true,
@@ -151,5 +151,5 @@ export async function GET(request: Request) {
       limit,
       minValue,
     },
-  })
+  });
 }

@@ -1,34 +1,34 @@
-'use client'
+'use client';
 
-import { useEffect } from 'react'
-import { X, TrendingUp, Calendar, DollarSign, Activity } from 'lucide-react'
-import Image from 'next/image'
+import { Activity, Calendar, DollarSign, TrendingUp, X } from 'lucide-react';
+import Image from 'next/image';
+import { useEffect } from 'react';
 
 /**
  * Breaking news item structure for detail modal.
  */
 type BreakingNewsItem = {
-  id: string
-  title: string
-  description: string
-  icon: 'chart' | 'calendar' | 'dollar' | 'trending'
-  timestamp: string
-  trending?: boolean
-  source?: string
-  fullDescription?: string
-  imageUrl?: string
-  relatedQuestion?: number
-  relatedActorId?: string
-  relatedOrganizationId?: string
-}
+  id: string;
+  title: string;
+  description: string;
+  icon: 'chart' | 'calendar' | 'dollar' | 'trending';
+  timestamp: string;
+  trending?: boolean;
+  source?: string;
+  fullDescription?: string;
+  imageUrl?: string;
+  relatedQuestion?: number;
+  relatedActorId?: string;
+  relatedOrganizationId?: string;
+};
 
 /**
  * Breaking news detail modal component for displaying full news article.
- * 
+ *
  * Displays a modal with full details of a breaking news item including
  * title, description, image, timestamp, and related entities. Handles
  * body scroll lock and escape key to close.
- * 
+ *
  * Features:
  * - Full article display
  * - Image support
@@ -36,10 +36,10 @@ type BreakingNewsItem = {
  * - Related entities links
  * - Escape key to close
  * - Body scroll lock
- * 
+ *
  * @param props - BreakingNewsDetailModal component props
  * @returns Breaking news detail modal element or null if not open
- * 
+ *
  * @example
  * ```tsx
  * <BreakingNewsDetailModal
@@ -49,61 +49,61 @@ type BreakingNewsItem = {
  * />
  * ```
  */
-interface BreakingNewsDetailModalProps {
-  isOpen: boolean
-  onClose: () => void
-  item: BreakingNewsItem | null
-}
+type BreakingNewsDetailModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  item: BreakingNewsItem | null;
+};
 
 export function BreakingNewsDetailModal({ isOpen, onClose, item }: BreakingNewsDetailModalProps) {
   // Handle escape key and body scroll lock
   useEffect(() => {
     if (!isOpen) {
       // Ensure body overflow is reset when modal is closed
-      document.body.style.overflow = ''
-      return
+      document.body.style.overflow = '';
+      return;
     }
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose()
+        onClose();
       }
-    }
+    };
 
-    document.addEventListener('keydown', handleEscape)
+    document.addEventListener('keydown', handleEscape);
     // Prevent body scroll when modal is open
-    document.body.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden';
 
     return () => {
-      document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = ''
-    }
-  }, [isOpen, onClose])
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, onClose]);
 
   // Cleanup on unmount (for HMR)
   useEffect(() => {
     return () => {
-      document.body.style.overflow = ''
-    }
-  }, [])
+      document.body.style.overflow = '';
+    };
+  }, []);
 
-  if (!isOpen || !item) return null
+  if (!isOpen || !item) return null;
 
   const getIcon = (icon: BreakingNewsItem['icon']) => {
     switch (icon) {
       case 'chart':
-        return <TrendingUp className="w-8 h-8" />
+        return <TrendingUp className="h-8 w-8" />;
       case 'calendar':
-        return <Calendar className="w-8 h-8" />
+        return <Calendar className="h-8 w-8" />;
       case 'dollar':
-        return <DollarSign className="w-8 h-8" />
+        return <DollarSign className="h-8 w-8" />;
       default:
-        return <Activity className="w-8 h-8" />
+        return <Activity className="h-8 w-8" />;
     }
-  }
+  };
 
   const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp)
+    const date = new Date(timestamp);
     return date.toLocaleString('en-US', {
       month: 'long',
       day: 'numeric',
@@ -111,34 +111,34 @@ export function BreakingNewsDetailModal({ isOpen, onClose, item }: BreakingNewsD
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    })
-  }
+    });
+  };
 
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
+      <button
+        type="button"
+        aria-label="Close breaking news detail"
+        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-2xl">
-        <div className="bg-[#1e1e1e] border border-white/10 rounded-lg shadow-2xl p-6 m-4 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+      <div className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-full max-w-2xl">
+        <div className="fade-in zoom-in-95 m-4 max-h-[90vh] animate-in overflow-y-auto rounded-lg border border-white/10 bg-[#1e1e1e] p-6 shadow-2xl duration-200">
           {/* Header */}
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-start gap-4 flex-1">
-              <div className="text-[#0066FF] mt-1 shrink-0">
-                {getIcon(item.icon)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3 leading-tight">
+          <div className="mb-6 flex items-start justify-between">
+            <div className="flex flex-1 items-start gap-4">
+              <div className="mt-1 shrink-0 text-[#0066FF]">{getIcon(item.icon)}</div>
+              <div className="min-w-0 flex-1">
+                <h2 className="mb-3 font-bold text-2xl text-foreground leading-tight sm:text-3xl">
                   {item.title}
                 </h2>
-                <div className="flex items-center gap-3 text-sm text-gray-400">
+                <div className="flex items-center gap-3 text-gray-400 text-sm">
                   <span>{formatDate(item.timestamp)}</span>
                   {item.trending && (
-                    <span className="text-[#0066FF] font-semibold">• Trending</span>
+                    <span className="font-semibold text-[#0066FF]">• Trending</span>
                   )}
                 </div>
               </div>
@@ -146,7 +146,7 @@ export function BreakingNewsDetailModal({ isOpen, onClose, item }: BreakingNewsD
             <button
               type="button"
               onClick={onClose}
-              className="text-gray-400 hover:text-foreground transition-colors p-2 -mt-2 -mr-2"
+              className="-mt-2 -mr-2 p-2 text-gray-400 transition-colors hover:text-foreground"
             >
               <X size={24} />
             </button>
@@ -154,13 +154,13 @@ export function BreakingNewsDetailModal({ isOpen, onClose, item }: BreakingNewsD
 
           {/* Image */}
           {item.imageUrl && (
-            <div className="mb-6 rounded-lg overflow-hidden">
+            <div className="mb-6 overflow-hidden rounded-lg">
               <Image
                 src={item.imageUrl}
                 alt={item.title}
                 width={800}
                 height={400}
-                className="w-full h-auto object-cover"
+                className="h-auto w-full object-cover"
                 unoptimized
               />
             </div>
@@ -168,40 +168,38 @@ export function BreakingNewsDetailModal({ isOpen, onClose, item }: BreakingNewsD
 
           {/* Content */}
           <div className="space-y-4">
-            <div className="p-4 bg-[#2d2d2d] rounded-lg border border-white/5">
-              <p className="text-base sm:text-lg text-foreground leading-relaxed whitespace-pre-wrap">
+            <div className="rounded-lg border border-white/5 bg-[#2d2d2d] p-4">
+              <p className="whitespace-pre-wrap text-base text-foreground leading-relaxed sm:text-lg">
                 {item.fullDescription || item.description}
               </p>
             </div>
 
             {/* Metadata */}
-            <div className="space-y-3 pt-4 border-t border-white/10">
+            <div className="space-y-3 border-white/10 border-t pt-4">
               {item.relatedQuestion && (
                 <div>
-                  <p className="text-sm text-foreground">
-                    <span className="font-semibold text-gray-400">Related Question:</span> #{item.relatedQuestion}
+                  <p className="text-foreground text-sm">
+                    <span className="font-semibold text-gray-400">Related Question:</span> #
+                    {item.relatedQuestion}
                   </p>
                 </div>
               )}
 
               {item.source && (
                 <div>
-                  <p className="text-sm text-foreground">
+                  <p className="text-foreground text-sm">
                     <span className="font-semibold text-gray-400">Source:</span> {item.source}
                   </p>
                 </div>
               )}
 
               <div>
-                <p className="text-xs text-gray-500">
-                  News ID: {item.id}
-                </p>
+                <p className="text-gray-500 text-xs">News ID: {item.id}</p>
               </div>
             </div>
           </div>
         </div>
       </div>
     </>
-  )
+  );
 }
-

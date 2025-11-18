@@ -3,7 +3,12 @@
  */
 
 import { z } from 'zod';
-import { SnowflakeIdSchema, UserIdSchema, createTrimmedStringSchema, PaginationSchema } from './common';
+import {
+  PaginationSchema,
+  SnowflakeIdSchema,
+  UserIdSchema,
+  createTrimmedStringSchema,
+} from './common';
 
 /**
  * Post ID parameter schema
@@ -11,7 +16,7 @@ import { SnowflakeIdSchema, UserIdSchema, createTrimmedStringSchema, PaginationS
  * Game post IDs have format: {gameId}-{authorId}-{timestamp}-{random}
  */
 export const PostIdParamSchema = z.object({
-  id: z.string().min(1, 'Post ID is required')
+  id: z.string().min(1, 'Post ID is required'),
 });
 
 /**
@@ -24,7 +29,7 @@ export const CreatePostSchema = z.object({
   sentiment: z.number().min(-1).max(1).optional(),
   shareCount: z.number().int().nonnegative().optional(),
   imageUrl: z.string().url().optional(),
-  repostOfId: SnowflakeIdSchema.optional()
+  repostOfId: SnowflakeIdSchema.optional(),
 });
 
 /**
@@ -32,7 +37,7 @@ export const CreatePostSchema = z.object({
  */
 export const UpdatePostSchema = z.object({
   content: createTrimmedStringSchema(1, 5000).optional(),
-  imageUrl: z.string().url().optional()
+  imageUrl: z.string().url().optional(),
 });
 
 /**
@@ -41,14 +46,14 @@ export const UpdatePostSchema = z.object({
 export const CreateCommentSchema = z.object({
   content: createTrimmedStringSchema(1, 2000),
   postId: z.string().min(1).optional(), // Optional since it comes from route params
-  parentCommentId: SnowflakeIdSchema.optional()
+  parentCommentId: SnowflakeIdSchema.optional(),
 });
 
 /**
  * Update comment schema
  */
 export const UpdateCommentSchema = z.object({
-  content: createTrimmedStringSchema(1, 2000)
+  content: createTrimmedStringSchema(1, 2000),
 });
 
 /**
@@ -56,14 +61,14 @@ export const UpdateCommentSchema = z.object({
  */
 export const LikeSchema = z.object({
   targetId: SnowflakeIdSchema,
-  targetType: z.enum(['post', 'comment'])
+  targetType: z.enum(['post', 'comment']),
 });
 
 /**
  * Share post schema (postId comes from route params)
  */
 export const SharePostSchema = z.object({
-  comment: createTrimmedStringSchema(undefined, 500).optional()
+  comment: createTrimmedStringSchema(undefined, 500).optional(),
 });
 
 /**
@@ -72,7 +77,7 @@ export const SharePostSchema = z.object({
 export const ReplyToPostSchema = z.object({
   content: createTrimmedStringSchema(1, 5000),
   marketId: SnowflakeIdSchema.optional(),
-  sentiment: z.number().min(-1).max(1).optional()
+  sentiment: z.number().min(-1).max(1).optional(),
 });
 
 /**
@@ -85,7 +90,7 @@ export const PostFeedQuerySchema = PaginationSchema.extend({
   onlyFavorites: z.coerce.boolean().default(false),
   minSentiment: z.coerce.number().min(-1).max(1).optional(),
   maxSentiment: z.coerce.number().min(-1).max(1).optional(),
-  hasMedia: z.coerce.boolean().optional()
+  hasMedia: z.coerce.boolean().optional(),
 });
 
 /**
@@ -95,7 +100,7 @@ export const PostInteractionsQuerySchema = z.object({
   includeComments: z.coerce.boolean().default(true),
   includeReactions: z.coerce.boolean().default(true),
   includeShares: z.coerce.boolean().default(false),
-  limit: z.coerce.number().positive().max(100).default(50)
+  limit: z.coerce.number().positive().max(100).default(50),
 });
 
 /**
@@ -103,13 +108,12 @@ export const PostInteractionsQuerySchema = z.object({
  */
 export const CommentRepliesQuerySchema = PaginationSchema.extend({
   commentId: SnowflakeIdSchema,
-  depth: z.coerce.number().int().min(1).max(5).default(3)
+  depth: z.coerce.number().int().min(1).max(5).default(3),
 });
 
 /**
  * Favorite profile schema
  */
 export const FavoriteProfileSchema = z.object({
-  targetUserId: SnowflakeIdSchema
+  targetUserId: SnowflakeIdSchema,
 });
-

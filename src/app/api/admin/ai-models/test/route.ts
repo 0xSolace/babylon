@@ -1,14 +1,14 @@
 /**
  * Admin AI Model Test API
- * 
+ *
  * @route POST /api/admin/ai-models/test - Test AI model configuration
  * @access Admin
- * 
+ *
  * @description
  * Tests the current AI model configuration with a simple completion request.
  * Verifies wandb integration and model availability. Returns test response
  * and performance metrics.
- * 
+ *
  * @openapi
  * /api/admin/ai-models/test:
  *   post:
@@ -42,7 +42,7 @@
  *         description: Admin access required
  *       500:
  *         description: Model test failed
- * 
+ *
  * @example
  * ```typescript
  * const result = await fetch('/api/admin/ai-models/test', {
@@ -52,11 +52,11 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
-import { BabylonLLMClient } from '@/generator/llm/openai-client';
 import { getWandbModel } from '@/lib/ai-model-config';
 import { logger } from '@/lib/logger';
+import { BabylonLLMClient } from '@/generator/llm/openai-client';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 /**
  * POST /api/admin/ai-models/test
@@ -66,15 +66,19 @@ export async function POST(_req: NextRequest) {
   try {
     // Load wandb model from config
     const wandbModel = await getWandbModel();
-    
+
     // Initialize client
     const client = new BabylonLLMClient(undefined, wandbModel);
     const stats = client.getStats();
-    
-    logger.info('Testing AI model', { 
-      provider: stats.provider, 
-      model: stats.model 
-    }, 'AIModelsTest');
+
+    logger.info(
+      'Testing AI model',
+      {
+        provider: stats.provider,
+        model: stats.model,
+      },
+      'AIModelsTest'
+    );
 
     // Simple test prompt
     const testPrompt = `Generate a brief test response (max 50 chars) confirming you're working.
@@ -86,9 +90,11 @@ Return your response as XML in this exact format:
 </response>`;
 
     const startTime = Date.now();
-    
+
     // Make test call
-    const rawResponse = await client.generateJSON<{ message: string; status: string } | { response: { message: string; status: string } }>(
+    const rawResponse = await client.generateJSON<
+      { message: string; status: string } | { response: { message: string; status: string } }
+    >(
       testPrompt,
       {
         properties: {
@@ -102,20 +108,25 @@ Return your response as XML in this exact format:
         maxTokens: 100,
       }
     );
-    
+
     // Handle XML structure
-    const response = 'response' in rawResponse && rawResponse.response
-      ? rawResponse.response
-      : rawResponse as { message: string; status: string };
+    const response =
+      'response' in rawResponse && rawResponse.response
+        ? rawResponse.response
+        : (rawResponse as { message: string; status: string });
 
     const latency = Date.now() - startTime;
 
-    logger.info('AI model test successful', { 
-      provider: stats.provider,
-      model: stats.model,
-      latency,
-      response 
-    }, 'AIModelsTest');
+    logger.info(
+      'AI model test successful',
+      {
+        provider: stats.provider,
+        model: stats.model,
+        latency,
+        response,
+      },
+      'AIModelsTest'
+    );
 
     return NextResponse.json({
       success: true,
@@ -131,7 +142,7 @@ Return your response as XML in this exact format:
     });
   } catch (error) {
     logger.error('AI model test failed', { error }, 'AIModelsTest');
-    
+
     return NextResponse.json(
       {
         success: false,
@@ -142,4 +153,3 @@ Return your response as XML in this exact format:
     );
   }
 }
-

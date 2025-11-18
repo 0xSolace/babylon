@@ -1,33 +1,33 @@
 /**
  * Benchmark Data Generator
- * 
+ *
  * Generates deterministic benchmark scenarios for agent testing.
  * Creates pre-recorded game states with known outcomes for reproducible testing.
  */
 
 import { logger } from '@/lib/logger';
 
-export interface BenchmarkConfig {
+export type BenchmarkConfig = {
   /** Duration of benchmark in minutes */
   durationMinutes: number;
-  
+
   /** Interval between ticks in seconds */
   tickInterval: number;
-  
+
   /** Number of prediction markets */
   numPredictionMarkets: number;
-  
+
   /** Number of perpetual markets */
   numPerpetualMarkets: number;
-  
+
   /** Number of other simulated agents */
   numAgents: number;
-  
+
   /** Random seed for reproducibility */
   seed?: number;
-}
+};
 
-export interface GameState {
+export type GameState = {
   tick: number;
   timestamp: number;
   predictionMarkets: PredictionMarket[];
@@ -35,9 +35,9 @@ export interface GameState {
   agents: SimulatedAgent[];
   posts?: Post[];
   groupChats?: GroupChat[];
-}
+};
 
-export interface PredictionMarket {
+export type PredictionMarket = {
   id: string;
   question: string;
   yesShares: number;
@@ -49,9 +49,9 @@ export interface PredictionMarket {
   resolved: boolean;
   createdAt: number;
   resolveAt: number;
-}
+};
 
-export interface PerpetualMarket {
+export type PerpetualMarket = {
   ticker: string;
   price: number;
   priceChange24h: number;
@@ -59,16 +59,16 @@ export interface PerpetualMarket {
   openInterest: number;
   fundingRate: number;
   nextFundingTime: number;
-}
+};
 
-export interface SimulatedAgent {
+export type SimulatedAgent = {
   id: string;
   name: string;
   reputation: number;
   totalPnl: number;
-}
+};
 
-export interface Post {
+export type Post = {
   id: string;
   authorId: string;
   authorName: string;
@@ -77,9 +77,9 @@ export interface Post {
   likes: number;
   comments: number;
   marketId?: string;
-}
+};
 
-export interface GroupChat {
+export type GroupChat = {
   id: string;
   name: string;
   memberIds: string[];
@@ -93,28 +93,28 @@ export interface GroupChat {
     content: string;
     timestamp: number;
   }>;
-}
+};
 
-export interface Tick {
+export type Tick = {
   number: number;
   timestamp: number;
   events: TickEvent[];
   state: GameState;
-}
+};
 
-export interface TickEvent {
+export type TickEvent = {
   type: string;
   timestamp: number;
   data: Record<string, unknown>;
-}
+};
 
-export interface GroundTruth {
+export type GroundTruth = {
   /** Known market outcomes (marketId -> boolean) */
   marketOutcomes: Record<string, boolean>;
-  
+
   /** Historical price data */
   priceHistory: Record<string, Array<{ tick: number; timestamp: number; price: number }>>;
-  
+
   /** Optimal actions for perfect play */
   optimalActions: Array<{
     tick: number;
@@ -123,7 +123,7 @@ export interface GroundTruth {
     expectedValue: number;
     reason: string;
   }>;
-  
+
   /** Social opportunities */
   socialOpportunities: Array<{
     tick: number;
@@ -131,7 +131,7 @@ export interface GroundTruth {
     value: number;
     description: string;
   }>;
-  
+
   /** Hidden facts that agents don't know (for RULER evaluation) */
   hiddenFacts: Array<{
     tick: number;
@@ -139,7 +139,7 @@ export interface GroundTruth {
     category: 'market' | 'social' | 'event' | 'insider';
     value: unknown;
   }>;
-  
+
   /** Hidden events that occur but agents don't see */
   hiddenEvents: Array<{
     tick: number;
@@ -147,12 +147,12 @@ export interface GroundTruth {
     description: string;
     impact: Record<string, unknown>;
   }>;
-  
+
   /** True facts about the world state */
   trueFacts: Record<string, unknown>;
-}
+};
 
-export interface BenchmarkGameSnapshot {
+export type BenchmarkGameSnapshot = {
   id: string;
   version: string;
   createdAt: number;
@@ -161,17 +161,17 @@ export interface BenchmarkGameSnapshot {
   initialState: GameState;
   ticks: Tick[];
   groundTruth: GroundTruth;
-}
+};
 
 export class BenchmarkDataGenerator {
   private config: BenchmarkConfig;
   private rng: SeededRandom;
-  
+
   constructor(config: BenchmarkConfig) {
     this.config = config;
     this.rng = new SeededRandom(config.seed || Date.now());
   }
-  
+
   /**
    * Generate a complete benchmark snapshot
    */
@@ -179,29 +179,29 @@ export class BenchmarkDataGenerator {
     const id = Date.now().toString();
     const createdAt = Date.now();
     const numTicks = Math.floor((this.config.durationMinutes * 60) / this.config.tickInterval);
-    
+
     logger.info('Generating benchmark', {
       id,
       duration: this.config.durationMinutes,
       ticks: numTicks,
     });
-    
+
     // Generate initial state
     const initialState = this.generateInitialState(createdAt);
-    
+
     // Generate ground truth (outcomes)
     const groundTruth = this.generateGroundTruth(initialState, numTicks);
-    
+
     // Generate tick-by-tick progression
     const ticks = this.generateTicks(initialState, groundTruth, numTicks, createdAt);
-    
+
     logger.info('Benchmark generated', {
       id,
       ticks: ticks.length,
       markets: initialState.predictionMarkets.length,
       perps: initialState.perpetualMarkets.length,
     });
-    
+
     return {
       id,
       version: '1.0.0',
@@ -213,7 +213,7 @@ export class BenchmarkDataGenerator {
       groundTruth,
     };
   }
-  
+
   /**
    * Generate initial game state
    */
@@ -231,7 +231,7 @@ export class BenchmarkDataGenerator {
       'Will oil prices exceed $100/barrel?',
       'Will Apple announce new product line?',
     ];
-    
+
     for (let i = 0; i < this.config.numPredictionMarkets; i++) {
       const question = questions[i % questions.length];
       // Generate markets with varied prices (some low, some high)
@@ -241,7 +241,7 @@ export class BenchmarkDataGenerator {
       const totalShares = yesShares + noShares;
       const yesPrice = yesShares / totalShares;
       const noPrice = noShares / totalShares;
-      
+
       if (question) {
         predictionMarkets.push({
           id: `market-${i}`,
@@ -258,15 +258,15 @@ export class BenchmarkDataGenerator {
         });
       }
     }
-    
+
     const perpetualMarkets: PerpetualMarket[] = [];
     const tickers = ['BTC', 'ETH', 'SOL', 'AVAX', 'MATIC'];
     const basePrices = [65000, 3200, 140, 35, 0.9];
-    
+
     for (let i = 0; i < this.config.numPerpetualMarkets; i++) {
-      const ticker = tickers[i % tickers.length]!;
-      const basePrice = basePrices[i % basePrices.length]!;
-      
+      const ticker = tickers[i % tickers.length] ?? `ASSET-${i}`;
+      const basePrice = basePrices[i % basePrices.length] ?? 100;
+
       perpetualMarkets.push({
         ticker,
         price: basePrice,
@@ -277,7 +277,7 @@ export class BenchmarkDataGenerator {
         nextFundingTime: timestamp + 8 * 60 * 60 * 1000,
       });
     }
-    
+
     const agents: SimulatedAgent[] = [];
     for (let i = 0; i < this.config.numAgents; i++) {
       agents.push({
@@ -287,11 +287,11 @@ export class BenchmarkDataGenerator {
         totalPnl: (this.rng.next() - 0.5) * 1000,
       });
     }
-    
+
     // Initialize empty arrays for posts and group chats
     const posts: Post[] = [];
     const groupChats: GroupChat[] = [];
-    
+
     return {
       tick: 0,
       timestamp,
@@ -302,7 +302,7 @@ export class BenchmarkDataGenerator {
       groupChats,
     };
   }
-  
+
   /**
    * Generate ground truth (known outcomes)
    */
@@ -312,28 +312,31 @@ export class BenchmarkDataGenerator {
     for (const market of initialState.predictionMarkets) {
       marketOutcomes[market.id] = this.rng.next() > 0.5;
     }
-    
+
     // Generate price history for perpetuals
-    const priceHistory: Record<string, Array<{ tick: number; timestamp: number; price: number }>> = {};
+    const priceHistory: Record<
+      string,
+      Array<{ tick: number; timestamp: number; price: number }>
+    > = {};
     for (const perp of initialState.perpetualMarkets) {
       const history: Array<{ tick: number; timestamp: number; price: number }> = [];
       let currentPrice = perp.price;
-      
+
       for (let tick = 0; tick < numTicks; tick++) {
         // Random walk with drift
         const change = (this.rng.next() - 0.48) * 0.02; // Slight upward bias
         currentPrice = currentPrice * (1 + change);
-        
+
         history.push({
           tick,
           timestamp: 0, // Will be filled in during tick generation
           price: currentPrice,
         });
       }
-      
+
       priceHistory[perp.ticker] = history;
     }
-    
+
     // Generate optimal actions
     const optimalActions: GroundTruth['optimalActions'] = [];
     for (const [marketId, outcome] of Object.entries(marketOutcomes)) {
@@ -345,7 +348,7 @@ export class BenchmarkDataGenerator {
         reason: `Market ${marketId} will resolve ${outcome ? 'YES' : 'NO'}`,
       });
     }
-    
+
     // Generate social opportunities
     const socialOpportunities: GroundTruth['socialOpportunities'] = [];
     for (let i = 0; i < numTicks; i += Math.floor(numTicks / 5)) {
@@ -353,18 +356,24 @@ export class BenchmarkDataGenerator {
         tick: i,
         type: this.rng.next() > 0.5 ? 'insider_signal' : 'group_invite',
         value: 50 + this.rng.next() * 150,
-        description: this.rng.next() > 0.5 
-          ? 'Insider information about market outcome'
-          : `Invitation to high-value trading group ${i}`,
+        description:
+          this.rng.next() > 0.5
+            ? 'Insider information about market outcome'
+            : `Invitation to high-value trading group ${i}`,
       });
     }
-    
+
     // Generate hidden facts (information agents don't have access to)
     const hiddenFacts: GroundTruth['hiddenFacts'] = [];
     for (let i = 0; i < numTicks; i += Math.floor(numTicks / 10)) {
-      const factTypes: Array<'market' | 'social' | 'event' | 'insider'> = ['market', 'social', 'event', 'insider'];
-      const factType = factTypes[Math.floor(this.rng.next() * factTypes.length)]!;
-      
+      const factTypes: Array<'market' | 'social' | 'event' | 'insider'> = [
+        'market',
+        'social',
+        'event',
+        'insider',
+      ];
+      const factType = factTypes[Math.floor(this.rng.next() * factTypes.length)] ?? 'market';
+
       hiddenFacts.push({
         tick: i,
         fact: `Hidden ${factType} fact at tick ${i}`,
@@ -376,33 +385,43 @@ export class BenchmarkDataGenerator {
         },
       });
     }
-    
+
     // Generate hidden events (events that occur but agents don't see)
     const hiddenEvents: GroundTruth['hiddenEvents'] = [];
     for (let i = 0; i < numTicks; i += Math.floor(numTicks / 8)) {
-      const eventTypes = ['regulatory_announcement', 'whale_movement', 'exchange_hack', 'partnership_news'];
-      const eventType = eventTypes[Math.floor(this.rng.next() * eventTypes.length)]!;
-      
+      const eventTypes = [
+        'regulatory_announcement',
+        'whale_movement',
+        'exchange_hack',
+        'partnership_news',
+      ];
+      const eventType =
+        eventTypes[Math.floor(this.rng.next() * eventTypes.length)] ?? 'regulatory_announcement';
+
       hiddenEvents.push({
         tick: i,
         type: eventType,
         description: `Hidden ${eventType} event occurred at tick ${i}`,
         impact: {
-          affectedMarkets: initialState.predictionMarkets.slice(0, Math.floor(this.rng.next() * 3) + 1).map(m => m.id),
+          affectedMarkets: initialState.predictionMarkets
+            .slice(0, Math.floor(this.rng.next() * 3) + 1)
+            .map((m) => m.id),
           severity: this.rng.next(),
         },
       });
     }
-    
+
     // Generate true facts about the world state
     const trueFacts: GroundTruth['trueFacts'] = {
       totalLiquidity: initialState.predictionMarkets.reduce((sum, m) => sum + m.liquidity, 0),
-      averageMarketPrice: initialState.predictionMarkets.reduce((sum, m) => sum + m.yesPrice, 0) / initialState.predictionMarkets.length,
+      averageMarketPrice:
+        initialState.predictionMarkets.reduce((sum, m) => sum + m.yesPrice, 0) /
+        initialState.predictionMarkets.length,
       marketVolatility: this.rng.next() * 0.5,
       socialSentiment: this.rng.next() * 2 - 1, // -1 to 1
       activeTraders: initialState.agents.length,
     };
-    
+
     return {
       marketOutcomes,
       priceHistory,
@@ -413,7 +432,7 @@ export class BenchmarkDataGenerator {
       trueFacts,
     };
   }
-  
+
   /**
    * Generate tick-by-tick progression
    */
@@ -425,7 +444,7 @@ export class BenchmarkDataGenerator {
   ): Tick[] {
     const ticks: Tick[] = [];
     // Create a mutable copy of initial state
-    let currentState: GameState = {
+    const currentState: GameState = {
       ...initialState,
       predictionMarkets: [...initialState.predictionMarkets],
       perpetualMarkets: [...initialState.perpetualMarkets],
@@ -433,15 +452,15 @@ export class BenchmarkDataGenerator {
       posts: initialState.posts ? [...initialState.posts] : [],
       groupChats: initialState.groupChats ? [...initialState.groupChats] : [],
     };
-    
+
     // Track group chats across ticks
     const groupChatMap = new Map<string, GroupChat>();
     let nextGroupChatId = 0;
-    
+
     for (let i = 0; i < numTicks; i++) {
       const tickTimestamp = startTimestamp + (i + 1) * this.config.tickInterval * 1000;
       const events: TickEvent[] = [];
-      
+
       // Update perpetual prices
       for (const perp of currentState.perpetualMarkets) {
         const tickerHistory = groundTruth.priceHistory[perp.ticker];
@@ -458,13 +477,13 @@ export class BenchmarkDataGenerator {
         });
         perp.price = newPrice;
       }
-      
+
       // Simulate some agent actions
       if (this.rng.next() > 0.5) {
         const agentId = `agent-${Math.floor(this.rng.next() * this.config.numAgents)}`;
         const marketId = `market-${Math.floor(this.rng.next() * this.config.numPredictionMarkets)}`;
         const outcome = this.rng.next() > 0.5 ? 'YES' : 'NO';
-        
+
         events.push({
           type: 'market:trade',
           timestamp: tickTimestamp,
@@ -476,14 +495,16 @@ export class BenchmarkDataGenerator {
           },
         });
       }
-      
+
       // Simulate social activity - create posts and add to state
       if (this.rng.next() > 0.7) {
         const agentId = `agent-${Math.floor(this.rng.next() * this.config.numAgents)}`;
         const agent = currentState.agents.find((a: { id: string }) => a.id === agentId);
         const marketId = `market-${Math.floor(this.rng.next() * this.config.numPredictionMarkets)}`;
-        const market = currentState.predictionMarkets.find((m: { id: string; question: string }) => m.id === marketId);
-        
+        const market = currentState.predictionMarkets.find(
+          (m: { id: string; question: string }) => m.id === marketId
+        );
+
         const postId = `post-${i}-${Math.floor(this.rng.next() * 1000000)}`;
         const post: Post = {
           id: postId,
@@ -495,18 +516,18 @@ export class BenchmarkDataGenerator {
           comments: Math.floor(this.rng.next() * 5),
           marketId,
         };
-        
+
         // Add post to state
         if (!currentState.posts) {
           currentState.posts = [];
         }
         currentState.posts.push(post);
-        
+
         // Keep only last 50 posts to avoid memory issues
         if (currentState.posts.length > 50) {
           currentState.posts = currentState.posts.slice(-50);
         }
-        
+
         events.push({
           type: 'post:created',
           timestamp: tickTimestamp,
@@ -519,14 +540,14 @@ export class BenchmarkDataGenerator {
           },
         });
       }
-      
+
       // Simulate group chat creation and messages
       if (this.rng.next() > 0.95 && i > 5) {
         // Create a new group chat occasionally
         const groupChatId = `group-${nextGroupChatId++}`;
         const adminAgentId = `agent-${Math.floor(this.rng.next() * this.config.numAgents)}`;
         const adminAgent = currentState.agents.find((a: { id: string }) => a.id === adminAgentId);
-        
+
         const groupChat: GroupChat = {
           id: groupChatId,
           name: `${adminAgent?.name || 'Agent'}'s Trading Group`,
@@ -536,14 +557,14 @@ export class BenchmarkDataGenerator {
           invitedAgent: false,
           messages: [],
         };
-        
+
         groupChatMap.set(groupChatId, groupChat);
-        
+
         if (!currentState.groupChats) {
           currentState.groupChats = [];
         }
         currentState.groupChats.push(groupChat);
-        
+
         events.push({
           type: 'group:created',
           timestamp: tickTimestamp,
@@ -554,13 +575,17 @@ export class BenchmarkDataGenerator {
           },
         });
       }
-      
+
       // Add messages to existing group chats
       for (const [groupId, groupChat] of groupChatMap.entries()) {
         if (this.rng.next() > 0.8 && groupChat.memberIds.length > 0) {
-          const senderId = groupChat.memberIds[Math.floor(this.rng.next() * groupChat.memberIds.length)]!;
+          const memberIndex = Math.floor(this.rng.next() * groupChat.memberIds.length);
+          const senderId = groupChat.memberIds[memberIndex];
+          if (!senderId) {
+            continue;
+          }
           const sender = currentState.agents.find((a: { id: string }) => a.id === senderId);
-          
+
           const messageId = `msg-${i}-${groupId}-${Math.floor(this.rng.next() * 1000000)}`;
           const message = {
             id: messageId,
@@ -569,19 +594,19 @@ export class BenchmarkDataGenerator {
             content: `Group message: ${this.rng.next() > 0.5 ? 'What do you think about the markets?' : 'I think we should watch market trends closely.'}`,
             timestamp: tickTimestamp,
           };
-          
+
           if (!groupChat.messages) {
             groupChat.messages = [];
           }
           groupChat.messages.push(message);
           groupChat.messageCount++;
           groupChat.lastActivity = tickTimestamp;
-          
+
           // Keep only last 20 messages per group
           if (groupChat.messages.length > 20) {
             groupChat.messages = groupChat.messages.slice(-20);
           }
-          
+
           events.push({
             type: 'group:message',
             timestamp: tickTimestamp,
@@ -594,10 +619,11 @@ export class BenchmarkDataGenerator {
           });
         }
       }
-      
+
       // Simulate group chat invites (for the agent being tested)
       if (this.rng.next() > 0.9 && currentState.groupChats && currentState.groupChats.length > 0) {
-        const groupChat = currentState.groupChats[Math.floor(this.rng.next() * currentState.groupChats.length)];
+        const groupChat =
+          currentState.groupChats[Math.floor(this.rng.next() * currentState.groupChats.length)];
         if (groupChat && groupChat.memberIds.length < 10) {
           groupChat.invitedAgent = true;
           events.push({
@@ -611,14 +637,14 @@ export class BenchmarkDataGenerator {
           });
         }
       }
-      
+
       // Update current state
       currentState.tick = i + 1;
       currentState.timestamp = tickTimestamp;
-      
+
       // Update group chats array from map
       currentState.groupChats = Array.from(groupChatMap.values());
-      
+
       // Create snapshot of state (shallow copy is sufficient since we're not mutating nested objects)
       const stateSnapshot: GameState = {
         ...currentState,
@@ -626,13 +652,15 @@ export class BenchmarkDataGenerator {
         perpetualMarkets: [...currentState.perpetualMarkets],
         agents: [...currentState.agents],
         posts: currentState.posts ? [...currentState.posts] : [],
-        groupChats: currentState.groupChats ? currentState.groupChats.map(gc => ({
-          ...gc,
-          memberIds: [...gc.memberIds],
-          messages: gc.messages ? [...gc.messages] : undefined,
-        })) : [],
+        groupChats: currentState.groupChats
+          ? currentState.groupChats.map((gc) => ({
+              ...gc,
+              memberIds: [...gc.memberIds],
+              messages: gc.messages ? [...gc.messages] : undefined,
+            }))
+          : [],
       };
-      
+
       ticks.push({
         number: i,
         timestamp: tickTimestamp,
@@ -640,7 +668,7 @@ export class BenchmarkDataGenerator {
         state: stateSnapshot,
       });
     }
-    
+
     return ticks;
   }
 }
@@ -650,11 +678,11 @@ export class BenchmarkDataGenerator {
  */
 class SeededRandom {
   private seed: number;
-  
+
   constructor(seed: number) {
     this.seed = seed;
   }
-  
+
   /**
    * Generate next random number (0-1)
    */

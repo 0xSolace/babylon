@@ -1,14 +1,14 @@
 /**
  * Agent Points Wallet API
- * 
+ *
  * @route GET /api/agents/[agentId]/wallet - Get wallet balance
  * @route POST /api/agents/[agentId]/wallet - Deposit/withdraw points
  * @access Authenticated (owner only)
- * 
+ *
  * @description
  * Manages agent points wallet, view balance, and transaction history.
  * Points are used for all agent operations: chat, trading, posting, etc.
- * 
+ *
  * @openapi
  * /api/agents/{agentId}/wallet:
  *   get:
@@ -93,14 +93,14 @@
  *         description: Not agent owner
  *       404:
  *         description: Agent not found
- * 
+ *
  * @example
  * ```typescript
  * // Get balance
  * const { balance } = await fetch(`/api/agents/${agentId}/wallet`, {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * }).then(r => r.json());
- * 
+ *
  * // Deposit points
  * await fetch(`/api/agents/${agentId}/wallet`, {
  *   method: 'POST',
@@ -109,7 +109,7 @@
  * });
  * ```
  * @throws {500} Internal server error or insufficient balance
- * 
+ *
  * @example
  * ```typescript
  * // Get wallet info
@@ -117,7 +117,7 @@
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
  * const { balance, transactions } = await wallet.json();
- * 
+ *
  * // Deposit points
  * await fetch(`/api/agents/${agentId}/wallet`, {
  *   method: 'POST',
@@ -126,7 +126,7 @@
  *     amount: 500
  *   })
  * });
- * 
+ *
  * // Withdraw points
  * await fetch(`/api/agents/${agentId}/wallet`, {
  *   method: 'POST',
@@ -136,42 +136,42 @@
  *   })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/agents/services/AgentService} Points management
  * @see {@link /src/app/agents/[agentId]/page.tsx} Wallet UI
  */
 
-import type { NextRequest} from 'next/server'
-import { NextResponse } from 'next/server'
-import { agentService } from '@/lib/agents/services/AgentService'
-import { logger } from '@/lib/logger'
-import { authenticateUser } from '@/lib/server-auth'
-import { prisma } from '@/lib/prisma'
+import { agentService } from '@/lib/agents/services/AgentService';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ agentId: string }> }
-) {
-  const user = await authenticateUser(req)
-  const { agentId } = await params
+type AgentPointsResult = Awaited<ReturnType<typeof agentService.depositPoints>>;
 
-  const agent = await agentService.getAgent(agentId, user.id)
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { authenticateUser } from '@/lib/server-auth';
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ agentId: string }> }) {
+  const user = await authenticateUser(req);
+  const { agentId } = await params;
+
+  const agent = await agentService.getAgent(agentId, user.id);
 
   const transactions = await prisma.agentPointsTransaction.findMany({
     where: { agentUserId: agentId },
     orderBy: { createdAt: 'desc' },
-    take: 100
-  })
+    take: 100,
+  });
 
   return NextResponse.json({
     success: true,
     balance: {
-      current: agent!.agentPointsBalance,
-      totalDeposited: agent!.agentTotalDeposited,
-      totalWithdrawn: agent!.agentTotalWithdrawn,
-      totalSpent: agent!.agentTotalPointsSpent
+      current: agent?.agentPointsBalance,
+      totalDeposited: agent?.agentTotalDeposited,
+      totalWithdrawn: agent?.agentTotalWithdrawn,
+      totalSpent: agent?.agentTotalPointsSpent,
     },
-    transactions: transactions.map(tx => ({
+    transactions: transactions.map((tx) => ({
       id: tx.id,
       type: tx.type,
       amount: tx.amount,
@@ -179,28 +179,25 @@ export async function GET(
       balanceAfter: tx.balanceAfter,
       description: tx.description,
       relatedId: tx.relatedId,
-      createdAt: tx.createdAt.toISOString()
-    }))
-  })
+      createdAt: tx.createdAt.toISOString(),
+    })),
+  });
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ agentId: string }> }
-) {
-  const user = await authenticateUser(req)
-  const { agentId } = await params
-  const body = await req.json()
+export async function POST(req: NextRequest, { params }: { params: Promise<{ agentId: string }> }) {
+  const user = await authenticateUser(req);
+  const { agentId } = await params;
+  const body = await req.json();
 
-  const { action, amount } = body
+  const { action, amount } = body;
 
-  let agent
+  let agent: AgentPointsResult;
   if (action === 'deposit') {
-    agent = await agentService.depositPoints(agentId, user.id, amount)
-    logger.info(`Deposited ${amount} points to agent ${agentId}`, undefined, 'AgentsAPI')
+    agent = await agentService.depositPoints(agentId, user.id, amount);
+    logger.info(`Deposited ${amount} points to agent ${agentId}`, undefined, 'AgentsAPI');
   } else {
-    agent = await agentService.withdrawPoints(agentId, user.id, amount)
-    logger.info(`Withdrew ${amount} points from agent ${agentId}`, undefined, 'AgentsAPI')
+    agent = await agentService.withdrawPoints(agentId, user.id, amount);
+    logger.info(`Withdrew ${amount} points from agent ${agentId}`, undefined, 'AgentsAPI');
   }
 
   return NextResponse.json({
@@ -208,9 +205,8 @@ export async function POST(
     balance: {
       current: agent.agentPointsBalance,
       totalDeposited: agent.agentTotalDeposited,
-      totalWithdrawn: agent.agentTotalWithdrawn
+      totalWithdrawn: agent.agentTotalWithdrawn,
     },
-    message: `${action === 'deposit' ? 'Deposited' : 'Withdrew'} ${amount} points successfully`
-  })
+    message: `${action === 'deposit' ? 'Deposited' : 'Withdrew'} ${amount} points successfully`,
+  });
 }
-

@@ -1,7 +1,6 @@
-import { describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-
-import * as broadcaster from '@/lib/sse/event-broadcaster';
 import { PredictionMarketEventService } from '@/lib/services/prediction-market-event-service';
+import * as broadcaster from '@/lib/sse/event-broadcaster';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 
 describe('PredictionMarketEventService', () => {
   let broadcastSpy: ReturnType<typeof spyOn>;

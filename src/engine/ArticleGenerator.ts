@@ -1,13 +1,13 @@
 /**
  * Article Generator - Long-Form News Content with Organizational Bias
- * 
+ *
  * @module engine/ArticleGenerator
- * 
+ *
  * @description
  * Generates realistic long-form news articles from media organizations with
  * editorial bias based on organizational relationships and affiliations. Creates
  * multi-perspective coverage of game events with different spins.
- * 
+ *
  * **Key Features:**
  * - Long-form investigative articles (800-1500 words)
  * - Organizational bias based on actor affiliations
@@ -15,39 +15,39 @@
  * - Editorial slant/spin based on relationships
  * - Multiple outlets covering same events differently
  * - Realistic journalist bylines
- * 
+ *
  * **Bias System:**
  * - **Protective Bias (+0.6)**: Downplays negative news about aligned actors
  * - **Critical Bias (-0.6)**: Emphasizes negative news about opposing actors
  * - **Neutral (0)**: Balanced coverage when no relationships
- * 
+ *
  * **Article Structure:**
  * - Compelling headline that hints at angle
  * - 2-3 sentence summary for listings
  * - Full body with insider details, quotes, analysis
  * - Category and tags for organization
  * - Sentiment and slant metadata
- * 
+ *
  * **Coverage Strategy:**
  * - 50-80% of news organizations cover each major event
  * - Each outlet provides unique perspective
  * - Bias creates natural disagreement in coverage
  * - Insider quotes from affiliated journalists
- * 
+ *
  * @see {@link FeedGenerator} - Also generates short-form posts
  * @see {@link GameEngine} - Uses ArticleGenerator for mixed content
- * 
+ *
  * @example
  * ```typescript
  * const generator = new ArticleGenerator(llmClient);
- * 
+ *
  * const articles = await generator.generateArticlesForEvent(
  *   worldEvent,
  *   newsOrganizations,
  *   actors,
  *   recentEvents
  * );
- * 
+ *
  * // Each org has different take
  * articles.forEach(article => {
  *   console.log(`${article.authorOrgName}: ${article.title}`);
@@ -57,18 +57,18 @@
  * ```
  */
 
-import type { Actor, Organization, WorldEvent, Question } from '@/shared/types';
-import type { BabylonLLMClient } from '../generator/llm/openai-client';
 import { generateSnowflakeId } from '@/lib/snowflake';
 import { shuffleArray } from '@/lib/utils/randomization';
+import type { Actor, Organization, Question, WorldEvent } from '@/shared/types';
+import type { BabylonLLMClient } from '../generator/llm/openai-client';
 
 type ArticleStage = 'breaking' | 'commentary' | 'resolution';
 
 /**
  * Long-form news article with metadata
- * 
+ *
  * @interface Article
- * 
+ *
  * @property id - Unique snowflake ID
  * @property title - Article headline
  * @property summary - 2-3 sentence summary for listings
@@ -89,7 +89,7 @@ type ArticleStage = 'breaking' | 'commentary' | 'resolution';
  * @property tags - SEO/filtering tags
  * @property publishedAt - Publication timestamp
  */
-export interface Article {
+export type Article = {
   id: string;
   title: string;
   summary: string;
@@ -109,9 +109,9 @@ export interface Article {
   category?: string;
   tags: string[];
   publishedAt: Date;
-}
+};
 
-interface ArticleGenerationContext {
+type ArticleGenerationContext = {
   event: WorldEvent;
   organization: Organization;
   journalist?: Actor;
@@ -119,17 +119,17 @@ interface ArticleGenerationContext {
   opposingActors: string[]; // Actors the org opposes
   insiderInfo?: string; // Insider information to include
   recentEvents: WorldEvent[]; // Context from recent events
-}
+};
 
 /**
  * Article Generator
- * 
+ *
  * @class ArticleGenerator
- * 
+ *
  * @description
  * Generates biased long-form news articles using LLM. Each organization produces
  * articles with different angles based on their relationships with actors involved.
- * 
+ *
  * **Generation Process:**
  * 1. Identify news organizations to cover event (50-80% coverage)
  * 2. For each organization:
@@ -137,12 +137,12 @@ interface ArticleGenerationContext {
  *    - Build context with bias instructions
  *    - Generate article via LLM (800-1500 words)
  *    - Add metadata (category, tags, sentiment)
- * 
+ *
  * **Bias Calculation:**
  * - If event involves aligned actors → protective bias
  * - If event involves opposing actors → critical bias
  * - Otherwise → neutral coverage
- * 
+ *
  * @usage
  * Instantiated by GameEngine for mixed content generation alongside short posts.
  */
@@ -151,7 +151,7 @@ export class ArticleGenerator {
 
   /**
    * Create a new ArticleGenerator
-   * 
+   *
    * @param llm - Babylon LLM client for article generation
    */
   constructor(llm: BabylonLLMClient) {
@@ -160,14 +160,14 @@ export class ArticleGenerator {
 
   /**
    * Generate a single article for a question at specific stage
-   * 
+   *
    * @param question - Prediction market question
    * @param organization - News organization writing the article
    * @param stage - Article stage (breaking/commentary/resolution)
    * @param actors - All game actors
    * @param recentEvents - Recent events for context
    * @returns Article with stage-appropriate content
-   * 
+   *
    * @description
    * Generates articles tied to prediction market question lifecycle.
    * Each stage has different tone and purpose.
@@ -206,13 +206,19 @@ export class ArticleGenerator {
 
     // Validate generated article has required content
     if (!article.title || article.title.trim().length === 0) {
-      throw new Error(`Generated article has empty title for Q${question.id} by ${organization.name}`);
+      throw new Error(
+        `Generated article has empty title for Q${question.id} by ${organization.name}`
+      );
     }
     if (!article.summary || article.summary.trim().length === 0) {
-      throw new Error(`Generated article has empty summary for Q${question.id} by ${organization.name}`);
+      throw new Error(
+        `Generated article has empty summary for Q${question.id} by ${organization.name}`
+      );
     }
     if (!article.content || article.content.trim().length < 100) {
-      throw new Error(`Generated article content too short (${article.content?.length || 0} chars) for Q${question.id} by ${organization.name}`);
+      throw new Error(
+        `Generated article content too short (${article.content?.length || 0} chars) for Q${question.id} by ${organization.name}`
+      );
     }
 
     return article;
@@ -229,14 +235,19 @@ export class ArticleGenerator {
     recentEvents: WorldEvent[]
   ): ArticleGenerationContext {
     // Find journalist from this org
-    const journalist = actors.find(a => a.affiliations?.includes(org.id));
+    const journalist = actors.find((a) => a.affiliations?.includes(org.id));
 
     // Create synthetic event from question for consistency with existing code
     const questionIdNumber = typeof question.id === 'number' ? question.id : null;
     const syntheticEvent: WorldEvent = {
       id: `question-${question.id}-${stage}`,
       day: 0, // Will be set by caller
-      type: stage === 'breaking' ? 'announcement' : stage === 'resolution' ? 'revelation' : 'development',
+      type:
+        stage === 'breaking'
+          ? 'announcement'
+          : stage === 'resolution'
+            ? 'revelation'
+            : 'development',
       description: question.text,
       actors: [], // Question-level articles don't focus on specific actors
       visibility: 'public',
@@ -250,35 +261,35 @@ export class ArticleGenerator {
       journalist,
       alignedActors: [],
       opposingActors: [],
-      recentEvents: recentEvents.filter(e => e.relatedQuestion === questionIdNumber).slice(0, 3),
+      recentEvents: recentEvents.filter((e) => e.relatedQuestion === questionIdNumber).slice(0, 3),
     };
   }
 
   /**
    * Generate multiple articles about an event from different news organizations
-   * 
+   *
    * @param event - World event to cover
    * @param newsOrganizations - Available news organizations
    * @param actors - All game actors
    * @param recentEvents - Recent events for context
    * @returns Array of articles with different perspectives
-   * 
+   *
    * @description
    * Each organization produces an article with unique bias and angle based on their
    * relationships with actors involved in the event. Creates natural disagreement
    * and multiple perspectives in news coverage.
-   * 
+   *
    * **Coverage Selection:**
    * - 1-2 articles per event maximum (prevents duplicate coverage)
    * - Random selection of news organizations
    * - Each outlet provides unique perspective
-   * 
+   *
    * **Bias Determination:**
    * - Scans event.actors for affiliations
    * - Protective bias if organization employs involved actors
    * - Critical bias if organization opposes involved actors
    * - Neutral if no strong relationships
-   * 
+   *
    * @example
    * ```typescript
    * const articles = await generator.generateArticlesForEvent(
@@ -287,7 +298,7 @@ export class ArticleGenerator {
    *   allActors,
    *   recentEvents
    * );
-   * 
+   *
    * // CNN (employs CEO): "Visionary Leader Steps Down to Pursue New Ventures"
    * // Fox (opposes CEO): "Embattled Executive Forced Out Amid Controversy"
    * // NYT (neutral): "Tech CEO Announces Resignation After Tumultuous Quarter"
@@ -328,19 +339,17 @@ export class ArticleGenerator {
     recentEvents: WorldEvent[]
   ): ArticleGenerationContext {
     // Find actors aligned with this organization
-    const alignedActors = actors
-      .filter(a => a.affiliations?.includes(org.id))
-      .map(a => a.id);
+    const alignedActors = actors.filter((a) => a.affiliations?.includes(org.id)).map((a) => a.id);
 
     // Find actors mentioned in the event
     const eventActors = event.actors || [];
 
     // Determine which event actors are aligned vs opposing
-    const aligned = eventActors.filter(actorId => alignedActors.includes(actorId));
-    const opposing = eventActors.filter(actorId => !alignedActors.includes(actorId));
+    const aligned = eventActors.filter((actorId) => alignedActors.includes(actorId));
+    const opposing = eventActors.filter((actorId) => !alignedActors.includes(actorId));
 
     // Find a journalist from this org
-    const journalist = actors.find(a => a.affiliations?.includes(org.id));
+    const journalist = actors.find((a) => a.affiliations?.includes(org.id));
 
     return {
       event,
@@ -348,7 +357,7 @@ export class ArticleGenerator {
       journalist,
       alignedActors: aligned,
       opposingActors: opposing,
-      recentEvents: recentEvents.filter(e => e.id !== event.id).slice(0, 3),
+      recentEvents: recentEvents.filter((e) => e.id !== event.id).slice(0, 3),
     };
   }
 
@@ -356,12 +365,19 @@ export class ArticleGenerator {
    * Generate a single article with bias based on organizational relationships
    */
   private async generateArticle(context: ArticleGenerationContext): Promise<Article> {
-    const { event, organization, journalist, alignedActors, opposingActors, recentEvents: _recentEvents } = context;
+    const {
+      event,
+      organization,
+      journalist,
+      alignedActors,
+      opposingActors,
+      recentEvents: _recentEvents,
+    } = context;
 
     // Determine bias direction
     let biasDirection = 'neutral';
     let biasScore = 0;
-    
+
     if (alignedActors.length > 0) {
       biasDirection = 'protective'; // Downplay negative news about aligned actors
       biasScore = 0.6;
@@ -374,27 +390,30 @@ export class ArticleGenerator {
     const prompt = await this.buildArticlePrompt(context, biasDirection);
 
     // Generate article content using kimi for high-quality content generation
-    const response = await this.llm.generateJSON<{
-      title: string;
-      summary: string;
-      content: string;
-      slant: string;
-      sentiment: 'positive' | 'negative' | 'neutral';
-      category: string;
-      tags: string[];
-    } | { 
-      response: {
-        title: string;
-        summary: string;
-        content: string;
-        slant: string;
-        sentiment: 'positive' | 'negative' | 'neutral';
-        category: string;
-        tags: string[] | { tag: string[] };
-      }
-    }>(
+    const response = await this.llm.generateJSON<
+      | {
+          title: string;
+          summary: string;
+          content: string;
+          slant: string;
+          sentiment: 'positive' | 'negative' | 'neutral';
+          category: string;
+          tags: string[];
+        }
+      | {
+          response: {
+            title: string;
+            summary: string;
+            content: string;
+            slant: string;
+            sentiment: 'positive' | 'negative' | 'neutral';
+            category: string;
+            tags: string[] | { tag: string[] };
+          };
+        }
+    >(
       prompt,
-      { 
+      {
         properties: {
           title: { type: 'string' },
           summary: { type: 'string' },
@@ -402,31 +421,32 @@ export class ArticleGenerator {
           slant: { type: 'string' },
           sentiment: { type: 'string' },
           category: { type: 'string' },
-          tags: { type: 'array' }
+          tags: { type: 'array' },
         },
-        required: ['title', 'summary', 'content', 'slant', 'sentiment'] 
+        required: ['title', 'summary', 'content', 'slant', 'sentiment'],
       },
-      { 
+      {
         temperature: 0.85,
         maxTokens: 2500,
         model: 'moonshotai/kimi-k2-instruct-0905',
         format: 'xml', // Use XML for robustness
       }
     );
-    
+
     // Handle XML structure
-    const articleData = 'response' in response && response.response
-      ? response.response
-      : response as {
-          title: string | string[];
-          summary: string | string[];
-          content: string | string[];
-          slant: string;
-          sentiment: 'positive' | 'negative' | 'neutral';
-          category: string;
-          tags: string[] | { tag: string[] };
-        };
-    
+    const articleData =
+      'response' in response && response.response
+        ? response.response
+        : (response as {
+            title: string | string[];
+            summary: string | string[];
+            content: string | string[];
+            slant: string;
+            sentiment: 'positive' | 'negative' | 'neutral';
+            category: string;
+            tags: string[] | { tag: string[] };
+          });
+
     // Helper to extract string from possibly array value (XML sometimes returns arrays for text)
     const extractString = (value: unknown): string => {
       if (typeof value === 'string') return value;
@@ -434,17 +454,21 @@ export class ArticleGenerator {
       if (value && typeof value === 'object') return JSON.stringify(value);
       return '';
     };
-    
+
     // Extract strings from potentially wrapped values
     const title = extractString(articleData.title);
     const summary = extractString(articleData.summary);
     const content = extractString(articleData.content);
-    
+
     // Handle tags (could be array or {tag: [...]} from XML)
     let tagsArray: string[];
     if (Array.isArray(articleData.tags)) {
       tagsArray = articleData.tags;
-    } else if (articleData.tags && typeof articleData.tags === 'object' && 'tag' in articleData.tags) {
+    } else if (
+      articleData.tags &&
+      typeof articleData.tags === 'object' &&
+      'tag' in articleData.tags
+    ) {
       const tagData = (articleData.tags as { tag: string[] }).tag;
       tagsArray = Array.isArray(tagData) ? tagData : [tagData];
     } else {
@@ -457,10 +481,17 @@ export class ArticleGenerator {
       slantString = articleData.slant;
     } else if (articleData.slant && typeof articleData.slant === 'object') {
       // If slant is an object, try to extract the actual value or stringify it
-      if ('response' in articleData.slant && typeof (articleData.slant as Record<string, unknown>).response === 'object') {
+      if (
+        'response' in articleData.slant &&
+        typeof (articleData.slant as Record<string, unknown>).response === 'object'
+      ) {
         // If there's a nested response object, it's malformed - extract title or summary as fallback
-        const nestedResponse = (articleData.slant as Record<string, unknown>).response as Record<string, unknown>;
-        slantString = (nestedResponse.slant as string) || (nestedResponse.title as string) || undefined;
+        const nestedResponse = (articleData.slant as Record<string, unknown>).response as Record<
+          string,
+          unknown
+        >;
+        slantString =
+          (nestedResponse.slant as string) || (nestedResponse.title as string) || undefined;
       } else {
         // Try to extract a meaningful string representation
         slantString = JSON.stringify(articleData.slant);
@@ -501,7 +532,14 @@ export class ArticleGenerator {
     context: ArticleGenerationContext,
     biasDirection: string
   ): Promise<string> {
-    const { event, organization, journalist: _journalist, alignedActors, opposingActors, recentEvents } = context;
+    const {
+      event,
+      organization,
+      journalist: _journalist,
+      alignedActors,
+      opposingActors,
+      recentEvents,
+    } = context;
 
     let biasInstructions = '';
     if (biasDirection === 'protective') {
@@ -535,9 +573,10 @@ BIAS INSTRUCTIONS:
 `;
     }
 
-    const recentContext = recentEvents.length > 0
-      ? `\n\nRECENT CONTEXT (for background):\n${recentEvents.map(e => `- ${e.description}`).join('\n')}`
-      : '';
+    const recentContext =
+      recentEvents.length > 0
+        ? `\n\nRECENT CONTEXT (for background):\n${recentEvents.map((e) => `- ${e.description}`).join('\n')}`
+        : '';
 
     return `You are a journalist writing for ${organization.name}, a ${organization.type} organization.
 Style: ${organization.postStyle || 'Professional journalism'}
@@ -583,7 +622,7 @@ FORMAT YOUR RESPONSE AS XML:
    */
   private categorizeEvent(event: WorldEvent): string {
     const type = event.type.toLowerCase();
-    
+
     if (type.includes('scandal') || type.includes('leak') || type.includes('revelation')) {
       return 'scandal';
     } else if (type.includes('meeting') || type.includes('summit')) {
@@ -595,7 +634,7 @@ FORMAT YOUR RESPONSE AS XML:
     } else if (type.includes('tech') || type.includes('launch') || type.includes('product')) {
       return 'tech';
     }
-    
+
     return 'general';
   }
 
@@ -608,4 +647,3 @@ FORMAT YOUR RESPONSE AS XML:
     return shuffled.slice(0, count);
   }
 }
-

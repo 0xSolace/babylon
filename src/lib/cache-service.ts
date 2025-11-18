@@ -1,9 +1,9 @@
 /**
  * Cache Service
- * 
+ *
  * Provides intelligent caching layer for frequently accessed data.
  * Uses Redis when available, falls back to in-memory cache.
- * 
+ *
  * Features:
  * - Automatic TTL management
  * - Cache invalidation patterns
@@ -12,22 +12,22 @@
  * - Graceful degradation if Redis unavailable
  */
 
-import { redis, redisClientType } from './redis';
-import { logger } from './logger';
 import type { Redis as UpstashRedis } from '@upstash/redis';
 import type IORedis from 'ioredis';
+import { logger } from './logger';
+import { redis, redisClientType } from './redis';
 // import { performanceMonitor } from './monitoring/performance-monitor';
 
-export interface CacheOptions {
+export type CacheOptions = {
   ttl?: number; // Time to live in seconds
   compress?: boolean; // Compress large objects
   namespace?: string; // Cache key prefix
-}
+};
 
-interface CacheEntry<T> {
+type CacheEntry<T> = {
   value: T;
   expiresAt: number;
-}
+};
 
 // In-memory fallback cache (for when Redis is unavailable)
 const memoryCache = new Map<string, CacheEntry<unknown>>();
@@ -53,18 +53,18 @@ export const DEFAULT_TTLS = {
   // Real-time data - very short TTL
   POSTS_LIST: 10, // 10 seconds
   POSTS_FOLLOWING: 15, // 15 seconds
-  
+
   // Semi-real-time data - short TTL
   POST: 30, // 30 seconds
   USER_BALANCE: 30, // 30 seconds
   MARKET: 60, // 1 minute
   MARKETS_LIST: 60, // 1 minute
-  
+
   // Moderate change frequency - medium TTL
   USER: 300, // 5 minutes
   TRENDING_TAGS: 300, // 5 minutes
   WIDGET: 300, // 5 minutes
-  
+
   // Rarely changing data - long TTL
   ACTOR: 3600, // 1 hour
   ORGANIZATION: 3600, // 1 hour
@@ -84,7 +84,9 @@ function cleanMemoryCache(): void {
     }
   });
 
-  toDelete.forEach(key => memoryCache.delete(key));
+  toDelete.forEach((key) => {
+    memoryCache.delete(key);
+  });
 }
 
 // Clean memory cache every minute
@@ -93,16 +95,13 @@ setInterval(cleanMemoryCache, 60000);
 /**
  * Get value from cache
  */
-export async function getCache<T>(
-  key: string,
-  options: CacheOptions = {}
-): Promise<T | null> {
+export async function getCache<T>(key: string, options: CacheOptions = {}): Promise<T | null> {
   const fullKey = options.namespace ? `${options.namespace}:${key}` : key;
   // const startTime = performance.now();
 
   if (redis && redisClientType) {
     const cached = await redis.get(fullKey);
-    
+
     if (cached) {
       try {
         // Handle cached value based on its type
@@ -111,25 +110,28 @@ export async function getCache<T>(
           logger.debug('Cache hit (Redis, object)', { key: fullKey }, 'CacheService');
           return cached as T;
         }
-        
+
         // Handle string values (standard Redis behavior)
         if (typeof cached === 'string') {
           if (!cached || cached.trim() === '') {
             logger.warn('Empty cached value in Redis', { key: fullKey }, 'CacheService');
             return null;
           }
-          
+
           logger.debug('Cache hit (Redis, string)', { key: fullKey }, 'CacheService');
           return JSON.parse(cached) as T;
         }
-        
+
         // Unexpected type
-        logger.warn('Unexpected cached value type', { 
-          key: fullKey, 
-          cachedType: typeof cached 
-        }, 'CacheService');
+        logger.warn(
+          'Unexpected cached value type',
+          {
+            key: fullKey,
+            cachedType: typeof cached,
+          },
+          'CacheService'
+        );
         return null;
-        
       } catch (error) {
         // Safely preview cached value for logging
         let preview = 'Unable to preview';
@@ -138,18 +140,22 @@ export async function getCache<T>(
         } else if (cached !== null && cached !== undefined) {
           preview = String(cached).substring(0, 100);
         }
-        
-        logger.error('Failed to parse cached value from Redis', { 
-          key: fullKey, 
-          error: error instanceof Error ? error.message : 'Unknown error',
-          cachedType: typeof cached,
-          preview
-        }, 'CacheService');
+
+        logger.error(
+          'Failed to parse cached value from Redis',
+          {
+            key: fullKey,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            cachedType: typeof cached,
+            preview,
+          },
+          'CacheService'
+        );
         // Return null to trigger a fresh fetch
         return null;
       }
     }
-    
+
     logger.debug('Cache miss (Redis)', { key: fullKey }, 'CacheService');
     // const latency = performance.now() - startTime;
     // performanceMonitor.recordCacheOperation('get', false, latency);
@@ -157,7 +163,7 @@ export async function getCache<T>(
   }
 
   const entry = memoryCache.get(fullKey);
-  
+
   if (entry) {
     if (entry.expiresAt > Date.now()) {
       logger.debug('Cache hit (Memory)', { key: fullKey }, 'CacheService');
@@ -203,7 +209,7 @@ export async function setCache<T>(
     return;
   }
 
-  const expiresAt = Date.now() + (ttl * 1000);
+  const expiresAt = Date.now() + ttl * 1000;
   memoryCache.set(fullKey, { value, expiresAt });
   logger.debug('Cache set (Memory)', { key: fullKey, ttl }, 'CacheService');
   // const latency = performance.now() - startTime;
@@ -213,10 +219,7 @@ export async function setCache<T>(
 /**
  * Invalidate cache entry
  */
-export async function invalidateCache(
-  key: string,
-  options: CacheOptions = {}
-): Promise<void> {
+export async function invalidateCache(key: string, options: CacheOptions = {}): Promise<void> {
   const fullKey = options.namespace ? `${options.namespace}:${key}` : key;
 
   if (redis && redisClientType) {
@@ -248,7 +251,10 @@ export async function invalidateCachePattern(
     );
   } else if (redis && redisClientType === 'standard') {
     // For standard Redis, use SCAN to find matching keys
-    const ioRedis = redis as { scanStream: (opts: { match: string }) => NodeJS.ReadableStream; del: (...keys: string[]) => Promise<unknown> };
+    const ioRedis = redis as {
+      scanStream: (opts: { match: string }) => NodeJS.ReadableStream;
+      del: (...keys: string[]) => Promise<unknown>;
+    };
     const stream = ioRedis.scanStream({ match: fullPattern });
     const keys: string[] = [];
 
@@ -272,11 +278,11 @@ export async function invalidateCachePattern(
   }
 
   // Invalidate in memory cache
-  const memoryKeys = Array.from(memoryCache.keys()).filter(key =>
-    key.includes(pattern)
-  );
-  memoryKeys.forEach(key => memoryCache.delete(key));
-  
+  const memoryKeys = Array.from(memoryCache.keys()).filter((key) => key.includes(pattern));
+  memoryKeys.forEach((key) => {
+    memoryCache.delete(key);
+  });
+
   if (memoryKeys.length > 0) {
     logger.debug(
       'Cache pattern invalidated (Memory)',
@@ -296,7 +302,7 @@ export async function getCacheOrFetch<T>(
 ): Promise<T> {
   // Try to get from cache
   const cached = await getCache<T>(key, options);
-  
+
   if (cached !== null) {
     return cached;
   }
@@ -366,4 +372,3 @@ export async function clearAllCache(): Promise<void> {
     );
   }
 }
-

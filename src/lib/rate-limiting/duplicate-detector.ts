@@ -1,17 +1,17 @@
 /**
  * Duplicate Content Detection Utility
- * 
+ *
  * Prevents users from posting duplicate content in a short time period.
  * Uses content hashing to detect exact and near-duplicate content.
  */
 
 import { logger } from '@/lib/logger';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 
-interface DuplicateRecord {
+type DuplicateRecord = {
   contentHash: string;
   timestamp: number;
-}
+};
 
 // In-memory store for duplicate detection
 // In production, you might want to use Redis
@@ -41,16 +41,10 @@ export const DUPLICATE_DETECTION_CONFIGS = {
  */
 function hashContent(content: string): string {
   // Normalize content: trim, lowercase, remove extra whitespace
-  const normalized = content
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
-  
+  const normalized = content.trim().toLowerCase().replace(/\s+/g, ' ');
+
   // Create SHA-256 hash
-  return crypto
-    .createHash('sha256')
-    .update(normalized)
-    .digest('hex');
+  return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
 /**
@@ -65,23 +59,23 @@ export function checkDuplicate(
   const key = `${userId}:${config.actionType}`;
   const contentHash = hashContent(content);
   const now = Date.now();
-  
+
   // Get user's recent posts
   let records = duplicateStore.get(key);
-  
+
   if (!records) {
     records = [];
     duplicateStore.set(key, records);
   }
-  
+
   // Remove old records outside the window
   const windowStart = now - config.windowMs;
-  records = records.filter(record => record.timestamp > windowStart);
+  records = records.filter((record) => record.timestamp > windowStart);
   duplicateStore.set(key, records);
-  
+
   // Check for duplicate
-  const duplicate = records.find(record => record.contentHash === contentHash);
-  
+  const duplicate = records.find((record) => record.contentHash === contentHash);
+
   if (duplicate) {
     logger.warn('Duplicate content detected', {
       userId,
@@ -89,25 +83,25 @@ export function checkDuplicate(
       contentHash,
       lastPostedAt: new Date(duplicate.timestamp).toISOString(),
     });
-    
+
     return {
       isDuplicate: true,
       lastPostedAt: new Date(duplicate.timestamp),
     };
   }
-  
+
   // Record this content
   records.push({
     contentHash,
     timestamp: now,
   });
-  
+
   logger.debug('Content uniqueness check passed', {
     userId,
     actionType: config.actionType,
     contentHash,
   });
-  
+
   return {
     isDuplicate: false,
   };
@@ -136,13 +130,13 @@ export function clearAllDuplicates(): void {
 export function cleanupDuplicates(): void {
   const now = Date.now();
   const maxAge = 10 * 60 * 1000; // 10 minutes (longer than any window)
-  
+
   let cleanedCount = 0;
-  
+
   for (const [key, records] of duplicateStore.entries()) {
     // Filter out old records
-    const validRecords = records.filter(record => now - record.timestamp < maxAge);
-    
+    const validRecords = records.filter((record) => now - record.timestamp < maxAge);
+
     if (validRecords.length === 0) {
       duplicateStore.delete(key);
       cleanedCount++;
@@ -150,9 +144,12 @@ export function cleanupDuplicates(): void {
       duplicateStore.set(key, validRecords);
     }
   }
-  
+
   if (cleanedCount > 0) {
-    logger.info('Cleaned up old duplicate records', { cleanedCount, totalRemaining: duplicateStore.size });
+    logger.info('Cleaned up old duplicate records', {
+      cleanedCount,
+      totalRemaining: duplicateStore.size,
+    });
   }
 }
 
@@ -169,13 +166,13 @@ export function getDuplicateStats(): {
     totalRecords: 0,
     recordsByType: {} as Record<string, number>,
   };
-  
+
   for (const [key, records] of duplicateStore.entries()) {
     const actionType = key.split(':')[1] || 'unknown';
     stats.totalRecords += records.length;
     stats.recordsByType[actionType] = (stats.recordsByType[actionType] || 0) + records.length;
   }
-  
+
   return stats;
 }
 
@@ -183,4 +180,3 @@ export function getDuplicateStats(): {
 if (typeof setInterval !== 'undefined') {
   setInterval(cleanupDuplicates, 5 * 60 * 1000);
 }
-

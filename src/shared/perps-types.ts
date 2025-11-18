@@ -1,6 +1,6 @@
 /**
  * Perpetual Futures Trading Types
- * 
+ *
  * Defines all types for perps markets:
  * - Positions (long/short with leverage)
  * - Funding rates
@@ -8,7 +8,7 @@
  * - PnL calculations
  */
 
-export interface PerpPosition {
+export type PerpPosition = {
   id: string;
   userId: string;
   ticker: string; // Company ticker (e.g., "FACEHOOK")
@@ -24,16 +24,16 @@ export interface PerpPosition {
   fundingPaid: number; // Cumulative funding paid/received
   openedAt: string; // ISO timestamp
   lastUpdated: string;
-}
+};
 
-export interface FundingRate {
+export type FundingRate = {
   ticker: string;
   rate: number; // APR as decimal (e.g., 0.01 = 1%)
   nextFundingTime: string; // ISO timestamp
   predictedRate: number; // Next period's estimated rate
-}
+};
 
-export interface PerpMarket {
+export type PerpMarket = {
   ticker: string;
   organizationId: string;
   name: string;
@@ -49,25 +49,25 @@ export interface PerpMarket {
   minOrderSize: number;
   markPrice: number; // Fair price for liquidations
   indexPrice: number; // Spot price reference
-}
+};
 
-export interface OrderRequest {
+export type OrderRequest = {
   ticker: string;
   side: 'long' | 'short';
   size: number; // USD size
   leverage: number;
   orderType: 'market' | 'limit';
   limitPrice?: number;
-}
+};
 
-export interface PositionUpdate {
+export type PositionUpdate = {
   positionId: string;
   action: 'increase' | 'decrease' | 'close';
   amount?: number; // USD amount to add/remove
   newLeverage?: number;
-}
+};
 
-export interface Liquidation {
+export type Liquidation = {
   positionId: string;
   ticker: string;
   side: 'long' | 'short';
@@ -75,9 +75,9 @@ export interface Liquidation {
   actualPrice: number;
   loss: number;
   timestamp: string;
-}
+};
 
-export interface DailyPriceSnapshot {
+export type DailyPriceSnapshot = {
   date: string; // YYYY-MM-DD
   ticker: string;
   organizationId: string;
@@ -87,9 +87,9 @@ export interface DailyPriceSnapshot {
   lowPrice: number;
   volume: number;
   timestamp: string; // EOD timestamp
-}
+};
 
-export interface TradingStats {
+export type TradingStats = {
   totalVolume: number;
   totalTrades: number;
   totalPnL: number;
@@ -100,7 +100,7 @@ export interface TradingStats {
   largestLoss: number;
   totalFundingPaid: number;
   totalLiquidations: number;
-}
+};
 
 /**
  * Calculate liquidation price for a position
@@ -114,9 +114,9 @@ export function calculateLiquidationPrice(
   // For long: liquidationPrice = entryPrice * (1 - 0.9/leverage)
   // For short: liquidationPrice = entryPrice * (1 + 0.9/leverage)
   // Using 0.9 instead of 1.0 to account for liquidation fees
-  
+
   const liquidationThreshold = 0.9 / leverage;
-  
+
   if (side === 'long') {
     return entryPrice * (1 - liquidationThreshold);
   } else {
@@ -134,34 +134,31 @@ export function calculateUnrealizedPnL(
   size: number
 ): { pnl: number; pnlPercent: number } {
   let pnl: number;
-  
+
   if (side === 'long') {
     pnl = ((currentPrice - entryPrice) / entryPrice) * size;
   } else {
     pnl = ((entryPrice - currentPrice) / entryPrice) * size;
   }
-  
+
   const pnlPercent = (pnl / size) * 100;
-  
+
   return { pnl, pnlPercent };
 }
 
 /**
  * Calculate funding payment for a single 8-hour period
  * Funding is paid every 8 hours based on the funding rate
- * 
+ *
  * @param positionSize - Position size in USD
  * @param fundingRate - Annual funding rate (e.g., 0.01 = 1% per year)
  * @returns Funding payment for one 8-hour period
  */
-export function calculateFundingPayment(
-  positionSize: number,
-  fundingRate: number
-): number {
+export function calculateFundingPayment(positionSize: number, fundingRate: number): number {
   // Funding rate is annual, convert to single 8-hour period
   // Annual → 8-hour: rate / (365.25 * 24 / 8) = rate / 1095.75
   const fundingPerPeriod = fundingRate / 1095.75;
-  
+
   return positionSize * fundingPerPeriod;
 }
 
@@ -191,11 +188,9 @@ export function calculateMarkPrice(
 ): number {
   // Simple mark price: 70% index, 30% last, adjusted by funding
   const baseMarkPrice = indexPrice * 0.7 + lastPrice * 0.3;
-  
+
   // Adjust slightly based on funding rate (indicates market bias)
   const fundingAdjustment = fundingRate * 0.01;
-  
+
   return baseMarkPrice * (1 + fundingAdjustment);
 }
-
-

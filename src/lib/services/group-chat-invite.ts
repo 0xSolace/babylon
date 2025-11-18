@@ -1,11 +1,11 @@
 /**
  * Group Chat Invite Service
- * 
+ *
  * Manages inviting players to NPC group chats based on:
  * - Being followed by the NPC
  * - High quality interactions
  * - Consistent engagement
- * 
+ *
  * Weighted chance between:
  * - NPC-owned chats (higher chance, 70%)
  * - NPC-member chats (lower chance, 30%)
@@ -21,48 +21,20 @@ type GroupChatData = Omit<GroupChat, 'messages'> & {
   messageCount?: number;
 };
 
-
-export interface InviteChance {
+export type InviteChance = {
   willInvite: boolean;
   probability: number;
   chatId?: string;
   chatName?: string;
   isOwned: boolean; // NPC owns vs is member
   reasons: string[];
-}
+};
 
 export class GroupChatInvite {
-  // Requirements for invite
-  private static readonly MIN_FOLLOW_DURATION_HOURS = 24; // Must be followed for 24+ hours
-  private static readonly MIN_QUALITY_SCORE = 0.75;
-  private static readonly MIN_REPLIES_SINCE_FOLLOW = 5;
-
-  // Probabilities
-  private static readonly BASE_INVITE_PROBABILITY = 0.10; // 10% base chance
-  private static readonly MAX_INVITE_PROBABILITY = 0.60; // 60% max chance
-
-  // Weighting for chat type
-  private static readonly OWNED_CHAT_WEIGHT = 0.70; // 70% chance for owned chat
-  private static readonly MEMBER_CHAT_WEIGHT = 0.30; // 30% chance for member chat
-  
-  // Use MEMBER_CHAT_WEIGHT in probability calculations
-  private static calculateChatTypeWeight(isOwned: boolean): number {
-    return isOwned ? this.OWNED_CHAT_WEIGHT : this.MEMBER_CHAT_WEIGHT;
-  }
-  
-  // Calculate invite probability using chat type weight
-  private static calculateInviteProbability(baseProb: number, isOwned: boolean): number {
-    const weight = this.calculateChatTypeWeight(isOwned);
-    return Math.min(baseProb * weight, this.MAX_INVITE_PROBABILITY);
-  }
-
   /**
    * Calculate if player should be invited to a group chat
    */
-  static async calculateInviteChance(
-    userId: string,
-    npcId: string
-  ): Promise<InviteChance> {
+  static async calculateInviteChance(userId: string, npcId: string): Promise<InviteChance> {
     // Must be followed first
     const followStatus = await prisma.followStatus.findUnique({
       where: {
@@ -83,16 +55,15 @@ export class GroupChatInvite {
     }
 
     // Check follow duration
-    const hoursSinceFollow =
-      (Date.now() - followStatus.followedAt.getTime()) / (1000 * 60 * 60);
+    const hoursSinceFollow = (Date.now() - followStatus.followedAt.getTime()) / (1000 * 60 * 60);
 
-    if (hoursSinceFollow < this.MIN_FOLLOW_DURATION_HOURS) {
+    if (hoursSinceFollow < GroupChatInvite.MIN_FOLLOW_DURATION_HOURS) {
       return {
         willInvite: false,
         probability: 0,
         isOwned: false,
         reasons: [
-          `Need ${Math.ceil(this.MIN_FOLLOW_DURATION_HOURS - hoursSinceFollow)} more hours of being followed`,
+          `Need ${Math.ceil(GroupChatInvite.MIN_FOLLOW_DURATION_HOURS - hoursSinceFollow)} more hours of being followed`,
         ],
       };
     }
@@ -126,13 +97,13 @@ export class GroupChatInvite {
       },
     });
 
-    if (interactionsSinceFollow.length < this.MIN_REPLIES_SINCE_FOLLOW) {
+    if (interactionsSinceFollow.length < GroupChatInvite.MIN_REPLIES_SINCE_FOLLOW) {
       return {
         willInvite: false,
         probability: 0,
         isOwned: false,
         reasons: [
-          `Need ${this.MIN_REPLIES_SINCE_FOLLOW - interactionsSinceFollow.length} more quality replies since being followed`,
+          `Need ${GroupChatInvite.MIN_REPLIES_SINCE_FOLLOW - interactionsSinceFollow.length} more quality replies since being followed`,
         ],
       };
     }
@@ -142,13 +113,13 @@ export class GroupChatInvite {
       interactionsSinceFollow.reduce((sum, i) => sum + i.qualityScore, 0) /
       interactionsSinceFollow.length;
 
-    if (avgQuality < this.MIN_QUALITY_SCORE) {
+    if (avgQuality < GroupChatInvite.MIN_QUALITY_SCORE) {
       return {
         willInvite: false,
         probability: 0,
         isOwned: false,
         reasons: [
-          `Quality score ${(avgQuality * 100).toFixed(0)}% is below ${(this.MIN_QUALITY_SCORE * 100).toFixed(0)}% threshold`,
+          `Quality score ${(avgQuality * 100).toFixed(0)}% is below ${(GroupChatInvite.MIN_QUALITY_SCORE * 100).toFixed(0)}% threshold`,
         ],
       };
     }
@@ -160,22 +131,23 @@ export class GroupChatInvite {
     const ownedChatName = `${npcId}'s Inner Circle`;
 
     // Determine which chat type
-    const isOwned = Math.random() < this.OWNED_CHAT_WEIGHT;
+    const isOwned = Math.random() < GroupChatInvite.OWNED_CHAT_WEIGHT;
 
     // Calculate probability based on quality and engagement
-    const qualityFactor = avgQuality / this.MIN_QUALITY_SCORE;
+    const qualityFactor = avgQuality / GroupChatInvite.MIN_QUALITY_SCORE;
     const engagementFactor = Math.min(
-      interactionsSinceFollow.length / this.MIN_REPLIES_SINCE_FOLLOW,
+      interactionsSinceFollow.length / GroupChatInvite.MIN_REPLIES_SINCE_FOLLOW,
       1.5
     );
 
     // Calculate base probability first
-    const baseProbability = this.BASE_INVITE_PROBABILITY +
-      (this.MAX_INVITE_PROBABILITY - this.BASE_INVITE_PROBABILITY) *
+    const baseProbability =
+      GroupChatInvite.BASE_INVITE_PROBABILITY +
+      (GroupChatInvite.MAX_INVITE_PROBABILITY - GroupChatInvite.BASE_INVITE_PROBABILITY) *
         (qualityFactor * 0.6 + engagementFactor * 0.4);
-    
+
     // Apply chat type weight using calculateInviteProbability method
-    const probability = this.calculateInviteProbability(baseProbability, isOwned);
+    const probability = GroupChatInvite.calculateInviteProbability(baseProbability, isOwned);
 
     // Roll the dice
     const willInvite = Math.random() < probability;
@@ -274,7 +246,7 @@ export class GroupChatInvite {
     });
 
     // Convert memberships to GroupChatData format
-    const groupChats: GroupChatData[] = memberships.map(m => ({
+    const groupChats: GroupChatData[] = memberships.map((m) => ({
       id: m.chatId,
       name: `${m.npcAdminId}'s Chat`,
       admin: m.npcAdminId, // Match GroupChat interface property name
@@ -282,7 +254,7 @@ export class GroupChatInvite {
       theme: 'default', // Required by GroupChat interface
       messageCount: 0, // Custom property for our use case
     }));
-    
+
     return groupChats;
   }
 
@@ -302,5 +274,3 @@ export class GroupChatInvite {
     return membership?.isActive ?? false;
   }
 }
-
-

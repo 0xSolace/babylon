@@ -1,11 +1,11 @@
 /**
  * Username Availability Check API
- * 
+ *
  * @description
  * Validates username availability during onboarding process. Provides
  * intelligent suggestions if requested username is taken. Sanitizes
  * usernames to ensure platform consistency and safety.
- * 
+ *
  * **Features:**
  * - Real-time availability checking
  * - Automatic username sanitization
@@ -13,19 +13,19 @@
  * - Fallback random suffix if needed
  * - Case-insensitive checking
  * - Special character removal
- * 
+ *
  * **Username Rules:**
  * - Length: 3-20 characters
  * - Allowed: a-z, A-Z, 0-9, underscore (_)
  * - Converted to lowercase
  * - Special chars converted to underscores
  * - Leading @ symbol removed
- * 
+ *
  * **Suggestion Algorithm:**
  * 1. Check base username
  * 2. If taken, try username1, username2, ... username9999
  * 3. If all taken, append random 4-digit suffix
- * 
+ *
  * @openapi
  * /api/onboarding/check-username:
  *   get:
@@ -72,45 +72,47 @@
  *                   suggestion: alice1
  *       400:
  *         description: Invalid username (too short, too long, or missing)
- * 
+ *
  * @example
  * ```typescript
  * // Check if username is available
  * const response = await fetch('/api/onboarding/check-username?username=alice');
  * const { available, username, suggestion } = await response.json();
- * 
+ *
  * if (available) {
  *   console.log(`✓ ${username} is available!`);
  * } else {
  *   console.log(`✗ ${username} is taken. Try: ${suggestion}`);
  * }
- * 
+ *
  * // Username sanitization examples:
  * // Input: "@Alice_Trader!" -> Output: "alice_trader"
  * // Input: "Bob Smith" -> Output: "bob_smith"
  * ```
- * 
+ *
  * @see {@link /src/app/onboarding/page.tsx} Onboarding flow
  * @see {@link /lib/db/context} RLS context
  */
 
-import type { NextRequest } from 'next/server';
-import { successResponse, errorResponse } from '@/lib/api/auth-middleware';
-import { optionalAuth } from '@/lib/api/auth-middleware';
-import { asUser, asPublic } from '@/lib/db/context';
+import { errorResponse, optionalAuth, successResponse } from '@/lib/api/auth-middleware';
+import { asPublic, asUser } from '@/lib/db/context';
 import { logger } from '@/lib/logger';
 import type { PrismaClient } from '@prisma/client';
+import type { NextRequest } from 'next/server';
 
-interface UsernameCheckResult {
+type UsernameCheckResult = {
   available: boolean;
   username: string;
   suggestion?: string;
-}
+};
 
 /**
  * Check if a username is available and suggest an alternative if not
  */
-async function checkUsernameAvailability(baseUsername: string, db: PrismaClient): Promise<UsernameCheckResult> {
+async function checkUsernameAvailability(
+  baseUsername: string,
+  db: PrismaClient
+): Promise<UsernameCheckResult> {
   // Sanitize username
   const cleanUsername = baseUsername
     .replace(/^@/, '')
@@ -134,7 +136,7 @@ async function checkUsernameAvailability(baseUsername: string, db: PrismaClient)
   // Username taken, find an available one by adding numbers
   let attempt = 1;
   let suggestedUsername = `${cleanUsername}${attempt}`;
-  
+
   // Keep incrementing until we find an available username
   while (attempt < 9999) {
     const exists = await db.user.findUnique({
@@ -192,7 +194,7 @@ export async function GET(request: NextRequest) {
 
     // Check username availability with RLS (public or user context)
     // Verify authUser has userId before using asUser()
-    const result = (authUser && authUser.userId)
+    const result = authUser?.userId
       ? await asUser(authUser, async (db) => {
           return await checkUsernameAvailability(username, db);
         })
@@ -204,8 +206,11 @@ export async function GET(request: NextRequest) {
 
     return successResponse(result);
   } catch (error) {
-    logger.error('Error checking username availability', { error, username }, 'GET /api/onboarding/check-username');
+    logger.error(
+      'Error checking username availability',
+      { error, username },
+      'GET /api/onboarding/check-username'
+    );
     return errorResponse('Failed to check username availability', 500);
   }
 }
-

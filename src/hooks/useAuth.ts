@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
-
+import { apiFetch } from '@/lib/api/fetch';
+import { logger } from '@/lib/logger';
+import { type User, useAuthStore } from '@/stores/authStore';
 import {
   type ConnectedWallet,
   type User as PrivyUser,
@@ -9,16 +10,12 @@ import {
   useWallets,
 } from '@privy-io/react-auth';
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets';
-
-import { apiFetch } from '@/lib/api/fetch';
-import { logger } from '@/lib/logger';
-
-import { type User, useAuthStore } from '@/stores/authStore';
+import { useCallback, useEffect, useMemo } from 'react';
 
 /**
  * Return type for the useAuth hook.
  */
-interface UseAuthReturn {
+type UseAuthReturn = {
   /** Whether Privy authentication is ready */
   ready: boolean;
   /** Whether the user is currently authenticated */
@@ -45,7 +42,7 @@ interface UseAuthReturn {
   refresh: () => Promise<void>;
   /** Function to get the current access token */
   getAccessToken: () => Promise<string | null>;
-}
+};
 
 let lastSyncedWalletAddress: string | null = null;
 
@@ -58,7 +55,7 @@ const linkedSocialUsers = new Set<string>();
 
 /**
  * Main authentication hook for managing user authentication state.
- * 
+ *
  * This hook provides comprehensive authentication management including:
  * - User profile loading and synchronization
  * - Wallet connection and management (prioritizes embedded wallet for gas sponsorship)
@@ -66,35 +63,28 @@ const linkedSocialUsers = new Set<string>();
  * - Social account linking (Farcaster, Twitter, Wallet)
  * - Access token management
  * - Onboarding and on-chain registration status
- * 
+ *
  * The hook uses Privy for authentication and automatically:
  * - Fetches user profile when authenticated
  * - Links social accounts when available
  * - Manages access tokens for API calls
  * - Prevents duplicate profile fetches across components
- * 
+ *
  * @returns Authentication state and methods for login, logout, and profile refresh.
- * 
+ *
  * @example
  * ```tsx
  * const { user, authenticated, login, logout } = useAuth();
- * 
+ *
  * if (!authenticated) {
- *   return <button onClick={login}>Login</button>;
+ *   return <button type="button" onClick={login}>Login</button>;
  * }
- * 
+ *
  * return <div>Welcome, {user?.displayName}</div>;
  * ```
  */
 export function useAuth(): UseAuthReturn {
-  const {
-    ready,
-    authenticated,
-    user: privyUser,
-    login,
-    logout,
-    getAccessToken,
-  } = usePrivy();
+  const { ready, authenticated, user: privyUser, login, logout, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
   const { client } = useSmartWallets();
   const {
@@ -128,7 +118,7 @@ export function useAuth(): UseAuthReturn {
   const smartWalletAddress = client?.account?.address;
   const smartWalletReady = Boolean(smartWalletAddress);
 
-  const persistAccessToken = async (): Promise<string | null> => {
+  const persistAccessToken = useCallback(async (): Promise<string | null> => {
     if (!authenticated) {
       if (typeof window !== 'undefined') {
         window.__privyAccessToken = null;
@@ -141,56 +131,67 @@ export function useAuth(): UseAuthReturn {
       window.__privyAccessToken = token;
     }
     return token ?? null;
-  };
+  }, [authenticated, getAccessToken]);
 
-  const fetchCurrentUser = async () => {
-    if (!authenticated || !privyUser) return;
+  const fetchCurrentUser = useCallback(
+    async function runFetchCurrentUser() {
+      if (!authenticated || !privyUser) return;
 
-    // Use global ref to prevent ANY duplicate calls across all components
-    if (globalFetchInFlight) {
-      await globalFetchInFlight;
-      return;
-    }
+      // Use global ref to prevent ANY duplicate calls across all components
+      if (globalFetchInFlight) {
+        await globalFetchInFlight;
+        return;
+      }
 
-    const run = async () => {
-      setIsLoadingProfile(true);
-      setLoadedUserId(privyUser.id);
+      const run = async () => {
+        setIsLoadingProfile(true);
+        setLoadedUserId(privyUser.id);
 
-      const token = await persistAccessToken();
-      if (!token) {
-        logger.warn(
-          'Privy access token unavailable; delaying /api/users/me fetch',
-          { userId: privyUser.id },
-          'useAuth'
-        );
-        setIsLoadingProfile(false);
-        if (typeof window !== 'undefined') {
-          if (globalTokenRetryTimeout) {
-            window.clearTimeout(globalTokenRetryTimeout);
+        const token = await persistAccessToken();
+        if (!token) {
+          logger.warn(
+            'Privy access token unavailable; delaying /api/users/me fetch',
+            { userId: privyUser.id },
+            'useAuth'
+          );
+          setIsLoadingProfile(false);
+          if (typeof window !== 'undefined') {
+            if (globalTokenRetryTimeout) {
+              window.clearTimeout(globalTokenRetryTimeout);
+            }
+            globalTokenRetryTimeout = window.setTimeout(() => {
+              void runFetchCurrentUser();
+            }, 200);
           }
-          globalTokenRetryTimeout = window.setTimeout(() => {
-            void fetchCurrentUser();
-          }, 200);
+          return;
         }
-        return;
-      }
 
-      const response = await apiFetch('/api/users/me');
-      let data;
-      try {
-        data = await response.json();
-      } catch (error) {
-        logger.error('Failed to parse /api/users/me response', { error, userId: privyUser.id }, 'useAuth');
-        setIsLoadingProfile(false);
-        return;
-      }
-
-        const me = data as {
+        const response = await apiFetch('/api/users/me');
+        type CurrentUserResponse = {
           authenticated: boolean;
           needsOnboarding: boolean;
           needsOnchain: boolean;
           user: (User & { createdAt?: string; updatedAt?: string }) | null;
         };
+        let currentUserResponse: CurrentUserResponse | null = null;
+        try {
+          currentUserResponse = (await response.json()) as CurrentUserResponse;
+        } catch (error) {
+          logger.error(
+            'Failed to parse /api/users/me response',
+            { error, userId: privyUser.id },
+            'useAuth'
+          );
+          setIsLoadingProfile(false);
+          return;
+        }
+
+        if (!currentUserResponse) {
+          setIsLoadingProfile(false);
+          return;
+        }
+
+        const me = currentUserResponse;
 
         setNeedsOnboarding(me.needsOnboarding);
         setNeedsOnchain(me.needsOnchain);
@@ -201,21 +202,16 @@ export function useAuth(): UseAuthReturn {
         if (me.user) {
           const hydratedUser: User = {
             id: me.user.id,
-            walletAddress:
-              me.user.walletAddress ?? smartWalletAddress ?? wallet?.address,
+            walletAddress: me.user.walletAddress ?? smartWalletAddress ?? wallet?.address,
             displayName:
               me.user.displayName && me.user.displayName.trim() !== ''
                 ? me.user.displayName
-                : privyUser.email?.address ||
-                  wallet?.address ||
-                  'Anonymous',
+                : privyUser.email?.address || wallet?.address || 'Anonymous',
             email: privyUser.email?.address,
             username: me.user.username ?? undefined,
             bio: me.user.bio ?? undefined,
-            profileImageUrl:
-              me.user.profileImageUrl ?? fallbackProfileImageUrl ?? undefined,
-            coverImageUrl:
-              me.user.coverImageUrl ?? fallbackCoverImageUrl ?? undefined,
+            profileImageUrl: me.user.profileImageUrl ?? fallbackProfileImageUrl ?? undefined,
+            coverImageUrl: me.user.coverImageUrl ?? fallbackCoverImageUrl ?? undefined,
             profileComplete: me.user.profileComplete ?? false,
             reputationPoints: me.user.reputationPoints ?? undefined,
             referralCount: undefined,
@@ -257,8 +253,7 @@ export function useAuth(): UseAuthReturn {
             setUser({
               id: privyUser.id,
               walletAddress: wallet?.address,
-              displayName:
-                privyUser.email?.address ?? wallet?.address ?? 'Anonymous',
+              displayName: privyUser.email?.address ?? wallet?.address ?? 'Anonymous',
               email: privyUser.email?.address,
               onChainRegistered: false,
             });
@@ -266,21 +261,35 @@ export function useAuth(): UseAuthReturn {
         }
 
         setIsLoadingProfile(false);
-    };
+      };
 
-    const promise = run().finally(() => {
-      globalFetchInFlight = null;
-      if (typeof window !== 'undefined' && globalTokenRetryTimeout) {
-        window.clearTimeout(globalTokenRetryTimeout);
-        globalTokenRetryTimeout = null;
-      }
-    });
+      const promise = run().finally(() => {
+        globalFetchInFlight = null;
+        if (typeof window !== 'undefined' && globalTokenRetryTimeout) {
+          window.clearTimeout(globalTokenRetryTimeout);
+          globalTokenRetryTimeout = null;
+        }
+      });
 
-    globalFetchInFlight = promise;
-    await promise;
-  };
+      globalFetchInFlight = promise;
+      await promise;
+    },
+    [
+      authenticated,
+      privyUser,
+      persistAccessToken,
+      setIsLoadingProfile,
+      setLoadedUserId,
+      setNeedsOnboarding,
+      setNeedsOnchain,
+      setUser,
+      smartWalletAddress,
+      wallet,
+      user,
+    ]
+  );
 
-  const synchronizeWallet = () => {
+  const synchronizeWallet = useCallback(() => {
     if (!wallet) return;
     if (wallet.address === lastSyncedWalletAddress) return;
 
@@ -289,9 +298,9 @@ export function useAuth(): UseAuthReturn {
       address: wallet.address,
       chainId: wallet.chainId,
     });
-  };
+  }, [wallet, setWallet]);
 
-  const linkSocialAccounts = async () => {
+  const linkSocialAccounts = useCallback(async () => {
     if (!authenticated || !privyUser) return;
     if (isLoadingProfile) return; // Wait for profile to load
     if (needsOnboarding || needsOnchain) return;
@@ -313,19 +322,16 @@ export function useAuth(): UseAuthReturn {
     if (userWithFarcaster.farcaster) {
       const farcaster = userWithFarcaster.farcaster;
       try {
-        await apiFetch(
-          `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              platform: 'farcaster',
-              username: farcaster.username || farcaster.displayName,
-            }),
-          }
-        );
+        await apiFetch(`/api/users/${encodeURIComponent(privyUser.id)}/link-social`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            platform: 'farcaster',
+            username: farcaster.username || farcaster.displayName,
+          }),
+        });
         logger.info(
           'Linked Farcaster account during auth sync',
           { username: farcaster.username },
@@ -343,19 +349,16 @@ export function useAuth(): UseAuthReturn {
     if (userWithTwitter.twitter) {
       const twitter = userWithTwitter.twitter;
       try {
-        await apiFetch(
-          `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              platform: 'twitter',
-              username: twitter.username,
-            }),
-          }
-        );
+        await apiFetch(`/api/users/${encodeURIComponent(privyUser.id)}/link-social`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            platform: 'twitter',
+            username: twitter.username,
+          }),
+        });
         logger.info(
           'Linked Twitter account during auth sync',
           { username: twitter.username },
@@ -372,24 +375,17 @@ export function useAuth(): UseAuthReturn {
 
     if (wallet?.address) {
       try {
-        await apiFetch(
-          `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              platform: 'wallet',
-              address: wallet.address.toLowerCase(),
-            }),
-          }
-        );
-        logger.info(
-          'Linked wallet during auth sync',
-          { address: wallet.address },
-          'useAuth'
-        );
+        await apiFetch(`/api/users/${encodeURIComponent(privyUser.id)}/link-social`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            platform: 'wallet',
+            address: wallet.address.toLowerCase(),
+          }),
+        });
+        logger.info('Linked wallet during auth sync', { address: wallet.address }, 'useAuth');
       } catch (error) {
         logger.warn(
           'Failed to link wallet during auth sync',
@@ -398,11 +394,20 @@ export function useAuth(): UseAuthReturn {
         );
       }
     }
-  };
+  }, [
+    authenticated,
+    getAccessToken,
+    isLoadingProfile,
+    needsOnchain,
+    needsOnboarding,
+    privyUser,
+    user,
+    wallet,
+  ]);
 
   useEffect(() => {
     void persistAccessToken();
-  }, [authenticated, getAccessToken]);
+  }, [persistAccessToken]);
 
   useEffect(() => {
     return () => {
@@ -416,11 +421,19 @@ export function useAuth(): UseAuthReturn {
   // Expose getAccessToken to window for use by apiFetch
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      (window as typeof window & { __privyGetAccessToken?: () => Promise<string | null> }).__privyGetAccessToken = getAccessToken;
+      (
+        window as typeof window & {
+          __privyGetAccessToken?: () => Promise<string | null>;
+        }
+      ).__privyGetAccessToken = getAccessToken;
     }
     return () => {
       if (typeof window !== 'undefined') {
-        (window as typeof window & { __privyGetAccessToken?: () => Promise<string | null> }).__privyGetAccessToken = undefined;
+        (
+          window as typeof window & {
+            __privyGetAccessToken?: () => Promise<string | null>;
+          }
+        ).__privyGetAccessToken = undefined;
       }
     };
   }, [getAccessToken]);
@@ -430,7 +443,7 @@ export function useAuth(): UseAuthReturn {
     if (authenticated && privyUser) {
       synchronizeWallet();
     }
-  }, [authenticated, privyUser, wallet?.address, wallet?.chainId]);
+  }, [authenticated, privyUser, synchronizeWallet]);
 
   // Fetch user only when authentication status or user ID changes
   useEffect(() => {
@@ -443,11 +456,7 @@ export function useAuth(): UseAuthReturn {
         const stored = localStorage.getItem('babylon-auth');
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (
-            parsed.state?.user?.id &&
-            privyUser &&
-            parsed.state.user.id !== privyUser.id
-          ) {
+          if (parsed.state?.user?.id && privyUser && parsed.state.user.id !== privyUser.id) {
             logger.info(
               'Clearing stale auth cache for different user',
               {
@@ -464,17 +473,11 @@ export function useAuth(): UseAuthReturn {
     }
 
     void fetchCurrentUser();
-  }, [authenticated, privyUser?.id]);
+  }, [authenticated, privyUser?.id, clearAuth, fetchCurrentUser, privyUser]);
 
   useEffect(() => {
     void linkSocialAccounts();
-  }, [
-    authenticated,
-    privyUser?.id,
-    wallet?.address,
-    needsOnboarding,
-    isLoadingProfile,
-  ]);
+  }, [linkSocialAccounts]);
 
   const refresh = async () => {
     if (!authenticated || !privyUser) return;
@@ -484,32 +487,36 @@ export function useAuth(): UseAuthReturn {
   const handleLogout = async () => {
     // Call Privy's logout first to clear Privy state
     await logout();
-    
+
     // Clear our app's auth state
     clearAuth();
-    
+
     // Clear access token
     if (typeof window !== 'undefined') {
       window.__privyAccessToken = null;
-      
+
       // Explicitly remove the persisted auth storage
       // This ensures localStorage is cleared even if clearAuth() doesn't trigger storage update
       localStorage.removeItem('babylon-auth');
-      
+
       // Clear any Privy localStorage keys that might persist
       // Privy's logout() should handle this, but we'll be thorough
-      const privyKeys = Object.keys(localStorage).filter(key => key.startsWith('privy:') || key.startsWith('privy-'));
-      privyKeys.forEach(key => {
+      const privyKeys = Object.keys(localStorage).filter(
+        (key) => key.startsWith('privy:') || key.startsWith('privy-')
+      );
+      privyKeys.forEach((key) => {
         try {
           localStorage.removeItem(key);
         } catch (error) {
           logger.warn(`Failed to remove localStorage key: ${key}`, { error }, 'useAuth');
         }
       });
-      
+
       // Clear session storage as well
-      const sessionPrivyKeys = Object.keys(sessionStorage).filter(key => key.startsWith('privy:') || key.startsWith('privy-'));
-      sessionPrivyKeys.forEach(key => {
+      const sessionPrivyKeys = Object.keys(sessionStorage).filter(
+        (key) => key.startsWith('privy:') || key.startsWith('privy-')
+      );
+      sessionPrivyKeys.forEach((key) => {
         try {
           sessionStorage.removeItem(key);
         } catch (error) {
@@ -517,7 +524,7 @@ export function useAuth(): UseAuthReturn {
         }
       });
     }
-    
+
     // Clear module-level state
     linkedSocialUsers.clear();
     lastSyncedWalletAddress = null;
@@ -526,7 +533,7 @@ export function useAuth(): UseAuthReturn {
       clearTimeout(globalTokenRetryTimeout);
       globalTokenRetryTimeout = null;
     }
-    
+
     logger.info('User logged out and all auth state cleared', undefined, 'useAuth');
   };
 

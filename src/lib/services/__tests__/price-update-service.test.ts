@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
-
 import { PriceUpdateService } from '../price-update-service';
 
 const mockFindUnique = mock();

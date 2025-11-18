@@ -1,13 +1,13 @@
 /**
  * MarketDecisionEngine Token Management Test Suite
- * 
+ *
  * @module engine/__tests__/MarketDecisionEngine-token-management.test
- * 
+ *
  * @description
  * Specialized test suite for token management and batching features of the
  * MarketDecisionEngine. Verifies that the engine correctly handles token limits,
  * batches NPCs appropriately, and truncates content to fit within model constraints.
- * 
+ *
  * **Test Coverage:**
  * - Engine initialization with default and custom models
  * - Batch size calculation for various NPC counts
@@ -23,7 +23,7 @@
  * - Batch failure with individual retry fallback
  * - Model configuration (default vs custom)
  * - Safe context limit calculation
- * 
+ *
  * **Key Features Tested:**
  * - Token-aware batching (5-15 NPCs per batch typically)
  * - Automatic chunking for large NPC counts
@@ -31,49 +31,48 @@
  * - Multiple response format support
  * - Strict validation preventing over-budget trades
  * - Graceful error handling with fallbacks
- * 
+ *
  * **Testing Strategy:**
  * - Mock LLM client for controlled responses
  * - Mock context service for test data
  * - Helper functions for test NPC creation
  * - Unit tests for batching logic
  * - Integration tests for full flow
- * 
+ *
  * @see {@link MarketDecisionEngine} - Class under test
  * @see {@link MarketContextService} - Context building tested
  */
 
-import { describe, test, expect, beforeEach } from 'bun:test';
-import { MarketDecisionEngine } from '../MarketDecisionEngine';
 import { MarketContextService } from '@/lib/services/market-context-service';
 import type { BabylonLLMClient } from '@/generator/llm/openai-client';
 import type { NPCMarketContext } from '@/types/market-context';
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { MarketDecisionEngine } from '../MarketDecisionEngine';
 
-interface JSONSchema {
+type JSONSchema = {
   required?: string[];
-  properties?: Record<string, {
-    type?: 'string' | 'number' | 'boolean' | 'object' | 'array';
-    description?: string;
-    items?: unknown;
-    properties?: Record<string, unknown>;
-  }>;
-}
+  properties?: Record<
+    string,
+    {
+      type?: 'string' | 'number' | 'boolean' | 'object' | 'array';
+      description?: string;
+      items?: unknown;
+      properties?: Record<string, unknown>;
+    }
+  >;
+};
 
-interface GenerateJSONOptions {
+type GenerateJSONOptions = {
   model?: string;
   temperature?: number;
   maxTokens?: number;
   format?: 'xml' | 'json';
-}
+};
 
 // Mock LLM client for testing - doesn't require API keys
 class MockLLMClient {
   private mockResponses: unknown[] = [];
   private callCount = 0;
-
-  constructor() {
-    // No super() call - this is a standalone mock that doesn't extend BabylonLLMClient
-  }
 
   getProvider(): string {
     return 'groq';
@@ -83,7 +82,11 @@ class MockLLMClient {
     this.mockResponses.push(response);
   }
 
-  async generateJSON<T>(_prompt: string, _schema?: JSONSchema, _options?: GenerateJSONOptions): Promise<T> {
+  async generateJSON<T>(
+    _prompt: string,
+    _schema?: JSONSchema,
+    _options?: GenerateJSONOptions
+  ): Promise<T> {
     const response = this.mockResponses[this.callCount] ?? ([] as unknown);
     this.callCount++;
     return response as T;
@@ -101,13 +104,16 @@ class MockLLMClient {
 
 // Type assertion to make MockLLMClient compatible with BabylonLLMClient interface
 // Returns both the mock instance (for test methods) and the LLM client (for engine)
-const createMockLLMClient = (): { mock: MockLLMClient; client: BabylonLLMClient } => {
+const createMockLLMClient = (): {
+  mock: MockLLMClient;
+  client: BabylonLLMClient;
+} => {
   const mockInstance = new MockLLMClient();
   return {
     mock: mockInstance,
     client: mockInstance as unknown as BabylonLLMClient,
   };
-}
+};
 
 // Mock context service
 class MockContextService extends MarketContextService {
@@ -119,12 +125,14 @@ class MockContextService extends MarketContextService {
 
   async buildContextForAllNPCs(): Promise<Map<string, NPCMarketContext>> {
     const map = new Map<string, NPCMarketContext>();
-    this.mockNPCs.forEach(npc => map.set(npc.npcId, npc));
+    this.mockNPCs.forEach((npc) => {
+      map.set(npc.npcId, npc);
+    });
     return map;
   }
 
   async buildContextForNPC(npcId: string): Promise<NPCMarketContext> {
-    const npc = this.mockNPCs.find(n => n.npcId === npcId);
+    const npc = this.mockNPCs.find((n) => n.npcId === npcId);
     if (!npc) {
       throw new Error(`NPC ${npcId} not found`);
     }
@@ -142,15 +150,39 @@ function createMockNPC(id: string, name: string): NPCMarketContext {
     availableBalance: 10000,
     relationships: [],
     recentPosts: [
-      { author: 'author1', authorName: 'Author 1', content: 'Test post', timestamp: new Date().toISOString() },
+      {
+        author: 'author1',
+        authorName: 'Author 1',
+        content: 'Test post',
+        timestamp: new Date().toISOString(),
+      },
     ],
     groupChatMessages: [],
     recentEvents: [],
     perpMarkets: [
-      { ticker: 'TECH', organizationId: 'tech-co', name: 'Tech Co', currentPrice: 100, change24h: 5, changePercent24h: 5, high24h: 105, low24h: 95, volume24h: 1000, openInterest: 5000 },
+      {
+        ticker: 'TECH',
+        organizationId: 'tech-co',
+        name: 'Tech Co',
+        currentPrice: 100,
+        change24h: 5,
+        changePercent24h: 5,
+        high24h: 105,
+        low24h: 95,
+        volume24h: 1000,
+        openInterest: 5000,
+      },
     ],
     predictionMarkets: [
-      { id: 'q1', text: 'Will X happen?', yesPrice: 50, noPrice: 50, totalVolume: 1000, resolutionDate: new Date().toISOString(), daysUntilResolution: 7 },
+      {
+        id: 'q1',
+        text: 'Will X happen?',
+        yesPrice: 50,
+        noPrice: 50,
+        totalVolume: 1000,
+        resolutionDate: new Date().toISOString(),
+        daysUntilResolution: 7,
+      },
     ],
     currentPositions: [],
   };
@@ -171,7 +203,7 @@ describe('MarketDecisionEngine - Token Management', () => {
   describe('Initialization', () => {
     test('should initialize with default model and token limits', () => {
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      
+
       // Should initialize without errors
       expect(engine).toBeDefined();
     });
@@ -181,7 +213,7 @@ describe('MarketDecisionEngine - Token Management', () => {
         model: 'gpt-4o',
         maxOutputTokens: 4000,
       });
-      
+
       expect(engine).toBeDefined();
     });
 
@@ -195,13 +227,11 @@ describe('MarketDecisionEngine - Token Management', () => {
   describe('Batch Size Calculation', () => {
     test('should calculate correct batch size for small NPC count', async () => {
       // With 400 tokens per NPC and 108k context, should fit ~270 NPCs per batch
-      const npcs = Array.from({ length: 10 }, (_, i) => 
-        createMockNPC(`npc-${i}`, `NPC ${i}`)
-      );
+      const npcs = Array.from({ length: 10 }, (_, i) => createMockNPC(`npc-${i}`, `NPC ${i}`));
       mockContext.setMockNPCs(npcs);
-      
+
       // Mock response
-      const mockDecisions = npcs.map(npc => ({
+      const mockDecisions = npcs.map((npc) => ({
         npcId: npc.npcId,
         npcName: npc.npcName,
         action: 'hold' as const,
@@ -224,14 +254,12 @@ describe('MarketDecisionEngine - Token Management', () => {
       // Create 400 NPCs (should require 4 batches with current config)
       // Actual implementation: 800 tokens per NPC, 128450 max context, 80% safety = ~128 NPCs per batch
       // Max NPCs per batch: (128450 * 0.8) / 800 = 128, so 400 NPCs = 4 batches
-      const npcs = Array.from({ length: 400 }, (_, i) => 
-        createMockNPC(`npc-${i}`, `NPC ${i}`)
-      );
+      const npcs = Array.from({ length: 400 }, (_, i) => createMockNPC(`npc-${i}`, `NPC ${i}`));
       mockContext.setMockNPCs(npcs);
 
       // Mock responses for each batch (128 NPCs per batch)
-      const createBatch = (start: number, count: number) => 
-        npcs.slice(start, start + count).map(npc => ({
+      const createBatch = (start: number, count: number) =>
+        npcs.slice(start, start + count).map((npc) => ({
           npcId: npc.npcId,
           npcName: npc.npcName,
           action: 'hold' as const,
@@ -260,16 +288,18 @@ describe('MarketDecisionEngine - Token Management', () => {
       const npcs = [createMockNPC('npc1', 'NPC 1')];
       mockContext.setMockNPCs(npcs);
 
-      const mockResponse = [{
-        npcId: 'npc1',
-        npcName: 'NPC 1',
-        action: 'hold' as const,
-        marketType: null,
-        amount: 0,
-        confidence: 1,
-        reasoning: 'Holding',
-        timestamp: new Date().toISOString(),
-      }];
+      const mockResponse = [
+        {
+          npcId: 'npc1',
+          npcName: 'NPC 1',
+          action: 'hold' as const,
+          marketType: null,
+          amount: 0,
+          confidence: 1,
+          reasoning: 'Holding',
+          timestamp: new Date().toISOString(),
+        },
+      ];
       mockLLMInstance.setMockResponse(mockResponse);
 
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
@@ -284,16 +314,18 @@ describe('MarketDecisionEngine - Token Management', () => {
       mockContext.setMockNPCs(npcs);
 
       const mockResponse = {
-        decisions: [{
-          npcId: 'npc1',
-          npcName: 'NPC 1',
-          action: 'hold' as const,
-          marketType: null,
-          amount: 0,
-          confidence: 1,
-          reasoning: 'Holding',
-          timestamp: new Date().toISOString(),
-        }]
+        decisions: [
+          {
+            npcId: 'npc1',
+            npcName: 'NPC 1',
+            action: 'hold' as const,
+            marketType: null,
+            amount: 0,
+            confidence: 1,
+            reasoning: 'Holding',
+            timestamp: new Date().toISOString(),
+          },
+        ],
       };
       mockLLMInstance.setMockResponse(mockResponse);
 
@@ -309,16 +341,18 @@ describe('MarketDecisionEngine - Token Management', () => {
       mockContext.setMockNPCs(npcs);
 
       const mockResponse = {
-        decision: [{
-          npcId: 'npc1',
-          npcName: 'NPC 1',
-          action: 'hold' as const,
-          marketType: null,
-          amount: 0,
-          confidence: 1,
-          reasoning: 'Holding',
-          timestamp: new Date().toISOString(),
-        }]
+        decision: [
+          {
+            npcId: 'npc1',
+            npcName: 'NPC 1',
+            action: 'hold' as const,
+            marketType: null,
+            amount: 0,
+            confidence: 1,
+            reasoning: 'Holding',
+            timestamp: new Date().toISOString(),
+          },
+        ],
       };
       mockLLMInstance.setMockResponse(mockResponse);
 
@@ -344,7 +378,7 @@ describe('MarketDecisionEngine - Token Management', () => {
           confidence: 1,
           reasoning: 'Holding',
           timestamp: new Date().toISOString(),
-        }
+        },
       };
       mockLLMInstance.setMockResponse(mockResponse);
 
@@ -373,24 +407,28 @@ describe('MarketDecisionEngine - Token Management', () => {
     test('should truncate long post content', async () => {
       const npc = createMockNPC('npc1', 'NPC 1');
       // Add a very long post
-      npc.recentPosts = [{
-        author: 'author1',
-        authorName: 'Author 1',
-        content: 'A'.repeat(1000), // Very long content
-        timestamp: new Date().toISOString(),
-      }];
+      npc.recentPosts = [
+        {
+          author: 'author1',
+          authorName: 'Author 1',
+          content: 'A'.repeat(1000), // Very long content
+          timestamp: new Date().toISOString(),
+        },
+      ];
       mockContext.setMockNPCs([npc]);
 
-      const mockResponse = [{
-        npcId: 'npc1',
-        npcName: 'NPC 1',
-        action: 'hold' as const,
-        marketType: null,
-        amount: 0,
-        confidence: 1,
-        reasoning: 'Holding',
-        timestamp: new Date().toISOString(),
-      }];
+      const mockResponse = [
+        {
+          npcId: 'npc1',
+          npcName: 'NPC 1',
+          action: 'hold' as const,
+          marketType: null,
+          amount: 0,
+          confidence: 1,
+          reasoning: 'Holding',
+          timestamp: new Date().toISOString(),
+        },
+      ];
       mockLLMInstance.setMockResponse(mockResponse);
 
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
@@ -411,16 +449,18 @@ describe('MarketDecisionEngine - Token Management', () => {
       }));
       mockContext.setMockNPCs([npc]);
 
-      const mockResponse = [{
-        npcId: 'npc1',
-        npcName: 'NPC 1',
-        action: 'hold' as const,
-        marketType: null,
-        amount: 0,
-        confidence: 1,
-        reasoning: 'Holding',
-        timestamp: new Date().toISOString(),
-      }];
+      const mockResponse = [
+        {
+          npcId: 'npc1',
+          npcName: 'NPC 1',
+          action: 'hold' as const,
+          marketType: null,
+          amount: 0,
+          confidence: 1,
+          reasoning: 'Holding',
+          timestamp: new Date().toISOString(),
+        },
+      ];
       mockLLMInstance.setMockResponse(mockResponse);
 
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
@@ -435,16 +475,18 @@ describe('MarketDecisionEngine - Token Management', () => {
       const npcs = [createMockNPC('npc1', 'NPC 1')];
       mockContext.setMockNPCs(npcs);
 
-      const mockResponse = [{
-        npcId: 'npc1',
-        npcName: 'NPC 1',
-        action: 'hold' as const,
-        marketType: null,
-        amount: 0,
-        confidence: 1,
-        reasoning: 'Market conditions unclear',
-        timestamp: new Date().toISOString(),
-      }];
+      const mockResponse = [
+        {
+          npcId: 'npc1',
+          npcName: 'NPC 1',
+          action: 'hold' as const,
+          marketType: null,
+          amount: 0,
+          confidence: 1,
+          reasoning: 'Market conditions unclear',
+          timestamp: new Date().toISOString(),
+        },
+      ];
       mockLLMInstance.setMockResponse(mockResponse);
 
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
@@ -461,17 +503,19 @@ describe('MarketDecisionEngine - Token Management', () => {
       mockContext.setMockNPCs([npc]);
 
       // LLM tries to trade more than balance (should be rejected)
-      const mockResponse = [{
-        npcId: 'npc1',
-        npcName: 'NPC 1',
-        action: 'open_long' as const,
-        marketType: 'perp' as const,
-        ticker: 'TECH',
-        amount: 5000, // Exceeds balance!
-        confidence: 0.8,
-        reasoning: 'Strong signal',
-        timestamp: new Date().toISOString(),
-      }];
+      const mockResponse = [
+        {
+          npcId: 'npc1',
+          npcName: 'NPC 1',
+          action: 'open_long' as const,
+          marketType: 'perp' as const,
+          ticker: 'TECH',
+          amount: 5000, // Exceeds balance!
+          confidence: 0.8,
+          reasoning: 'Strong signal',
+          timestamp: new Date().toISOString(),
+        },
+      ];
       mockLLMInstance.setMockResponse(mockResponse);
 
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
@@ -486,17 +530,19 @@ describe('MarketDecisionEngine - Token Management', () => {
       npc.availableBalance = 10000;
       mockContext.setMockNPCs([npc]);
 
-      const mockResponse = [{
-        npcId: 'npc1',
-        npcName: 'NPC 1',
-        action: 'open_long' as const,
-        marketType: 'perp' as const,
-        ticker: 'TECH',
-        amount: 1000, // Within balance
-        confidence: 0.8,
-        reasoning: 'Strong signal',
-        timestamp: new Date().toISOString(),
-      }];
+      const mockResponse = [
+        {
+          npcId: 'npc1',
+          npcName: 'NPC 1',
+          action: 'open_long' as const,
+          marketType: 'perp' as const,
+          ticker: 'TECH',
+          amount: 1000, // Within balance
+          confidence: 0.8,
+          reasoning: 'Strong signal',
+          timestamp: new Date().toISOString(),
+        },
+      ];
       mockLLMInstance.setMockResponse(mockResponse);
 
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
@@ -519,40 +565,41 @@ describe('MarketDecisionEngine - Token Management', () => {
     });
 
     test('should handle batch failure with individual retry', async () => {
-      const npcs = [
-        createMockNPC('npc1', 'NPC 1'),
-        createMockNPC('npc2', 'NPC 2'),
-      ];
+      const npcs = [createMockNPC('npc1', 'NPC 1'), createMockNPC('npc2', 'NPC 2')];
       mockContext.setMockNPCs(npcs);
 
       // First call (batch) fails, then individual calls succeed
       mockLLMInstance.setMockResponse(null); // Batch failure
-      mockLLMInstance.setMockResponse([{
-        npcId: 'npc1',
-        npcName: 'NPC 1',
-        action: 'hold' as const,
-        marketType: null,
-        amount: 0,
-        confidence: 1,
-        reasoning: 'Holding',
-        timestamp: new Date().toISOString(),
-      }]);
-      mockLLMInstance.setMockResponse([{
-        npcId: 'npc2',
-        npcName: 'NPC 2',
-        action: 'hold' as const,
-        marketType: null,
-        amount: 0,
-        confidence: 1,
-        reasoning: 'Holding',
-        timestamp: new Date().toISOString(),
-      }]);
+      mockLLMInstance.setMockResponse([
+        {
+          npcId: 'npc1',
+          npcName: 'NPC 1',
+          action: 'hold' as const,
+          marketType: null,
+          amount: 0,
+          confidence: 1,
+          reasoning: 'Holding',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      mockLLMInstance.setMockResponse([
+        {
+          npcId: 'npc2',
+          npcName: 'NPC 2',
+          action: 'hold' as const,
+          marketType: null,
+          amount: 0,
+          confidence: 1,
+          reasoning: 'Holding',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
 
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      
+
       // Should handle the error gracefully
       const decisions = await engine.generateBatchDecisions();
-      
+
       // Should get some decisions from individual retries
       expect(decisions).toBeDefined();
     });
@@ -577,10 +624,9 @@ describe('MarketDecisionEngine - Token Management', () => {
       // qwen/qwen3-32b: 130k input context
       // * 0.9 safety = 117k safe limit
       // / 400 per NPC = ~292 NPCs per batch
-      
+
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
       expect(engine).toBeDefined();
     });
   });
 });
-

@@ -3,7 +3,7 @@ import { broadcastToChannel } from '@/lib/sse/event-broadcaster';
 
 type PredictionActorType = 'user' | 'npc' | 'system';
 
-export interface PredictionTradeEvent {
+export type PredictionTradeEvent = {
   marketId: string;
   yesPrice: number;
   noPrice: number;
@@ -21,9 +21,9 @@ export interface PredictionTradeEvent {
     source: 'user_trade' | 'npc_trade' | 'system';
     timestamp: string;
   };
-}
+};
 
-export interface PredictionResolutionEvent {
+export type PredictionResolutionEvent = {
   marketId: string;
   winningSide: 'yes' | 'no';
   yesShares: number;
@@ -31,7 +31,7 @@ export interface PredictionResolutionEvent {
   liquidity?: number;
   totalPayout: number;
   timestamp: string;
-}
+};
 
 export class PredictionMarketEventService {
   static emitTradeUpdate(event: PredictionTradeEvent): void {
@@ -41,7 +41,11 @@ export class PredictionMarketEventService {
         ...event,
       });
     } catch (error) {
-      logger.warn('Failed to broadcast prediction trade update', { error, marketId: event.marketId }, 'PredictionMarketEventService');
+      logger.warn(
+        'Failed to broadcast prediction trade update',
+        { error, marketId: event.marketId },
+        'PredictionMarketEventService'
+      );
     }
   }
 
@@ -52,7 +56,11 @@ export class PredictionMarketEventService {
         ...event,
       });
     } catch (error) {
-      logger.warn('Failed to broadcast prediction resolution update', { error, marketId: event.marketId }, 'PredictionMarketEventService');
+      logger.warn(
+        'Failed to broadcast prediction resolution update',
+        { error, marketId: event.marketId },
+        'PredictionMarketEventService'
+      );
     }
   }
 }

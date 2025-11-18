@@ -1,26 +1,26 @@
 /**
  * Test HuggingFace Integration
- * 
+ *
  * Comprehensive test script for the HuggingFace integration system.
  * Tests all components without actually uploading to HuggingFace.
- * 
+ *
  * Usage:
  *   npx ts-node scripts/test-huggingface-integration.ts
  */
 
+import { ModelBenchmarkService } from '@/lib/benchmark/ModelBenchmarkService';
 import { HuggingFaceDatasetUploader } from '@/lib/huggingface/HuggingFaceDatasetUploader';
 import { HuggingFaceModelUploader } from '@/lib/huggingface/HuggingFaceModelUploader';
-import { ModelBenchmarkService } from '@/lib/benchmark/ModelBenchmarkService';
 import { prisma } from '@/lib/prisma';
-import * as path from 'path';
-import { promises as fs } from 'fs';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 
-interface TestResult {
+type TestResult = {
   name: string;
   passed: boolean;
   error?: string;
   details?: string;
-}
+};
 
 const results: TestResult[] = [];
 
@@ -67,7 +67,7 @@ async function main() {
   await test('Benchmark Files Exist', async () => {
     const benchmarksDir = path.join(process.cwd(), 'benchmarks');
     const files = await fs.readdir(benchmarksDir);
-    const benchmarkFiles = files.filter(f => f.endsWith('.json') && f.startsWith('benchmark-'));
+    const benchmarkFiles = files.filter((f) => f.endsWith('.json') && f.startsWith('benchmark-'));
     if (benchmarkFiles.length === 0) {
       throw new Error('No benchmark files found. Run: npx ts-node scripts/generate-benchmark.ts');
     }
@@ -110,7 +110,7 @@ async function main() {
     try {
       const count = await prisma.benchmarkResult.count();
       console.log(`   BenchmarkResult table has ${count} records`);
-    } catch (error) {
+    } catch (_error) {
       throw new Error('BenchmarkResult table not found. Run: npx prisma migrate dev');
     }
   });
@@ -119,7 +119,8 @@ async function main() {
   await test('TrainedModel Schema Updated', async () => {
     const model = await prisma.trainedModel.findFirst();
     if (model) {
-      const hasNewFields = 'huggingFaceRepo' in model && 'lastBenchmarked' in model && 'benchmarkCount' in model;
+      const hasNewFields =
+        'huggingFaceRepo' in model && 'lastBenchmarked' in model && 'benchmarkCount' in model;
       if (!hasNewFields) {
         throw new Error('TrainedModel missing new fields. Run: npx prisma migrate dev');
       }
@@ -189,8 +190,8 @@ async function main() {
   console.log('                 TEST SUMMARY                 ');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-  const passed = results.filter(r => r.passed).length;
-  const failed = results.filter(r => r.passed === false).length;
+  const passed = results.filter((r) => r.passed).length;
+  const failed = results.filter((r) => r.passed === false).length;
 
   console.log(`Total Tests: ${results.length}`);
   console.log(`✅ Passed: ${passed}`);
@@ -198,9 +199,11 @@ async function main() {
 
   if (failed > 0) {
     console.log('\n❌ FAILED TESTS:');
-    results.filter(r => !r.passed).forEach(r => {
-      console.log(`   - ${r.name}: ${r.error}`);
-    });
+    results
+      .filter((r) => !r.passed)
+      .forEach((r) => {
+        console.log(`   - ${r.name}: ${r.error}`);
+      });
   }
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
@@ -225,4 +228,3 @@ main().catch(async (error) => {
   await prisma.$disconnect();
   process.exit(1);
 });
-

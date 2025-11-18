@@ -1,6 +1,6 @@
 /**
  * Post ID Parser
- * 
+ *
  * Type-safe parser for extracting metadata from various post ID formats.
  * Supports multiple formats used throughout the application.
  */
@@ -8,19 +8,19 @@
 /**
  * Parsed post metadata from post ID
  */
-export interface ParsedPostMetadata {
+export type ParsedPostMetadata = {
   gameId: string;
   authorId: string;
   timestamp: Date;
-}
+};
 
 /**
  * Parse result with success indicator
  */
-export interface ParseResult {
+export type ParseResult = {
   metadata: ParsedPostMetadata;
   success: boolean;
-}
+};
 
 /**
  * Default post metadata
@@ -48,7 +48,7 @@ function parseFormat1(postId: string): ParsedPostMetadata | null {
 
   const timestampStr = isoTimestampMatch[1];
   const timestamp = new Date(timestampStr);
-  if (isNaN(timestamp.getTime())) return null;
+  if (Number.isNaN(timestamp.getTime())) return null;
 
   const firstHyphenIndex = postId.indexOf('-');
   if (firstHyphenIndex === -1) return null;
@@ -56,11 +56,11 @@ function parseFormat1(postId: string): ParsedPostMetadata | null {
   const gameId = postId.substring(0, firstHyphenIndex);
   const withoutGameId = postId.substring(firstHyphenIndex + 1);
   const secondHyphenIndex = withoutGameId.indexOf('-');
-  
+
   let authorId = 'system';
   if (secondHyphenIndex !== -1) {
     const afterGameTimestamp = withoutGameId.substring(secondHyphenIndex + 1);
-    authorId = afterGameTimestamp.substring(0, afterGameTimestamp.lastIndexOf('-' + timestampStr));
+    authorId = afterGameTimestamp.substring(0, afterGameTimestamp.lastIndexOf(`-${timestampStr}`));
   }
 
   return { gameId, authorId, timestamp };
@@ -81,10 +81,10 @@ function parsePostFormat(postId: string): ParsedPostMetadata | null {
   if (!timestampPart) return null;
 
   const timestampNum = parseInt(timestampPart, 10);
-  if (isNaN(timestampNum) || timestampNum <= 1000000000000) return null;
+  if (Number.isNaN(timestampNum) || timestampNum <= 1000000000000) return null;
 
   const timestamp = new Date(timestampNum);
-  if (isNaN(timestamp.getTime())) return null;
+  if (Number.isNaN(timestamp.getTime())) return null;
 
   let authorId = 'system';
   const thirdPart = getArrayElement(parts, 2);
@@ -112,12 +112,12 @@ function parseGameFormat(postId: string): ParsedPostMetadata | null {
 
   // Try ISO date first
   let timestamp = new Date(timestampPart);
-  if (isNaN(timestamp.getTime())) {
+  if (Number.isNaN(timestamp.getTime())) {
     // Try numeric timestamp
     const numericTimestamp = parseInt(timestampPart, 10);
-    if (isNaN(numericTimestamp)) return null;
+    if (Number.isNaN(numericTimestamp)) return null;
     timestamp = new Date(numericTimestamp);
-    if (isNaN(timestamp.getTime())) return null;
+    if (Number.isNaN(timestamp.getTime())) return null;
   }
 
   return { gameId, authorId: 'system', timestamp };
@@ -125,7 +125,7 @@ function parseGameFormat(postId: string): ParsedPostMetadata | null {
 
 /**
  * Parse post ID and extract metadata
- * 
+ *
  * @param postId - The post ID to parse
  * @returns ParseResult with metadata and success indicator
  */
@@ -147,4 +147,3 @@ export function parsePostId(postId: string): ParseResult {
 
   return { metadata: DEFAULT_POST_METADATA, success: false };
 }
-

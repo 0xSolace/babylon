@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating single company PR statements or announcements.
- * 
+ *
  * Creates corporate posts from a company's PR team perspective, responding
  * to events or announcements. Uses professional corporate speak while
  * referencing specific actors, markets, and events from world context.
- * 
+ *
  * Returns XML with post content and sentiment analysis metadata.
  */
 export const companyPost = definePrompt({
@@ -59,5 +59,5 @@ clueStrength: 0 (no info) to 1 (smoking gun)
 pointsToward: true/false/null (does this help guilty party?)
 
 No other text.
-`.trim()
+`.trim(),
 });

@@ -1,20 +1,20 @@
-'use client'
+'use client';
 
 /**
  * PostHog User Identifier
  * Identifies users to PostHog when they authenticate
  */
 
-import { useEffect, useRef } from 'react'
-import { useAuth } from '@/hooks/useAuth'
-import { posthog } from '@/lib/posthog/client'
+import { posthog } from '@/lib/posthog/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useEffect, useRef } from 'react';
 
 export function PostHogIdentifier() {
-  const { user, authenticated } = useAuth()
-  const identifiedUserId = useRef<string | null>(null)
+  const { user, authenticated } = useAuth();
+  const identifiedUserId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!posthog || typeof window === 'undefined') return
+    if (!posthog || typeof window === 'undefined') return;
 
     // Identify user when authenticated
     if (authenticated && user?.id && user.id !== identifiedUserId.current) {
@@ -33,24 +33,23 @@ export function PostHogIdentifier() {
         reputationPoints: user.reputationPoints,
         // Track when user was created
         createdAt: user.createdAt,
-      })
-      identifiedUserId.current = user.id
-      
+      });
+      identifiedUserId.current = user.id;
+
       // Set user properties
       posthog.people?.set({
         username: user.username,
         displayName: user.displayName,
         authenticated: true,
-      })
+      });
     }
 
     // Reset on logout
     if (!authenticated && identifiedUserId.current) {
-      posthog.reset()
-      identifiedUserId.current = null
+      posthog.reset();
+      identifiedUserId.current = null;
     }
-  }, [authenticated, user])
+  }, [authenticated, user]);
 
-  return null
+  return null;
 }
-

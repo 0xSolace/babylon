@@ -1,18 +1,17 @@
-import nextra from 'nextra'
+import nextra from 'nextra';
 
 const withNextra = nextra({
   latex: true,
   search: {
-    codeblocks: true
+    codeblocks: true,
   },
   defaultShowCopyCode: true,
-  contentDirBasePath: "/docs"
-})
+  contentDirBasePath: '/docs',
+});
 
 export default withNextra({
   output: 'standalone',
   images: {
-    unoptimized: true
-  }
-})
-
+    unoptimized: true,
+  },
+});

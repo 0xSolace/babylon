@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating one-line summaries of daily events.
- * 
+ *
  * Creates concise summaries that capture the key developments of a game day,
  * including question context, events, and outcomes. Uses parody names only,
  * never real names.
- * 
+ *
  * Returns XML with one-line day summary.
  */
 export const daySummary = definePrompt({
@@ -39,5 +39,5 @@ Respond with XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

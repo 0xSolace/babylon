@@ -1,15 +1,15 @@
 /**
  * Chat Management API
- * 
+ *
  * @route GET /api/chats - List user's chats
  * @route POST /api/chats - Create new chat
  * @access Authenticated
- * 
+ *
  * @description
  * Manages both group chats and direct messages (DMs). Provides chat listings
  * with participant information, message counts, and last message previews.
  * Supports both user-specific chats and all game chats retrieval.
- * 
+ *
  * @openapi
  * /api/chats:
  *   get:
@@ -86,13 +86,13 @@
  *                   type: object
  *       401:
  *         description: Unauthorized
- * 
+ *
  * **GET - List User's Chats**
- * 
+ *
  * Returns all chats the authenticated user participates in, separated into:
  * - **Group Chats:** Multi-participant group conversations
  * - **Direct Messages:** One-on-one chats with other real users
- * 
+ *
  * **Features:**
  * - Quality scoring for group chats
  * - Last message preview
@@ -100,35 +100,35 @@
  * - Participant metadata
  * - DM participant profile details
  * - Filters out NPC/actor DMs (only real user DMs shown)
- * 
+ *
  * @query {boolean} all - Get all game chats (public, no auth required)
  * @query {boolean} debug - Enable debug logging
- * 
+ *
  * **All Game Chats Mode (all=true):**
  * Returns all group chats for the game without authentication.
  * Used for public game chat discovery.
- * 
+ *
  * @returns {object} Chat listings
  * @property {array} groupChats - User's group chat memberships
  * @property {array} directChats - User's direct message chats
  * @property {number} total - Total chat count
- * 
+ *
  * **POST - Create New Chat**
- * 
+ *
  * Creates a new chat (group or DM) and adds participants.
  * Creator is automatically added as the first participant.
- * 
+ *
  * @param {string} name - Chat name (optional for DMs)
  * @param {boolean} isGroup - Whether chat is a group chat (default: false)
  * @param {array} participantIds - Array of user IDs to add (optional)
- * 
+ *
  * @returns {object} Created chat
  * @property {object} chat - Created chat object
- * 
+ *
  * @throws {400} Invalid input parameters
  * @throws {401} Unauthorized - authentication required
  * @throws {500} Internal server error
- * 
+ *
  * @example
  * ```typescript
  * // Get user's chats
@@ -136,11 +136,11 @@
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
  * const { groupChats, directChats } = await chats.json();
- * 
+ *
  * // Get all game chats (public)
  * const gameChats = await fetch('/api/chats?all=true');
  * const { chats } = await gameChats.json();
- * 
+ *
  * // Create group chat
  * const newGroup = await fetch('/api/chats', {
  *   method: 'POST',
@@ -150,7 +150,7 @@
  *     participantIds: ['user1', 'user2', 'user3']
  *   })
  * });
- * 
+ *
  * // Create DM
  * const newDM = await fetch('/api/chats', {
  *   method: 'POST',
@@ -160,7 +160,7 @@
  *   })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/db/context} Database context with RLS
  * @see {@link /lib/validation/schemas} Request validation schemas
  * @see {@link /src/app/chats/page.tsx} Chat list UI
@@ -182,26 +182,27 @@ import type { NextRequest } from 'next/server';
 export const GET = withErrorHandling(async (request: NextRequest) => {
   console.log('[API /api/chats] GET request received');
   logger.info('GET /api/chats - Request received', undefined, 'GET /api/chats');
-  
+
   // Validate query parameters
   const { searchParams } = new URL(request.url);
   const query: Record<string, string> = {};
-  
+
   const all = searchParams.get('all');
   const debug = searchParams.get('debug');
-  
+
   if (all) query.all = all;
   if (debug) query.debug = debug;
-  
+
   console.log('[API /api/chats] Query params:', { all, debug });
-  
-  const validatedQuery = Object.keys(query).length > 0 
-    ? ChatQuerySchema.parse(query) 
-    : { all: undefined, debug: undefined };
+
+  const validatedQuery =
+    Object.keys(query).length > 0
+      ? ChatQuerySchema.parse(query)
+      : { all: undefined, debug: undefined };
 
   // Check if requesting all game chats
   const getAllChats = validatedQuery.all === 'true';
-  
+
   console.log('[API /api/chats] getAllChats:', getAllChats);
 
   if (getAllChats) {
@@ -232,7 +233,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     logger.info('All game chats fetched', { count: gameChats.length }, 'GET /api/chats');
 
     return successResponse({
-      chats: gameChats.map(chat => ({
+      chats: gameChats.map((chat) => ({
         id: chat.id,
         name: chat.name,
         isGroup: chat.isGroup,
@@ -244,12 +245,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const user = await authenticate(request);
 
-  logger.info('Fetching chats for user', { 
-    userId: user.userId,
-    privyId: user.privyId,
-    dbUserId: user.dbUserId,
-    fullUser: user
-  }, 'GET /api/chats');
+  logger.info(
+    'Fetching chats for user',
+    {
+      userId: user.userId,
+      privyId: user.privyId,
+      dbUserId: user.dbUserId,
+      fullUser: user,
+    },
+    'GET /api/chats'
+  );
 
   // Get user's chats - TEMPORARILY BYPASS RLS FOR DEBUGGING
   const { groupChats, directChats } = await asSystem(async (db) => {
@@ -287,11 +292,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       },
     });
 
-    logger.info('Found DM participants (using asSystem bypass)', { 
-      userId: user.userId, 
-      count: dmParticipants.length,
-      participants: dmParticipants 
-    }, 'GET /api/chats');
+    logger.info(
+      'Found DM participants (using asSystem bypass)',
+      {
+        userId: user.userId,
+        count: dmParticipants.length,
+        participants: dmParticipants,
+      },
+      'GET /api/chats'
+    );
 
     const dmChatIds = dmParticipants.map((p) => p.chatId);
     const dmChatsDetails = await db.chat.findMany({
@@ -333,20 +342,20 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         const otherParticipant = chat.ChatParticipant.find((p) => p.userId !== user.userId);
         let chatName = chat.name || 'Direct Message';
         let otherUserDetails = null;
-        
+
         if (otherParticipant) {
           // Try to get user details (real users only, not actors)
           const otherUser = await db.user.findUnique({
             where: { id: otherParticipant.userId },
-            select: { 
+            select: {
               id: true,
-              displayName: true, 
+              displayName: true,
               username: true,
               profileImageUrl: true,
               isActor: true,
             },
           });
-          
+
           if (otherUser && !otherUser.isActor) {
             chatName = otherUser.displayName || otherUser.username || 'Unknown';
             otherUserDetails = {
@@ -357,12 +366,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             };
           }
         }
-        
+
         // Only return DMs with real users (not NPCs)
         if (!otherUserDetails) {
           return null;
         }
-        
+
         return {
           id: chat.id,
           name: chatName,
@@ -373,12 +382,20 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           otherUser: otherUserDetails,
         };
       })
-    ).then(chats => chats.filter(c => c !== null));
+    ).then((chats) => chats.filter((c) => c !== null));
 
     return { groupChats, directChats };
   });
 
-  logger.info('User chats fetched successfully', { userId: user.userId, groupChats: groupChats.length, directChats: directChats.length }, 'GET /api/chats');
+  logger.info(
+    'User chats fetched successfully',
+    {
+      userId: user.userId,
+      groupChats: groupChats.length,
+      directChats: directChats.length,
+    },
+    'GET /api/chats'
+  );
 
   return successResponse({
     groupChats,
@@ -437,8 +454,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     return newChat;
   });
 
-  logger.info('Chat created successfully', { chatId: chat.id, userId: user.userId, isGroup, participantCount: (participantIds?.length || 0) + 1 }, 'POST /api/chats');
+  logger.info(
+    'Chat created successfully',
+    {
+      chatId: chat.id,
+      userId: user.userId,
+      isGroup,
+      participantCount: (participantIds?.length || 0) + 1,
+    },
+    'POST /api/chats'
+  );
 
   return successResponse({ chat }, 201);
 });
-

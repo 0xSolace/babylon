@@ -1,6 +1,6 @@
 /**
  * A2A Services
- * 
+ *
  * Service layer for A2A protocol operations
  */
 

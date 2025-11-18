@@ -1,13 +1,13 @@
 /**
  * Points Award API
- * 
+ *
  * @route POST /api/users/points/award - Award points to user
  * @access Internal/System
- * 
+ *
  * @description
  * Awards points to users for achievements and milestones. Creates balance
  * transaction records for transparency. Used internally by points service.
- * 
+ *
  * @openapi
  * /api/users/points/award:
  *   post:
@@ -52,7 +52,7 @@
  *                   type: number
  *       400:
  *         description: Invalid input or user not found
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/users/points/award', {
@@ -64,20 +64,20 @@
  *   })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/services/points-service} Points service
  */
 
 import { successResponse } from '@/lib/api/auth-middleware';
-import { prisma } from '@/lib/prisma';
 import { BusinessLogicError } from '@/lib/errors';
 import { withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
 import { requireUserByIdentifier } from '@/lib/users/user-lookup';
 import { AwardPointsSchema, UserIdParamSchema } from '@/lib/validation/schemas';
 import { Prisma } from '@prisma/client';
 import type { NextRequest } from 'next/server';
-import { generateSnowflakeId } from '@/lib/snowflake';
 
 /**
  * POST /api/users/points/award
@@ -131,7 +131,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     },
   });
 
-  logger.info(`Successfully awarded ${amount} points`, { userId: user.id, amount, reason }, 'POST /api/users/points/award');
+  logger.info(
+    `Successfully awarded ${amount} points`,
+    { userId: user.id, amount, reason },
+    'POST /api/users/points/award'
+  );
 
   return successResponse({
     message: `Successfully awarded ${amount} points`,
@@ -158,11 +162,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url);
   const userIdParam = searchParams.get('userId');
-  
+
   if (!userIdParam) {
     throw new BusinessLogicError('User ID is required', 'USER_ID_REQUIRED');
   }
-  
+
   // Validate userId format
   const { userId } = UserIdParamSchema.parse({ userId: userIdParam });
   const targetUser = await requireUserByIdentifier(userId, { id: true });
@@ -187,10 +191,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 
-  logger.info('Points award history fetched', { userId: canonicalUserId, transactionCount: transactions.length }, 'GET /api/users/points/award');
+  logger.info(
+    'Points award history fetched',
+    { userId: canonicalUserId, transactionCount: transactions.length },
+    'GET /api/users/points/award'
+  );
 
   return successResponse({
-    transactions: transactions.map(tx => ({
+    transactions: transactions.map((tx) => ({
       id: tx.id,
       amount: tx.amount.toString(),
       reason: tx.description,

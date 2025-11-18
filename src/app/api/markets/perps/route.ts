@@ -1,15 +1,15 @@
 /**
  * Perpetual Futures Markets API
- * 
+ *
  * @route GET /api/markets/perps
  * @access Public (optional authentication for user positions)
- * 
+ *
  * @description
  * Returns all available perpetual futures markets with real-time pricing,
  * 24-hour statistics, open interest, funding rates, and user positions.
  * Perpetual futures allow leveraged trading on company valuations without
  * expiration dates.
- * 
+ *
  * @openapi
  * /api/markets/perps:
  *   get:
@@ -52,7 +52,7 @@
  *                         type: object
  *                 count:
  *                   type: integer
- * 
+ *
  * **Market Data Includes:**
  * - **Current Price:** Real-time company valuation
  * - **24h Statistics:** Price change, volume, high/low
@@ -60,34 +60,34 @@
  * - **Funding Rate:** Periodic payment between long and short positions
  * - **Leverage Limits:** Maximum leverage available (up to 100x)
  * - **User Positions:** Active positions for authenticated users
- * 
+ *
  * **Funding Rate Calculation:**
  * Funding rates balance long/short position imbalance:
  * - Base rate: 1% annual
  * - Adjusted by position imbalance: ±5%
  * - Paid every 8 hours
  * - Longs pay shorts when more longs, vice versa
- * 
+ *
  * **24h Statistics:**
  * Calculated from minute-by-minute price history:
  * - Change: Current price vs 24h ago
  * - Change %: Percentage change
  * - High/Low: 24h price range
  * - Volume: Sum of notional values of positions opened
- * 
+ *
  * **Open Interest:**
  * Total size of all open positions (long + short) representing
  * market liquidity and trader commitment.
- * 
+ *
  * **Authentication:**
  * - Public access: Returns all markets without user positions
  * - Authenticated: Includes user's open positions for each market
- * 
+ *
  * @returns {object} Markets list response
  * @property {boolean} success - Operation success
  * @property {array} markets - Array of market objects
  * @property {number} count - Total markets available
- * 
+ *
  * **Market Object:**
  * @property {string} ticker - Trading symbol (e.g., 'AAPL', 'GOOGL')
  * @property {string} organizationId - Company/organization ID
@@ -105,15 +105,15 @@
  * @property {number} fundingRate.predictedRate - Predicted next rate
  * @property {number} maxLeverage - Maximum leverage allowed (100x)
  * @property {number} minOrderSize - Minimum order size
- * 
+ *
  * @throws {500} Internal server error
- * 
+ *
  * @example
  * ```typescript
  * // Get all perp markets
  * const response = await fetch('/api/markets/perps');
  * const { markets } = await response.json();
- * 
+ *
  * // Display market data
  * markets.forEach(market => {
  *   console.log(`${market.ticker}: $${market.currentPrice}`);
@@ -121,19 +121,19 @@
  *   console.log(`Open Interest: $${market.openInterest.toLocaleString()}`);
  *   console.log(`Funding: ${(market.fundingRate.rate * 100).toFixed(3)}%`);
  * });
- * 
+ *
  * // Find most active market
- * const mostActive = markets.reduce((max, m) => 
+ * const mostActive = markets.reduce((max, m) =>
  *   m.volume24h > max.volume24h ? m : max
  * );
  * ```
- * 
+ *
  * @see {@link /lib/database-service} Database service
  * @see {@link /lib/db/context} RLS context for user positions
  * @see {@link /src/app/markets/perps/page.tsx} Perps trading UI
  */
 
-import { optionalAuth, type AuthenticatedUser } from '@/lib/api/auth-middleware';
+import { type AuthenticatedUser, optionalAuth } from '@/lib/api/auth-middleware';
 import db from '@/lib/database-service';
 import { asPublic, asUser } from '@/lib/db/context';
 import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
@@ -153,7 +153,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     companies.map(async (company: Organization) => {
       // Use ticker from company if available, otherwise generate from ID
       const ticker = company.ticker || company.id.toUpperCase().replace(/-/g, '').substring(0, 12);
-      
+
       const currentPrice = Number(company.currentPrice) || Number(company.initialPrice) || 100;
 
       // Get last 24 hours of price history (1440 minutes)
@@ -178,7 +178,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       }
 
       // Get positions with RLS (only if authenticated)
-      const dbPositions = (authUser && authUser.userId)
+      const dbPositions = authUser?.userId
         ? await asUser(authUser, async (dbPrisma) => {
             return await dbPrisma.perpPosition.findMany({
               where: {
@@ -213,8 +213,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
               },
             });
           });
-      
-      const positions = dbPositions.map(p => ({
+
+      const positions = dbPositions.map((p) => ({
         id: p.id,
         userId: p.userId,
         side: p.side as 'long' | 'short',
@@ -225,11 +225,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       }));
 
       // Open Interest = total notional value of all open positions
-      const openInterest = positions.reduce((sum, p) => sum + (p.size * p.currentPrice), 0);
+      const openInterest = positions.reduce((sum, p) => sum + p.size * p.currentPrice, 0);
 
       // Calculate 24h trading volume from positions opened in last 24 hours
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const recentPositions = (authUser && authUser.userId)
+      const recentPositions = authUser?.userId
         ? await asUser(authUser, async (dbPrisma) => {
             return await dbPrisma.perpPosition.findMany({
               where: {
@@ -259,12 +259,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       const volume24h = recentPositions.reduce((sum, p) => {
         const size = Number(p.size);
         const entryPrice = Number(p.entryPrice);
-        return sum + (size * entryPrice);
+        return sum + size * entryPrice;
       }, 0);
 
       // Calculate funding rate from position imbalance
-      const longs = positions.filter(p => p.side === 'long');
-      const shorts = positions.filter(p => p.side === 'short');
+      const longs = positions.filter((p) => p.side === 'long');
+      const shorts = positions.filter((p) => p.side === 'short');
       const longSize = longs.reduce((sum, p) => sum + p.size, 0);
       const shortSize = shorts.reduce((sum, p) => sum + p.size, 0);
       const totalSize = longSize + shortSize;
@@ -272,7 +272,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       let fundingRate = 0.01; // Default 1% annual
       if (totalSize > 0) {
         const imbalance = (longSize - shortSize) / totalSize;
-        fundingRate = 0.01 + (imbalance * 0.05); // ±5% based on imbalance
+        fundingRate = 0.01 + imbalance * 0.05; // ±5% based on imbalance
       }
 
       return {
@@ -297,7 +297,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     })
   );
 
-  logger.info('Perpetual markets fetched successfully', { count: markets.length }, 'GET /api/markets/perps');
+  logger.info(
+    'Perpetual markets fetched successfully',
+    { count: markets.length },
+    'GET /api/markets/perps'
+  );
 
   return successResponse({
     success: true,

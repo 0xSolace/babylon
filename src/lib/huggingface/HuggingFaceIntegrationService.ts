@@ -1,18 +1,18 @@
 /**
  * HuggingFace Integration Service
- * 
+ *
  * Orchestrates the complete HuggingFace integration pipeline.
  * Main entry point for all HuggingFace operations.
  */
 
+import { exportToHuggingFace } from '@/lib/agents/plugins/plugin-trajectory-logger/src/export';
+import { ModelBenchmarkService } from '@/lib/benchmark/ModelBenchmarkService';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { HuggingFaceDatasetUploader } from './HuggingFaceDatasetUploader';
 import { HuggingFaceModelUploader } from './HuggingFaceModelUploader';
-import { ModelBenchmarkService } from '@/lib/benchmark/ModelBenchmarkService';
-import { exportToHuggingFace } from '@/lib/agents/plugins/plugin-trajectory-logger/src/export';
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
 
-export interface WeeklyUploadResult {
+export type WeeklyUploadResult = {
   success: boolean;
   datasets: {
     benchmarks: { success: boolean; url?: string; error?: string };
@@ -25,14 +25,14 @@ export interface WeeklyUploadResult {
   };
   errors: string[];
   duration: number;
-}
+};
 
-export interface DatasetUploadOptions {
+export type DatasetUploadOptions = {
   datasetName?: string;
   trajectoryDatasetName?: string;
   modelNamePrefix?: string;
   dryRun?: boolean;
-}
+};
 
 export class HuggingFaceIntegrationService {
   private datasetUploader: HuggingFaceDatasetUploader;
@@ -70,7 +70,8 @@ export class HuggingFaceIntegrationService {
       if (!options.dryRun) {
         logger.info('Step 1: Uploading benchmark dataset', undefined, 'HuggingFaceIntegration');
         const benchmarkResult = await this.datasetUploader.uploadDataset({
-          datasetName: options.datasetName || process.env.HF_DATASET_NAME || 'babylonlabs/agent-benchmarks',
+          datasetName:
+            options.datasetName || process.env.HF_DATASET_NAME || 'babylonlabs/agent-benchmarks',
           description: 'Weekly benchmark results for Babylon autonomous trading agents',
         });
 
@@ -84,7 +85,11 @@ export class HuggingFaceIntegrationService {
           result.errors.push(`Benchmark dataset upload: ${benchmarkResult.error}`);
         }
       } else {
-        logger.info('DRY RUN: Skipping benchmark dataset upload', undefined, 'HuggingFaceIntegration');
+        logger.info(
+          'DRY RUN: Skipping benchmark dataset upload',
+          undefined,
+          'HuggingFaceIntegration'
+        );
         result.datasets.benchmarks.success = true;
       }
 
@@ -92,7 +97,10 @@ export class HuggingFaceIntegrationService {
       if (!options.dryRun) {
         logger.info('Step 2: Uploading trajectory dataset', undefined, 'HuggingFaceIntegration');
         const trajectoryResult = await exportToHuggingFace({
-          datasetName: options.trajectoryDatasetName || process.env.HF_TRAJECTORY_DATASET_NAME || 'babylonlabs/agent-trajectories',
+          datasetName:
+            options.trajectoryDatasetName ||
+            process.env.HF_TRAJECTORY_DATASET_NAME ||
+            'babylonlabs/agent-trajectories',
           huggingFaceToken: process.env.HUGGING_FACE_TOKEN || process.env.HF_TOKEN,
           maxTrajectories: 10000,
           includeJudged: false,
@@ -109,7 +117,11 @@ export class HuggingFaceIntegrationService {
           result.errors.push(`Trajectory dataset upload: ${trajectoryResult.error}`);
         }
       } else {
-        logger.info('DRY RUN: Skipping trajectory dataset upload', undefined, 'HuggingFaceIntegration');
+        logger.info(
+          'DRY RUN: Skipping trajectory dataset upload',
+          undefined,
+          'HuggingFaceIntegration'
+        );
         result.datasets.trajectories.success = true;
       }
 
@@ -117,7 +129,11 @@ export class HuggingFaceIntegrationService {
       const unbenchmarkedModels = await ModelBenchmarkService.getUnbenchmarkedModels();
       result.models.processed = unbenchmarkedModels.length;
 
-      logger.info(`Step 3: Found ${unbenchmarkedModels.length} unbenchmarked models`, undefined, 'HuggingFaceIntegration');
+      logger.info(
+        `Step 3: Found ${unbenchmarkedModels.length} unbenchmarked models`,
+        undefined,
+        'HuggingFaceIntegration'
+      );
 
       if (unbenchmarkedModels.length > 0) {
         const standardBenchmarks = await ModelBenchmarkService.getStandardBenchmarkPaths();
@@ -143,18 +159,22 @@ export class HuggingFaceIntegrationService {
 
               // Upload if improved
               if (comparison.recommendation === 'deploy' && !options.dryRun) {
-                logger.info(`Model ${modelId} improved, uploading`, undefined, 'HuggingFaceIntegration');
+                logger.info(
+                  `Model ${modelId} improved, uploading`,
+                  undefined,
+                  'HuggingFaceIntegration'
+                );
 
                 const model = await prisma.trainedModel.findUnique({
                   where: { modelId },
                 });
 
                 if (model) {
-                  const modelName = options.modelNamePrefix 
+                  const modelName = options.modelNamePrefix
                     ? `${options.modelNamePrefix}-${model.version}`
-                    : process.env.HF_MODEL_NAME 
-                    ? `${process.env.HF_MODEL_NAME}-${model.version}`
-                    : `babylonlabs/babylon-agent-${model.version}`;
+                    : process.env.HF_MODEL_NAME
+                      ? `${process.env.HF_MODEL_NAME}-${model.version}`
+                      : `babylonlabs/babylon-agent-${model.version}`;
 
                   const uploadResult = await this.modelUploader.uploadModel({
                     modelId,
@@ -165,7 +185,7 @@ export class HuggingFaceIntegrationService {
 
                   if (uploadResult.success) {
                     result.models.uploaded++;
-                    
+
                     // Update model with HuggingFace repo
                     await prisma.trainedModel.update({
                       where: { modelId },
@@ -176,11 +196,19 @@ export class HuggingFaceIntegrationService {
                   }
                 }
               } else {
-                logger.info(`Model ${modelId} not ready for deployment: ${comparison.recommendation}`, undefined, 'HuggingFaceIntegration');
+                logger.info(
+                  `Model ${modelId} not ready for deployment: ${comparison.recommendation}`,
+                  undefined,
+                  'HuggingFaceIntegration'
+                );
               }
             } catch (error) {
               const errorMsg = error instanceof Error ? error.message : String(error);
-              logger.error(`Failed to process model ${modelId}`, { error }, 'HuggingFaceIntegration');
+              logger.error(
+                `Failed to process model ${modelId}`,
+                { error },
+                'HuggingFaceIntegration'
+              );
               result.errors.push(`Model ${modelId}: ${errorMsg}`);
             }
           }
@@ -190,16 +218,20 @@ export class HuggingFaceIntegrationService {
       result.success = result.errors.length === 0;
       result.duration = Date.now() - startTime;
 
-      logger.info('Weekly upload pipeline complete', {
-        success: result.success,
-        benchmarkDataset: result.datasets.benchmarks.success,
-        trajectoryDataset: result.datasets.trajectories.success,
-        modelsProcessed: result.models.processed,
-        modelsBenchmarked: result.models.benchmarked,
-        modelsUploaded: result.models.uploaded,
-        errors: result.errors.length,
-        duration: result.duration,
-      }, 'HuggingFaceIntegration');
+      logger.info(
+        'Weekly upload pipeline complete',
+        {
+          success: result.success,
+          benchmarkDataset: result.datasets.benchmarks.success,
+          trajectoryDataset: result.datasets.trajectories.success,
+          modelsProcessed: result.models.processed,
+          modelsBenchmarked: result.models.benchmarked,
+          modelsUploaded: result.models.uploaded,
+          errors: result.errors.length,
+          duration: result.duration,
+        },
+        'HuggingFaceIntegration'
+      );
 
       return result;
     } catch (error) {
@@ -297,7 +329,9 @@ export class HuggingFaceIntegrationService {
     // Check for standard benchmarks
     const standardBenchmarks = await ModelBenchmarkService.getStandardBenchmarkPaths();
     if (standardBenchmarks.length === 0) {
-      warnings.push('No standard benchmarks found. Run: npx ts-node scripts/generate-standard-benchmarks.ts');
+      warnings.push(
+        'No standard benchmarks found. Run: npx ts-node scripts/generate-standard-benchmarks.ts'
+      );
     }
 
     // Check for benchmark data
@@ -385,4 +419,3 @@ export class HuggingFaceIntegrationService {
 }
 
 export const huggingFaceIntegration = new HuggingFaceIntegrationService();
-

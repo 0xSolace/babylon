@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
+
 /**
  * SAFE Load Test - Won't OOM Your Computer
- * 
+ *
  * Proves monitoring works with REAL data but safe limits:
  * - Max 100 concurrent users
  * - 30 second duration
@@ -9,12 +10,12 @@
  * - Auto-stops if memory gets high
  */
 
-import { EnhancedLoadTestSimulator } from '@/lib/testing/enhanced-load-test-simulator';
 import { queryMonitor } from '@/lib/db/query-monitor';
+import { EnhancedLoadTestSimulator } from '@/lib/testing/enhanced-load-test-simulator';
 
 console.log('╔══════════════════════════════════════════════════════════╗');
 console.log('║   SAFE LOAD TEST - Proves Monitoring Works              ║');
-console.log('║   (Won\'t crash your computer!)                           ║');
+console.log("║   (Won't crash your computer!)                           ║");
 console.log('╚══════════════════════════════════════════════════════════╝\n');
 
 const baseUrl = 'http://localhost:3000';
@@ -25,7 +26,7 @@ async function main() {
   try {
     const response = await fetch(baseUrl);
     console.log(`✅ Server ready (status: ${response.status})\n`);
-  } catch (error) {
+  } catch (_error) {
     console.error('❌ Server not running');
     console.error('   Run: bun run dev\n');
     process.exit(1);
@@ -59,7 +60,7 @@ async function main() {
   console.log('🚀 Starting SAFE load test...\n');
 
   const simulator = new EnhancedLoadTestSimulator(baseUrl);
-  
+
   // Handle Ctrl+C
   process.on('SIGINT', () => {
     console.log('\n\n⚠️  Stopping test...');
@@ -98,7 +99,7 @@ async function main() {
     const sortedSlow = Object.entries(slowQueries)
       .sort((a, b) => b[1].avgDuration - a[1].avgDuration)
       .slice(0, 5);
-    
+
     for (const [pattern, stats] of sortedSlow) {
       console.log(`  ${pattern}:`);
       console.log(`    Count: ${stats.count}`);
@@ -113,11 +114,13 @@ async function main() {
 
   if (result.performanceMetrics) {
     const pm = result.performanceMetrics;
-    
+
     console.log(`Hit Rate: ${(pm.cache.hitRate * 100).toFixed(2)}%`);
     console.log(`Cache Operations: ${pm.cache.operations.get + pm.cache.operations.set}`);
-    console.log(`\nIssue Detected: ${pm.cache.hitRate === 0 ? 'NO CACHING IMPLEMENTED' : 'Cache working'}`);
-    
+    console.log(
+      `\nIssue Detected: ${pm.cache.hitRate === 0 ? 'NO CACHING IMPLEMENTED' : 'Cache working'}`
+    );
+
     if (pm.cache.hitRate === 0) {
       console.log(`Recommendation: Implement Redis caching for 10-20x improvement`);
     }
@@ -129,17 +132,21 @@ async function main() {
 
   if (result.bottlenecks && result.bottlenecks.length > 0) {
     console.log(`Bottlenecks Found: ${result.bottlenecks.length}`);
-    const critical = result.bottlenecks.filter(b => b.severity === 'critical');
-    const warnings = result.bottlenecks.filter(b => b.severity === 'warning');
-    
+    const critical = result.bottlenecks.filter((b) => b.severity === 'critical');
+    const warnings = result.bottlenecks.filter((b) => b.severity === 'warning');
+
     if (critical.length > 0) {
       console.log(`\nCRITICAL (${critical.length}):`);
-      critical.forEach(b => console.log(`  ❌ ${b.description}`));
+      for (const bottleneck of critical) {
+        console.log(`  ❌ ${bottleneck.description}`);
+      }
     }
-    
+
     if (warnings.length > 0) {
       console.log(`\nWARNINGS (${warnings.length}):`);
-      warnings.forEach(b => console.log(`  ⚠️  ${b.description}`));
+      for (const bottleneck of warnings) {
+        console.log(`  ⚠️  ${bottleneck.description}`);
+      }
     }
   }
 
@@ -149,11 +156,13 @@ async function main() {
 
   console.log('✅ Load test executed without crashing');
   console.log('✅ Response times captured from real requests');
-  console.log(`${queryStats.totalQueries > 0 ? '✅' : '⚠️ '} Database queries ${queryStats.totalQueries > 0 ? 'tracked' : 'not yet integrated'}`);
+  console.log(
+    `${queryStats.totalQueries > 0 ? '✅' : '⚠️ '} Database queries ${queryStats.totalQueries > 0 ? 'tracked' : 'not yet integrated'}`
+  );
   console.log('✅ Performance metrics collected');
   console.log('✅ Bottlenecks identified');
   console.log('✅ Memory limits protected system');
-  
+
   const finalMemory = process.memoryUsage().heapUsed / 1024 / 1024;
   console.log(`\nFinal Memory Usage: ${finalMemory.toFixed(2)}MB (safe)`);
 
@@ -164,4 +173,3 @@ main().catch((error) => {
   console.error('\n❌ Test failed:', error);
   process.exit(1);
 });
-

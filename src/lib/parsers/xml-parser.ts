@@ -1,17 +1,17 @@
 /**
  * XML Response Parser
- * 
+ *
  * @description
  * Canonical parser for handling all XML response formats from LLMs.
  * Consolidates 10+ duplicated parsing implementations into one.
- * 
+ *
  * **Handles All Formats**:
  * - Direct array: { items: [...] }
  * - XML nested: { items: { item: [...] } }
  * - Response wrapped: { response: { items: [...] } }
  * - Single item: { items: { item: {...} } }
  * - Array of objects: [{ items: [...] }, { items: [...] }]
- * 
+ *
  * **Usage**:
  * ```typescript
  * const questions = XMLParser.extractArray<Question>(rawResult, 'questions', 'question');
@@ -25,12 +25,12 @@ import { logger } from '@/lib/logger';
 export class XMLParser {
   /**
    * Extract array from XML/JSON response with all format handling
-   * 
+   *
    * @param response - Raw LLM response
    * @param arrayField - Field name for array (e.g., 'questions', 'scenarios')
    * @param itemField - Field name for items in XML nesting (e.g., 'question', 'scenario')
    * @returns Extracted and flattened array
-   * 
+   *
    * @example
    * ```typescript
    * // Handles: { questions: [...] }
@@ -40,11 +40,7 @@ export class XMLParser {
    * const questions = XMLParser.extractArray<Question>(rawResult, 'questions', 'question');
    * ```
    */
-  static extractArray<T>(
-    response: unknown,
-    arrayField: string,
-    itemField?: string
-  ): T[] {
+  static extractArray<T>(response: unknown, arrayField: string, itemField?: string): T[] {
     // Handle null/undefined
     if (!response) {
       logger.warn('XMLParser received null/undefined response', {}, 'XMLParser');
@@ -54,7 +50,7 @@ export class XMLParser {
     // Handle array of objects format: [{ items: [...] }, { items: [...] }]
     if (Array.isArray(response)) {
       logger.info('XMLParser: Flattening array format', { arrayField }, 'XMLParser');
-      return response.flatMap(item => {
+      return response.flatMap((item) => {
         if (item && typeof item === 'object' && arrayField in item) {
           const value = (item as Record<string, unknown>)[arrayField];
           if (Array.isArray(value)) {
@@ -76,15 +72,19 @@ export class XMLParser {
     // Handle response wrapper: { response: { items: [...] } }
     if ('response' in obj && obj.response && typeof obj.response === 'object') {
       logger.info('XMLParser: Extracting from response wrapper', { arrayField }, 'XMLParser');
-      return this.extractArray(obj.response, arrayField, itemField);
+      return XMLParser.extractArray(obj.response, arrayField, itemField);
     }
 
     // Check if array field exists
     if (!(arrayField in obj)) {
-      logger.warn('XMLParser: Field not found in response', { 
-        arrayField, 
-        availableFields: Object.keys(obj) 
-      }, 'XMLParser');
+      logger.warn(
+        'XMLParser: Field not found in response',
+        {
+          arrayField,
+          availableFields: Object.keys(obj),
+        },
+        'XMLParser'
+      );
       return [];
     }
 
@@ -97,13 +97,17 @@ export class XMLParser {
 
     // XML nested structure: { items: { item: [...] } }
     if (itemField && fieldValue && typeof fieldValue === 'object' && itemField in fieldValue) {
-      logger.info('XMLParser: Extracting from nested structure', { 
-        arrayField, 
-        itemField 
-      }, 'XMLParser');
-      
+      logger.info(
+        'XMLParser: Extracting from nested structure',
+        {
+          arrayField,
+          itemField,
+        },
+        'XMLParser'
+      );
+
       const nested = (fieldValue as Record<string, unknown>)[itemField];
-      
+
       // Could be array or single item
       if (Array.isArray(nested)) {
         return nested as T[];
@@ -113,27 +117,28 @@ export class XMLParser {
     }
 
     // Unknown format
-    logger.warn('XMLParser: Unknown format', { 
-      arrayField, 
-      itemField,
-      fieldType: typeof fieldValue,
-      fieldKeys: fieldValue && typeof fieldValue === 'object' ? Object.keys(fieldValue) : []
-    }, 'XMLParser');
-    
+    logger.warn(
+      'XMLParser: Unknown format',
+      {
+        arrayField,
+        itemField,
+        fieldType: typeof fieldValue,
+        fieldKeys: fieldValue && typeof fieldValue === 'object' ? Object.keys(fieldValue) : [],
+      },
+      'XMLParser'
+    );
+
     return [];
   }
 
   /**
    * Extract single object from response
-   * 
+   *
    * @param response - Raw LLM response
    * @param objectField - Field name for object
    * @returns Extracted object or null
    */
-  static extractObject<T>(
-    response: unknown,
-    objectField: string
-  ): T | null {
+  static extractObject<T>(response: unknown, objectField: string): T | null {
     if (!response || typeof response !== 'object') {
       return null;
     }
@@ -142,7 +147,7 @@ export class XMLParser {
 
     // Handle response wrapper
     if ('response' in obj && obj.response) {
-      return this.extractObject(obj.response, objectField);
+      return XMLParser.extractObject(obj.response, objectField);
     }
 
     // Direct access
@@ -155,7 +160,7 @@ export class XMLParser {
 
   /**
    * Validate extracted data is not empty
-   * 
+   *
    * @param data - Extracted data
    * @param context - Context for error message
    * @throws Error if data is empty
@@ -166,5 +171,3 @@ export class XMLParser {
     }
   }
 }
-
-

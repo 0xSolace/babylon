@@ -1,16 +1,16 @@
 /**
  * Integration Tests for Prisma Retry Logic
- * 
+ *
  * Tests the actual retry proxy behavior with mocked Prisma operations
  */
 
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
-import { createRetryProxy, withRetry, isRetryableError } from '../prisma-retry';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
+import { createRetryProxy, isRetryableError, withRetry } from '../prisma-retry';
 
 // Mock Prisma client for testing
-interface MockPrismaClient {
+type MockPrismaClient = {
   user: {
     findMany: () => Promise<unknown[]>;
     create: (args: unknown) => Promise<unknown>;
@@ -20,7 +20,7 @@ interface MockPrismaClient {
   $queryRaw: (query: unknown) => Promise<unknown>;
   $connect: () => Promise<void>;
   $disconnect: () => Promise<void>;
-}
+};
 
 describe('Prisma Retry Integration Tests', () => {
   describe('isRetryableError Function (Direct Testing)', () => {
@@ -28,7 +28,7 @@ describe('Prisma Retry Integration Tests', () => {
       const error = new Error('data did not match any variant of untagged enum JsonBody');
       (error as Error & { code: string }).code = 'InvalidArg';
       error.name = 'PrismaClientKnownRequestError';
-      
+
       expect(isRetryableError(error)).toBe(false);
     });
 
@@ -36,7 +36,7 @@ describe('Prisma Retry Integration Tests', () => {
       const error = new Error('Unique constraint failed');
       (error as Error & { code: string }).code = 'P2002';
       error.name = 'PrismaClientKnownRequestError';
-      
+
       expect(isRetryableError(error)).toBe(false);
     });
 
@@ -44,13 +44,13 @@ describe('Prisma Retry Integration Tests', () => {
       const error = new Error('Connection timeout');
       (error as Error & { code: string }).code = 'P1002';
       error.name = 'PrismaClientKnownRequestError';
-      
+
       expect(isRetryableError(error)).toBe(true);
     });
 
     it('should return true for ETIMEDOUT network errors', () => {
       const error = new Error('ETIMEDOUT: Connection timed out');
-      
+
       expect(isRetryableError(error)).toBe(true);
     });
 
@@ -65,7 +65,7 @@ describe('Prisma Retry Integration Tests', () => {
   describe('Error Classification', () => {
     it('should NOT retry InvalidArg errors', async () => {
       let attempts = 0;
-      
+
       const operation = mock(async () => {
         attempts++;
         const error = new Error(
@@ -76,9 +76,9 @@ describe('Prisma Retry Integration Tests', () => {
         throw error;
       });
 
-      await expect(
-        withRetry(operation, 'test-operation', { maxRetries: 5 })
-      ).rejects.toThrow('data did not match');
+      await expect(withRetry(operation, 'test-operation', { maxRetries: 5 })).rejects.toThrow(
+        'data did not match'
+      );
 
       // Should only attempt once (no retries for permanent errors)
       expect(attempts).toBe(1);
@@ -87,7 +87,7 @@ describe('Prisma Retry Integration Tests', () => {
 
     it('should NOT retry unique constraint violations', async () => {
       let attempts = 0;
-      
+
       const operation = mock(async () => {
         attempts++;
         const error = new Error('Unique constraint failed on the fields: (`email`)');
@@ -96,9 +96,9 @@ describe('Prisma Retry Integration Tests', () => {
         throw error;
       });
 
-      await expect(
-        withRetry(operation, 'test-operation', { maxRetries: 5 })
-      ).rejects.toThrow('Unique constraint');
+      await expect(withRetry(operation, 'test-operation', { maxRetries: 5 })).rejects.toThrow(
+        'Unique constraint'
+      );
 
       // Should only attempt once
       expect(attempts).toBe(1);
@@ -106,7 +106,7 @@ describe('Prisma Retry Integration Tests', () => {
 
     it('should NOT retry record not found errors', async () => {
       let attempts = 0;
-      
+
       const operation = mock(async () => {
         attempts++;
         const error = new Error('Record to update not found.');
@@ -115,16 +115,16 @@ describe('Prisma Retry Integration Tests', () => {
         throw error;
       });
 
-      await expect(
-        withRetry(operation, 'test-operation', { maxRetries: 5 })
-      ).rejects.toThrow('Record to update not found');
+      await expect(withRetry(operation, 'test-operation', { maxRetries: 5 })).rejects.toThrow(
+        'Record to update not found'
+      );
 
       expect(attempts).toBe(1);
     });
 
     it('SHOULD retry connection timeout errors', async () => {
       let attempts = 0;
-      
+
       const operation = mock(async () => {
         attempts++;
         if (attempts < 3) {
@@ -136,9 +136,9 @@ describe('Prisma Retry Integration Tests', () => {
         return { success: true };
       });
 
-      const result = await withRetry(operation, 'test-operation', { 
+      const result = await withRetry(operation, 'test-operation', {
         maxRetries: 5,
-        initialDelayMs: 1 // Speed up test
+        initialDelayMs: 1, // Speed up test
       });
 
       // Should retry and eventually succeed
@@ -148,7 +148,7 @@ describe('Prisma Retry Integration Tests', () => {
 
     it('SHOULD retry ETIMEDOUT network errors', async () => {
       let attempts = 0;
-      
+
       const operation = mock(async () => {
         attempts++;
         if (attempts < 2) {
@@ -157,9 +157,9 @@ describe('Prisma Retry Integration Tests', () => {
         return { success: true };
       });
 
-      const result = await withRetry(operation, 'test-operation', { 
+      const result = await withRetry(operation, 'test-operation', {
         maxRetries: 5,
-        initialDelayMs: 1
+        initialDelayMs: 1,
       });
 
       expect(attempts).toBe(2);
@@ -168,7 +168,7 @@ describe('Prisma Retry Integration Tests', () => {
 
     it('SHOULD give up after max retries for retryable errors', async () => {
       let attempts = 0;
-      
+
       const operation = mock(async () => {
         attempts++;
         const error = new Error('Connection timeout');
@@ -177,9 +177,9 @@ describe('Prisma Retry Integration Tests', () => {
       });
 
       await expect(
-        withRetry(operation, 'test-operation', { 
+        withRetry(operation, 'test-operation', {
           maxRetries: 3,
-          initialDelayMs: 1
+          initialDelayMs: 1,
         })
       ).rejects.toThrow('Connection timeout');
 
@@ -195,7 +195,10 @@ describe('Prisma Retry Integration Tests', () => {
       mockClient = {
         user: {
           findMany: mock(async () => [{ id: '1', name: 'Test' }]),
-          create: mock(async (args: unknown) => ({ id: '1', ...args as Record<string, unknown> })),
+          create: mock(async (args: unknown) => ({
+            id: '1',
+            ...(args as Record<string, unknown>),
+          })),
         },
         $transaction: mock(async (callback: (txClient: MockPrismaClient) => Promise<unknown>) => {
           // Simulate transaction client
@@ -277,7 +280,7 @@ describe('Prisma Retry Integration Tests', () => {
         $executeRaw: ReturnType<typeof mock>;
         user: { findMany: ReturnType<typeof mock> };
       };
-      
+
       const mockClient = {
         $transaction: mock(async (callback: (tx: TxClient) => Promise<unknown>) => {
           // Simulate transaction client with $executeRaw
@@ -318,7 +321,9 @@ describe('Prisma Retry Integration Tests', () => {
           transactionAttempts++;
           const txClient: TxClient = {
             $executeRaw: mock(async () => {
-              const error = new Error('Invalid query') as Error & { code: string };
+              const error = new Error('Invalid query') as Error & {
+                code: string;
+              };
               error.code = 'InvalidArg';
               error.name = 'PrismaClientKnownRequestError';
               throw error;
@@ -360,9 +365,7 @@ describe('Prisma Retry Integration Tests', () => {
               return 1;
             }),
             position: {
-              findMany: mock(async () => [
-                { id: '1', userId: 'user123', amount: 100 }
-              ]),
+              findMany: mock(async () => [{ id: '1', userId: 'user123', amount: 100 }]),
             },
           };
           return await callback(txClient);
@@ -372,16 +375,16 @@ describe('Prisma Retry Integration Tests', () => {
       const proxiedClient = createRetryProxy(mockClient);
 
       // Simulate asUser pattern
-      const result = await proxiedClient.$transaction(async (tx: TxClient) => {
+      const result = (await proxiedClient.$transaction(async (tx: TxClient) => {
         // Set RLS context
         await tx.$executeRaw(
           Prisma.sql`SELECT set_config('app.current_user_id', ${'user123'}, true)`
         );
-        
+
         // Query with RLS applied
         const positions = await tx.position.findMany();
         return positions;
-      }) as Array<{ id: string; userId: string; amount: number }>;
+      })) as Array<{ id: string; userId: string; amount: number }>;
 
       expect(result).toHaveLength(1);
       expect(result[0]).toHaveProperty('userId', 'user123');
@@ -394,15 +397,17 @@ describe('Prisma Retry Integration Tests', () => {
         user: {
           create: mock(async () => {
             attempts++;
-            
+
             // First attempt: unique constraint violation (should not retry)
             if (attempts === 1) {
-              const error = new Error('Unique constraint failed') as Error & { code: string };
+              const error = new Error('Unique constraint failed') as Error & {
+                code: string;
+              };
               error.code = 'P2002';
               error.name = 'PrismaClientKnownRequestError';
               throw error;
             }
-            
+
             return { id: '1', name: 'Test' };
           }),
         },
@@ -414,9 +419,7 @@ describe('Prisma Retry Integration Tests', () => {
       });
 
       // Should fail immediately without retry
-      await expect(
-        proxiedClient.user.create()
-      ).rejects.toThrow('Unique constraint');
+      await expect(proxiedClient.user.create()).rejects.toThrow('Unique constraint');
 
       expect(attempts).toBe(1);
     });
@@ -459,7 +462,7 @@ describe('Prisma Retry Integration Tests', () => {
       };
 
       const proxiedClient = createRetryProxy(mockClient);
-      
+
       // Should pass through Symbol access without wrapping
       expect(proxiedClient[Symbol.for('test')]).toBe('symbolValue');
     });
@@ -475,7 +478,7 @@ describe('Prisma Retry Integration Tests', () => {
       };
 
       const proxiedClient = createRetryProxy(mockClient);
-      
+
       // Should pass through Symbol access on model
       expect(proxiedClient.user[Symbol.for('modelSymbol')]).toBe('modelSymbolValue');
     });
@@ -491,7 +494,7 @@ describe('Prisma Retry Integration Tests', () => {
       };
 
       const proxiedClient = createRetryProxy(mockClient);
-      
+
       // Should return primitives as-is without wrapping
       expect(proxiedClient.someString).toBe('stringValue');
       expect(proxiedClient.someNumber).toBe(42);
@@ -508,7 +511,7 @@ describe('Prisma Retry Integration Tests', () => {
       };
 
       const proxiedClient = createRetryProxy(mockClient);
-      
+
       // Should return non-function properties as-is
       expect(proxiedClient.user.someProperty).toBe('propertyValue');
       expect(proxiedClient.user.someConfig).toEqual({ setting: true });
@@ -523,7 +526,7 @@ describe('Prisma Retry Integration Tests', () => {
       };
 
       const proxiedClient = createRetryProxy(mockClient);
-      
+
       // Should return undefined as-is
       expect(proxiedClient.undefinedModel).toBeUndefined();
     });
@@ -565,7 +568,7 @@ describe('Prisma Retry Integration Tests', () => {
         }
         startTimes.push(now);
         attempts++;
-        
+
         if (attempts < 3) {
           throw new Error('ETIMEDOUT');
         }
@@ -595,7 +598,7 @@ describe('Prisma Retry Integration Tests', () => {
       });
 
       const startTime = Date.now();
-      
+
       await withRetry(operation, 'test', {
         maxRetries: 10,
         initialDelayMs: 1000,
@@ -605,7 +608,7 @@ describe('Prisma Retry Integration Tests', () => {
       });
 
       const duration = Date.now() - startTime;
-      
+
       // Should complete relatively quickly because delays are capped
       // 9 retries * 50ms max = 450ms maximum
       expect(duration).toBeLessThan(1000); // Well under 1 second
@@ -621,9 +624,9 @@ describe('Prisma Retry Integration Tests', () => {
         throw error;
       });
 
-      await expect(
-        withRetry(operation, 'test', { maxRetries: 3 })
-      ).rejects.toThrow('Generic error');
+      await expect(withRetry(operation, 'test', { maxRetries: 3 })).rejects.toThrow(
+        'Generic error'
+      );
 
       // Should not retry (not a retryable error)
       expect(attempts).toBe(1);
@@ -638,9 +641,7 @@ describe('Prisma Retry Integration Tests', () => {
         throw error;
       });
 
-      await expect(
-        withRetry(operation, 'test', { maxRetries: 3 })
-      ).rejects.toThrow('Symbol error');
+      await expect(withRetry(operation, 'test', { maxRetries: 3 })).rejects.toThrow('Symbol error');
 
       // Should not retry and should not crash on Symbol
       expect(attempts).toBe(1);
@@ -654,7 +655,7 @@ describe('Prisma Retry Integration Tests', () => {
         // Verify it has the expected properties
         expect(prisma).toBeDefined();
         expect(typeof prisma.$transaction).toBe('function');
-        
+
         // Verify model methods exist
         expect(prisma.user).toBeDefined();
         expect(typeof prisma.user.findMany).toBe('function');
@@ -665,10 +666,10 @@ describe('Prisma Retry Integration Tests', () => {
       // Verify all public APIs are exported
       expect(createRetryProxy).toBeDefined();
       expect(typeof createRetryProxy).toBe('function');
-      
+
       expect(withRetry).toBeDefined();
       expect(typeof withRetry).toBe('function');
-      
+
       expect(isRetryableError).toBeDefined();
       expect(typeof isRetryableError).toBe('function');
     });
@@ -678,28 +679,28 @@ describe('Prisma Retry Integration Tests', () => {
     const RETRYABLE_CODES = ['P1001', 'P1002', 'P1008', 'P1017', 'P2024'];
     const NON_RETRYABLE_CODES = ['P2002', 'P2025', 'P2003', 'P2014', 'P2016', 'InvalidArg'];
 
-    RETRYABLE_CODES.forEach(code => {
+    RETRYABLE_CODES.forEach((code) => {
       it(`should retry error code ${code}`, () => {
         const error = new Error(`Error ${code}`);
         (error as Error & { code: string }).code = code;
         error.name = 'PrismaClientKnownRequestError';
-        
+
         expect(isRetryableError(error)).toBe(true);
       });
     });
 
-    NON_RETRYABLE_CODES.forEach(code => {
+    NON_RETRYABLE_CODES.forEach((code) => {
       it(`should NOT retry error code ${code}`, () => {
         const error = new Error(`Error ${code}`);
         (error as Error & { code: string }).code = code;
         error.name = 'PrismaClientKnownRequestError';
-        
+
         expect(isRetryableError(error)).toBe(false);
       });
     });
 
     const RETRYABLE_MESSAGES = [
-      'Can\'t reach database server',
+      "Can't reach database server",
       'Connection timeout',
       'ECONNREFUSED',
       'ECONNRESET',
@@ -707,13 +708,12 @@ describe('Prisma Retry Integration Tests', () => {
       'Connection terminated unexpectedly',
     ];
 
-    RETRYABLE_MESSAGES.forEach(message => {
+    RETRYABLE_MESSAGES.forEach((message) => {
       it(`should retry error with message: ${message}`, () => {
         const error = new Error(message);
-        
+
         expect(isRetryableError(error)).toBe(true);
       });
     });
   });
 });
-

@@ -1,13 +1,13 @@
 /**
  * GameSimulator Test Suite
- * 
+ *
  * @module engine/__tests__/GameSimulator.test
- * 
+ *
  * @description
  * Comprehensive test suite for the GameSimulator autonomous prediction market engine.
  * Tests game simulation without any server dependencies, database connections, or
  * external services.
- * 
+ *
  * **Test Coverage:**
  * - Instantiation with various configurations
  * - Complete 30-day game simulation
@@ -17,7 +17,7 @@
  * - Market evolution and LMSR pricing
  * - Winner calculation and reputation changes
  * - Performance benchmarks
- * 
+ *
  * **Key Features Tested:**
  * - Standalone operation (no database/server)
  * - Fast execution (<2s per game)
@@ -27,18 +27,18 @@
  * - Market price discovery
  * - Reputation system
  * - Batch performance (10 games in <10s)
- * 
+ *
  * **Testing Approach:**
  * - Unit tests for core functionality
  * - Integration tests for complete game flow
  * - Performance tests for batch execution
  * - Behavioral tests for agent decisions
- * 
+ *
  * @see {@link GameSimulator} - Class under test
  */
 
-import { describe, test, expect, beforeEach } from 'bun:test';
-import { GameSimulator, type GameConfig, type GameResult } from '../GameSimulator';
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { type GameConfig, type GameResult, GameSimulator } from '../GameSimulator';
 
 describe('GameSimulator - Standalone Engine', () => {
   let simulator: GameSimulator;
@@ -116,8 +116,8 @@ describe('GameSimulator - Standalone Engine', () => {
 
     test('processes all 30 days', async () => {
       const result = await simulator.runCompleteGame();
-      
-      const dayEvents = result.events.filter(e => e.type === 'day:changed');
+
+      const dayEvents = result.events.filter((e) => e.type === 'day:changed');
       expect(dayEvents.length).toBe(30);
     });
 
@@ -166,23 +166,23 @@ describe('GameSimulator - Standalone Engine', () => {
     test('designates insiders correctly', async () => {
       const result = await simulator.runCompleteGame();
 
-      const insiders = result.agents.filter(a => a.isInsider);
+      const insiders = result.agents.filter((a) => a.isInsider);
       const expected = Math.floor(5 * 0.3); // 30% insiders
-      
+
       expect(insiders.length).toBeGreaterThanOrEqual(expected);
     });
 
     test('agents receive clues', async () => {
       const result = await simulator.runCompleteGame();
 
-      const agentsWithClues = result.agents.filter(a => a.cluesReceived > 0);
+      const agentsWithClues = result.agents.filter((a) => a.cluesReceived > 0);
       expect(agentsWithClues.length).toBeGreaterThan(0);
     });
 
     test('agents place bets', async () => {
       const result = await simulator.runCompleteGame();
 
-      const betEvents = result.events.filter(e => e.type === 'agent:bet');
+      const betEvents = result.events.filter((e) => e.type === 'agent:bet');
       expect(betEvents.length).toBeGreaterThan(0);
     });
   });
@@ -204,7 +204,7 @@ describe('GameSimulator - Standalone Engine', () => {
       const result = await simulator.runCompleteGame();
 
       const finalMarket = result.market;
-      
+
       if (result.outcome) {
         // For YES outcome, YES odds should be higher
         expect(finalMarket.yesOdds).toBeGreaterThan(40);
@@ -227,7 +227,7 @@ describe('GameSimulator - Standalone Engine', () => {
 
       expect(result.winners).toBeDefined();
       expect(Array.isArray(result.winners)).toBe(true);
-      
+
       // Should have at least one winner
       expect(result.winners.length).toBeGreaterThan(0);
     });
@@ -237,12 +237,12 @@ describe('GameSimulator - Standalone Engine', () => {
 
       expect(result.reputationChanges).toBeDefined();
       expect(result.reputationChanges.length).toBe(result.agents.length);
-      
+
       // Winners should gain reputation
-      const winnerChanges = result.reputationChanges.filter(c => 
+      const winnerChanges = result.reputationChanges.filter((c) =>
         result.winners.includes(c.agentId)
       );
-      winnerChanges.forEach(change => {
+      winnerChanges.forEach((change) => {
         expect(change.change).toBeGreaterThan(0);
       });
     });
@@ -265,4 +265,3 @@ describe('GameSimulator - Standalone Engine', () => {
     });
   });
 });
-

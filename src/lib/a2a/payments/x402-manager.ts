@@ -1,30 +1,37 @@
 /**
  * x402 Micropayment Manager
  * Implements HTTP 402-based micropayment protocol for agent services
- * 
+ *
  * Uses Redis for persistent storage across serverless functions
  */
 
-import { JsonRpcProvider, type Provider, parseEther, formatEther, hexlify, randomBytes } from 'ethers'
-import { z } from 'zod'
-import { PaymentRequestSchema, type PaymentRequest } from '@/types/a2a'
-import type { PaymentVerificationParams, PaymentVerificationResult } from '@/types/payments'
-import { logger } from '@/lib/logger'
-import { redis, redisClientType } from '@/lib/redis'
-import type { Redis as UpstashRedis } from '@upstash/redis'
-import type IORedis from 'ioredis'
+import { logger } from '@/lib/logger';
+import { redis, redisClientType } from '@/lib/redis';
+import { type PaymentRequest, PaymentRequestSchema } from '@/types/a2a';
+import type { PaymentVerificationParams, PaymentVerificationResult } from '@/types/payments';
+import type { Redis as UpstashRedis } from '@upstash/redis';
+import {
+  JsonRpcProvider,
+  type Provider,
+  formatEther,
+  hexlify,
+  parseEther,
+  randomBytes,
+} from 'ethers';
+import type IORedis from 'ioredis';
+import { z } from 'zod';
 
-export interface X402Config {
-  rpcUrl: string
-  minPaymentAmount?: string // Minimum payment in wei (default: 0)
-  paymentTimeout?: number // Payment timeout in ms (default: 5 minutes)
-}
+export type X402Config = {
+  rpcUrl: string;
+  minPaymentAmount?: string; // Minimum payment in wei (default: 0)
+  paymentTimeout?: number; // Payment timeout in ms (default: 5 minutes)
+};
 
-interface PendingPayment {
-  request: PaymentRequest
-  createdAt: number
-  verified: boolean
-}
+type PendingPayment = {
+  request: PaymentRequest;
+  createdAt: number;
+  verified: boolean;
+};
 
 const PendingPaymentSchema = z.object({
   request: PaymentRequestSchema,
@@ -32,42 +39,46 @@ const PendingPaymentSchema = z.object({
   verified: z.boolean(),
 });
 
-
-const REDIS_PREFIX = 'x402:payment:'
+const REDIS_PREFIX = 'x402:payment:';
 
 export class X402Manager {
-  private provider: Provider
-  private config: Required<X402Config>
-  private readonly DEFAULT_MIN_PAYMENT = '1000000000000000' // 0.001 ETH
-  private readonly DEFAULT_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+  private static readonly DEFAULT_MIN_PAYMENT = '0';
+  private static readonly DEFAULT_TIMEOUT = 5 * 60 * 1000;
+  private provider: Provider;
+  private config: Required<X402Config>;
 
   constructor(config: X402Config) {
-    this.provider = new JsonRpcProvider(config.rpcUrl)
+    this.provider = new JsonRpcProvider(config.rpcUrl);
     this.config = {
       rpcUrl: config.rpcUrl,
-      minPaymentAmount: config.minPaymentAmount || this.DEFAULT_MIN_PAYMENT,
-      paymentTimeout: config.paymentTimeout || this.DEFAULT_TIMEOUT
-    }
+      minPaymentAmount: config.minPaymentAmount || X402Manager.DEFAULT_MIN_PAYMENT,
+      paymentTimeout: config.paymentTimeout || X402Manager.DEFAULT_TIMEOUT,
+    };
   }
 
   /**
    * Store payment in Redis with TTL
    */
   private async storePayment(requestId: string, payment: PendingPayment): Promise<void> {
-    const key = `${REDIS_PREFIX}${requestId}`
-    const ttlSeconds = Math.ceil(this.config.paymentTimeout / 1000)
-    
-    const serialized = JSON.stringify(payment)
-    
+    const key = `${REDIS_PREFIX}${requestId}`;
+    const ttlSeconds = Math.ceil(this.config.paymentTimeout / 1000);
+
+    const serialized = JSON.stringify(payment);
+
     if (redis && redisClientType) {
       if (redisClientType === 'upstash') {
-        await (redis as UpstashRedis).set(key, serialized, { ex: ttlSeconds })
+        await (redis as UpstashRedis).set(key, serialized, { ex: ttlSeconds });
       } else {
-        await (redis as IORedis).set(key, serialized, 'EX', ttlSeconds)
+        await (redis as IORedis).set(key, serialized, 'EX', ttlSeconds);
       }
-      logger.debug('[X402Manager] Stored payment in Redis', { requestId, ttl: ttlSeconds })
+      logger.debug('[X402Manager] Stored payment in Redis', {
+        requestId,
+        ttl: ttlSeconds,
+      });
     } else {
-      logger.warn('[X402Manager] Redis not available, payment will not persist across serverless instances')
+      logger.warn(
+        '[X402Manager] Redis not available, payment will not persist across serverless instances'
+      );
     }
   }
 
@@ -75,58 +86,64 @@ export class X402Manager {
    * Retrieve payment from Redis
    */
   private async getPayment(requestId: string): Promise<PendingPayment | null> {
-    const key = `${REDIS_PREFIX}${requestId}`
-    
+    const key = `${REDIS_PREFIX}${requestId}`;
+
     if (!redis || !redisClientType) {
-      logger.debug('[X402Manager] Redis not available', { requestId })
-      return null
+      logger.debug('[X402Manager] Redis not available', { requestId });
+      return null;
     }
 
-    const cached = await redis.get(key)
-    
+    const cached = await redis.get(key);
+
     if (!cached) {
-      logger.debug('[X402Manager] Payment not found in Redis', { requestId })
-      return null
+      logger.debug('[X402Manager] Payment not found in Redis', { requestId });
+      return null;
     }
 
-    const paymentData = JSON.parse(cached as string)
-    const validation = PendingPaymentSchema.safeParse(paymentData)
-    
+    const paymentData = JSON.parse(cached as string);
+    const validation = PendingPaymentSchema.safeParse(paymentData);
+
     if (!validation.success) {
-      logger.error('[X402Manager] Invalid payment data in Redis', { requestId, error: validation.error })
-      await this.deletePayment(requestId)
-      return null
+      logger.error('[X402Manager] Invalid payment data in Redis', {
+        requestId,
+        error: validation.error,
+      });
+      await this.deletePayment(requestId);
+      return null;
     }
-    
-    logger.debug('[X402Manager] Retrieved payment from Redis', { requestId })
+
+    logger.debug('[X402Manager] Retrieved payment from Redis', { requestId });
     return {
       ...validation.data,
       request: {
         ...validation.data.request,
-        metadata: validation.data.request.metadata as Record<string, string | number | boolean | null>
-      }
-    }
+        metadata: validation.data.request.metadata as Record<
+          string,
+          string | number | boolean | null
+        >,
+      },
+    };
   }
 
   /**
    * Update payment in Redis
    */
   private async updatePayment(requestId: string, payment: PendingPayment): Promise<void> {
-    const key = `${REDIS_PREFIX}${requestId}`
-    
+    const key = `${REDIS_PREFIX}${requestId}`;
+
     // Calculate remaining TTL
-    const remainingMs = payment.request.expiresAt - Date.now()
-    const ttlSeconds = Math.max(Math.ceil(remainingMs / 1000), 1)
-    
-    const serialized = JSON.stringify(payment)
-    
+    const remainingMs = payment.request.expiresAt - Date.now();
+    const ttlSeconds = Math.max(Math.ceil(remainingMs / 1000), 1);
+
+    const serialized = JSON.stringify(payment);
+
     if (redis && redisClientType) {
       if (redisClientType === 'upstash') {
-        await (redis as UpstashRedis).set(key, serialized, { ex: ttlSeconds })
+        await (redis as UpstashRedis).set(key, serialized, { ex: ttlSeconds });
       } else {
-        await (redis as IORedis).set(key, serialized, 'EX', ttlSeconds)
+        await (redis as IORedis).set(key, serialized, 'EX', ttlSeconds);
       }
-      logger.debug('[X402Manager] Updated payment in Redis', { requestId })
+      logger.debug('[X402Manager] Updated payment in Redis', { requestId });
     }
   }
 
@@ -134,11 +151,11 @@ export class X402Manager {
    * Delete payment from Redis
    */
   private async deletePayment(requestId: string): Promise<void> {
-    const key = `${REDIS_PREFIX}${requestId}`
-    
+    const key = `${REDIS_PREFIX}${requestId}`;
+
     if (redis && redisClientType) {
-      await redis.del(key)
-      logger.debug('[X402Manager] Deleted payment from Redis', { requestId })
+      await redis.del(key);
+      logger.debug('[X402Manager] Deleted payment from Redis', { requestId });
     }
   }
 
@@ -153,15 +170,15 @@ export class X402Manager {
     metadata?: Record<string, string | number | boolean | null>
   ): Promise<PaymentRequest> {
     // Validate amount meets minimum
-    const amountBn = parseEther(formatEther(amount))
-    const minAmountBn = parseEther(formatEther(this.config.minPaymentAmount))
+    const amountBn = parseEther(formatEther(amount));
+    const minAmountBn = parseEther(formatEther(this.config.minPaymentAmount));
 
     if (amountBn < minAmountBn) {
-      throw new Error(`Payment amount must be at least ${this.config.minPaymentAmount} wei`)
+      throw new Error(`Payment amount must be at least ${this.config.minPaymentAmount} wei`);
     }
 
-    const requestId = this.generateRequestId()
-    const expiresAt = Date.now() + this.config.paymentTimeout
+    const requestId = this.generateRequestId();
+    const expiresAt = Date.now() + this.config.paymentTimeout;
 
     const request: PaymentRequest = {
       requestId,
@@ -170,168 +187,181 @@ export class X402Manager {
       amount,
       service,
       metadata,
-      expiresAt
-    }
+      expiresAt,
+    };
 
     // Store pending payment in Redis
     await this.storePayment(requestId, {
       request,
       createdAt: Date.now(),
-      verified: false
-    })
+      verified: false,
+    });
 
-    return request
+    return request;
   }
 
   /**
    * Verify a payment receipt against blockchain transaction
    * Supports both EOA and smart wallet transactions
    */
-  async verifyPayment(verificationData: PaymentVerificationParams): Promise<PaymentVerificationResult> {
-    const pending = await this.getPayment(verificationData.requestId)
+  async verifyPayment(
+    verificationData: PaymentVerificationParams
+  ): Promise<PaymentVerificationResult> {
+    const pending = await this.getPayment(verificationData.requestId);
     if (!pending) {
-      return { verified: false, error: 'Payment request not found or expired' }
+      return { verified: false, error: 'Payment request not found or expired' };
     }
 
     if (pending.verified) {
-      return { verified: true }
+      return { verified: true };
     }
 
     if (Date.now() > pending.request.expiresAt) {
-      await this.deletePayment(verificationData.requestId)
-      return { verified: false, error: 'Payment request expired' }
+      await this.deletePayment(verificationData.requestId);
+      return { verified: false, error: 'Payment request expired' };
     }
 
-    const tx = await this.provider.getTransaction(verificationData.txHash)
+    const tx = await this.provider.getTransaction(verificationData.txHash);
     if (!tx) {
-      return { verified: false, error: 'Transaction not found on blockchain' }
+      return { verified: false, error: 'Transaction not found on blockchain' };
     }
 
-    const txReceipt = await this.provider.getTransactionReceipt(verificationData.txHash)
+    const txReceipt = await this.provider.getTransactionReceipt(verificationData.txHash);
     if (!txReceipt) {
-      return { verified: false, error: 'Transaction not yet confirmed' }
+      return { verified: false, error: 'Transaction not yet confirmed' };
     }
 
     if (txReceipt.status !== 1) {
-      return { verified: false, error: 'Transaction failed on blockchain' }
+      return { verified: false, error: 'Transaction failed on blockchain' };
     }
 
-    const errors: string[] = []
+    const errors: string[] = [];
 
     // For smart wallets (account abstraction), the tx.from might be the paymaster or smart wallet
     // We need to be more lenient with sender validation
-    const fromMatch = tx.from.toLowerCase() === pending.request.from.toLowerCase()
-    
+    const fromMatch = tx.from.toLowerCase() === pending.request.from.toLowerCase();
+
     // Check if this might be a smart wallet transaction (has different from address)
-    const isSmartWallet = !fromMatch
-    
+    const isSmartWallet = !fromMatch;
+
     if (!fromMatch) {
-      logger.warn(`[X402Manager] Sender mismatch: expected ${pending.request.from}, got ${tx.from}, treating as smart wallet`)
+      logger.warn(
+        `[X402Manager] Sender mismatch: expected ${pending.request.from}, got ${tx.from}, treating as smart wallet`
+      );
       // For production, you may want to implement more sophisticated verification:
       // - Check transaction trace for internal calls to the sender's smart wallet
       // - Verify the smart wallet contract code/factory
     }
 
     // Recipient validation - should be strict
-    const recipientMatch = tx.to?.toLowerCase() === pending.request.to.toLowerCase()
-    
+    const recipientMatch = tx.to?.toLowerCase() === pending.request.to.toLowerCase();
+
     if (!recipientMatch) {
       // For smart wallets, tx.to could be an entrypoint. A robust solution would involve:
       // 1. Decoding the transaction data to find the ultimate recipient.
       // 2. Tracing the transaction to see internal calls.
       // For now, we will reject if there is a direct mismatch, to be safe.
-      errors.push(`Recipient mismatch: expected ${pending.request.to}, got ${tx.to}`)
+      errors.push(`Recipient mismatch: expected ${pending.request.to}, got ${tx.to}`);
     }
 
     // Verify amount (with some tolerance for gas and fees)
-    const requestedAmount = BigInt(pending.request.amount)
-    const paidAmount = tx.value
-    
+    const requestedAmount = BigInt(pending.request.amount);
+    const paidAmount = tx.value;
+
     // Allow for 1% tolerance for gas fees in smart wallet transactions
-    const minAcceptableAmount = requestedAmount * 99n / 100n
-    
+    const minAcceptableAmount = (requestedAmount * 99n) / 100n;
+
     if (paidAmount < minAcceptableAmount) {
-      errors.push(`Insufficient payment: expected at least ${minAcceptableAmount}, got ${paidAmount}`)
+      errors.push(
+        `Insufficient payment: expected at least ${minAcceptableAmount}, got ${paidAmount}`
+      );
     }
 
     if (errors.length > 0) {
-      return { verified: false, error: errors.join('; ') }
+      return { verified: false, error: errors.join('; ') };
     }
 
     // Mark as verified in Redis
-    pending.verified = true
-    await this.updatePayment(verificationData.requestId, pending)
+    pending.verified = true;
+    await this.updatePayment(verificationData.requestId, pending);
 
-    logger.info(`[X402Manager] Payment verified successfully: ${verificationData.txHash}`, { 
-      requestId: verificationData.requestId, 
-      isSmartWallet 
-    })
+    logger.info(`[X402Manager] Payment verified successfully: ${verificationData.txHash}`, {
+      requestId: verificationData.requestId,
+      isSmartWallet,
+    });
 
-    return { verified: true }
+    return { verified: true };
   }
 
   /**
    * Get payment request details
    */
   async getPaymentRequest(requestId: string): Promise<PaymentRequest | null> {
-    const pending = await this.getPayment(requestId)
-    return pending ? pending.request : null
+    const pending = await this.getPayment(requestId);
+    return pending ? pending.request : null;
   }
 
   /**
    * Check if payment has been verified
    */
   async isPaymentVerified(requestId: string): Promise<boolean> {
-    const pending = await this.getPayment(requestId)
-    return pending ? pending.verified : false
+    const pending = await this.getPayment(requestId);
+    return pending ? pending.verified : false;
   }
 
   /**
    * Cancel a payment request
    */
   async cancelPaymentRequest(requestId: string): Promise<boolean> {
-    await this.deletePayment(requestId)
-    return true
+    await this.deletePayment(requestId);
+    return true;
   }
 
   /**
    * Generate unique request ID
    */
   private generateRequestId(): string {
-    return `x402-${Date.now()}-${hexlify(randomBytes(16))}`
+    return `x402-${Date.now()}-${hexlify(randomBytes(16))}`;
   }
 
   /**
    * Get all pending payments (for testing/debugging)
    */
   async getPendingPayments(): Promise<PendingPayment[]> {
-    if (!redis) return []
-    const keys = await redis.keys(`${REDIS_PREFIX}*`)
-    const payments = await Promise.all(keys.map(key => this.getPayment(key.replace(REDIS_PREFIX, ''))))
-    return payments.filter(p => p && !p.verified) as PendingPayment[]
+    if (!redis) return [];
+    const keys = await redis.keys(`${REDIS_PREFIX}*`);
+    const payments = await Promise.all(
+      keys.map((key) => this.getPayment(key.replace(REDIS_PREFIX, '')))
+    );
+    return payments.filter((p) => p && !p.verified) as PendingPayment[];
   }
 
   /**
    * Get statistics about payments (for testing/debugging)
    */
   async getStatistics() {
-    if (!redis) return { pending: 0, verified: 0, expired: 0 }
-    const keys = await redis.keys(`${REDIS_PREFIX}*`)
-    const payments = await Promise.all(keys.map(key => this.getPayment(key.replace(REDIS_PREFIX, ''))))
+    if (!redis) return { pending: 0, verified: 0, expired: 0 };
+    const keys = await redis.keys(`${REDIS_PREFIX}*`);
+    const payments = await Promise.all(
+      keys.map((key) => this.getPayment(key.replace(REDIS_PREFIX, '')))
+    );
 
-    const now = Date.now()
-    return payments.reduce((acc, p) => {
-      if (p) {
-        if (p.verified) {
-          acc.verified++
-        } else if (p.request.expiresAt < now) {
-          acc.expired++
-        } else {
-          acc.pending++
+    const now = Date.now();
+    return payments.reduce(
+      (acc, p) => {
+        if (p) {
+          if (p.verified) {
+            acc.verified++;
+          } else if (p.request.expiresAt < now) {
+            acc.expired++;
+          } else {
+            acc.pending++;
+          }
         }
-      }
-      return acc
-    }, { pending: 0, verified: 0, expired: 0 })
+        return acc;
+      },
+      { pending: 0, verified: 0, expired: 0 }
+    );
   }
 
   /**

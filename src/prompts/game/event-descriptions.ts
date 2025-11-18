@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating day-by-day event descriptions with narrative context.
- * 
+ *
  * Creates detailed event descriptions for each day, including narrative
  * context, actor involvement, and consequences. Similar to dayEvents but
  * with different formatting or context requirements.
- * 
+ *
  * Returns XML with event descriptions.
  */
 export const eventDescriptions = definePrompt({
@@ -44,5 +44,5 @@ Return XML with events and whether they point toward outcomes:
 </response>
 
 Return EXACTLY {{eventCount}} events.
-`.trim()
+`.trim(),
 });

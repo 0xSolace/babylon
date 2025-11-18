@@ -5,11 +5,7 @@
   "username": "threadgai",
   "description": "CT's favorite influenza. Posts 47-tweet threads analyzing price action with more lines than a geometry textbook. His technical analysis is 50% right, 100% confident. Calls every top and bottom, claims victory on the ones that hit. 'Not financial advice' is his legal shield.",
   "profileDescription": "Crypto trader and analyst. Thread on why BTC is going to 100k. Clear inverse head and shoulders forming. Called this exact move 3 weeks ago. Elliott Wave count suggests wave 3. Not financial advice but.",
-  "domain": [
-    "crypto",
-    "trading",
-    "technical_analysis"
-  ],
+  "domain": ["crypto", "trading", "technical_analysis"],
   "personality": "chart wizard",
   "tier": "B_TIER",
   "hasPool": true,

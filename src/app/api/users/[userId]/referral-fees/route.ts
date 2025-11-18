@@ -1,13 +1,13 @@
 /**
  * User Referral Fees API
- * 
+ *
  * @route GET /api/users/[userId]/referral-fees - Get referral fee earnings
  * @access Authenticated (own profile only)
- * 
+ *
  * @description
  * Returns referral fee earnings including total earned, total referrals, top
  * referrals, and recent fee transactions. Requires own profile access.
- * 
+ *
  * @openapi
  * /api/users/{userId}/referral-fees:
  *   get:
@@ -44,59 +44,59 @@
  *         description: Unauthorized
  *       403:
  *         description: Cannot access another user's referral fees
- * 
+ *
  * @example
  * ```typescript
  * const { totalEarned, recentFees } = await fetch(`/api/users/${userId}/referral-fees`, {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * }).then(r => r.json());
  * ```
- * 
+ *
  * @see {@link /lib/services/fee-service} Fee service
  */
 
-import type { NextRequest } from 'next/server'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { FeeService } from '@/lib/services/fee-service'
-import { logger } from '@/lib/logger'
-import { requireUserByIdentifier } from '@/lib/users/user-lookup'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { FeeService } from '@/lib/services/fee-service';
+import { requireUserByIdentifier } from '@/lib/users/user-lookup';
+import type { NextRequest } from 'next/server';
 
-export const GET = withErrorHandling(async (
-  request: NextRequest,
-  context: { params: Promise<{ userId: string }> }
-) => {
-  const authUser = await authenticate(request);
-  const { userId } = await context.params;
-  
-  // Verify authorization
-  const user = await requireUserByIdentifier(userId, {
-    id: true,
-    totalFeesEarned: true,
-  })
-  
-  if (authUser.userId !== user.id) {
-    throw new Error('Unauthorized')
+export const GET = withErrorHandling(
+  async (request: NextRequest, context: { params: Promise<{ userId: string }> }) => {
+    const authUser = await authenticate(request);
+    const { userId } = await context.params;
+
+    // Verify authorization
+    const user = await requireUserByIdentifier(userId, {
+      id: true,
+      totalFeesEarned: true,
+    });
+
+    if (authUser.userId !== user.id) {
+      throw new Error('Unauthorized');
+    }
+
+    // Get referral earnings
+    const earnings = await FeeService.getReferralEarnings(user.id, {
+      limit: 20,
+    });
+
+    logger.info(
+      'Referral fees fetched',
+      {
+        userId: user.id,
+        totalEarned: earnings.totalEarned,
+        totalReferrals: earnings.totalReferrals,
+      },
+      'GET /api/users/[userId]/referral-fees'
+    );
+
+    return successResponse({
+      totalEarned: earnings.totalEarned,
+      totalReferrals: earnings.totalReferrals,
+      topReferrals: earnings.topReferrals,
+      recentFees: earnings.recentFees,
+    });
   }
-
-  // Get referral earnings
-  const earnings = await FeeService.getReferralEarnings(user.id, {
-    limit: 20,
-  })
-
-  logger.info('Referral fees fetched', {
-    userId: user.id,
-    totalEarned: earnings.totalEarned,
-    totalReferrals: earnings.totalReferrals,
-  }, 'GET /api/users/[userId]/referral-fees')
-
-  return successResponse({
-    totalEarned: earnings.totalEarned,
-    totalReferrals: earnings.totalReferrals,
-    topReferrals: earnings.topReferrals,
-    recentFees: earnings.recentFees,
-  })
-})
-
-
-
+);

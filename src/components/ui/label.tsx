@@ -1,15 +1,15 @@
-import React from 'react';
 import { cn } from '@/lib/utils';
+import type React from 'react';
 
 /**
  * Label component for form field labels.
- * 
+ *
  * Simple label wrapper that extends standard label HTML attributes.
  * Styling is handled via className.
- * 
+ *
  * @param props - Label component props
  * @returns Label element
- * 
+ *
  * @example
  * ```tsx
  * <Label htmlFor="email">Email</Label>
@@ -17,11 +17,10 @@ import { cn } from '@/lib/utils';
  */
 export type LabelProps = React.ComponentPropsWithoutRef<'label'>;
 
-export const Label = ({ children, className, ...props }: LabelProps) => {
+export const Label = ({ children, className, htmlFor, ...props }: LabelProps) => {
   return (
-    <label className={cn(className)} {...props}>
+    <label className={cn(className)} htmlFor={htmlFor} {...props}>
       {children}
     </label>
   );
 };
-

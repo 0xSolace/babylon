@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Test Swagger/OpenAPI Generation
- * 
+ *
  * Verifies that the auto-generator works correctly and finds all documented routes
  */
 
@@ -11,7 +11,7 @@ async function testSwagger() {
   console.log('🧪 Testing Swagger Auto-Generator...\n');
 
   try {
-    const spec = await generateAutoSpec() as {
+    const spec = (await generateAutoSpec()) as {
       openapi?: string;
       paths?: Record<string, unknown>;
       info?: { title?: string; version?: string };
@@ -83,7 +83,9 @@ async function testSwagger() {
 
     if (missing.length > 0) {
       console.log(`\n⚠️  Missing routes:`);
-      missing.forEach((route) => console.log(`   - ${route}`));
+      missing.forEach((route) => {
+        console.log(`   - ${route}`);
+      });
       console.log('\n💡 These routes may need @openapi tags or have formatting issues.');
       process.exit(1);
     } else {
@@ -97,4 +99,3 @@ async function testSwagger() {
 }
 
 testSwagger();
-

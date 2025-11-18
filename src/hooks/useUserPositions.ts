@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-
 import type { PerpPosition } from '@/shared/perps-types';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Represents a user's position in a prediction market.
@@ -19,7 +18,7 @@ function toNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
-export interface UserPredictionPosition {
+export type UserPredictionPosition = {
   id: string;
   marketId: string;
   question: string;
@@ -32,23 +31,23 @@ export interface UserPredictionPosition {
   unrealizedPnL: number;
   resolved: boolean;
   resolution: boolean | null;
-}
+};
 
-interface PerpStats {
+type PerpStats = {
   totalPositions: number;
   totalPnL: number;
   totalFunding: number;
-}
+};
 
-interface PositionsState {
+type PositionsState = {
   perpPositions: PerpPosition[];
   predictionPositions: UserPredictionPosition[];
   perpStats: PerpStats;
-}
+};
 
 type NumericLike = number | string | null | undefined;
 
-interface ApiPerpPositionPayload {
+type ApiPerpPositionPayload = {
   id: string;
   userId?: string;
   ticker: string;
@@ -64,9 +63,9 @@ interface ApiPerpPositionPayload {
   fundingPaid?: NumericLike;
   openedAt: string;
   lastUpdated?: string;
-}
+};
 
-interface ApiPredictionPositionPayload {
+type ApiPredictionPositionPayload = {
   id: string;
   marketId: string;
   question: string;
@@ -80,15 +79,15 @@ interface ApiPredictionPositionPayload {
   currentProbability?: NumericLike;
   resolved?: boolean;
   resolution?: boolean | null;
-}
+};
 
 /**
  * Options for configuring user positions loading.
  */
-interface UseUserPositionsOptions {
+type UseUserPositionsOptions = {
   /** Whether to enable position fetching (default: true) */
   enabled?: boolean;
-}
+};
 
 const DEFAULT_STATS: PerpStats = {
   totalPositions: 0,
@@ -104,14 +103,14 @@ const createDefaultState = (): PositionsState => ({
 
 /**
  * Hook for fetching and managing user trading positions.
- * 
+ *
  * Loads all positions (both perpetual and prediction markets) for a given user.
  * Automatically refreshes when the userId changes. Supports cancellation of
  * in-flight requests and error handling.
- * 
+ *
  * @param userId - The user ID to fetch positions for, or null/undefined to clear positions
  * @param options - Configuration options including enabled flag
- * 
+ *
  * @returns An object containing:
  * - `perpPositions`: Array of perpetual market positions
  * - `predictionPositions`: Array of prediction market positions
@@ -119,13 +118,13 @@ const createDefaultState = (): PositionsState => ({
  * - `loading`: Whether positions are currently loading
  * - `error`: Any error that occurred while fetching
  * - `refresh`: Function to manually refresh positions
- * 
+ *
  * @example
  * ```tsx
  * const { perpPositions, predictionPositions, loading } = useUserPositions(userId);
- * 
+ *
  * if (loading) return <div>Loading positions...</div>;
- * 
+ *
  * return (
  *   <div>
  *     <h2>Perpetual Positions: {perpPositions.length}</h2>
@@ -134,10 +133,7 @@ const createDefaultState = (): PositionsState => ({
  * );
  * ```
  */
-export function useUserPositions(
-  userId?: string | null,
-  options: UseUserPositionsOptions = {}
-) {
+export function useUserPositions(userId?: string | null, options: UseUserPositionsOptions = {}) {
   const { enabled = true } = options;
   const [state, setState] = useState<PositionsState>(createDefaultState);
   const [loading, setLoading] = useState(false);
@@ -160,14 +156,22 @@ export function useUserPositions(
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/markets/positions/${encodeURIComponent(userId)}`,
-        { signal: controller.signal }
-      );
+      const response = await fetch(`/api/markets/positions/${encodeURIComponent(userId)}`, {
+        signal: controller.signal,
+      });
 
       if (controller.signal.aborted) return;
 
-      let data;
+      type UserPositionsResponse = {
+        perpetuals?: {
+          positions?: ApiPerpPositionPayload[];
+          stats?: PerpStats;
+        };
+        predictions?: {
+          positions?: ApiPredictionPositionPayload[];
+        };
+      };
+      let data: UserPositionsResponse | null = null;
       try {
         data = await response.json();
       } catch (parseError) {
@@ -179,16 +183,15 @@ export function useUserPositions(
 
       if (controller.signal.aborted) return;
 
-      const perpetuals = data?.perpetuals ?? {};
+      const perpetuals = data?.perpetuals ?? { positions: [], stats: undefined };
       const predictions = data?.predictions ?? {};
 
-      const normalizedPerps = (perpetuals.positions ?? []).map(
-        (pos: ApiPerpPositionPayload) => ({
-          id: pos.id,
-          userId: pos.userId,
-          ticker: pos.ticker,
-          organizationId: pos.organizationId,
-          side: pos.side,
+      const normalizedPerps = (perpetuals.positions ?? []).map((pos: ApiPerpPositionPayload) => ({
+        id: pos.id,
+        userId: pos.userId,
+        ticker: pos.ticker,
+        organizationId: pos.organizationId,
+        side: pos.side,
         entryPrice: toNumber(pos.entryPrice),
         currentPrice: toNumber(pos.currentPrice),
         size: toNumber(pos.size),
@@ -198,9 +201,8 @@ export function useUserPositions(
         unrealizedPnLPercent: toNumber(pos.unrealizedPnLPercent),
         fundingPaid: toNumber(pos.fundingPaid),
         openedAt: pos.openedAt,
-          lastUpdated: pos.lastUpdated ?? pos.openedAt,
-        })
-      ) as PerpPosition[];
+        lastUpdated: pos.lastUpdated ?? pos.openedAt,
+      })) as PerpPosition[];
 
       const normalizedPredictions = (predictions.positions ?? []).map(
         (pos: ApiPredictionPositionPayload) => {
@@ -237,9 +239,9 @@ export function useUserPositions(
       if (err instanceof Error && err.name === 'AbortError') {
         return;
       }
-      
+
       console.error('Failed to fetch user positions', err);
-      
+
       if (!controller.signal.aborted) {
         setError(err instanceof Error ? err : new Error('Failed to fetch positions'));
         setLoading(false);

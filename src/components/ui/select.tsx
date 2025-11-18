@@ -1,15 +1,15 @@
-import React from 'react';
 import { cn } from '@/lib/utils';
+import type React from 'react';
 
 /**
  * Select component for dropdown selection.
- * 
+ *
  * Select dropdown component with controlled value support.
  * Provides onValueChange callback for value updates.
- * 
+ *
  * @param props - Select component props
  * @returns Select element
- * 
+ *
  * @example
  * ```tsx
  * <Select value={selected} onValueChange={setSelected}>
@@ -24,8 +24,8 @@ export interface SelectProps extends React.ComponentPropsWithoutRef<'select'> {
 
 export const Select = ({ children, className, value, onValueChange, ...props }: SelectProps) => {
   return (
-    <select 
-      className={cn(className)} 
+    <select
+      className={cn(className)}
       value={value}
       onChange={(e) => onValueChange?.(e.target.value)}
       {...props}
@@ -37,9 +37,9 @@ export const Select = ({ children, className, value, onValueChange, ...props }: 
 
 /**
  * Select content container component.
- * 
+ *
  * Container for select dropdown content.
- * 
+ *
  * @param props - SelectContent component props
  * @returns Select content element
  */
@@ -55,9 +55,9 @@ export const SelectContent = ({ children, className, ...props }: SelectContentPr
 
 /**
  * Select item component for individual select options.
- * 
+ *
  * Individual select option item with value attribute.
- * 
+ *
  * @param props - SelectItem component props
  * @returns Select item element
  */
@@ -75,9 +75,9 @@ export const SelectItem = ({ children, value, className, ...props }: SelectItemP
 
 /**
  * Select trigger button component.
- * 
+ *
  * Button that triggers the select dropdown.
- * 
+ *
  * @param props - SelectTrigger component props
  * @returns Select trigger button element
  */
@@ -85,7 +85,7 @@ export type SelectTriggerProps = React.ComponentPropsWithoutRef<'button'>;
 
 export const SelectTrigger = ({ children, className, ...props }: SelectTriggerProps) => {
   return (
-    <button className={cn(className)} {...props}>
+    <button type="button" className={cn(className)} {...props}>
       {children}
     </button>
   );
@@ -93,17 +93,16 @@ export const SelectTrigger = ({ children, className, ...props }: SelectTriggerPr
 
 /**
  * Select value display component.
- * 
+ *
  * Displays the selected value or placeholder text.
- * 
+ *
  * @param props - SelectValue component props
  * @returns Select value display element
  */
-export interface SelectValueProps {
+export type SelectValueProps = {
   placeholder?: string;
-}
+};
 
 export const SelectValue = ({ placeholder }: SelectValueProps) => {
   return <span>{placeholder}</span>;
 };
-

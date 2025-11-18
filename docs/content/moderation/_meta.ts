@@ -4,5 +4,4 @@ export default {
   'admin-dashboard': 'Admin Dashboard',
   'a2a-integration': 'A2A Integration',
   'api-reference': 'API Reference',
-}
-
+};

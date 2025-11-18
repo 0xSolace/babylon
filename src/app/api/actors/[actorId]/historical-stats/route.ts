@@ -1,15 +1,15 @@
 /**
  * Actor Historical Statistics API
- * 
+ *
  * @route GET /api/actors/[actorId]/historical-stats
  * @access Public
- * 
+ *
  * @description
  * Returns historical performance data based on PAST GAME OUTCOMES only.
  * Does NOT expose oracle data or predetermined outcomes. Safe for competitive
  * MMO - based on observable results only. Includes post history, game participation,
  * and historical accuracy metrics.
- * 
+ *
  * @openapi
  * /api/actors/{actorId}/historical-stats:
  *   get:
@@ -63,40 +63,37 @@
  *         description: Actor not found
  *       500:
  *         description: Internal server error
- * 
+ *
  * @param {string} actorId - Actor ID (path parameter)
- * 
+ *
  * @returns {Promise<NextResponse>} Historical statistics for the actor
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/actors/actor_123/historical-stats');
  * const stats = await response.json();
  * console.log(stats.totalPosts); // Total posts count
  * ```
- * 
+ *
  * @see {@link /lib/logger} Logging utilities
  */
 
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
 
 /**
  * GET /api/actors/[actorId]/historical-stats
- * 
+ *
  * @description Get historical performance data based on past game outcomes
- * 
+ *
  * @param {NextRequest} _req - Request object
  * @param {Promise<{actorId: string}>} params - Route parameters
- * 
+ *
  * @returns {Promise<NextResponse>} Historical statistics
  */
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ actorId: string }> }
-) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ actorId: string }> }) {
   try {
     const { actorId } = await params;
 
@@ -109,7 +106,7 @@ export async function GET(
         role: true,
         tier: true,
         description: true,
-      }
+      },
     });
 
     if (!actor) {
@@ -130,7 +127,7 @@ export async function GET(
         // We'll need to join with resolved questions to calculate accuracy
       },
       orderBy: { createdAt: 'desc' },
-      take: 100  // Last 100 posts
+      take: 100, // Last 100 posts
     });
 
     // Calculate stats from historical OUTCOMES (not oracle):
@@ -143,33 +140,28 @@ export async function GET(
       role: actor.role,
       tier: actor.tier,
       description: actor.description,
-      
+
       // Observable metrics:
       totalPosts: posts.length,
-      gamesParticipated: new Set(posts.map(p => p.gameId).filter(Boolean)).size,
-      
+      gamesParticipated: new Set(posts.map((p) => p.gameId).filter(Boolean)).size,
+
       // Placeholder for future implementation:
-      historicalAccuracy: null,  // Will calculate from resolved questions
-      totalPredictions: null,    // Will calculate after post-analysis
-      correctPredictions: null,   // Will calculate after post-analysis
-      
+      historicalAccuracy: null, // Will calculate from resolved questions
+      totalPredictions: null, // Will calculate after post-analysis
+      correctPredictions: null, // Will calculate after post-analysis
+
       // Recent activity:
-      recentPosts: posts.slice(0, 10).map(p => ({
+      recentPosts: posts.slice(0, 10).map((p) => ({
         id: p.id,
         content: p.content.substring(0, 100),
         gameId: p.gameId,
-        createdAt: p.createdAt
-      }))
+        createdAt: p.createdAt,
+      })),
     };
 
     return NextResponse.json(stats);
-
   } catch (error) {
     logger.error('Error fetching actor stats', error, 'ActorStatsAPI');
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
-

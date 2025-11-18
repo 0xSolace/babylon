@@ -1,14 +1,14 @@
 /**
  * User Positions API
- * 
+ *
  * @route GET /api/markets/positions/[userId] - Get user positions
  * @access Public (RLS applies)
- * 
+ *
  * @description
  * Returns user's positions in both perpetual markets and prediction markets.
  * Supports filtering by type and status. Includes position details, P&L, and
  * market information.
- * 
+ *
  * @openapi
  * /api/markets/positions/{userId}:
  *   get:
@@ -65,37 +65,30 @@
  *                   type: boolean
  *       404:
  *         description: User not found
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch(`/api/markets/positions/${userId}?type=all&status=open`);
  * const { positions, total } = await response.json();
  * ```
- * 
+ *
  * @see {@link /lib/db/context} RLS context
  */
-
-import type { NextRequest } from 'next/server';
 
 import { optionalAuth } from '@/lib/api/auth-middleware';
 import { asPublic, asUser } from '@/lib/db/context';
 import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
-import {
-  UserIdParamSchema,
-  UserPositionsQuerySchema,
-} from '@/lib/validation/schemas';
 import { PredictionPricing } from '@/lib/prediction-pricing';
+import { UserIdParamSchema, UserPositionsQuerySchema } from '@/lib/validation/schemas';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/markets/positions/[userId]
  * Get user's positions in perpetuals and prediction markets
  */
 export const GET = withErrorHandling(
-  async (
-    request: NextRequest,
-    context: { params: Promise<{ userId: string }> }
-  ) => {
+  async (request: NextRequest, context: { params: Promise<{ userId: string }> }) => {
     const { userId } = UserIdParamSchema.parse(await context.params);
 
     // Validate query parameters
@@ -113,78 +106,76 @@ export const GET = withErrorHandling(
     const authUser = await optionalAuth(request).catch(() => null);
 
     // Get perpetual positions from database (respecting RLS if viewer is the same user)
-    const perpPositions =
-      authUser && authUser.userId
-        ? await asUser(authUser, async (db) => {
-            return await db.perpPosition.findMany({
-              where: {
-                userId,
-                closedAt: null,
-              },
-            });
-          })
-        : await asPublic(async (db) => {
-            return await db.perpPosition.findMany({
-              where: {
-                userId,
-                closedAt: null,
-              },
-            });
+    const perpPositions = authUser?.userId
+      ? await asUser(authUser, async (db) => {
+          return await db.perpPosition.findMany({
+            where: {
+              userId,
+              closedAt: null,
+            },
           });
+        })
+      : await asPublic(async (db) => {
+          return await db.perpPosition.findMany({
+            where: {
+              userId,
+              closedAt: null,
+            },
+          });
+        });
 
     // Get prediction market positions with RLS
-    const predictionPositions =
-      authUser && authUser.userId
-        ? await asUser(authUser, async (db) => {
-            return await db.position.findMany({
-              where: {
-                userId,
-              },
-              include: {
-                Market: {
-                  select: {
-                    id: true,
-                    question: true,
-                    endDate: true,
-                    resolved: true,
-                    resolution: true,
-                    yesShares: true,
-                    noShares: true,
-                  },
+    const predictionPositions = authUser?.userId
+      ? await asUser(authUser, async (db) => {
+          return await db.position.findMany({
+            where: {
+              userId,
+            },
+            include: {
+              Market: {
+                select: {
+                  id: true,
+                  question: true,
+                  endDate: true,
+                  resolved: true,
+                  resolution: true,
+                  yesShares: true,
+                  noShares: true,
                 },
               },
-            });
-          })
-        : await asPublic(async (db) => {
-            return await db.position.findMany({
-              where: {
-                userId,
-              },
-              include: {
-                Market: {
-                  select: {
-                    id: true,
-                    question: true,
-                    endDate: true,
-                    resolved: true,
-                    resolution: true,
-                    yesShares: true,
-                    noShares: true,
-                  },
-                },
-              },
-            });
+            },
           });
+        })
+      : await asPublic(async (db) => {
+          return await db.position.findMany({
+            where: {
+              userId,
+            },
+            include: {
+              Market: {
+                select: {
+                  id: true,
+                  question: true,
+                  endDate: true,
+                  resolved: true,
+                  resolution: true,
+                  yesShares: true,
+                  noShares: true,
+                },
+              },
+            },
+          });
+        });
 
     // Calculate stats
     const perpStats = {
       totalPositions: perpPositions.length,
       totalPnL: perpPositions.reduce(
-        (sum: number, p: typeof perpPositions[number]) => sum + Number(p.unrealizedPnL),
+        (sum: number, p: (typeof perpPositions)[number]) => sum + Number(p.unrealizedPnL),
         0
       ),
       totalFunding: perpPositions.reduce(
-        (sum: number, p: typeof perpPositions[number]) => sum + Number(p.fundingPaid),
+        (sum: number, p: (typeof perpPositions)[number]) => sum + Number(p.fundingPaid),
         0
       ),
     };
@@ -201,7 +192,7 @@ export const GET = withErrorHandling(
 
     return successResponse({
       perpetuals: {
-        positions: perpPositions.map((p: typeof perpPositions[number]) => ({
+        positions: perpPositions.map((p: (typeof perpPositions)[number]) => ({
           id: p.id,
           ticker: p.ticker,
           side: p.side as 'long' | 'short',
@@ -218,7 +209,7 @@ export const GET = withErrorHandling(
         stats: perpStats,
       },
       predictions: {
-        positions: predictionPositions.map((p: typeof predictionPositions[number]) => {
+        positions: predictionPositions.map((p: (typeof predictionPositions)[number]) => {
           const yesShares = Number(p.Market.yesShares);
           const noShares = Number(p.Market.noShares);
           const totalShares = yesShares + noShares;
@@ -241,13 +232,16 @@ export const GET = withErrorHandling(
               currentValue = sellPreview.totalCost;
               currentUnitPrice = sellPreview.totalCost / shares;
             } catch (error) {
-              logger.warn('Failed to compute prediction MTM value', { error, marketId: p.marketId }, 'GET /api/markets/positions/[userId]');
+              logger.warn(
+                'Failed to compute prediction MTM value',
+                { error, marketId: p.marketId },
+                'GET /api/markets/positions/[userId]'
+              );
             }
           }
 
-          const currentProbability = totalShares > 0
-            ? PredictionPricing.getCurrentPrice(yesShares, noShares, sideKey)
-            : 0.5;
+          const currentProbability =
+            totalShares > 0 ? PredictionPricing.getCurrentPrice(yesShares, noShares, sideKey) : 0.5;
 
           const unrealizedPnL = currentValue - costBasis;
 

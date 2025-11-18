@@ -1,10 +1,10 @@
 /**
  * TypeScript types for Training Pipeline
- * 
+ *
  * Proper types to replace 'any' usage throughout the training system
  */
 
-import type { Trajectory, TrainingBatch, TrainedModel, LlmCallLog, Prisma } from '@prisma/client';
+import type { LlmCallLog, Prisma, TrainedModel, TrainingBatch, Trajectory } from '@prisma/client';
 
 // Re-export Prisma types for convenience
 export type { Trajectory, TrainingBatch, TrainedModel, LlmCallLog };
@@ -13,7 +13,7 @@ export type { Prisma };
 // Trajectory Step types
 // Note: These are simplified versions for training pipeline.
 // For full trajectory recording, see @/lib/agents/plugins/plugin-trajectory-logger/src/types
-export interface TrajectoryStep {
+export type TrajectoryStep = {
   stepNumber: number;
   timestamp: number;
   environmentState: EnvironmentState;
@@ -21,23 +21,23 @@ export interface TrajectoryStep {
   llmCalls: LLMCall[];
   action: Action;
   reward: number;
-}
+};
 
-export interface EnvironmentState {
+export type EnvironmentState = {
   agentBalance: number;
   agentPnL: number;
   openPositions: number;
   activeMarkets?: number;
   [key: string]: number | string | boolean | null | undefined;
-}
+};
 
-export interface ProviderAccess {
+export type ProviderAccess = {
   providerName: string;
   data: Record<string, unknown>;
   purpose: string;
-}
+};
 
-export interface LLMCall {
+export type LLMCall = {
   model: string;
   modelVersion?: string; // Trained model version if using RL model
   systemPrompt: string;
@@ -49,9 +49,9 @@ export interface LLMCall {
   latencyMs?: number;
   purpose: 'action' | 'reasoning' | 'evaluation' | 'response';
   actionType?: string;
-}
+};
 
-export interface Action {
+export type Action = {
   actionType: string;
   parameters: Record<string, unknown>;
   success: boolean;
@@ -64,29 +64,29 @@ export interface Action {
     predictionCorrect?: boolean; // Was the prediction correct?
     actualOutcome?: boolean; // Actual market outcome (YES=true, NO=false)
     predictedOutcome?: boolean; // What agent predicted
-    
+
     // Perp trade correctness
     perpCorrect?: boolean; // Was the perp trade correct?
     sentimentAtTrade?: number; // Sentiment at time of trade (-1 to 1)
     priceChange?: number; // Actual price change after trade
     expectedDirection?: 'up' | 'down'; // Expected direction based on sentiment
-    
+
     // Sentiment analysis accuracy
     sentimentAccuracy?: number; // How accurate was sentiment reading (0-1)
     sentimentAtTime?: number; // Sentiment value at time of action
     actualSentiment?: number; // Actual sentiment (if known)
   };
-}
+};
 
 // Parsed trajectory data (from JSON fields)
-export interface ParsedTrajectoryData {
+export type ParsedTrajectoryData = {
   steps: TrajectoryStep[];
   rewardComponents: Record<string, number>;
   metrics: TrajectoryMetrics;
   metadata: TrajectoryMetadata;
-}
+};
 
-export interface TrajectoryMetrics {
+export type TrajectoryMetrics = {
   episodeLength: number;
   finalStatus: string;
   finalBalance?: number;
@@ -94,61 +94,61 @@ export interface TrajectoryMetrics {
   tradesExecuted?: number;
   postsCreated?: number;
   errorCount?: number;
-}
+};
 
-export interface TrajectoryMetadata {
+export type TrajectoryMetadata = {
   isTrainingData: boolean;
   gameKnowledge?: {
     trueProbabilities?: Record<string, number>;
     actualOutcomes?: Record<string, unknown>;
     futureOutcomes?: Record<string, unknown>;
   };
-}
+};
 
 // Scenario group result (from Prisma groupBy)
-export interface ScenarioGroupResult {
+export type ScenarioGroupResult = {
   scenarioId: string | null;
   _count: number;
-}
+};
 
 // Training readiness stats
-export interface TrainingReadinessStats {
+export type TrainingReadinessStats = {
   totalTrajectories: number;
   unscoredTrajectories: number;
   scenarioGroups: number;
   dataQuality: number;
-}
+};
 
 // Training readiness result
-export interface TrainingReadinessResult {
+export type TrainingReadinessResult = {
   ready: boolean;
   reason: string;
   stats: TrainingReadinessStats;
-}
+};
 
 // Training trigger options
-export interface TrainingTriggerOptions {
+export type TrainingTriggerOptions = {
   force?: boolean;
   batchSize?: number;
-}
+};
 
 // Training trigger result
-export interface TrainingTriggerResult {
+export type TrainingTriggerResult = {
   success: boolean;
   jobId?: string;
   error?: string;
-}
+};
 
 // Training monitoring status
-export interface TrainingMonitoringStatus {
+export type TrainingMonitoringStatus = {
   status: string;
   progress?: number;
   eta?: number;
   error?: string;
-}
+};
 
 // Automation status
-export interface AutomationStatus {
+export type AutomationStatus = {
   dataCollection: {
     last24h: number;
     last7d: number;
@@ -169,10 +169,10 @@ export interface AutomationStatus {
     storage: boolean;
     wandb: boolean;
   };
-}
+};
 
 // Automation configuration
-export interface AutomationConfig {
+export type AutomationConfig = {
   minTrajectoriesForTraining: number;
   minGroupSize: number;
   dataQualityThreshold: number;
@@ -184,7 +184,7 @@ export interface AutomationConfig {
   dataStoragePath: string;
   wandbProject?: string;
   wandbApiKey?: string;
-}
+};
 
 // Full trajectory with all parsed data
 export interface TrajectoryWithParsedData extends Trajectory {
@@ -195,4 +195,3 @@ export interface TrajectoryWithParsedData extends Trajectory {
 export type TrajectorySelect = Prisma.TrajectorySelect;
 export type TrajectoryWhereInput = Prisma.TrajectoryWhereInput;
 export type TrajectoryOrderByInput = Prisma.TrajectoryOrderByWithRelationInput;
-

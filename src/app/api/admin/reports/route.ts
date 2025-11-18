@@ -1,14 +1,14 @@
 /**
  * Admin Reports API
- * 
+ *
  * @route GET /api/admin/reports - Get reports list
  * @access Admin
- * 
+ *
  * @description
  * Returns paginated list of user reports with comprehensive filtering, sorting,
  * and moderation metrics. Includes reporter and reported user information.
  * Requires admin authentication.
- * 
+ *
  * @openapi
  * /api/admin/reports:
  *   get:
@@ -100,23 +100,23 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/admin/reports?status=pending&priority=high', {
  *   headers: { 'Authorization': `Bearer ${adminToken}` }
  * });
  * ```
- * 
+ *
  * @see {@link /lib/api/admin-middleware} Admin middleware
  */
 
-import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import { GetReportsSchema } from '@/lib/validation/schemas/moderation';
-import { logger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   // Require admin authentication
@@ -198,7 +198,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   ]);
 
   // Parse evaluation from resolution field if it exists
-  const reportsWithEvaluation = reports.map(report => {
+  const reportsWithEvaluation = reports.map((report) => {
     let evaluation = null;
     if (report.resolution) {
       try {
@@ -226,5 +226,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-
-

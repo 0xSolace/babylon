@@ -2,11 +2,7 @@
   "compilerOptions": {
     // Language and Environment
     "target": "ES2022",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -41,9 +37,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     // Bun-specific
-    "types": [
-      "bun-types"
-    ],
+    "types": ["bun-types"],
     "moduleDetection": "force",
     // Next.js
     "plugins": [
@@ -54,33 +48,15 @@
     // Path aliases for shared code and Next.js
     "baseUrl": ".",
     "paths": {
-      "@/shared/constants": [
-        "./src/shared/constants.ts"
-      ],
-      "@/shared/types": [
-        "./src/shared/types.ts"
-      ],
-      "@/shared/utils": [
-        "./src/shared/utils.ts"
-      ],
-      "@/components/*": [
-        "./src/components/*"
-      ],
-      "@/lib/*": [
-        "./src/lib/*"
-      ],
-      "@/hooks/*": [
-        "./src/hooks/*"
-      ],
-      "@/stores/*": [
-        "./src/stores/*"
-      ],
-      "@/app/*": [
-        "./src/app/*"
-      ],
-      "@/*": [
-        "./src/*"
-      ]
+      "@/shared/constants": ["./src/shared/constants.ts"],
+      "@/shared/types": ["./src/shared/types.ts"],
+      "@/shared/utils": ["./src/shared/utils.ts"],
+      "@/components/*": ["./src/components/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/stores/*": ["./src/stores/*"],
+      "@/app/*": ["./src/app/*"],
+      "@/*": ["./src/*"]
     },
     "allowJs": true
   },

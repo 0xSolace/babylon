@@ -1,21 +1,19 @@
-import { useMemo, useState } from 'react';
-
 import { useSSEChannel } from '@/hooks/useSSE';
+import { useMemo, useState } from 'react';
 
 /**
  * Represents a live market price update.
  */
-export interface LivePrice {
+export type LivePrice = {
   /** The ticker symbol (e.g., 'AAPL', 'TSLA') */
   ticker: string;
   /** Current price */
   price: number;
   /** Optional percentage change from previous price */
   changePercent?: number;
-}
+};
 
-const normalizeTicker = (ticker?: string | null) =>
-  ticker ? ticker.toUpperCase() : null;
+const normalizeTicker = (ticker?: string | null) => (ticker ? ticker.toUpperCase() : null);
 
 const deriveTicker = (update: Record<string, unknown>): string | null => {
   const direct = normalizeTicker(update.ticker as string | undefined);
@@ -29,9 +27,7 @@ const deriveTicker = (update: Record<string, unknown>): string | null => {
   }
 
   const organizationId =
-    typeof update.organizationId === 'string'
-      ? update.organizationId
-      : undefined;
+    typeof update.organizationId === 'string' ? update.organizationId : undefined;
   return organizationId ? organizationId.toUpperCase().replace(/-/g, '') : null;
 };
 
@@ -43,21 +39,21 @@ const derivePrice = (update: Record<string, unknown>): number | null => {
 
 /**
  * Hook for subscribing to live market price updates via SSE.
- * 
+ *
  * Automatically subscribes to the 'markets' SSE channel and filters price
  * updates for the specified tickers. Supports both prediction markets and
  * perpetual markets. Prices are normalized and deduplicated automatically.
- * 
+ *
  * @param targetTickers - Array of ticker symbols to subscribe to (e.g., ['AAPL', 'TSLA']).
  * If empty, subscribes to all market updates. Tickers are case-insensitive.
- * 
+ *
  * @returns A Map of ticker symbols to LivePrice objects, updated in real-time
  * as price updates are received via SSE.
- * 
+ *
  * @example
  * ```tsx
  * const prices = useMarketPrices(['AAPL', 'TSLA']);
- * 
+ *
  * const aaplPrice = prices.get('AAPL');
  * if (aaplPrice) {
  *   console.log(`AAPL: $${aaplPrice.price} (${aaplPrice.changePercent}%)`);
@@ -88,10 +84,7 @@ export function useMarketPrices(targetTickers: string[]) {
 
         const ticker = deriveTicker(update);
         if (!ticker) continue;
-        if (
-          normalizedTargets.length > 0 &&
-          !normalizedTargets.includes(ticker)
-        ) {
+        if (normalizedTargets.length > 0 && !normalizedTargets.includes(ticker)) {
           continue;
         }
 
@@ -102,9 +95,7 @@ export function useMarketPrices(targetTickers: string[]) {
           ticker,
           price,
           changePercent:
-            typeof update.changePercent === 'number'
-              ? update.changePercent
-              : undefined,
+            typeof update.changePercent === 'number' ? update.changePercent : undefined,
         });
       }
 

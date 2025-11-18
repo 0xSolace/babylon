@@ -1,20 +1,20 @@
 /**
  * Randomization utilities for adding entropy to prompts
- * 
+ *
  * Provides functions to shuffle arrays, sample random elements,
  * and add variety to AI prompts to prevent repetitive outputs.
  */
 
 /**
  * Fisher-Yates shuffle algorithm
- * 
+ *
  * Randomly shuffles array in-place and returns it.
  * Creates a copy to avoid mutating the original array.
- * 
+ *
  * @param array - Array to shuffle
  * @returns New shuffled array (original array unchanged)
  * @throws Never throws - returns empty array if input is empty
- * 
+ *
  * @example
  * ```typescript
  * const shuffled = shuffleArray([1, 2, 3, 4, 5]);
@@ -25,23 +25,27 @@ export function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    const temp = shuffled[i]!;
-    shuffled[i] = shuffled[j]!;
-    shuffled[j] = temp;
+    const currentValue = shuffled[i];
+    const swapValue = shuffled[j];
+    if (currentValue === undefined || swapValue === undefined) {
+      continue;
+    }
+    shuffled[i] = swapValue;
+    shuffled[j] = currentValue;
   }
   return shuffled;
 }
 
 /**
  * Get N random samples from an array without replacement
- * 
+ *
  * Returns a random subset of the array without duplicates.
- * 
+ *
  * @param array - Array to sample from
  * @param count - Number of samples to return
  * @returns Array of random samples (may be shorter than count if array is smaller)
  * @throws Never throws - returns empty array if input is empty or count is 0
- * 
+ *
  * @example
  * ```typescript
  * const samples = sampleRandom([1, 2, 3, 4, 5], 3);
@@ -55,10 +59,10 @@ export function sampleRandom<T>(array: T[], count: number): T[] {
 
 /**
  * Get a single random element from an array
- * 
+ *
  * @param array - Array to pick from
  * @returns Random element or undefined if array is empty
- * 
+ *
  * @example
  * ```typescript
  * const item = pickRandom([1, 2, 3, 4, 5]);
@@ -72,13 +76,13 @@ export function pickRandom<T>(array: T[]): T | undefined {
 
 /**
  * Randomly decide with a given probability (0-1)
- * 
+ *
  * Returns true with probability p, false otherwise.
- * 
+ *
  * @param probability - Probability between 0 and 1
  * @returns True with given probability, false otherwise
  * @throws Never throws - clamps probability to [0, 1] range
- * 
+ *
  * @example
  * ```typescript
  * if (randomChance(0.3)) {
@@ -92,12 +96,12 @@ export function randomChance(probability: number): boolean {
 
 /**
  * Get random integer between min (inclusive) and max (exclusive)
- * 
+ *
  * @param min - Minimum value (inclusive)
  * @param max - Maximum value (exclusive)
  * @returns Random integer in range [min, max)
  * @throws Never throws - returns min if max <= min
- * 
+ *
  * @example
  * ```typescript
  * const roll = randomInt(1, 7); // Random dice roll: 1-6
@@ -106,4 +110,3 @@ export function randomChance(probability: number): boolean {
 export function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min)) + min;
 }
-

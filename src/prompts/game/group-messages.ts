@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating private group chat messages for the day.
- * 
+ *
  * Creates batch private group chat messages containing insider information,
  * strategic discussions, and confidential revelations. Messages provide
  * exclusive context to group members that affects trading decisions.
- * 
+ *
  * Returns XML with multiple group messages.
  */
 export const groupMessages = definePrompt({
@@ -63,5 +63,5 @@ Respond with ONLY this XML:
 </response>
 
 Return {{groupCount}} groups in the array. No other text.
-`.trim()
+`.trim(),
 });

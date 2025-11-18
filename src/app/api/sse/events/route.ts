@@ -1,19 +1,19 @@
 /**
  * Server-Sent Events (SSE) API
- * 
+ *
  * @description
  * Real-time event streaming endpoint using Server-Sent Events (SSE).
  * Provides live updates for feeds, markets, chats, and news without
  * requiring WebSocket connections. Vercel-compatible alternative to
  * traditional WebSockets with automatic reconnection support.
- * 
+ *
  * **Supported Channels:**
  * - **feed:** New posts and social feed updates
  * - **markets:** Market price changes and trading activity
  * - **breaking-news:** Breaking news and important announcements
  * - **upcoming-events:** New prediction questions and events
  * - **chat:{chatId}:** Real-time chat messages for specific chat ID
- * 
+ *
  * **Features:**
  * - Multi-channel subscription (comma-separated)
  * - Automatic keepalive pings (every 15 seconds)
@@ -21,7 +21,7 @@
  * - Client reconnection support
  * - Per-user authentication
  * - Channel-based access control
- * 
+ *
  * **Connection Lifecycle:**
  * 1. Client connects with auth token and channels
  * 2. Server sends `connected` event with client ID
@@ -29,13 +29,13 @@
  * 4. Server sends periodic `:ping` keepalives
  * 5. Client or server closes connection when done
  * 6. Client auto-reconnects if connection lost
- * 
+ *
  * **Vercel Compatibility:**
  * - Uses Server-Sent Events (not WebSocket)
  * - Works with serverless functions
  * - No persistent connections required
  * - Auto-reconnection on timeout
- * 
+ *
  * @openapi
  * /api/sse/events:
  *   get:
@@ -68,42 +68,42 @@
  *               description: Server-Sent Events stream
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * // Subscribe to multiple channels
  * const eventSource = new EventSource(
  *   `/api/sse/events?token=${token}&channels=feed,markets`
  * );
- * 
+ *
  * // Handle connected event
  * eventSource.addEventListener('connected', (e) => {
  *   const { clientId, channels } = JSON.parse(e.data);
  *   console.log(`Connected as ${clientId} to: ${channels.join(', ')}`);
  * });
- * 
+ *
  * // Handle new posts
  * eventSource.addEventListener('new_post', (e) => {
  *   const post = JSON.parse(e.data);
  *   addPostToFeed(post);
  * });
- * 
+ *
  * // Handle market updates
  * eventSource.addEventListener('market_update', (e) => {
  *   const { marketId, price } = JSON.parse(e.data);
  *   updateMarketPrice(marketId, price);
  * });
- * 
+ *
  * // Handle errors and reconnection
  * eventSource.onerror = () => {
  *   console.log('Connection lost, reconnecting...');
  *   // EventSource auto-reconnects
  * };
- * 
+ *
  * // Close connection when done
  * eventSource.close();
  * ```
- * 
+ *
  * **Event Types:**
  * - `connected`: Initial connection confirmation
  * - `new_post`: New post in feed
@@ -111,17 +111,17 @@
  * - `chat_message`: New chat message
  * - `breaking_news`: Breaking news alert
  * - `:ping`: Keepalive ping (every 15s)
- * 
+ *
  * @see {@link /lib/sse/event-broadcaster} Event broadcaster
  * @see {@link /src/hooks/useSSE} SSE React hook
  */
 
-import { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/api/auth-middleware';
-import { getEventBroadcaster, type SSEClient, type Channel } from '@/lib/sse/event-broadcaster';
-import { SSEChannelsQuerySchema } from '@/lib/validation/schemas';
 import { logger } from '@/lib/logger';
 import { generateSnowflakeId } from '@/lib/snowflake';
+import { type Channel, type SSEClient, getEventBroadcaster } from '@/lib/sse/event-broadcaster';
+import { SSEChannelsQuerySchema } from '@/lib/validation/schemas';
+import { NextRequest, NextResponse } from 'next/server';
 
 // Vercel function configuration
 export const maxDuration = 300; // 5 minutes max for SSE connections
@@ -131,117 +131,136 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
+  const { searchParams } = new URL(request.url);
   const queryParams = {
     token: searchParams.get('token'),
-    channels: searchParams.get('channels')
+    channels: searchParams.get('channels'),
+  };
+
+  const validatedQuery = SSEChannelsQuerySchema.parse(queryParams);
+  const token = validatedQuery.token;
+  if (!token) {
+    return NextResponse.json({ error: 'Missing token' }, { status: 401 });
   }
-  
-  const validatedQuery = SSEChannelsQuerySchema.parse(queryParams)
-  const token = validatedQuery.token!
 
   const modifiedRequest = new NextRequest(request.url, {
     headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  })
-  const user = await authenticate(modifiedRequest)
-  
-  const channelsParam = validatedQuery.channels
-  const channels = channelsParam ? channelsParam.split(',') as Channel[] : ['feed']
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const user = await authenticate(modifiedRequest);
 
-  logger.info(`SSE connection request from user ${user.userId} for channels: ${channels.join(', ')}`, { userId: user.userId, channels }, 'SSE')
+  const channelsParam = validatedQuery.channels;
+  const channels = channelsParam ? (channelsParam.split(',') as Channel[]) : ['feed'];
 
-  const encoder = new TextEncoder()
-  const clientId = await generateSnowflakeId()
-  
-  let pingIntervalId: NodeJS.Timeout | null = null
-  let streamClosed = false
-  let controllerRef: ReadableStreamDefaultController | null = null
-  let broadcasterRef: ReturnType<typeof getEventBroadcaster> | null = null
+  logger.info(
+    `SSE connection request from user ${user.userId} for channels: ${channels.join(', ')}`,
+    { userId: user.userId, channels },
+    'SSE'
+  );
+
+  const encoder = new TextEncoder();
+  const clientId = await generateSnowflakeId();
+
+  let pingIntervalId: NodeJS.Timeout | null = null;
+  let streamClosed = false;
+  let controllerRef: ReadableStreamDefaultController | null = null;
+  let broadcasterRef: ReturnType<typeof getEventBroadcaster> | null = null;
 
   const cleanup = (reason: string) => {
-    if (streamClosed) return
-    streamClosed = true
+    if (streamClosed) return;
+    streamClosed = true;
     if (pingIntervalId) {
-      clearInterval(pingIntervalId)
-      pingIntervalId = null
+      clearInterval(pingIntervalId);
+      pingIntervalId = null;
     }
     if (broadcasterRef) {
-      broadcasterRef.removeClient(clientId)
+      broadcasterRef.removeClient(clientId);
     }
     try {
-      controllerRef?.close()
+      controllerRef?.close();
     } catch {
       // ignore
     }
-    logger.info(`SSE client disconnected (${reason})`, { clientId, userId: user.userId }, 'SSE')
-  }
+    logger.info(`SSE client disconnected (${reason})`, { clientId, userId: user.userId }, 'SSE');
+  };
 
   const stream = new ReadableStream({
     start: async (controller) => {
-      controllerRef = controller
-      const broadcaster = getEventBroadcaster()
-      broadcasterRef = broadcaster
+      controllerRef = controller;
+      const broadcaster = getEventBroadcaster();
+      broadcasterRef = broadcaster;
 
       const client: SSEClient = {
         id: clientId,
         userId: user.userId,
         channels: new Set(channels),
         controller,
-        lastPing: Date.now()
-      }
+        lastPing: Date.now(),
+      };
 
-      broadcaster.addClient(client)
+      broadcaster.addClient(client);
 
       for (const channel of channels) {
-        broadcaster.subscribeToChannel(clientId, channel)
+        broadcaster.subscribeToChannel(clientId, channel);
       }
 
       const send = (payload: string) => {
         if (streamClosed || controller.desiredSize === null) {
-          return false
+          return false;
         }
         try {
-          controller.enqueue(encoder.encode(payload))
-          return true
+          controller.enqueue(encoder.encode(payload));
+          return true;
         } catch {
-          logger.debug('Failed to enqueue SSE payload (client likely disconnected)', { clientId }, 'SSE')
-          cleanup('enqueue_error')
-          return false
+          logger.debug(
+            'Failed to enqueue SSE payload (client likely disconnected)',
+            { clientId },
+            'SSE'
+          );
+          cleanup('enqueue_error');
+          return false;
         }
-      }
+      };
 
-      if (!send(`event: connected\ndata: ${JSON.stringify({ 
-        clientId, 
-        channels: Array.from(client.channels),
-        timestamp: Date.now() 
-      })}\n\n`)) {
-        return
+      if (
+        !send(
+          `event: connected\ndata: ${JSON.stringify({
+            clientId,
+            channels: Array.from(client.channels),
+            timestamp: Date.now(),
+          })}\n\n`
+        )
+      ) {
+        return;
       }
 
       pingIntervalId = setInterval(() => {
         if (!send(`:ping ${Date.now()}\n\n`)) {
-          logger.debug('Ping failed, closing SSE client', { clientId }, 'SSE')
+          logger.debug('Ping failed, closing SSE client', { clientId }, 'SSE');
         }
-      }, 15000)
+      }, 15000);
 
-      request.signal.addEventListener('abort', () => cleanup('abort'))
+      request.signal.addEventListener('abort', () => cleanup('abort'));
 
-      logger.info(`SSE client connected: ${clientId}`, { clientId, userId: user.userId, channels }, 'SSE')
+      logger.info(
+        `SSE client connected: ${clientId}`,
+        { clientId, userId: user.userId, channels },
+        'SSE'
+      );
     },
-    
+
     cancel() {
-      cleanup('cancel')
-    }
-  })
+      cleanup('cancel');
+    },
+  });
 
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     },
-  })
+  });
 }

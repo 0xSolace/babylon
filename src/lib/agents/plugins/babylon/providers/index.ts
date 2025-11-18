@@ -3,19 +3,17 @@
  * Export all providers
  */
 
-export { dashboardProvider } from './dashboard'
-export { marketsProvider } from './markets'
-export { portfolioProvider } from './portfolio'
-export { feedProvider, trendingProvider } from './social'
-export { messagesProvider, notificationsProvider } from './messaging'
-export { userWalletProvider } from './user-wallet'
-export { userProfileProvider } from './user-profile'
-
+export { agentWalletProvider } from './agent-wallet';
+export { dashboardProvider } from './dashboard';
+export { entityMentionsProvider } from './entity-mentions';
+export { goalsProvider } from './goals';
 // New context providers
-export { headlinesProvider } from './headlines'
-export { marketMoversProvider } from './market-movers'
-export { agentWalletProvider } from './agent-wallet'
-export { entityMentionsProvider } from './entity-mentions'
-export { trendingTopicsProvider } from './trending-topics'
-export { goalsProvider } from './goals'
-
+export { headlinesProvider } from './headlines';
+export { marketMoversProvider } from './market-movers';
+export { marketsProvider } from './markets';
+export { messagesProvider, notificationsProvider } from './messaging';
+export { portfolioProvider } from './portfolio';
+export { feedProvider, trendingProvider } from './social';
+export { trendingTopicsProvider } from './trending-topics';
+export { userProfileProvider } from './user-profile';
+export { userWalletProvider } from './user-wallet';

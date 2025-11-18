@@ -1,14 +1,14 @@
 /**
  * Weekly Dataset Upload Cron API
- * 
+ *
  * @route POST /api/cron/weekly-dataset-upload - Weekly dataset upload
  * @access Cron (CRON_SECRET)
- * 
+ *
  * @description
  * Automated weekly job that aggregates benchmark data, uploads dataset to
  * HuggingFace, benchmarks RL models, and uploads improved models. Runs
  * weekly on Sundays at 2 AM UTC.
- * 
+ *
  * @openapi
  * /api/cron/weekly-dataset-upload:
  *   post:
@@ -34,7 +34,7 @@
  *                   type: integer
  *       401:
  *         description: Unauthorized (invalid CRON_SECRET)
- * 
+ *
  * @example
  * ```typescript
  * // Called by Vercel Cron (weekly)
@@ -45,10 +45,10 @@
  * ```
  */
 
+import { huggingFaceIntegration } from '@/lib/huggingface/HuggingFaceIntegrationService';
+import { logger } from '@/lib/logger';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { logger } from '@/lib/logger';
-import { huggingFaceIntegration } from '@/lib/huggingface/HuggingFaceIntegrationService';
 
 function verifyCronRequest(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -75,15 +75,19 @@ export async function POST(request: NextRequest) {
     // Use the integrated service
     const result = await huggingFaceIntegration.executeWeeklyUpload();
 
-    logger.info('Weekly dataset upload job completed', {
-      duration: result.duration,
-      benchmarkDataset: result.datasets.benchmarks.success,
-      trajectoryDataset: result.datasets.trajectories.success,
-      modelsProcessed: result.models.processed,
-      modelsBenchmarked: result.models.benchmarked,
-      modelsUploaded: result.models.uploaded,
-      errors: result.errors.length,
-    }, 'WeeklyDatasetUpload');
+    logger.info(
+      'Weekly dataset upload job completed',
+      {
+        duration: result.duration,
+        benchmarkDataset: result.datasets.benchmarks.success,
+        trajectoryDataset: result.datasets.trajectories.success,
+        modelsProcessed: result.models.processed,
+        modelsBenchmarked: result.models.benchmarked,
+        modelsUploaded: result.models.uploaded,
+        errors: result.errors.length,
+      },
+      'WeeklyDatasetUpload'
+    );
 
     return NextResponse.json({
       success: result.success,
@@ -110,4 +114,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

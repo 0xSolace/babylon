@@ -1,3 +1,3 @@
 export default {
-  'deployed-contracts': 'Deployed Contracts'
-}
+  'deployed-contracts': 'Deployed Contracts',
+};

@@ -1,19 +1,14 @@
-import { Footer, Layout, Navbar } from "nextra-theme-docs";
-import "nextra-theme-docs/style.css";
-import { getPageMap } from "nextra/page-map";
-import type { ReactNode } from "react";
-import Image from "next/image";
-
+import { Footer, Layout, Navbar } from 'nextra-theme-docs';
+import 'nextra-theme-docs/style.css';
+import Image from 'next/image';
+import { getPageMap } from 'nextra/page-map';
+import type { ReactNode } from 'react';
 // import logo_full.svg directly, its next.js
-import logo_full from "../logo_full.svg";
+import logo_full from '../logo_full.svg';
 
 const footer = <Footer>MIT {new Date().getFullYear()} © Babylon.</Footer>;
 
-export default async function DocsLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default async function DocsLayout({ children }: { children: ReactNode }) {
   return (
     <Layout
       navbar={
@@ -25,9 +20,9 @@ export default async function DocsLayout({
       pageMap={await getPageMap()}
       docsRepositoryBase="https://github.com/elizaos/babylon/tree/main/docs"
       editLink="Edit this page on GitHub →"
-      sidebar={{ 
-        defaultMenuCollapseLevel: 1, 
-        autoCollapse: true 
+      sidebar={{
+        defaultMenuCollapseLevel: 1,
+        autoCollapse: true,
       }}
       copyPageButton={true}
       toc={{
@@ -40,4 +35,3 @@ export default async function DocsLayout({
     </Layout>
   );
 }
-

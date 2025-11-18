@@ -1,14 +1,14 @@
 /**
  * Admin System Statistics API
- * 
+ *
  * @route GET /api/admin/stats - Get system statistics
  * @access Admin
- * 
+ *
  * @description
  * Returns comprehensive system-wide statistics including user metrics, market data,
  * trading activity, social engagement, financial metrics, pools, and top users.
  * Requires admin authentication.
- * 
+ *
  * @openapi
  * /api/admin/stats:
  *   get:
@@ -48,7 +48,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch('/api/admin/stats', {
@@ -56,15 +56,15 @@
  * });
  * const { users, markets, financial } = await response.json();
  * ```
- * 
+ *
  * @see {@link /lib/api/admin-middleware} Admin middleware
  */
 
-import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { prisma } from '@/lib/prisma';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   // Require admin authentication
@@ -93,7 +93,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     usersToday,
     usersThisWeek,
     usersThisMonth,
-    
+
     // Market and trading data
     totalMarkets,
     activeMarkets,
@@ -101,24 +101,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     totalPositions,
     totalBalanceTransactions,
     totalNPCTrades,
-    
+
     // Social engagement
     totalPosts,
     totalComments,
     totalReactions,
     postsToday,
-    
+
     // Financial metrics
     totalVirtualBalance,
     totalDeposited,
     totalWithdrawn,
     totalLifetimePnL,
-    
+
     // Pools
     totalPools,
     activePools,
     totalPoolDeposits,
-    
+
     // Referrals and reputation
     totalReferrals,
     totalPointsTransactions,
@@ -132,7 +132,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.user.count({ where: { createdAt: { gte: today } } }),
     prisma.user.count({ where: { createdAt: { gte: lastWeek } } }),
     prisma.user.count({ where: { createdAt: { gte: lastMonth } } }),
-    
+
     // Market and trading data
     prisma.market.count(),
     prisma.market.count({ where: { resolved: false, endDate: { gte: now } } }),
@@ -140,13 +140,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.position.count(),
     prisma.balanceTransaction.count(),
     prisma.nPCTrade.count(),
-    
+
     // Social engagement
     prisma.post.count(),
     prisma.comment.count(),
     prisma.reaction.count(),
     prisma.post.count({ where: { createdAt: { gte: today } } }),
-    
+
     // Financial metrics
     prisma.user.aggregate({
       _sum: { virtualBalance: true },
@@ -160,12 +160,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.user.aggregate({
       _sum: { lifetimePnL: true },
     }),
-    
+
     // Pools
     prisma.pool.count(),
     prisma.pool.count({ where: { isActive: true } }),
     prisma.poolDeposit.count(),
-    
+
     // Referrals and reputation
     prisma.referral.count(),
     prisma.pointsTransaction.count(),
@@ -263,7 +263,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       pointsTransactions: totalPointsTransactions,
     },
     topUsers: {
-      byBalance: topUsersByBalance.map(u => ({
+      byBalance: topUsersByBalance.map((u) => ({
         ...u,
         virtualBalance: u.virtualBalance.toString(),
         lifetimePnL: u.lifetimePnL.toString(),
@@ -273,4 +273,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     recentSignups,
   });
 });
-

@@ -1,14 +1,14 @@
 /**
  * User Data Export API
- * 
+ *
  * @route GET /api/users/export-data - Export user data
  * @access Authenticated
- * 
+ *
  * @description
  * Exports all user data in JSON format for GDPR compliance (right to data portability).
  * Includes user profile, posts, comments, reactions, positions, transactions, referrals,
  * notifications, and all associated data.
- * 
+ *
  * @openapi
  * /api/users/export-data:
  *   get:
@@ -47,29 +47,29 @@
  *                   format: date-time
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * const data = await fetch('/api/users/export-data', {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * }).then(r => r.json());
  * ```
- * 
+ *
  * @see GDPR Article 20 - Right to data portability
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const authUser = await authenticate(request)
-  const userId = authUser.dbUserId ?? authUser.userId
+  const authUser = await authenticate(request);
+  const userId = authUser.dbUserId ?? authUser.userId;
 
-  logger.info('User requested data export', { userId }, 'GET /api/users/export-data')
+  logger.info('User requested data export', { userId }, 'GET /api/users/export-data');
 
   // Fetch all user data from database
   const [
@@ -317,10 +317,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       orderBy: { createdAt: 'desc' },
       take: 100,
     }),
-  ])
+  ]);
 
   if (!user) {
-    return successResponse({ error: 'User not found' }, 404)
+    return successResponse({ error: 'User not found' }, 404);
   }
 
   // Compile all data into a comprehensive export
@@ -372,7 +372,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         version: user.privacyPolicyAcceptedVersion,
       },
     },
-  }
+  };
 
   // Return as JSON download
   return new NextResponse(JSON.stringify(exportData, null, 2), {
@@ -381,6 +381,5 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       'Content-Type': 'application/json',
       'Content-Disposition': `attachment; filename="babylon-data-export-${userId}-${Date.now()}.json"`,
     },
-  })
-})
-
+  });
+});

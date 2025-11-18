@@ -1,16 +1,16 @@
 /**
  * Group Management API
- * 
+ *
  * @route GET /api/groups/[groupId] - Get group details
  * @route PUT /api/groups/[groupId] - Update group
  * @route DELETE /api/groups/[groupId] - Delete group
  * @access Authenticated (members/admins only)
- * 
+ *
  * @description
  * Manages individual group details, settings, and lifecycle. GET returns group
  * information with members and admins. PUT updates group name/description (admin only).
  * DELETE removes the group (creator/admin only).
- * 
+ *
  * @openapi
  * /api/groups/{groupId}:
  *   get:
@@ -113,14 +113,14 @@
  *         description: Not authorized to delete group
  *       404:
  *         description: Group not found
- * 
+ *
  * @example
  * ```typescript
  * // Get group details
  * const group = await fetch(`/api/groups/${groupId}`, {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
- * 
+ *
  * // Update group
  * await fetch(`/api/groups/${groupId}`, {
  *   method: 'PUT',
@@ -131,22 +131,22 @@
  *   })
  * });
  * ```
- * 
+ *
  * @see {@link /lib/db/context} RLS context
  */
 
-import type { NextRequest } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
-import { ApiError } from '@/lib/errors/api-errors'
-import { logger } from '@/lib/logger'
-import { asUser } from '@/lib/db/context'
-import { z } from 'zod'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { asUser } from '@/lib/db/context';
+import { ApiError } from '@/lib/errors/api-errors';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 const UpdateGroupSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
-})
+});
 
 /**
  * GET /api/groups/[groupId]
@@ -154,8 +154,8 @@ const UpdateGroupSchema = z.object({
  */
 export const GET = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) => {
-    const user = await authenticate(request)
-    const { groupId } = await params
+    const user = await authenticate(request);
+    const { groupId } = await params;
 
     const groupDetails = await asUser(user, async (db) => {
       // Check if user is member or admin
@@ -176,21 +176,21 @@ export const GET = withErrorHandling(
             },
           },
         },
-      })
+      });
 
       if (!group) {
-        throw new ApiError('Group not found', 404)
+        throw new ApiError('Group not found', 404);
       }
 
-      const isMember = group.UserGroupMember.some((m) => m.userId === user.userId)
-      const isAdmin = group.UserGroupAdmin.some((a) => a.userId === user.userId)
+      const isMember = group.UserGroupMember.some((m) => m.userId === user.userId);
+      const isAdmin = group.UserGroupAdmin.some((a) => a.userId === user.userId);
 
       if (!isMember && !isAdmin) {
-        throw new ApiError('You are not a member of this group', 403)
+        throw new ApiError('You are not a member of this group', 403);
       }
 
       // Fetch member details
-      const memberIds = group.UserGroupMember.map((m) => m.userId)
+      const memberIds = group.UserGroupMember.map((m) => m.userId);
       const members = await db.user.findMany({
         where: {
           id: { in: memberIds },
@@ -201,9 +201,9 @@ export const GET = withErrorHandling(
           username: true,
           profileImageUrl: true,
         },
-      })
+      });
 
-      const adminIds = group.UserGroupAdmin.map((a) => a.userId)
+      const adminIds = group.UserGroupAdmin.map((a) => a.userId);
 
       return {
         id: group.id,
@@ -215,19 +215,22 @@ export const GET = withErrorHandling(
         members: members.map((m) => ({
           ...m,
           isAdmin: adminIds.includes(m.id),
-          joinedAt:
-            group.UserGroupMember.find((gm) => gm.userId === m.id)?.joinedAt || new Date(),
+          joinedAt: group.UserGroupMember.find((gm) => gm.userId === m.id)?.joinedAt || new Date(),
         })),
         isAdmin,
         isCreator: group.createdById === user.userId,
-      }
-    })
+      };
+    });
 
-    logger.info('Group details retrieved', { userId: user.userId, groupId }, 'GET /api/groups/:groupId')
+    logger.info(
+      'Group details retrieved',
+      { userId: user.userId, groupId },
+      'GET /api/groups/:groupId'
+    );
 
-    return successResponse({ group: groupDetails })
+    return successResponse({ group: groupDetails });
   }
-)
+);
 
 /**
  * PATCH /api/groups/[groupId]
@@ -235,10 +238,10 @@ export const GET = withErrorHandling(
  */
 export const PATCH = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) => {
-    const user = await authenticate(request)
-    const { groupId } = await params
-    const body = await request.json()
-    const data = UpdateGroupSchema.parse(body)
+    const user = await authenticate(request);
+    const { groupId } = await params;
+    const body = await request.json();
+    const data = UpdateGroupSchema.parse(body);
 
     const updatedGroup = await asUser(user, async (db) => {
       // Check if user is admin
@@ -247,10 +250,10 @@ export const PATCH = withErrorHandling(
           groupId,
           userId: user.userId,
         },
-      })
+      });
 
       if (!isAdmin) {
-        throw new ApiError('Only group admins can update group details', 403)
+        throw new ApiError('Only group admins can update group details', 403);
       }
 
       // Update group
@@ -260,7 +263,7 @@ export const PATCH = withErrorHandling(
           ...data,
           updatedAt: new Date(),
         },
-      })
+      });
 
       // Update associated chat name if name changed
       if (data.name) {
@@ -273,17 +276,17 @@ export const PATCH = withErrorHandling(
             name: data.name,
             updatedAt: new Date(),
           },
-        })
+        });
       }
 
-      return group
-    })
+      return group;
+    });
 
-    logger.info('Group updated', { userId: user.userId, groupId }, 'PATCH /api/groups/:groupId')
+    logger.info('Group updated', { userId: user.userId, groupId }, 'PATCH /api/groups/:groupId');
 
-    return successResponse({ group: updatedGroup })
+    return successResponse({ group: updatedGroup });
   }
-)
+);
 
 /**
  * DELETE /api/groups/[groupId]
@@ -291,8 +294,8 @@ export const PATCH = withErrorHandling(
  */
 export const DELETE = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ groupId: string }> }) => {
-    const user = await authenticate(request)
-    const { groupId } = await params
+    const user = await authenticate(request);
+    const { groupId } = await params;
 
     await asUser(user, async (db) => {
       // Check if user is admin
@@ -301,23 +304,22 @@ export const DELETE = withErrorHandling(
           groupId,
           userId: user.userId,
         },
-      })
+      });
 
       if (!isAdmin) {
-        throw new ApiError('Only group admins can delete the group', 403)
+        throw new ApiError('Only group admins can delete the group', 403);
       }
 
       // Delete group (cascades to members and admins)
       await db.userGroup.delete({
         where: { id: groupId },
-      })
+      });
 
       // Note: Associated chats remain but could be cleaned up separately
-    })
+    });
 
-    logger.info('Group deleted', { userId: user.userId, groupId }, 'DELETE /api/groups/:groupId')
+    logger.info('Group deleted', { userId: user.userId, groupId }, 'DELETE /api/groups/:groupId');
 
-    return successResponse({ success: true })
+    return successResponse({ success: true });
   }
-)
-
+);

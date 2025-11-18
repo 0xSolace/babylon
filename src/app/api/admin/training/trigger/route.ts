@@ -1,14 +1,14 @@
 /**
  * Admin Training Trigger API
- * 
+ *
  * @route GET /api/admin/training/trigger - Get training readiness
  * @route POST /api/admin/training/trigger - Trigger training job
  * @access Admin
- * 
+ *
  * @description
  * Manually triggers a training job or checks training readiness. GET returns
  * readiness status. POST triggers training with optional force flag and batch size.
- * 
+ *
  * @openapi
  * /api/admin/training/trigger:
  *   get:
@@ -54,7 +54,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/training/trigger', {
@@ -65,8 +65,8 @@
  * ```
  */
 
-import { NextResponse } from 'next/server';
 import { automationPipeline } from '@/lib/training/AutomationPipeline';
+import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
 
   const result = await automationPipeline.triggerTraining({
     force,
-    batchSize
+    batchSize,
   });
 
   return NextResponse.json(result);
@@ -85,4 +85,3 @@ export async function GET() {
   const readiness = await automationPipeline.checkTrainingReadiness();
   return NextResponse.json(readiness);
 }
-

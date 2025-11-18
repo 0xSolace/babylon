@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating individual conspiracy theory posts.
- * 
+ *
  * Creates a single conspiracy theory post from a character seeing
  * hidden connections in events. Uses conspiratorial tone with
  * wild speculation and connections.
- * 
+ *
  * Returns XML with conspiracy post and metadata.
  */
 export const conspiracyPost = definePrompt({
@@ -56,5 +56,5 @@ Respond with ONLY this XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });

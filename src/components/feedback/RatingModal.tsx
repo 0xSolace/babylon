@@ -7,29 +7,29 @@
  * Pattern based on: PositionDetailModal.tsx
  */
 
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { X, Star, Trophy, Target } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { FeedbackForm } from './FeedbackForm'
-import { ReputationBadge } from '../reputation/ReputationBadge'
+import { cn } from '@/lib/utils';
+import { Star, Target, Trophy, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ReputationBadge } from '../reputation/ReputationBadge';
+import { FeedbackForm } from './FeedbackForm';
 
-interface RatingModalProps {
-  isOpen: boolean
-  onClose: () => void
-  toUserId: string
-  toUserName?: string
-  toUserReputation?: number
+type RatingModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  toUserId: string;
+  toUserName?: string;
+  toUserReputation?: number;
   context?: {
-    type: 'game' | 'trade' | 'social' | 'general'
-    gameId?: string
-    tradeId?: string
-    positionId?: string
-    description?: string
-  }
-  onSuccess?: () => void
-}
+    type: 'game' | 'trade' | 'social' | 'general';
+    gameId?: string;
+    tradeId?: string;
+    positionId?: string;
+    description?: string;
+  };
+  onSuccess?: () => void;
+};
 
 export function RatingModal({
   isOpen,
@@ -40,80 +40,80 @@ export function RatingModal({
   context,
   onSuccess,
 }: RatingModalProps) {
-  const [showThankYou, setShowThankYou] = useState(false)
+  const [showThankYou, setShowThankYou] = useState(false);
 
   useEffect(() => {
     // Reset thank you state when modal opens
     if (isOpen) {
-      setShowThankYou(false)
+      setShowThankYou(false);
     }
-  }, [isOpen])
+  }, [isOpen]);
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   const handleSuccess = () => {
-    setShowThankYou(true)
+    setShowThankYou(true);
     setTimeout(() => {
-      onClose()
+      onClose();
       if (onSuccess) {
-        onSuccess()
+        onSuccess();
       }
-    }, 2000)
-  }
+    }, 2000);
+  };
 
   const getCategoryFromType = (
     type?: string
   ): 'game_performance' | 'trade_execution' | 'social_interaction' | 'general' => {
     switch (type) {
       case 'game':
-        return 'game_performance'
+        return 'game_performance';
       case 'trade':
-        return 'trade_execution'
+        return 'trade_execution';
       case 'social':
-        return 'social_interaction'
+        return 'social_interaction';
       default:
-        return 'general'
+        return 'general';
     }
-  }
+  };
 
   const getContextIcon = () => {
     switch (context?.type) {
       case 'game':
-        return Trophy
+        return Trophy;
       case 'trade':
-        return Target
+        return Target;
       case 'social':
-        return Star
+        return Star;
       default:
-        return Star
+        return Star;
     }
-  }
+  };
 
   const getContextTitle = (): string => {
     switch (context?.type) {
       case 'game':
-        return 'Rate Game Performance'
+        return 'Rate Game Performance';
       case 'trade':
-        return 'Rate Trading Experience'
+        return 'Rate Trading Experience';
       case 'social':
-        return 'Rate Interaction'
+        return 'Rate Interaction';
       default:
-        return 'Submit Feedback'
+        return 'Submit Feedback';
     }
-  }
+  };
 
-  const ContextIcon = getContextIcon()
+  const ContextIcon = getContextIcon();
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-background rounded-xl max-w-lg w-full border border-border max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-background">
         {showThankYou ? (
           /* Thank You State */
-          <div className="p-8 text-center space-y-4">
-            <div className="w-16 h-16 mx-auto bg-green-500/20 rounded-full flex items-center justify-center">
-              <Star className="w-8 h-8 text-green-500" fill="currentColor" />
+          <div className="space-y-4 p-8 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
+              <Star className="h-8 w-8 text-green-500" fill="currentColor" />
             </div>
-            <h3 className="text-2xl font-bold text-foreground">Thank You!</h3>
+            <h3 className="font-bold text-2xl text-foreground">Thank You!</h3>
             <p className="text-muted-foreground">
               Your feedback has been submitted and will help improve the community.
             </p>
@@ -121,33 +121,32 @@ export function RatingModal({
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-border">
+            <div className="flex items-center justify-between border-border border-b p-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#1c9cf0]/20 rounded-full flex items-center justify-center">
-                  <ContextIcon className="w-5 h-5 text-[#1c9cf0]" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1c9cf0]/20">
+                  <ContextIcon className="h-5 w-5 text-[#1c9cf0]" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-foreground">
-                    {getContextTitle()}
-                  </h2>
+                  <h2 className="font-bold text-foreground text-xl">{getContextTitle()}</h2>
                   {context?.description && (
-                    <p className="text-sm text-muted-foreground">{context.description}</p>
+                    <p className="text-muted-foreground text-sm">{context.description}</p>
                   )}
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onClose}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
+                className="rounded-lg p-2 transition-colors hover:bg-muted"
                 aria-label="Close modal"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-6">
+            <div className="space-y-6 p-6">
               {/* User Info */}
-              <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-4">
                 <div className="flex-1">
                   <div className="font-semibold text-foreground">
                     {toUserName || 'Unknown User'}
@@ -184,7 +183,7 @@ export function RatingModal({
         )}
       </div>
     </div>
-  )
+  );
 }
 
 /**
@@ -192,15 +191,15 @@ export function RatingModal({
  *
  * Quick action button to open rating modal
  */
-interface QuickRatingButtonProps {
-  userId: string
-  userName?: string
-  userReputation?: number
-  context?: RatingModalProps['context']
-  onSuccess?: () => void
-  className?: string
-  variant?: 'default' | 'compact' | 'icon'
-}
+type QuickRatingButtonProps = {
+  userId: string;
+  userName?: string;
+  userReputation?: number;
+  context?: RatingModalProps['context'];
+  onSuccess?: () => void;
+  className?: string;
+  variant?: 'default' | 'compact' | 'icon';
+};
 
 export function QuickRatingButton({
   userId,
@@ -211,23 +210,21 @@ export function QuickRatingButton({
   className = '',
   variant = 'default',
 }: QuickRatingButtonProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false);
 
-  const handleOpen = () => setIsOpen(true)
-  const handleClose = () => setIsOpen(false)
+  const handleOpen = () => setIsOpen(true);
+  const handleClose = () => setIsOpen(false);
 
   if (variant === 'icon') {
     return (
       <>
         <button
+          type="button"
           onClick={handleOpen}
-          className={cn(
-            'p-2 hover:bg-muted rounded-lg transition-colors',
-            className
-          )}
+          className={cn('rounded-lg p-2 transition-colors hover:bg-muted', className)}
           aria-label="Rate this user"
         >
-          <Star className="w-4 h-4 text-yellow-500" />
+          <Star className="h-4 w-4 text-yellow-500" />
         </button>
         <RatingModal
           isOpen={isOpen}
@@ -239,21 +236,22 @@ export function QuickRatingButton({
           onSuccess={onSuccess}
         />
       </>
-    )
+    );
   }
 
   if (variant === 'compact') {
     return (
       <>
         <button
+          type="button"
           onClick={handleOpen}
           className={cn(
-            'flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors',
-            'bg-muted hover:bg-muted/70 text-foreground',
+            'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
+            'bg-muted text-foreground hover:bg-muted/70',
             className
           )}
         >
-          <Star className="w-3 h-3" />
+          <Star className="h-3 w-3" />
           <span>Rate</span>
         </button>
         <RatingModal
@@ -266,20 +264,21 @@ export function QuickRatingButton({
           onSuccess={onSuccess}
         />
       </>
-    )
+    );
   }
 
   return (
     <>
       <button
+        type="button"
         onClick={handleOpen}
         className={cn(
-          'flex items-center gap-2 px-4 py-3 rounded-lg font-semibold transition-colors',
-          'bg-[#1c9cf0] hover:bg-[#1c9cf0]/90 text-primary-foreground',
+          'flex items-center gap-2 rounded-lg px-4 py-3 font-semibold transition-colors',
+          'bg-[#1c9cf0] text-primary-foreground hover:bg-[#1c9cf0]/90',
           className
         )}
       >
-        <Star className="w-4 h-4" />
+        <Star className="h-4 w-4" />
         <span>Rate Performance</span>
       </button>
       <RatingModal
@@ -292,5 +291,5 @@ export function QuickRatingButton({
         onSuccess={onSuccess}
       />
     </>
-  )
+  );
 }

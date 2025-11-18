@@ -2,35 +2,33 @@
  * Server-side portfolio P&L calculation
  */
 
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma';
 
-export interface PortfolioPnLSnapshot {
-  lifetimePnL: number
-  netContributions: number
-  totalDeposited: number
-  totalWithdrawn: number
-  availableBalance: number
-  unrealizedPerpPnL: number
-  unrealizedPredictionPnL: number
-  totalUnrealizedPnL: number
-  totalPnL: number
-  accountEquity: number
-}
+export type PortfolioPnLSnapshot = {
+  lifetimePnL: number;
+  netContributions: number;
+  totalDeposited: number;
+  totalWithdrawn: number;
+  availableBalance: number;
+  unrealizedPerpPnL: number;
+  unrealizedPredictionPnL: number;
+  totalUnrealizedPnL: number;
+  totalPnL: number;
+  accountEquity: number;
+};
 
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : fallback
+    return Number.isFinite(value) ? value : fallback;
   }
   if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value)
-    return Number.isFinite(parsed) ? parsed : fallback
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
-  return fallback
+  return fallback;
 }
 
-export async function calculatePortfolioPnL(
-  userId: string
-): Promise<PortfolioPnLSnapshot | null> {
+export async function calculatePortfolioPnL(userId: string): Promise<PortfolioPnLSnapshot | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -39,9 +37,9 @@ export async function calculatePortfolioPnL(
       totalWithdrawn: true,
       lifetimePnL: true,
     },
-  })
+  });
 
-  if (!user) return null
+  if (!user) return null;
 
   const perpPositions = await prisma.perpPosition.findMany({
     where: {
@@ -51,7 +49,7 @@ export async function calculatePortfolioPnL(
     select: {
       unrealizedPnL: true,
     },
-  })
+  });
 
   const predictionPositions = await prisma.position.findMany({
     where: {
@@ -71,41 +69,41 @@ export async function calculatePortfolioPnL(
         },
       },
     },
-  })
+  });
 
-  const totalDeposited = toNumber(user.totalDeposited)
-  const totalWithdrawn = toNumber(user.totalWithdrawn)
-  const lifetimePnL = toNumber(user.lifetimePnL)
-  const availableBalance = toNumber(user.virtualBalance)
+  const totalDeposited = toNumber(user.totalDeposited);
+  const totalWithdrawn = toNumber(user.totalWithdrawn);
+  const lifetimePnL = toNumber(user.lifetimePnL);
+  const availableBalance = toNumber(user.virtualBalance);
 
   const perpUnrealized = perpPositions.reduce(
     (sum, position) => sum + toNumber(position.unrealizedPnL),
     0
-  )
+  );
 
   const predictionUnrealized = predictionPositions.reduce((sum, position) => {
-    const shares = toNumber(position.shares)
-    const avgPrice = toNumber(position.avgPrice)
-    
+    const shares = toNumber(position.shares);
+    const avgPrice = toNumber(position.avgPrice);
+
     // Calculate current price from shares (CPMM pricing)
-    const yesShares = toNumber(position.Market.yesShares)
-    const noShares = toNumber(position.Market.noShares)
-    const totalShares = yesShares + noShares
-    
-    const currentPrice = totalShares > 0
-      ? (position.side === true
-        ? noShares / totalShares  // Yes price = noShares / total
-        : yesShares / totalShares  // No price = yesShares / total
-      )
-      : avgPrice
+    const yesShares = toNumber(position.Market.yesShares);
+    const noShares = toNumber(position.Market.noShares);
+    const totalShares = yesShares + noShares;
 
-    return sum + shares * (currentPrice - avgPrice)
-  }, 0)
+    const currentPrice =
+      totalShares > 0
+        ? position.side === true
+          ? noShares / totalShares // Yes price = noShares / total
+          : yesShares / totalShares // No price = yesShares / total
+        : avgPrice;
 
-  const totalUnrealizedPnL = perpUnrealized + predictionUnrealized
-  const totalPnL = lifetimePnL + totalUnrealizedPnL
-  const netContributions = totalDeposited - totalWithdrawn
-  const accountEquity = netContributions + totalPnL
+    return sum + shares * (currentPrice - avgPrice);
+  }, 0);
+
+  const totalUnrealizedPnL = perpUnrealized + predictionUnrealized;
+  const totalPnL = lifetimePnL + totalUnrealizedPnL;
+  const netContributions = totalDeposited - totalWithdrawn;
+  const accountEquity = netContributions + totalPnL;
 
   return {
     lifetimePnL,
@@ -118,6 +116,5 @@ export async function calculatePortfolioPnL(
     totalUnrealizedPnL,
     totalPnL,
     accountEquity,
-  }
+  };
 }
-

@@ -3,9 +3,9 @@
  * Provides access to social feed and posts via A2A protocol
  */
 
-import type { Provider, IAgentRuntime, Memory, State, ProviderResult } from '@elizaos/core'
-import { logger } from '@/lib/logger'
-import type { BabylonRuntime } from '../types'
+import { logger } from '@/lib/logger';
+import type { IAgentRuntime, Memory, Provider, ProviderResult, State } from '@elizaos/core';
+import type { BabylonRuntime } from '../types';
 // import type { A2AFeedResponse, A2ATrendingTagsResponse } from '@/types/a2a-responses' // Commented out - not needed
 
 /**
@@ -15,51 +15,71 @@ import type { BabylonRuntime } from '../types'
 export const feedProvider: Provider = {
   name: 'BABYLON_FEED',
   description: 'Get recent posts from the Babylon social feed via A2A protocol',
-  
+
   get: async (runtime: IAgentRuntime, _message: Memory, _state: State): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime
-    
+    const babylonRuntime = runtime as BabylonRuntime;
+
     // A2A is required
     if (!babylonRuntime.a2aClient?.isConnected()) {
-      logger.error('A2A client not connected - feed provider requires A2A', undefined, runtime.agentId)
-      return { text: 'ERROR: A2A client not connected. Cannot fetch feed. Please ensure A2A server is running.' }
+      logger.error(
+        'A2A client not connected - feed provider requires A2A',
+        undefined,
+        runtime.agentId
+      );
+      return {
+        text: 'ERROR: A2A client not connected. Cannot fetch feed. Please ensure A2A server is running.',
+      };
     }
-    
+
     try {
-      const feedResult = await babylonRuntime.a2aClient.getFeed({ limit: 20 }) as unknown as {
+      const feedResult = (await babylonRuntime.a2aClient.getFeed({
+        limit: 20,
+      })) as unknown as {
         posts?: Array<{
-          id: string
-          content: string
-          authorId: string
-          timestamp: string | Date
-          type?: string
-        }>
-      }
-      const posts = (feedResult as { posts?: Array<{
-        id: string
-        content: string
-        authorId: string
-        timestamp: string | Date
-        type?: string
-      }> })?.posts || []
-      
+          id: string;
+          content: string;
+          authorId: string;
+          timestamp: string | Date;
+          type?: string;
+        }>;
+      };
+      const posts =
+        (
+          feedResult as {
+            posts?: Array<{
+              id: string;
+              content: string;
+              authorId: string;
+              timestamp: string | Date;
+              type?: string;
+            }>;
+          }
+        )?.posts || [];
+
       if (posts.length === 0) {
-        return { text: 'No posts in feed.' }
+        return { text: 'No posts in feed.' };
       }
-      
-      const feedText = `Recent Feed Posts:\n${posts.map((p, idx) => 
-        `${idx + 1}. [${p.type || 'post'}] ${p.content.substring(0, 200)}${p.content.length > 200 ? '...' : ''} (Author: ${p.authorId}, ID: ${p.id})`
-      ).join('\n\n')}`
-      
-      return { text: feedText }
+
+      const feedText = `Recent Feed Posts:\n${posts
+        .map(
+          (p, idx) =>
+            `${idx + 1}. [${p.type || 'post'}] ${p.content.substring(0, 200)}${p.content.length > 200 ? '...' : ''} (Author: ${p.authorId}, ID: ${p.id})`
+        )
+        .join('\n\n')}`;
+
+      return { text: feedText };
     } catch (error) {
-      logger.error('Error fetching feed via A2A', { error, agentId: runtime.agentId }, 'FeedProvider')
-      return { 
-        text: `Error fetching feed: ${error instanceof Error ? error.message : 'Unknown error'}` 
-      }
+      logger.error(
+        'Error fetching feed via A2A',
+        { error, agentId: runtime.agentId },
+        'FeedProvider'
+      );
+      return {
+        text: `Error fetching feed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
-  }
-}
+  },
+};
 
 /**
  * Provider: Trending Topics
@@ -68,39 +88,53 @@ export const feedProvider: Provider = {
 export const trendingProvider: Provider = {
   name: 'BABYLON_TRENDING',
   description: 'Get trending topics and tags on Babylon via A2A protocol',
-  
+
   get: async (runtime: IAgentRuntime, _message: Memory, _state: State): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime
-    
+    const babylonRuntime = runtime as BabylonRuntime;
+
     // A2A is required
     if (!babylonRuntime.a2aClient?.isConnected()) {
-      logger.error('A2A client not connected - trending provider requires A2A', undefined, runtime.agentId)
-      return { text: 'ERROR: A2A client not connected. Cannot fetch trending topics. Please ensure A2A server is running.' }
+      logger.error(
+        'A2A client not connected - trending provider requires A2A',
+        undefined,
+        runtime.agentId
+      );
+      return {
+        text: 'ERROR: A2A client not connected. Cannot fetch trending topics. Please ensure A2A server is running.',
+      };
     }
-    
-    try {
-      const trendingResult = await babylonRuntime.a2aClient.getTrendingTags(20)
-      const tags = (trendingResult as { tags?: Array<{
-        id: string
-        name: string
-        displayName?: string
-      }> })?.tags || []
-      
-      if (tags.length === 0) {
-        return { text: 'No trending tags available.' }
-      }
-      
-      const trendingText = `Trending Topics:\n${tags.map((t, idx) => 
-        `${idx + 1}. #${t.displayName || t.name} (ID: ${t.id})`
-      ).join('\n')}`
-      
-      return { text: trendingText }
-    } catch (error) {
-      logger.error('Error fetching trending tags via A2A', { error, agentId: runtime.agentId }, 'TrendingProvider')
-      return { 
-        text: `Error fetching trending topics: ${error instanceof Error ? error.message : 'Unknown error'}` 
-      }
-    }
-  }
-}
 
+    try {
+      const trendingResult = await babylonRuntime.a2aClient.getTrendingTags(20);
+      const tags =
+        (
+          trendingResult as {
+            tags?: Array<{
+              id: string;
+              name: string;
+              displayName?: string;
+            }>;
+          }
+        )?.tags || [];
+
+      if (tags.length === 0) {
+        return { text: 'No trending tags available.' };
+      }
+
+      const trendingText = `Trending Topics:\n${tags
+        .map((t, idx) => `${idx + 1}. #${t.displayName || t.name} (ID: ${t.id})`)
+        .join('\n')}`;
+
+      return { text: trendingText };
+    } catch (error) {
+      logger.error(
+        'Error fetching trending tags via A2A',
+        { error, agentId: runtime.agentId },
+        'TrendingProvider'
+      );
+      return {
+        text: `Error fetching trending topics: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  },
+};

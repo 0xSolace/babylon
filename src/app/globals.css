@@ -7,34 +7,34 @@
   --card-foreground: #0f1419;
   --popover: #ffffff;
   --popover-foreground: #0f1419;
-  --primary: #0066FF;
+  --primary: #0066ff;
   --primary-foreground: #ffffff;
   --secondary: #0f1419;
   --secondary-foreground: #ffffff;
   --muted: #e5e5e6;
   --muted-foreground: #0f1419;
   --accent: #e3ecf6;
-  --accent-foreground: #0066FF;
+  --accent-foreground: #0066ff;
   --destructive: #f4212e;
   --destructive-foreground: #ffffff;
-  --border: #3C3A3A2A;
+  --border: #3c3a3a2a;
   --input: #f7f9fa;
-  --ring: #0066FF;
-  --chart-1: #0066FF;
+  --ring: #0066ff;
+  --chart-1: #0066ff;
   --chart-2: #00b87a;
   --chart-3: #f7b928;
   --chart-4: #17bf63;
   --chart-5: #e0245e;
   --sidebar: #fafafa;
   --sidebar-foreground: #0f1419;
-  --sidebar-primary: #0066FF;
+  --sidebar-primary: #0066ff;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #e3ecf6;
-  --sidebar-accent-foreground: #0066FF;
+  --sidebar-accent-foreground: #0066ff;
   --sidebar-border: #e1e8ed;
-  --sidebar-ring: #0066FF;
+  --sidebar-ring: #0066ff;
   --scrollbar-track: #e5e5e6;
-  --scrollbar-thumb: #0066FF;
+  --scrollbar-thumb: #0066ff;
   --scrollbar-thumb-hover: #2952d9;
   --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-serif: Georgia, serif;
@@ -45,15 +45,15 @@
   --shadow-blur: 3px;
   --shadow-spread: 0px;
   --shadow-opacity: 0.08;
-  --shadow-color: rgba(101,119,134,0.2);
-  --shadow-2xs: 0px 2px 0px 0px hsl(226 89% 58% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(226 89% 58% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 1px 2px -1px hsl(226 89% 58% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 1px 2px -1px hsl(226 89% 58% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 2px 4px -1px hsl(226 89% 58% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 4px 6px -1px hsl(226 89% 58% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 8px 10px -1px hsl(226 89% 58% / 0.00);
-  --shadow-2xl: 0px 2px 0px 0px hsl(226 89% 58% / 0.00);
+  --shadow-color: rgba(101, 119, 134, 0.2);
+  --shadow-2xs: 0px 2px 0px 0px hsl(226 89% 58% / 0);
+  --shadow-xs: 0px 2px 0px 0px hsl(226 89% 58% / 0);
+  --shadow-sm: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 1px 2px -1px hsl(226 89% 58% / 0);
+  --shadow: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 1px 2px -1px hsl(226 89% 58% / 0);
+  --shadow-md: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 2px 4px -1px hsl(226 89% 58% / 0);
+  --shadow-lg: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 4px 6px -1px hsl(226 89% 58% / 0);
+  --shadow-xl: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 8px 10px -1px hsl(226 89% 58% / 0);
+  --shadow-2xl: 0px 2px 0px 0px hsl(226 89% 58% / 0);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 }
@@ -65,34 +65,34 @@
   --card-foreground: #d9d9d9;
   --popover: #000000;
   --popover-foreground: #e7e9ea;
-  --primary: #0066FF;
+  --primary: #0066ff;
   --primary-foreground: #ffffff;
   --secondary: #f0f3f4;
   --secondary-foreground: #0f1419;
   --muted: #181818;
   --muted-foreground: #72767a;
   --accent: #061622;
-  --accent-foreground: #0066FF;
+  --accent-foreground: #0066ff;
   --destructive: #f4212e;
   --destructive-foreground: #ffffff;
   --border: #2f3336;
   --input: #22303c;
-  --ring: #0066FF;
-  --chart-1: #0066FF;
+  --ring: #0066ff;
+  --chart-1: #0066ff;
   --chart-2: #00b87a;
   --chart-3: #f7b928;
   --chart-4: #17bf63;
   --chart-5: #e0245e;
   --sidebar: #0a0a0a;
   --sidebar-foreground: #d9d9d9;
-  --sidebar-primary: #0066FF;
+  --sidebar-primary: #0066ff;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #1a1a1a;
-  --sidebar-accent-foreground: #0066FF;
+  --sidebar-accent-foreground: #0066ff;
   --sidebar-border: #2f3336;
-  --sidebar-ring: #0066FF;
+  --sidebar-ring: #0066ff;
   --scrollbar-track: #000000;
-  --scrollbar-thumb: #0066FF;
+  --scrollbar-thumb: #0066ff;
   --scrollbar-thumb-hover: #2952d9;
   --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-serif: Georgia, serif;
@@ -103,15 +103,15 @@
   --shadow-blur: 0px;
   --shadow-spread: 0px;
   --shadow-opacity: 0;
-  --shadow-color: rgba(52,98,243,0.25);
-  --shadow-2xs: 0px 2px 0px 0px hsl(226 89% 58% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(226 89% 58% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 1px 2px -1px hsl(226 89% 58% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 1px 2px -1px hsl(226 89% 58% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 2px 4px -1px hsl(226 89% 58% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 4px 6px -1px hsl(226 89% 58% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(226 89% 58% / 0.00), 0px 8px 10px -1px hsl(226 89% 58% / 0.00);
-  --shadow-2xl: 0px 2px 0px 0px hsl(226 89% 58% / 0.00);
+  --shadow-color: rgba(52, 98, 243, 0.25);
+  --shadow-2xs: 0px 2px 0px 0px hsl(226 89% 58% / 0);
+  --shadow-xs: 0px 2px 0px 0px hsl(226 89% 58% / 0);
+  --shadow-sm: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 1px 2px -1px hsl(226 89% 58% / 0);
+  --shadow: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 1px 2px -1px hsl(226 89% 58% / 0);
+  --shadow-md: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 2px 4px -1px hsl(226 89% 58% / 0);
+  --shadow-lg: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 4px 6px -1px hsl(226 89% 58% / 0);
+  --shadow-xl: 0px 2px 0px 0px hsl(226 89% 58% / 0), 0px 8px 10px -1px hsl(226 89% 58% / 0);
+  --shadow-2xl: 0px 2px 0px 0px hsl(226 89% 58% / 0);
 }
 
 /* @tailwind-css v4 theme block */
@@ -172,7 +172,9 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-feature-settings: "rlig" 1, "calt" 1;
+  font-feature-settings:
+    "rlig" 1,
+    "calt" 1;
   /* Prevent native pull-to-refresh and overscroll effects */
   overscroll-behavior-y: contain;
   overflow-y: auto;
@@ -195,33 +197,49 @@ button:disabled {
 
 /* Allow rounded elements to maintain their rounded state */
 [class*="rounded-full"] {
-  border-radius: 9999px !important;
+  border-radius: 9999px;
 }
 
 /* Allow bottom nav to have rounded bottom corners */
 .bottom-nav-rounded {
-  border-bottom-left-radius: 12px !important;
-  border-bottom-right-radius: 12px !important;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
 }
 
 @keyframes accordion-down {
-  from { height: 0 }
-  to { height: var(--radix-accordion-content-height) }
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
 }
 
 @keyframes accordion-up {
-  from { height: var(--radix-accordion-content-height) }
-  to { height: 0 }
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
 }
 
 @keyframes slide-in {
-  from { transform: translateY(100%) }
-  to { transform: translateY(0) }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 @keyframes fade-in {
-  from { opacity: 0 }
-  to { opacity: 1 }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Mobile-first touch targets */

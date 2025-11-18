@@ -5,86 +5,158 @@
  * Unit tests should not require a real database connection.
  */
 
-import { mock, beforeAll } from 'bun:test'
+import { beforeAll, mock } from 'bun:test';
 
 // Mock Prisma client for all unit tests
 beforeAll(() => {
   // Set test environment variables
   // @ts-expect-error - Need to override NODE_ENV for testing
-  process.env.NODE_ENV = 'test'
-  process.env.DATABASE_URL = 'postgresql://mock:mock@localhost:5432/mock_test'
-  process.env.REDIS_URL = 'redis://localhost:6379'
+  process.env.NODE_ENV = 'test';
+  process.env.DATABASE_URL = 'postgresql://mock:mock@localhost:5432/mock_test';
+  process.env.REDIS_URL = 'redis://localhost:6379';
 
   // Mock the Prisma module entirely
   mock.module('@/lib/prisma', () => {
-    const mockPrismaClient = createMockPrismaClient()
+    const mockPrismaClient = createMockPrismaClient();
     return {
       prisma: mockPrismaClient,
-      prismaBase: mockPrismaClient
-    }
-  })
+      prismaBase: mockPrismaClient,
+    };
+  });
 
   // Mock Redis as well
   mock.module('ioredis', () => {
     return {
       default: class MockRedis {
-        constructor() {}
-        on() { return this }
-        connect() { return Promise.resolve() }
-        disconnect() { return Promise.resolve() }
-        get() { return Promise.resolve(null) }
-        set() { return Promise.resolve('OK') }
-        del() { return Promise.resolve(1) }
-        expire() { return Promise.resolve(1) }
-        ttl() { return Promise.resolve(-1) }
-        keys() { return Promise.resolve([]) }
-        flushall() { return Promise.resolve('OK') }
+        on() {
+          return this;
+        }
+        connect() {
+          return Promise.resolve();
+        }
+        disconnect() {
+          return Promise.resolve();
+        }
+        get() {
+          return Promise.resolve(null);
+        }
+        set() {
+          return Promise.resolve('OK');
+        }
+        del() {
+          return Promise.resolve(1);
+        }
+        expire() {
+          return Promise.resolve(1);
+        }
+        ttl() {
+          return Promise.resolve(-1);
+        }
+        keys() {
+          return Promise.resolve([]);
+        }
+        flushall() {
+          return Promise.resolve('OK');
+        }
         pipeline() {
           return {
-            exec: () => Promise.resolve([])
-          }
+            exec: () => Promise.resolve([]),
+          };
         }
-      }
-    }
-  })
-})
+      },
+    };
+  });
+});
 
 /**
  * Create a mock Prisma client with all necessary models
  */
 function createMockPrismaClient() {
   const mockModels = [
-    'user', 'actor', 'pool', 'market', 'position', 'trade',
-    'post', 'comment', 'worldFact', 'parodyHeadline',
-    'waitlistEntry', 'points', 'marketOutcome', 'vote',
-    'marketSpotlight', 'userGroup', 'userGroupMember',
-    'actorFollow', 'userActorFollow', 'actorRelationship',
-    'nPCTrade', 'marketPool', 'liquidityPosition', 'swap',
-    'userStats', 'aiPrompt', 'threadMessage', 'userGroupAdmin',
-    'userGroupInvite', 'article', 'rSSFeedItem', 'rSSFeedSource', 'rSSHeadline', 'conversation',
-    'notification', 'fact', 'factCategoryBlacklist',
-    'factResponse', 'topicCategory', 'stickerPackCollectionInfo',
-    'leaderboardResults', 'onChainUserMapping', 'automationTask',
-    'automationLog', 'automationCampaign',
-    'feedback', 'reputationLog', 'achievements',
+    'user',
+    'actor',
+    'pool',
+    'market',
+    'position',
+    'trade',
+    'post',
+    'comment',
+    'worldFact',
+    'parodyHeadline',
+    'waitlistEntry',
+    'points',
+    'marketOutcome',
+    'vote',
+    'marketSpotlight',
+    'userGroup',
+    'userGroupMember',
+    'actorFollow',
+    'userActorFollow',
+    'actorRelationship',
+    'nPCTrade',
+    'marketPool',
+    'liquidityPosition',
+    'swap',
+    'userStats',
+    'aiPrompt',
+    'threadMessage',
+    'userGroupAdmin',
+    'userGroupInvite',
+    'article',
+    'rSSFeedItem',
+    'rSSFeedSource',
+    'rSSHeadline',
+    'conversation',
+    'notification',
+    'fact',
+    'factCategoryBlacklist',
+    'factResponse',
+    'topicCategory',
+    'stickerPackCollectionInfo',
+    'leaderboardResults',
+    'onChainUserMapping',
+    'automationTask',
+    'automationLog',
+    'automationCampaign',
+    'feedback',
+    'reputationLog',
+    'achievements',
     // Agent-related models
-    'agentGoal', 'agentGoalAction', 'agentMessage', 'agentLog',
-    'agentPointsTransaction', 'agentPerformanceMetrics',
+    'agentGoal',
+    'agentGoalAction',
+    'agentMessage',
+    'agentLog',
+    'agentPointsTransaction',
+    'agentPerformanceMetrics',
     // Trajectory and training models
-    'trajectory', 'trainingBatch', 'trainedModel', 'llmCallLog',
-    'rewardJudgment'
-  ]
+    'trajectory',
+    'trainingBatch',
+    'trainedModel',
+    'llmCallLog',
+    'rewardJudgment',
+  ];
 
-  const mockClient: any = {
+  type MockMethod = ReturnType<typeof mock>;
+  type PrismaModelMock = Record<string, MockMethod>;
+  type SetupMockPrismaClient = {
+    $connect: MockMethod;
+    $disconnect: MockMethod;
+    $queryRaw: MockMethod;
+    $executeRaw: MockMethod;
+    $transaction: MockMethod;
+    [modelName: string]: MockMethod | PrismaModelMock;
+  };
+
+  const mockClient: SetupMockPrismaClient = {
     $connect: mock(() => Promise.resolve()),
     $disconnect: mock(() => Promise.resolve()),
     $queryRaw: mock(() => Promise.resolve([])),
     $executeRaw: mock(() => Promise.resolve(0)),
-    $transaction: mock(async (fn: any) => {
+    $transaction: mock(async (fn: (client: SetupMockPrismaClient) => Promise<unknown>) => {
       // Execute the transaction function with the mock client
-      return await fn(mockClient)
-    })
-  }
+      return await fn(mockClient);
+    }),
+  };
 
   // Add mock methods for each Prisma model
   for (const modelName of mockModels) {
@@ -100,18 +172,20 @@ function createMockPrismaClient() {
       upsert: mock(() => Promise.resolve({ id: 'mock-id' })),
       delete: mock(() => Promise.resolve({ id: 'mock-id' })),
       deleteMany: mock(() => Promise.resolve({ count: 0 })),
-      aggregate: mock(() => Promise.resolve({
-        _count: 0,
-        _sum: null,
-        _avg: null,
-        _min: null,
-        _max: null
-      })),
-      groupBy: mock(() => Promise.resolve([]))
-    }
+      aggregate: mock(() =>
+        Promise.resolve({
+          _count: 0,
+          _sum: null,
+          _avg: null,
+          _min: null,
+          _max: null,
+        })
+      ),
+      groupBy: mock(() => Promise.resolve([])),
+    };
   }
 
-  return mockClient
+  return mockClient;
 }
 
-export { createMockPrismaClient }
+export { createMockPrismaClient };

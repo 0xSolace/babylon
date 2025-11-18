@@ -1,14 +1,14 @@
 /**
  * Admin Load Test API
- * 
+ *
  * @route POST /api/admin/load-test - Run load test
  * @route GET /api/admin/load-test - Get load test status/results
  * @access Admin
- * 
+ *
  * @description
  * Load testing endpoint for admin. POST runs a load test with specified
  * scenario (LIGHT, NORMAL, HEAVY, STRESS). GET returns status or results.
- * 
+ *
  * @openapi
  * /api/admin/load-test:
  *   post:
@@ -63,7 +63,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/load-test', {
@@ -74,12 +74,12 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
-import { withErrorHandling, successResponse, errorResponse } from '@/lib/errors/error-handler';
 import { requireAdmin } from '@/lib/api/admin-middleware';
+import { errorResponse, successResponse, withErrorHandling } from '@/lib/errors/error-handler';
+import { logger } from '@/lib/logger';
 import type { LoadTestResult } from '@/lib/testing/load-test-simulator';
 import { LoadTestSimulator, TEST_SCENARIOS } from '@/lib/testing/load-test-simulator';
-import { logger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
 const LoadTestRequestSchema = z.object({
@@ -115,15 +115,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Get configuration
   const config = TEST_SCENARIOS[scenario];
-  const testBaseUrl = baseUrl || (process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'http://localhost:3000');
+  const testBaseUrl =
+    baseUrl ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
-  logger.info('Starting load test', {
-    scenario,
-    baseUrl: testBaseUrl,
-    config,
-  }, 'POST /api/admin/load-test');
+  logger.info(
+    'Starting load test',
+    {
+      scenario,
+      baseUrl: testBaseUrl,
+      config,
+    },
+    'POST /api/admin/load-test'
+  );
 
   // Start test
   const simulator = new LoadTestSimulator(testBaseUrl);
@@ -137,19 +141,25 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   };
 
   // Handle test completion
-  testPromise.then(result => {
-    lastTestResult = result;
-    activeTest = null;
-    
-    logger.info('Load test completed', {
-      scenario,
-      totalRequests: result.totalRequests,
-      successRate: result.throughput.successRate,
-    }, 'LoadTest');
-  }).catch(error => {
-    logger.error('Load test failed', error, 'LoadTest');
-    activeTest = null;
-  });
+  testPromise
+    .then((result) => {
+      lastTestResult = result;
+      activeTest = null;
+
+      logger.info(
+        'Load test completed',
+        {
+          scenario,
+          totalRequests: result.totalRequests,
+          successRate: result.throughput.successRate,
+        },
+        'LoadTest'
+      );
+    })
+    .catch((error) => {
+      logger.error('Load test failed', error, 'LoadTest');
+      activeTest = null;
+    });
 
   return successResponse({
     message: 'Load test started',
@@ -172,7 +182,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   if (activeTest) {
     const runningTime = Date.now() - activeTest.startTime.getTime();
-    
+
     return successResponse({
       status: 'running',
       scenario: activeTest.scenario,
@@ -184,12 +194,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   return successResponse({
     status: 'idle',
-    lastResult: lastTestResult ? {
-      endTime: lastTestResult.endTime,
-      totalRequests: lastTestResult.totalRequests,
-      successRate: lastTestResult.throughput.successRate,
-      avgResponseTime: lastTestResult.responseTime.mean,
-    } : null,
+    lastResult: lastTestResult
+      ? {
+          endTime: lastTestResult.endTime,
+          totalRequests: lastTestResult.totalRequests,
+          successRate: lastTestResult.throughput.successRate,
+          avgResponseTime: lastTestResult.responseTime.mean,
+        }
+      : null,
   });
 });
-

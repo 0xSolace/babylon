@@ -1,13 +1,13 @@
 /**
  * Twitter OAuth Initiation API
- * 
+ *
  * @route GET /api/auth/twitter/initiate - Initiate Twitter OAuth
  * @access Authenticated
- * 
+ *
  * @description
  * Initiates Twitter OAuth 2.0 flow with PKCE, redirecting user to Twitter
  * authorization page. Generates secure state parameter with CSRF protection.
- * 
+ *
  * @openapi
  * /api/auth/twitter/initiate:
  *   get:
@@ -24,53 +24,50 @@
  *         description: Unauthorized
  *       503:
  *         description: Twitter OAuth not configured
- * 
+ *
  * @example
  * ```typescript
  * // Redirect user to initiate Twitter OAuth
  * window.location.href = '/api/auth/twitter/initiate';
  * ```
- * 
+ *
  * @see {@link /api/auth/twitter/callback} OAuth callback
  * @see {@link https://developer.twitter.com/en/docs/authentication/oauth-2-0} Twitter OAuth 2.0
  */
 
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { logger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
-import { generateSnowflakeId } from '@/lib/snowflake'
-import crypto from 'crypto'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { generateSnowflakeId } from '@/lib/snowflake';
+import crypto from 'node:crypto';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 /**
  * Generate PKCE code verifier (random string)
  */
 function generateCodeVerifier(): string {
-  return crypto.randomBytes(32).toString('base64url')
+  return crypto.randomBytes(32).toString('base64url');
 }
 
 /**
  * Generate PKCE code challenge from verifier
  */
 function generateCodeChallenge(verifier: string): string {
-  return crypto
-    .createHash('sha256')
-    .update(verifier)
-    .digest('base64url')
+  return crypto.createHash('sha256').update(verifier).digest('base64url');
 }
 
 export async function GET(request: NextRequest) {
-  const authUser = await authenticate(request)
-  const userId = authUser.userId
+  const authUser = await authenticate(request);
+  const userId = authUser.userId;
 
   // Use | as separator instead of : to avoid conflicts with Privy DIDs (did:privy:...)
-  const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`
-  
+  const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`;
+
   // Generate PKCE parameters
-  const codeVerifier = generateCodeVerifier()
-  const codeChallenge = generateCodeChallenge(codeVerifier)
-  
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = generateCodeChallenge(codeVerifier);
+
   // Store code verifier temporarily (expires in 10 minutes)
   const oauthRecord = await prisma.oAuthState.create({
     data: {
@@ -81,26 +78,40 @@ export async function GET(request: NextRequest) {
       returnPath: 'twitter', // Use returnPath to store provider
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     },
-  })
+  });
 
-  logger.info('Created OAuth state record', { 
-    userId, 
-    state, 
-    oauthRecordId: oauthRecord.id,
-    expiresAt: oauthRecord.expiresAt.toISOString()
-  }, 'TwitterInitiate')
+  logger.info(
+    'Created OAuth state record',
+    {
+      userId,
+      state,
+      oauthRecordId: oauthRecord.id,
+      expiresAt: oauthRecord.expiresAt.toISOString(),
+    },
+    'TwitterInitiate'
+  );
 
-  const authUrl = new URL('https://twitter.com/i/oauth2/authorize')
-  authUrl.searchParams.set('response_type', 'code')
-  authUrl.searchParams.set('client_id', process.env.TWITTER_CLIENT_ID!)
-  authUrl.searchParams.set('redirect_uri', `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/twitter/callback`)
-  authUrl.searchParams.set('scope', 'tweet.read tweet.write users.read offline.access')
-  authUrl.searchParams.set('state', state)
-  authUrl.searchParams.set('code_challenge', codeChallenge)
-  authUrl.searchParams.set('code_challenge_method', 'S256')
+  const authUrl = new URL('https://twitter.com/i/oauth2/authorize');
+  authUrl.searchParams.set('response_type', 'code');
+  const twitterClientId = process.env.TWITTER_CLIENT_ID;
+  if (!twitterClientId) {
+    throw new Error('TWITTER_CLIENT_ID is not configured');
+  }
+  authUrl.searchParams.set('client_id', twitterClientId);
+  authUrl.searchParams.set(
+    'redirect_uri',
+    `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/twitter/callback`
+  );
+  authUrl.searchParams.set('scope', 'tweet.read tweet.write users.read offline.access');
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('code_challenge', codeChallenge);
+  authUrl.searchParams.set('code_challenge_method', 'S256');
 
-  logger.info('Initiating Twitter OAuth with PKCE', { userId, state: state.substring(0, 20) + '...' }, 'TwitterInitiate')
+  logger.info(
+    'Initiating Twitter OAuth with PKCE',
+    { userId, state: `${state.substring(0, 20)}...` },
+    'TwitterInitiate'
+  );
 
-  return NextResponse.redirect(authUrl.toString())
+  return NextResponse.redirect(authUrl.toString());
 }
-

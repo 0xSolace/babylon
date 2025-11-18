@@ -1,13 +1,12 @@
-import { Prisma } from '@prisma/client';
-import type { PredictionPriceHistory } from '@prisma/client';
-
 import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
+import type { PredictionPriceHistory } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 export type PredictionHistoryEventType = 'trade' | 'resolution';
 export type PredictionHistorySource = 'user_trade' | 'npc_trade' | 'system';
 
-export interface PredictionPriceSnapshot {
+export type PredictionPriceSnapshot = {
   marketId: string;
   yesPrice: number;
   noPrice: number;
@@ -17,7 +16,7 @@ export interface PredictionPriceSnapshot {
   eventType: PredictionHistoryEventType;
   source: PredictionHistorySource;
   createdAt?: Date;
-}
+};
 
 export class PredictionPriceHistoryService {
   static async recordSnapshot(
@@ -42,10 +41,7 @@ export class PredictionPriceHistoryService {
     });
   }
 
-  static async getHistory(
-    marketId: string,
-    limit = 200
-  ): Promise<PredictionPriceHistory[]> {
+  static async getHistory(marketId: string, limit = 200): Promise<PredictionPriceHistory[]> {
     return prisma.predictionPriceHistory.findMany({
       where: { marketId },
       orderBy: { createdAt: 'desc' },

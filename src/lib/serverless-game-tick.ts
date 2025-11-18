@@ -9,33 +9,36 @@
  * ✅ Vercel-compatible: No filesystem access, completes in <60s
  */
 
-import { Prisma } from '@prisma/client';
-import { ArticleGenerator } from '@/engine/ArticleGenerator';
 import { invalidateAfterPredictionTrade } from '@/lib/cache/trade-cache-invalidation';
+import { PredictionPricing } from '@/lib/prediction-pricing';
+import { ArticleGenerator } from '@/engine/ArticleGenerator';
 import { MarketDecisionEngine } from '@/engine/MarketDecisionEngine';
+import { RelationshipEvolutionEngine } from '@/engine/RelationshipEvolutionEngine';
 import { BabylonLLMClient } from '@/generator/llm/openai-client';
 import type { ActorTier, WorldEvent } from '@/shared/types';
+import type { TradingExecutionResult } from '@/types/market-decisions';
+import { Prisma } from '@prisma/client';
 import db from './database-service';
 import { logger } from './logger';
 import { NPCInvestmentManager } from './npc/npc-investment-manager';
+import { getOracleService } from './oracle';
 import { prisma } from './prisma';
 import { MarketContextService } from './services/market-context-service';
-import { ReputationService } from './services/reputation-service';
-import { TradeExecutionService } from './services/trade-execution-service';
+import { createParodyHeadlineGenerator } from './services/parody-headline-generator';
 import { PredictionMarketEventService } from './services/prediction-market-event-service';
 import { PredictionPriceHistoryService } from './services/prediction-price-history-service';
-import { PredictionPricing } from '@/lib/prediction-pricing';
-import { calculateTrendingIfNeeded, calculateTrendingTags } from './services/trending-calculation-service';
-import { WalletService } from './services/wallet-service';
-import { generateSnowflakeId } from './snowflake';
-import type { TradingExecutionResult } from '@/types/market-decisions';
-import { getOracleService } from './oracle';
-import { worldFactsService } from './services/world-facts-service';
+import { ReputationService } from './services/reputation-service';
 import { rssFeedService } from './services/rss-feed-service';
-import { createParodyHeadlineGenerator } from './services/parody-headline-generator';
-import { RelationshipEvolutionEngine } from '@/engine/RelationshipEvolutionEngine';
+import { TradeExecutionService } from './services/trade-execution-service';
+import {
+  calculateTrendingIfNeeded,
+  calculateTrendingTags,
+} from './services/trending-calculation-service';
+import { WalletService } from './services/wallet-service';
+import { worldFactsService } from './services/world-facts-service';
+import { generateSnowflakeId } from './snowflake';
 
-export interface GameTickResult {
+export type GameTickResult = {
   postsCreated: number;
   eventsCreated: number;
   articlesCreated: number;
@@ -70,31 +73,29 @@ export interface GameTickResult {
     headlinesCleaned: number;
   };
   relationshipsUpdated?: number;
-}
+};
 
 /**
  * Execute a single game tick
  * Designed to complete within 3 minutes (180 seconds)
  * Uses parallelization for posts, articles, and other operations to maximize throughput
  * Guarantees critical operations (market decisions) always execute via budget reserve
- * 
+ *
  * @param skipContentGeneration - If true, skips post/event/article generation (for buffer management)
  */
-export async function executeGameTick(skipContentGeneration: boolean = false): Promise<GameTickResult> {
+export async function executeGameTick(
+  skipContentGeneration: boolean = false
+): Promise<GameTickResult> {
   const timestamp = new Date();
   const startedAt = Date.now();
   const budgetMs = Number(process.env.GAME_TICK_BUDGET_MS || 180000); // 3 minutes default
   const deadline = startedAt + budgetMs;
-  
+
   // Reserve 60 seconds for critical operations (market decisions, widget updates)
   const criticalOpsReserveMs = 60000;
   const criticalOpsDeadline = startedAt + budgetMs - criticalOpsReserveMs;
 
-  logger.info(
-    'Executing game tick',
-    { timestamp: timestamp.toISOString() },
-    'GameTick'
-  );
+  logger.info('Executing game tick', { timestamp: timestamp.toISOString() }, 'GameTick');
 
   // Initialize result counters
   const result: GameTickResult = {
@@ -127,10 +128,14 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
     // Initialize LLM client - force Groq for game NPCs (wandb is only for Eliza agents)
     const llmClient = new BabylonLLMClient(undefined, undefined, 'groq');
     const stats = llmClient.getStats();
-    logger.info('LLM client initialized for game NPCs', { 
-      provider: stats.provider, 
-      model: stats.model 
-    }, 'GameTick');
+    logger.info(
+      'LLM client initialized for game NPCs',
+      {
+        provider: stats.provider,
+        model: stats.model,
+      },
+      'GameTick'
+    );
 
     // Get active questions from database
     const activeQuestions = await prisma.question.findMany({
@@ -154,16 +159,20 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
         deadline
       );
       result.questionsCreated = questionsGenerated;
-      
+
       // Reload active questions after generation
       const newActiveQuestions = await prisma.question.findMany({
         where: { status: 'active' },
       });
       activeQuestions.length = 0;
       activeQuestions.push(...newActiveQuestions);
-      
-      logger.info(`Initial questions created: ${questionsGenerated}`, { count: questionsGenerated }, 'GameTick');
-      
+
+      logger.info(
+        `Initial questions created: ${questionsGenerated}`,
+        { count: questionsGenerated },
+        'GameTick'
+      );
+
       // Publish commitments to blockchain oracle
       if (questionsGenerated > 0 && newActiveQuestions.length > 0) {
         const oracleResult = await publishOracleCommitments(newActiveQuestions);
@@ -187,7 +196,9 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
 
       await prisma.question.updateMany({
         where: {
-          id: { in: questionsToResolve.map((q: typeof questionsToResolve[number]) => q.id) },
+          id: {
+            in: questionsToResolve.map((q: (typeof questionsToResolve)[number]) => q.id),
+          },
         },
         data: { status: 'resolved' },
       });
@@ -196,7 +207,7 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
         await resolveQuestionPayouts(question.questionNumber);
         result.questionsResolved++;
       }
-      
+
       // Publish reveals to blockchain oracle
       if (questionsToResolve.length > 0) {
         const oracleResult = await publishOracleReveals(questionsToResolve);
@@ -218,17 +229,10 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
         result.postsCreated = posts;
         result.articlesCreated = articles;
       } else {
-        logger.warn(
-          'Skipping post generation – tick budget exceeded',
-          { budgetMs },
-          'GameTick'
-        );
+        logger.warn('Skipping post generation – tick budget exceeded', { budgetMs }, 'GameTick');
       }
 
-      const eventsGenerated = await generateEvents(
-        activeQuestions.slice(0, 3),
-        timestamp
-      );
+      const eventsGenerated = await generateEvents(activeQuestions.slice(0, 3), timestamp);
       result.eventsCreated = eventsGenerated;
     } else {
       logger.info('Skipping content generation (buffer sufficient)', undefined, 'GameTick');
@@ -237,26 +241,27 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
     // CRITICAL PRIORITY: Generate and execute NPC trading decisions
     // This ALWAYS runs - uses the full deadline, not the critical ops deadline
     // Market decisions are essential for game economy and must always execute
-    logger.info('Starting critical market decision operations', { 
-      timeRemaining: deadline - Date.now() 
-    }, 'GameTick');
+    logger.info(
+      'Starting critical market decision operations',
+      {
+        timeRemaining: deadline - Date.now(),
+      },
+      'GameTick'
+    );
 
     const baselineResult = await NPCInvestmentManager.executeBaselineInvestments(timestamp);
 
     if (baselineResult) {
-      const baselineUpdates = await updateMarketPricesFromTrades(
-        timestamp,
-        baselineResult
-      );
+      const baselineUpdates = await updateMarketPricesFromTrades(timestamp, baselineResult);
       result.marketsUpdated += baselineUpdates;
     }
 
     const contextService = new MarketContextService();
-    
+
     // Configure decision engine with model and token limits from environment
     // Use qwen/qwen3-32b on Groq for background trading operations
     const modelName = process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
-    
+
     // Model-aware output token limits:
     // Note: Input and output are SEPARATE limits on modern models
     // - Kimi models: 260k INPUT + 16k OUTPUT (separate)
@@ -264,10 +269,10 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
     const isKimiModel = modelName.toLowerCase().includes('kimi');
     const defaultMaxOutput = isKimiModel ? 16000 : 32000;
     const maxOutputTokens = parseInt(
-      process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS || defaultMaxOutput.toString(), 
+      process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS || defaultMaxOutput.toString(),
       10
     );
-    
+
     const decisionEngine = new MarketDecisionEngine(llmClient, contextService, {
       model: modelName,
       maxOutputTokens,
@@ -279,8 +284,7 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
     if (marketDecisions.length === 0) {
       logger.info('No NPC market trades generated this tick', {}, 'GameTick');
     } else {
-      const executionResult =
-        await executionService.executeDecisionBatch(marketDecisions);
+      const executionResult = await executionService.executeDecisionBatch(marketDecisions);
 
       logger.info(
         `NPC Trading: ${executionResult.successfulTrades} trades executed`,
@@ -293,10 +297,7 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
       );
 
       // Update prices based on NPC trades
-      const marketsUpdated = await updateMarketPricesFromTrades(
-        timestamp,
-        executionResult
-      );
+      const marketsUpdated = await updateMarketPricesFromTrades(timestamp, executionResult);
       result.marketsUpdated += marketsUpdated;
     }
 
@@ -304,23 +305,14 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
     // Skip if buffer is sufficient (content generation handled by lookahead service)
     if (!skipContentGeneration) {
       if (Date.now() < deadline) {
-        const articlesGenerated = await generateArticles(
-          timestamp,
-          llmClient,
-          deadline
-        );
+        const articlesGenerated = await generateArticles(timestamp, llmClient, deadline);
         result.articlesCreated += articlesGenerated; // Add to existing count from mixed posts
       } else {
-        logger.warn(
-          'Skipping article generation – tick budget exceeded',
-          { budgetMs },
-          'GameTick'
-        );
+        logger.warn('Skipping article generation – tick budget exceeded', { budgetMs }, 'GameTick');
       }
     }
 
-    const currentActiveCount =
-      activeQuestions.length - result.questionsResolved;
+    const currentActiveCount = activeQuestions.length - result.questionsResolved;
     if (currentActiveCount < 10) {
       if (Date.now() < deadline) {
         const questionsGenerated = await generateNewQuestions(
@@ -352,7 +344,7 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
     // Calculate trending tags if needed (checks 30-minute interval internally)
     // Force calculation on first tick if we just generated baseline posts
     const forceCalculation = result.postsCreated > 0 && result.articlesCreated > 0;
-    const trendingCalculated = forceCalculation 
+    const trendingCalculated = forceCalculation
       ? await forceTrendingCalculation()
       : await calculateTrendingIfNeeded();
     result.trendingCalculated = trendingCalculated;
@@ -378,7 +370,11 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
           successful: syncResult.synced,
           failed: syncResult.failed,
         };
-        logger.info('Reputation sync completed during game tick', result.reputationSyncStats, 'GameTick');
+        logger.info(
+          'Reputation sync completed during game tick',
+          result.reputationSyncStats,
+          'GameTick'
+        );
       }
     } catch (error) {
       logger.warn('Reputation sync failed during game tick (non-blocking)', { error }, 'GameTick');
@@ -409,7 +405,11 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
       const relationshipsUpdated = await relationshipEngine.analyzeAndUpdateRelationships();
       result.relationshipsUpdated = relationshipsUpdated;
       if (relationshipsUpdated > 0) {
-        logger.info(`✅ Updated ${relationshipsUpdated} relationships`, { count: relationshipsUpdated }, 'GameTick');
+        logger.info(
+          `✅ Updated ${relationshipsUpdated} relationships`,
+          { count: relationshipsUpdated },
+          'GameTick'
+        );
       }
     }
 
@@ -424,20 +424,30 @@ export async function executeGameTick(skipContentGeneration: boolean = false): P
       usersKicked: dynamics.usersKicked,
       messagesPosted: dynamics.messagesPosted,
     };
-    if (dynamics.groupsCreated > 0 || dynamics.membersAdded > 0 || dynamics.membersRemoved > 0 || 
-        dynamics.usersInvited > 0 || dynamics.usersKicked > 0 || dynamics.messagesPosted > 0) {
+    if (
+      dynamics.groupsCreated > 0 ||
+      dynamics.membersAdded > 0 ||
+      dynamics.membersRemoved > 0 ||
+      dynamics.usersInvited > 0 ||
+      dynamics.usersKicked > 0 ||
+      dynamics.messagesPosted > 0
+    ) {
       logger.info('NPC group dynamics processed', dynamics, 'GameTick');
     }
 
     const durationMs = Date.now() - startedAt;
     logger.info('Game tick completed', { ...result, durationMs }, 'GameTick');
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    const errorStack = error instanceof Error ? error.stack : undefined
-    logger.error('Critical error in game tick', { 
-      error: errorMessage,
-      stack: errorStack 
-    }, 'GameTick');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logger.error(
+      'Critical error in game tick',
+      {
+        error: errorMessage,
+        stack: errorStack,
+      },
+      'GameTick'
+    );
     throw error;
   }
 
@@ -455,44 +465,52 @@ async function bootstrapContentIfNeeded(timestamp: Date): Promise<void> {
     prisma.post.count({ where: { type: 'article' } }),
     prisma.actorRelationship.count(),
   ]);
-  
+
   const MIN_TRENDING = 5;
   const MIN_NEWS = 5;
-  
+
   // If we have enough of everything, nothing to do
   if (trendingCount >= MIN_TRENDING && newsCount >= MIN_NEWS && relationshipCount > 0) {
     return;
   }
-  
-  logger.info('Bootstrapping initial content...', {
-    currentTrending: trendingCount,
-    currentNews: newsCount,
-    currentRelationships: relationshipCount,
-    needTrending: trendingCount < MIN_TRENDING,
-    needNews: newsCount < MIN_NEWS,
-    needRelationships: relationshipCount === 0,
-  }, 'GameTick');
-  
+
+  logger.info(
+    'Bootstrapping initial content...',
+    {
+      currentTrending: trendingCount,
+      currentNews: newsCount,
+      currentRelationships: relationshipCount,
+      needTrending: trendingCount < MIN_TRENDING,
+      needNews: newsCount < MIN_NEWS,
+      needRelationships: relationshipCount === 0,
+    },
+    'GameTick'
+  );
+
   // Bootstrap relationships FIRST (needed for social dynamics)
   if (relationshipCount === 0) {
     await bootstrapInitialRelationships();
   }
-  
+
   // Bootstrap news articles if needed
   if (newsCount < MIN_NEWS) {
     await bootstrapNewsArticles(timestamp, MIN_NEWS - newsCount);
   }
-  
+
   // Bootstrap trending if needed (requires posts and tags)
   if (trendingCount < MIN_TRENDING) {
     await bootstrapTrending();
   }
-  
-  logger.info('Bootstrap complete', {
-    trendingCount: await prisma.trendingTag.count(),
-    newsCount: await prisma.post.count({ where: { type: 'article' } }),
-    relationshipCount: await prisma.actorRelationship.count(),
-  }, 'GameTick');
+
+  logger.info(
+    'Bootstrap complete',
+    {
+      trendingCount: await prisma.trendingTag.count(),
+      newsCount: await prisma.post.count({ where: { type: 'article' } }),
+      relationshipCount: await prisma.actorRelationship.count(),
+    },
+    'GameTick'
+  );
 }
 
 /**
@@ -500,15 +518,15 @@ async function bootstrapContentIfNeeded(timestamp: Date): Promise<void> {
  */
 async function bootstrapInitialRelationships(): Promise<void> {
   logger.info('Generating initial NPC relationships...', undefined, 'GameTick');
-  
+
   // Get all actors and organizations
   const [actors, organizations] = await Promise.all([
     prisma.actor.findMany(),
     prisma.organization.findMany(),
   ]);
-  
+
   // Convert to Actor type
-  const actorData = actors.map(a => ({
+  const actorData = actors.map((a) => ({
     id: a.id,
     name: a.name,
     description: a.description || undefined,
@@ -516,19 +534,19 @@ async function bootstrapInitialRelationships(): Promise<void> {
     personality: a.personality || undefined,
     affiliations: a.affiliations,
   }));
-  
-  const orgData = organizations.map(o => ({
+
+  const orgData = organizations.map((o) => ({
     id: o.id,
     name: o.name,
     description: o.description,
     type: o.type as 'company' | 'media' | 'government',
     canBeInvolved: true,
   }));
-  
+
   // Generate relationships
   const engine = new RelationshipEvolutionEngine();
   const created = await engine.generateInitialRelationships(actorData, orgData);
-  
+
   logger.info(`✅ Generated ${created} initial relationships`, { count: created }, 'GameTick');
 }
 
@@ -537,89 +555,97 @@ async function bootstrapInitialRelationships(): Promise<void> {
  */
 async function bootstrapNewsArticles(timestamp: Date, count: number): Promise<void> {
   logger.info(`Creating ${count} initial news articles...`, undefined, 'GameTick');
-  
+
   // Get media organizations
   const newsOrgs = await prisma.organization.findMany({
     where: { type: 'media' },
     take: 5,
   });
-  
+
   if (newsOrgs.length === 0) {
     logger.warn('No media organizations found, skipping news bootstrap', undefined, 'GameTick');
     return;
   }
-  
+
   // Sample news topics (realistic, varied)
   const sampleArticles = [
     {
       title: 'Markets Show Mixed Signals Amid Economic Uncertainty',
-      summary: 'Investors navigate volatile conditions as key indicators point to divergent trends across major sectors and asset classes.',
+      summary:
+        'Investors navigate volatile conditions as key indicators point to divergent trends across major sectors and asset classes.',
       category: 'Finance',
       sentiment: 'neutral',
       biasScore: 0.0,
     },
     {
       title: 'Tech Industry Faces New Regulatory Scrutiny',
-      summary: 'Government agencies announce enhanced oversight measures targeting major technology companies and their market practices.',
+      summary:
+        'Government agencies announce enhanced oversight measures targeting major technology companies and their market practices.',
       category: 'Tech',
       sentiment: 'negative',
       biasScore: -0.3,
     },
     {
       title: 'Innovation in Clean Energy Accelerates',
-      summary: 'Breakthrough developments in renewable energy technology promise significant advances toward sustainability goals.',
+      summary:
+        'Breakthrough developments in renewable energy technology promise significant advances toward sustainability goals.',
       category: 'Tech',
       sentiment: 'positive',
       biasScore: 0.5,
     },
     {
       title: 'Global Markets Digest Policy Changes',
-      summary: 'Financial markets adjust to new policy frameworks as central banks signal potential shifts in monetary strategy.',
+      summary:
+        'Financial markets adjust to new policy frameworks as central banks signal potential shifts in monetary strategy.',
       category: 'Finance',
       sentiment: 'neutral',
       biasScore: 0.1,
     },
     {
       title: 'Corporate Investment Trends Shift',
-      summary: 'Major corporations redirect capital allocation strategies in response to evolving market dynamics and opportunities.',
+      summary:
+        'Major corporations redirect capital allocation strategies in response to evolving market dynamics and opportunities.',
       category: 'Finance',
       sentiment: 'neutral',
       biasScore: 0.0,
     },
     {
       title: 'Technology Adoption Reaches New Milestone',
-      summary: 'Enterprise software and cloud services see record adoption rates as digital transformation accelerates across industries.',
+      summary:
+        'Enterprise software and cloud services see record adoption rates as digital transformation accelerates across industries.',
       category: 'Tech',
       sentiment: 'positive',
       biasScore: 0.4,
     },
     {
       title: 'Economic Indicators Point to Continued Growth',
-      summary: 'Latest data releases suggest sustained expansion despite headwinds from global trade tensions and policy uncertainty.',
+      summary:
+        'Latest data releases suggest sustained expansion despite headwinds from global trade tensions and policy uncertainty.',
       category: 'Finance',
       sentiment: 'positive',
       biasScore: 0.3,
     },
     {
       title: 'Industry Leaders Navigate Changing Landscape',
-      summary: 'Executives across sectors adapt strategies to address emerging challenges and capitalize on new market opportunities.',
+      summary:
+        'Executives across sectors adapt strategies to address emerging challenges and capitalize on new market opportunities.',
       category: 'Business',
       sentiment: 'neutral',
       biasScore: 0.0,
     },
   ];
-  
+
   // Create articles spread over last 24 hours
   for (let i = 0; i < count && i < sampleArticles.length; i++) {
     const article = sampleArticles[i];
     if (!article) continue;
-    
+
     const org = newsOrgs[i % newsOrgs.length];
     if (!org) continue;
-    
+
     const hoursAgo = Math.floor((i / count) * 24);
     const articleTimestamp = new Date(timestamp.getTime() - hoursAgo * 60 * 60 * 1000);
-    
+
     await db().createPostWithAllFields({
       id: await generateSnowflakeId(),
       type: 'article',
@@ -635,7 +661,7 @@ async function bootstrapNewsArticles(timestamp: Date, count: number): Promise<vo
       timestamp: articleTimestamp,
     });
   }
-  
+
   logger.info(`Created ${count} initial news articles`, undefined, 'GameTick');
 }
 
@@ -644,36 +670,40 @@ async function bootstrapNewsArticles(timestamp: Date, count: number): Promise<vo
  */
 async function bootstrapTrending(): Promise<void> {
   logger.info('Bootstrapping trending tags...', undefined, 'GameTick');
-  
+
   // Check if we have enough posts and tags
   const postCount = await prisma.post.count();
   const taggedPostCount = await prisma.post.count({
     where: { PostTag: { some: {} } },
   });
-  
-  logger.info('Post/tag status for trending', {
-    totalPosts: postCount,
-    taggedPosts: taggedPostCount,
-    taggedPercentage: postCount > 0 ? Math.round((taggedPostCount / postCount) * 100) : 0,
-  }, 'GameTick');
-  
+
+  logger.info(
+    'Post/tag status for trending',
+    {
+      totalPosts: postCount,
+      taggedPosts: taggedPostCount,
+      taggedPercentage: postCount > 0 ? Math.round((taggedPostCount / postCount) * 100) : 0,
+    },
+    'GameTick'
+  );
+
   // If we have tagged posts, calculate trending
   if (taggedPostCount >= 10) {
     await calculateTrendingTags();
     logger.info('Calculated trending from existing posts', undefined, 'GameTick');
     return;
   }
-  
+
   // If we have posts but they're not tagged, tag them first
   if (postCount >= 10 && taggedPostCount < 10) {
     logger.info('Posts exist but not tagged, waiting for auto-tagging...', undefined, 'GameTick');
     logger.info('Trending will be calculated once posts are tagged', undefined, 'GameTick');
     return;
   }
-  
+
   // If we have very few posts, create sample tags and trending
   logger.info('Creating sample trending data...', undefined, 'GameTick');
-  
+
   const sampleTags = [
     { name: 'markets', displayName: 'Markets', category: 'Finance' },
     { name: 'tech', displayName: 'Tech', category: 'Tech' },
@@ -681,14 +711,14 @@ async function bootstrapTrending(): Promise<void> {
     { name: 'finance', displayName: 'Finance', category: 'Finance' },
     { name: 'innovation', displayName: 'Innovation', category: 'Tech' },
   ];
-  
+
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  
+
   for (let i = 0; i < sampleTags.length; i++) {
     const tagData = sampleTags[i];
     if (!tagData) continue;
-    
+
     // Create tag
     const tag = await prisma.tag.upsert({
       where: { name: tagData.name },
@@ -699,10 +729,10 @@ async function bootstrapTrending(): Promise<void> {
         updatedAt: now,
       },
     });
-    
+
     // Create trending entry
     const score = (sampleTags.length - i) * 10 + Math.random() * 5;
-    
+
     await prisma.trendingTag.create({
       data: {
         id: await generateSnowflakeId(),
@@ -716,7 +746,7 @@ async function bootstrapTrending(): Promise<void> {
       },
     });
   }
-  
+
   logger.info(`Created ${sampleTags.length} sample trending tags`, undefined, 'GameTick');
 }
 
@@ -732,7 +762,7 @@ async function generateMixedPosts(
   deadlineMs: number
 ): Promise<{ posts: number; articles: number }> {
   const postsToGenerate = 8; // Mix of NPC posts and org articles
-  
+
   if (questions.length === 0) {
     logger.warn('No questions available for post generation', {}, 'GameTick');
     return { posts: 0, articles: 0 };
@@ -757,73 +787,81 @@ async function generateMixedPosts(
   }
 
   // Create a mixed pool of content creators
-  interface ContentCreator {
+  type ContentCreator = {
     id: string;
     name: string;
     type: 'actor' | 'organization';
-    data: typeof actors[number] | typeof organizations[number];
-  }
+    data: (typeof actors)[number] | (typeof organizations)[number];
+  };
 
   const creators: ContentCreator[] = [
-    ...actors.map((actor: typeof actors[number]) => ({ 
-      id: actor.id, 
-      name: actor.name, 
+    ...actors.map((actor: (typeof actors)[number]) => ({
+      id: actor.id,
+      name: actor.name,
       type: 'actor' as const,
-      data: actor 
+      data: actor,
     })),
-    ...organizations.map((org: typeof organizations[number]) => ({ 
-      id: org.id, 
-      name: org.name || 'Unknown Org', 
+    ...organizations.map((org: (typeof organizations)[number]) => ({
+      id: org.id,
+      name: org.name || 'Unknown Org',
       type: 'organization' as const,
-      data: org 
+      data: org,
     })),
   ];
 
   // Shuffle to mix actors and orgs
   for (let i = creators.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [creators[i], creators[j]] = [creators[j]!, creators[i]!];
+    const temp = creators[i];
+    creators[i] = creators[j];
+    creators[j] = temp;
   }
 
-  logger.info(`Generating ${postsToGenerate} mixed posts in parallel`, { 
-    actorsAvailable: actors.length, 
-    orgsAvailable: organizations.length,
-    creatorsPoolSize: creators.length
-  }, 'GameTick');
+  logger.info(
+    `Generating ${postsToGenerate} mixed posts in parallel`,
+    {
+      actorsAvailable: actors.length,
+      orgsAvailable: organizations.length,
+      creatorsPoolSize: creators.length,
+    },
+    'GameTick'
+  );
 
   // Generate posts with timestamps spread across the tick interval (60 seconds)
   const tickDurationMs = 60000; // 1 minute
   const timeSlotMs = tickDurationMs / postsToGenerate;
 
   // Generate all posts in parallel
-  const postPromises = Array.from({ length: Math.min(postsToGenerate, creators.length) }, async (_, i) => {
-    // Check deadline before starting
-    if (Date.now() > deadlineMs) {
-      logger.debug('Skipping post due to deadline', { index: i }, 'GameTick');
-      return { posts: 0, articles: 0 };
-    }
+  const postPromises = Array.from(
+    { length: Math.min(postsToGenerate, creators.length) },
+    async (_, i) => {
+      // Check deadline before starting
+      if (Date.now() > deadlineMs) {
+        logger.debug('Skipping post due to deadline', { index: i }, 'GameTick');
+        return { posts: 0, articles: 0 };
+      }
 
-    const question = questions[i % questions.length];
-    
-    if (!question || !question.text) {
-      logger.warn('Missing question data', { questionIndex: i }, 'GameTick');
-      return { posts: 0, articles: 0 };
-    }
+      const question = questions[i % questions.length];
 
-    const creator = creators[i];
-    if (!creator) {
-      logger.warn('Missing creator data', { creatorIndex: i }, 'GameTick');
-      return { posts: 0, articles: 0 };
-    }
+      if (!question || !question.text) {
+        logger.warn('Missing question data', { questionIndex: i }, 'GameTick');
+        return { posts: 0, articles: 0 };
+      }
 
-    // Calculate timestamp for this post (spread throughout the minute)
-    const slotOffset = i * timeSlotMs;
-    const randomJitter = Math.random() * timeSlotMs * 0.8;
-    const timestampWithOffset = new Date(timestamp.getTime() + slotOffset + randomJitter);
-    
-    if (creator.type === 'actor') {
-      // Generate NPC post
-      const prompt = `You are ${creator.name}. Write a brief social media post (max 200 chars) about this prediction market question: "${question.text}". Be opinionated and entertaining.
+      const creator = creators[i];
+      if (!creator) {
+        logger.warn('Missing creator data', { creatorIndex: i }, 'GameTick');
+        return { posts: 0, articles: 0 };
+      }
+
+      // Calculate timestamp for this post (spread throughout the minute)
+      const slotOffset = i * timeSlotMs;
+      const randomJitter = Math.random() * timeSlotMs * 0.8;
+      const timestampWithOffset = new Date(timestamp.getTime() + slotOffset + randomJitter);
+
+      if (creator.type === 'actor') {
+        // Generate NPC post
+        const prompt = `You are ${creator.name}. Write a brief social media post (max 200 chars) about this prediction market question: "${question.text}". Be opinionated and entertaining.
 
 ${worldFactsContext}
 
@@ -832,44 +870,60 @@ Return your response as XML in this exact format:
   <post>your post content here</post>
 </response>`;
 
-      const response = await llm.generateJSON<{ post: string } | { response: { post: string } }>(
-        prompt,
-        {
-          properties: {
-            post: { type: 'string' },
+        const response = await llm.generateJSON<{ post: string } | { response: { post: string } }>(
+          prompt,
+          {
+            properties: {
+              post: { type: 'string' },
+            },
+            required: ['post'],
           },
-          required: ['post'],
-        },
-        { temperature: 0.9, maxTokens: 200, model: 'moonshotai/kimi-k2-instruct-0905', format: 'xml' }
-      );
-      
-      // Handle XML structure
-      const postContent = 'response' in response && response.response && typeof response.response === 'object' && 'post' in response.response
-        ? (response.response as { post: string }).post
-        : (response as { post: string }).post;
+          {
+            temperature: 0.9,
+            maxTokens: 200,
+            model: 'moonshotai/kimi-k2-instruct-0905',
+            format: 'xml',
+          }
+        );
 
-      if (!postContent) {
-        logger.warn('Empty post generated', { creatorIndex: i, creatorName: creator.name }, 'GameTick');
-        return { posts: 0, articles: 0 };
-      }
+        // Handle XML structure
+        const postContent =
+          'response' in response &&
+          response.response &&
+          typeof response.response === 'object' &&
+          'post' in response.response
+            ? (response.response as { post: string }).post
+            : (response as { post: string }).post;
 
-      await db().createPostWithAllFields({
-        id: await generateSnowflakeId(),
-        content: postContent,
-        authorId: creator.id,
-        gameId: 'continuous',
-        dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
-        timestamp: timestampWithOffset,
-      });
-      
-      logger.debug('Created NPC post', { actor: creator.name, timestamp: timestampWithOffset }, 'GameTick');
-      return { posts: 1, articles: 0 };
+        if (!postContent) {
+          logger.warn(
+            'Empty post generated',
+            { creatorIndex: i, creatorName: creator.name },
+            'GameTick'
+          );
+          return { posts: 0, articles: 0 };
+        }
 
-    } else {
+        await db().createPostWithAllFields({
+          id: await generateSnowflakeId(),
+          content: postContent,
+          authorId: creator.id,
+          gameId: 'continuous',
+          dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
+          timestamp: timestampWithOffset,
+        });
+
+        logger.debug(
+          'Created NPC post',
+          { actor: creator.name, timestamp: timestampWithOffset },
+          'GameTick'
+        );
+        return { posts: 1, articles: 0 };
+      } else {
         // Organization content - can be either article or regular post
         // 10% chance to create article, 90% chance to create regular post
         const shouldCreateArticle = Math.random() < 0.1;
-        
+
         if (shouldCreateArticle) {
           // Generate organization article
           const prompt = `You are ${creator.name}, a news organization. Write a comprehensive news article about this prediction market: "${question.text}".
@@ -888,26 +942,47 @@ Return your response as XML in this exact format:
   <article>full article body here with \\n\\n between paragraphs</article>
 </response>`;
 
-          const response = await llm.generateJSON<{ title: string; summary: string; article: string } | { response: { title: string; summary: string; article: string } }>(
+          const response = await llm.generateJSON<
+            | { title: string; summary: string; article: string }
+            | { response: { title: string; summary: string; article: string } }
+          >(
             prompt,
-            { 
+            {
               properties: {
                 title: { type: 'string' },
                 summary: { type: 'string' },
-                article: { type: 'string' }
+                article: { type: 'string' },
               },
-              required: ['title', 'summary', 'article'] 
+              required: ['title', 'summary', 'article'],
             },
-            { temperature: 0.7, maxTokens: 1000, model: 'moonshotai/kimi-k2-instruct-0905', format: 'xml' }
+            {
+              temperature: 0.7,
+              maxTokens: 1000,
+              model: 'moonshotai/kimi-k2-instruct-0905',
+              format: 'xml',
+            }
           );
-          
+
           // Handle XML structure
-          const articleData = 'response' in response && response.response 
-            ? response.response as { title: string; summary: string; article: string }
-            : response as { title: string; summary: string; article: string };
+          const articleData =
+            'response' in response && response.response
+              ? (response.response as {
+                  title: string;
+                  summary: string;
+                  article: string;
+                })
+              : (response as {
+                  title: string;
+                  summary: string;
+                  article: string;
+                });
 
           if (!articleData.title || !articleData.summary || !articleData.article) {
-            logger.warn('Empty article generated', { creatorIndex: i, creatorName: creator.name }, 'GameTick');
+            logger.warn(
+              'Empty article generated',
+              { creatorIndex: i, creatorName: creator.name },
+              'GameTick'
+            );
             return { posts: 0, articles: 0 };
           }
 
@@ -916,7 +991,15 @@ Return your response as XML in this exact format:
           const articleBody = articleData.article.trim();
 
           if (articleBody.length < 400) {
-            logger.warn('Article body too short', { creatorIndex: i, creatorName: creator.name, length: articleBody.length }, 'GameTick');
+            logger.warn(
+              'Article body too short',
+              {
+                creatorIndex: i,
+                creatorName: creator.name,
+                length: articleBody.length,
+              },
+              'GameTick'
+            );
             return { posts: 0, articles: 0 };
           }
 
@@ -931,8 +1014,12 @@ Return your response as XML in this exact format:
             dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
             timestamp: timestampWithOffset,
           });
-          
-          logger.debug('Created org article', { org: creator.name, timestamp: timestampWithOffset }, 'GameTick');
+
+          logger.debug(
+            'Created org article',
+            { org: creator.name, timestamp: timestampWithOffset },
+            'GameTick'
+          );
           return { posts: 1, articles: 1 };
         } else {
           // Generate regular post from news organization (announcement, quick update, etc.)
@@ -950,7 +1037,9 @@ Return your response as XML in this exact format:
   <post>your brief post content here</post>
 </response>`;
 
-          const response = await llm.generateJSON<{ post: string } | { response: { post: string } }>(
+          const response = await llm.generateJSON<
+            { post: string } | { response: { post: string } }
+          >(
             prompt,
             {
               properties: {
@@ -958,16 +1047,29 @@ Return your response as XML in this exact format:
               },
               required: ['post'],
             },
-            { temperature: 0.9, maxTokens: 200, model: 'moonshotai/kimi-k2-instruct-0905', format: 'xml' }
+            {
+              temperature: 0.9,
+              maxTokens: 200,
+              model: 'moonshotai/kimi-k2-instruct-0905',
+              format: 'xml',
+            }
           );
-          
+
           // Handle XML structure
-          const orgPostContent = 'response' in response && response.response && typeof response.response === 'object' && 'post' in response.response
-            ? (response.response as { post: string }).post
-            : (response as { post: string }).post;
+          const orgPostContent =
+            'response' in response &&
+            response.response &&
+            typeof response.response === 'object' &&
+            'post' in response.response
+              ? (response.response as { post: string }).post
+              : (response as { post: string }).post;
 
           if (!orgPostContent) {
-            logger.warn('Empty org post generated', { creatorIndex: i, creatorName: creator.name }, 'GameTick');
+            logger.warn(
+              'Empty org post generated',
+              { creatorIndex: i, creatorName: creator.name },
+              'GameTick'
+            );
             return { posts: 0, articles: 0 };
           }
 
@@ -980,20 +1082,25 @@ Return your response as XML in this exact format:
             dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
             timestamp: timestampWithOffset,
           });
-          
-          logger.debug('Created org post', { org: creator.name, timestamp: timestampWithOffset }, 'GameTick');
+
+          logger.debug(
+            'Created org post',
+            { org: creator.name, timestamp: timestampWithOffset },
+            'GameTick'
+          );
           return { posts: 1, articles: 0 };
         }
       }
-  });
+    }
+  );
 
   // Wait for all posts to complete
   const results = await Promise.allSettled(postPromises);
-  
+
   // Aggregate results
   let postsCreated = 0;
   let articlesCreated = 0;
-  
+
   for (const result of results) {
     if (result.status === 'fulfilled') {
       postsCreated += result.value.posts;
@@ -1007,15 +1114,19 @@ Return your response as XML in this exact format:
     }
   }
 
-  logger.info('Mixed post generation complete', { 
-    postsCreated, 
-    articlesCreated,
-    actorsAvailable: actors.length, 
-    orgsAvailable: organizations.length,
-    attempted: postPromises.length,
-    successful: results.filter(r => r.status === 'fulfilled').length,
-    failed: results.filter(r => r.status === 'rejected').length,
-  }, 'GameTick');
+  logger.info(
+    'Mixed post generation complete',
+    {
+      postsCreated,
+      articlesCreated,
+      actorsAvailable: actors.length,
+      orgsAvailable: organizations.length,
+      attempted: postPromises.length,
+      successful: results.filter((r) => r.status === 'fulfilled').length,
+      failed: results.filter((r) => r.status === 'rejected').length,
+    },
+    'GameTick'
+  );
 
   return { posts: postsCreated, articles: articlesCreated };
 }
@@ -1033,7 +1144,7 @@ async function generateArticles(
   const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
   const recentEvents = await prisma.worldEvent.findMany({
     where: {
-      timestamp: { 
+      timestamp: {
         gte: twoHoursAgo,
         lte: now, // ✅ No future events
       },
@@ -1050,12 +1161,12 @@ async function generateArticles(
       where: { type: 'media' },
       take: 5,
     });
-    
+
     if (newsOrgs.length === 0) {
       logger.warn('No news organizations found for baseline articles', {}, 'GameTick');
       return 0;
     }
-    
+
     return await generateBaselineArticlesParallel(newsOrgs, timestamp, llm, deadlineMs);
   }
 
@@ -1087,12 +1198,16 @@ async function generateArticles(
   const articlesToGenerate = Math.min(10, recentEvents.length);
   const eventsTocover = recentEvents.slice(0, articlesToGenerate);
 
-  logger.info(`Generating ${articlesToGenerate} articles in parallel`, { 
-    eventCount: recentEvents.length 
-  }, 'GameTick');
+  logger.info(
+    `Generating ${articlesToGenerate} articles in parallel`,
+    {
+      eventCount: recentEvents.length,
+    },
+    'GameTick'
+  );
 
   // Map organization and actor data once
-  const organizations = newsOrgs.map((org: typeof newsOrgs[number]) => ({
+  const organizations = newsOrgs.map((org: (typeof newsOrgs)[number]) => ({
     id: org.id,
     name: org.name || 'Unknown Organization',
     description: org.description || '',
@@ -1103,8 +1218,8 @@ async function generateArticles(
   }));
 
   const actorList = actors
-    .filter((a: typeof actors[number]) => a && a.id && a.name)
-    .map((a: typeof actors[number]) => ({
+    .filter((a: (typeof actors)[number]) => a?.id && a.name)
+    .map((a: (typeof actors)[number]) => ({
       id: a.id,
       name: a.name,
       description: a.description || '',
@@ -1143,8 +1258,8 @@ async function generateArticles(
     const hasExistingArticle = recentArticles.some((article) => {
       const articleText = `${article.articleTitle || ''} ${article.content || ''}`.toLowerCase();
       // Check if article contains at least 2 keywords from the event
-      const matchingKeywords = eventKeywords.filter((keyword) => 
-        keyword.length > 3 && articleText.includes(keyword)
+      const matchingKeywords = eventKeywords.filter(
+        (keyword) => keyword.length > 3 && articleText.includes(keyword)
       );
       return matchingKeywords.length >= 2;
     });
@@ -1156,32 +1271,37 @@ async function generateArticles(
     return true;
   });
 
-  logger.info(`Filtered events: ${eventsToCover.length}/${eventsTocover.length} events need articles`, {
-    filtered: eventsToCover.length,
-    total: eventsTocover.length,
-  }, 'GameTick');
+  logger.info(
+    `Filtered events: ${eventsToCover.length}/${eventsTocover.length} events need articles`,
+    {
+      filtered: eventsToCover.length,
+      total: eventsTocover.length,
+    },
+    'GameTick'
+  );
 
   // Generate articles in parallel with Promise.allSettled to handle failures gracefully
-  const articlePromises = eventsToCover.map(async (event: {
-    id: string;
-    eventType: string;
-    description: string;
-    actors: string[] | null;
-    relatedQuestion: number | null;
-    visibility: string;
-    dayNumber: number | null;
-  }) => {
-    // Check deadline before starting each article
-    if (Date.now() > deadlineMs) {
-      logger.debug('Skipping article due to deadline', { eventId: event.id }, 'GameTick');
-      return 0;
-    }
+  const articlePromises = eventsToCover.map(
+    async (event: {
+      id: string;
+      eventType: string;
+      description: string;
+      actors: string[] | null;
+      relatedQuestion: number | null;
+      visibility: string;
+      dayNumber: number | null;
+    }) => {
+      // Check deadline before starting each article
+      if (Date.now() > deadlineMs) {
+        logger.debug('Skipping article due to deadline', { eventId: event.id }, 'GameTick');
+        return 0;
+      }
 
-    const worldEvent: WorldEvent = {
+      const worldEvent: WorldEvent = {
         id: event.id,
         type: event.eventType as WorldEvent['type'],
         description: event.description,
-        actors: event.actors as string[] || [],
+        actors: (event.actors as string[]) || [],
         relatedQuestion: event.relatedQuestion || undefined,
         visibility: event.visibility as WorldEvent['visibility'],
         day: event.dayNumber || 0,
@@ -1197,11 +1317,7 @@ async function generateArticles(
       let created = 0;
       for (const article of articles) {
         if (!article || !article.authorOrgId) {
-          logger.warn(
-            'Invalid article generated',
-            { eventId: event.id },
-            'GameTick'
-          );
+          logger.warn('Invalid article generated', { eventId: event.id }, 'GameTick');
           continue;
         }
 
@@ -1223,33 +1339,34 @@ async function generateArticles(
         });
         created++;
       }
-      
+
       return created;
-  });
+    }
+  );
 
   // Wait for all article generation to complete
   const results = await Promise.allSettled(articlePromises);
-  
+
   // Count successful articles and log failures
   const articlesCreated = results.reduce((sum, result) => {
     if (result.status === 'fulfilled') {
       return sum + result.value;
     } else {
-      logger.error(
-        'Failed to generate article from event',
-        { error: result.reason },
-        'GameTick'
-      );
+      logger.error('Failed to generate article from event', { error: result.reason }, 'GameTick');
       return sum;
     }
   }, 0);
 
-  logger.info(`Parallel article generation complete`, { 
-    articlesCreated,
-    attempted: articlesToGenerate,
-    successful: results.filter(r => r.status === 'fulfilled').length,
-    failed: results.filter(r => r.status === 'rejected').length,
-  }, 'GameTick');
+  logger.info(
+    `Parallel article generation complete`,
+    {
+      articlesCreated,
+      attempted: articlesToGenerate,
+      successful: results.filter((r) => r.status === 'fulfilled').length,
+      failed: results.filter((r) => r.status === 'rejected').length,
+    },
+    'GameTick'
+  );
 
   return articlesCreated;
 }
@@ -1258,21 +1375,25 @@ async function generateArticles(
  * Generate baseline articles in parallel (optimized version)
  */
 async function generateBaselineArticlesParallel(
-  newsOrgs: Array<{ id: string; name: string | null; description: string | null }>,
+  newsOrgs: Array<{
+    id: string;
+    name: string | null;
+    description: string | null;
+  }>,
   timestamp: Date,
   llm: BabylonLLMClient,
   deadlineMs: number
 ): Promise<number> {
   const baselineTopics = [
-    { topic: "the current state of prediction markets", category: "finance" },
-    { topic: "upcoming trends in tech and politics", category: "tech" },
-    { topic: "volatility in crypto markets", category: "finance" },
-    { topic: "major developments to watch this week", category: "business" },
-    { topic: "the state of global markets", category: "finance" },
+    { topic: 'the current state of prediction markets', category: 'finance' },
+    { topic: 'upcoming trends in tech and politics', category: 'tech' },
+    { topic: 'volatility in crypto markets', category: 'finance' },
+    { topic: 'major developments to watch this week', category: 'business' },
+    { topic: 'the state of global markets', category: 'finance' },
   ];
-  
+
   const articlesToGenerate = Math.min(5, newsOrgs.length);
-  
+
   logger.info(`Generating ${articlesToGenerate} baseline articles in parallel`, {}, 'GameTick');
 
   // Generate all articles in parallel
@@ -1281,13 +1402,13 @@ async function generateBaselineArticlesParallel(
       logger.debug('Skipping baseline article due to deadline', { index: i }, 'GameTick');
       return 0;
     }
-    
+
     const org = newsOrgs[i];
     if (!org || !org.name) return 0;
-    
-      const topicData = baselineTopics[i % baselineTopics.length];
+
+    const topicData = baselineTopics[i % baselineTopics.length];
     if (!topicData) return 0;
-    
+
     const prompt = `You are ${org.name}, a news organization. Write a detailed news article about ${topicData.topic}.
 
 Your article should include:
@@ -1304,55 +1425,79 @@ Return your response as XML in this exact format:
   <summary>2-3 sentence summary here</summary>
   <article>full article body here with \\n\\n between paragraphs</article>
 </response>`;
-      
-      const response = await llm.generateJSON<{ title: string; summary: string; article: string } | { response: { title: string; summary: string; article: string } }>(
-        prompt,
-        { properties: { title: { type: 'string' }, summary: { type: 'string' }, article: { type: 'string' } }, required: ['title', 'summary', 'article'] },
-        { temperature: 0.7, maxTokens: 1100, model: 'moonshotai/kimi-k2-instruct-0905', format: 'xml' }
-      );
-      
-      // Handle XML structure
-      const baselineArticle = 'response' in response && response.response 
-        ? response.response as { title: string; summary: string; article: string }
-        : response as { title: string; summary: string; article: string };
-      
-      if (!baselineArticle.title || !baselineArticle.summary || !baselineArticle.article) return 0;
 
-      const summary = baselineArticle.summary.trim();
-      const articleTitle = baselineArticle.title.trim();
-      const articleBody = baselineArticle.article.trim();
-
-      if (articleBody.length < 400) {
-        logger.warn('Baseline article body too short', { orgId: org.id, length: articleBody.length }, 'GameTick');
-        return 0;
+    const response = await llm.generateJSON<
+      | { title: string; summary: string; article: string }
+      | { response: { title: string; summary: string; article: string } }
+    >(
+      prompt,
+      {
+        properties: {
+          title: { type: 'string' },
+          summary: { type: 'string' },
+          article: { type: 'string' },
+        },
+        required: ['title', 'summary', 'article'],
+      },
+      {
+        temperature: 0.7,
+        maxTokens: 1100,
+        model: 'moonshotai/kimi-k2-instruct-0905',
+        format: 'xml',
       }
-      
-      // Calculate timestamp with jitter
-      const timeSlotMs = 60000 / articlesToGenerate;
-      const slotOffset = i * timeSlotMs;
-      const randomJitter = Math.random() * timeSlotMs * 0.8;
-      const timestampWithOffset = new Date(timestamp.getTime() + slotOffset + randomJitter);
-      
-      await db().createPostWithAllFields({
-        id: await generateSnowflakeId(),
-        type: 'article',
-        content: summary,
-        fullContent: articleBody,
-        articleTitle: articleTitle,
-        category: topicData.category,
-        authorId: org.id,
-        gameId: 'continuous',
-        dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
-        timestamp: timestampWithOffset,
-      });
-      
-      logger.debug('Created baseline article', { org: org.name, topic: topicData.topic }, 'GameTick');
-      return 1;
+    );
+
+    // Handle XML structure
+    const baselineArticle =
+      'response' in response && response.response
+        ? (response.response as {
+            title: string;
+            summary: string;
+            article: string;
+          })
+        : (response as { title: string; summary: string; article: string });
+
+    if (!baselineArticle.title || !baselineArticle.summary || !baselineArticle.article) return 0;
+
+    const summary = baselineArticle.summary.trim();
+    const articleTitle = baselineArticle.title.trim();
+    const articleBody = baselineArticle.article.trim();
+
+    if (articleBody.length < 400) {
+      logger.warn(
+        'Baseline article body too short',
+        { orgId: org.id, length: articleBody.length },
+        'GameTick'
+      );
+      return 0;
+    }
+
+    // Calculate timestamp with jitter
+    const timeSlotMs = 60000 / articlesToGenerate;
+    const slotOffset = i * timeSlotMs;
+    const randomJitter = Math.random() * timeSlotMs * 0.8;
+    const timestampWithOffset = new Date(timestamp.getTime() + slotOffset + randomJitter);
+
+    await db().createPostWithAllFields({
+      id: await generateSnowflakeId(),
+      type: 'article',
+      content: summary,
+      fullContent: articleBody,
+      articleTitle: articleTitle,
+      category: topicData.category,
+      authorId: org.id,
+      gameId: 'continuous',
+      dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
+      timestamp: timestampWithOffset,
+    });
+
+    logger.debug('Created baseline article', { org: org.name, topic: topicData.topic }, 'GameTick');
+    return 1;
   });
-  
+
   // Wait for all baseline articles to complete
   const results = await Promise.allSettled(articlePromises);
-  
+
   const articlesCreated = results.reduce((sum, result) => {
     if (result.status === 'fulfilled') {
       return sum + result.value;
@@ -1361,12 +1506,16 @@ Return your response as XML in this exact format:
       return sum;
     }
   }, 0);
-  
-  logger.info('Parallel baseline article generation complete', { 
-    articlesCreated,
-    attempted: articlesToGenerate 
-  }, 'GameTick');
-  
+
+  logger.info(
+    'Parallel baseline article generation complete',
+    {
+      articlesCreated,
+      attempted: articlesToGenerate,
+    },
+    'GameTick'
+  );
+
   return articlesCreated;
 }
 
@@ -1386,22 +1535,19 @@ async function generateEvents(
     const question = questions[i];
 
     if (!question || !question.text) {
-      logger.warn(
-        'Missing question data for event',
-        { questionIndex: i },
-        'GameTick'
-      );
+      logger.warn('Missing question data for event', { questionIndex: i }, 'GameTick');
       continue;
     }
 
     // Validate integer fields to prevent overflow
-    const questionNum = typeof question.questionNumber === 'number' && 
-      Number.isFinite(question.questionNumber) && 
-      question.questionNumber >= 0 && 
-      question.questionNumber <= 2147483647 
-      ? question.questionNumber 
-      : undefined;
-      
+    const questionNum =
+      typeof question.questionNumber === 'number' &&
+      Number.isFinite(question.questionNumber) &&
+      question.questionNumber >= 0 &&
+      question.questionNumber <= 2147483647
+        ? question.questionNumber
+        : undefined;
+
     const dayNum = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
     const safeDayNumber = dayNum >= 0 && dayNum <= 2147483647 ? dayNum : undefined;
 
@@ -1424,10 +1570,9 @@ async function generateEvents(
   return eventsCreated;
 }
 
-
 /**
  * Update market prices based on NPC trading activity
- * 
+ *
  * Prices are derived from total NPC holdings (investment-based pricing):
  * - More NPCs buying/holding = higher price
  * - NPCs selling = lower price
@@ -1452,15 +1597,13 @@ async function updateMarketPricesFromTrades(
     },
   });
 
-  type CompanyData = typeof companies[0];
+  type CompanyData = (typeof companies)[0];
   // Use raw org IDs as keys since positions now store raw IDs
-  const companyMap = new Map<string, CompanyData>(
-    companies.map((c: CompanyData) => [c.id, c])
-  );
+  const companyMap = new Map<string, CompanyData>(companies.map((c: CompanyData) => [c.id, c]));
 
   // Calculate total holdings for each company from ALL positions
   const holdingsByTicker = new Map<string, number>();
-  
+
   const allPositions = await prisma.poolPosition.findMany({
     where: {
       marketType: 'perp',
@@ -1476,7 +1619,7 @@ async function updateMarketPricesFromTrades(
 
   for (const pos of allPositions) {
     if (!pos.ticker) continue;
-    
+
     const current = holdingsByTicker.get(pos.ticker) || 0;
     // Long positions add to holdings, short positions subtract
     const delta = pos.side === 'long' ? pos.size : -pos.size;
@@ -1484,7 +1627,10 @@ async function updateMarketPricesFromTrades(
   }
 
   let updates = 0;
-  const priceUpdatesForChain: Array<{ organizationId: string; newPrice: number }> = [];
+  const priceUpdatesForChain: Array<{
+    organizationId: string;
+    newPrice: number;
+  }> = [];
 
   // Update prices based on total capital deployed
   // Market cap = initialPrice × syntheticSupply + totalDeployed
@@ -1495,20 +1641,20 @@ async function updateMarketPricesFromTrades(
 
     const initialPrice = company.initialPrice ?? 100;
     const currentPrice = company.currentPrice ?? initialPrice;
-    
+
     // Fixed synthetic supply per company
     const syntheticSupply = 10000;
     const baseMarketCap = initialPrice * syntheticSupply; // e.g. $100 × 10k = $1M
-    
+
     // Market cap increases with net long holdings
     const newMarketCap = baseMarketCap + netHoldings;
-    
+
     // Price = marketCap / supply, with floor and ceiling
     const rawPrice = newMarketCap / syntheticSupply;
     const minPrice = initialPrice * 0.1; // Floor: 90% max drop
     const maxPrice = currentPrice * 2.0; // Cap: 100% max gain per tick
     const newPrice = Math.max(minPrice, Math.min(rawPrice, maxPrice));
-    
+
     const change = newPrice - currentPrice;
     const changePercent = currentPrice > 0 ? (change / currentPrice) * 100 : 0;
 
@@ -1541,7 +1687,7 @@ async function updateMarketPricesFromTrades(
   if (priceUpdatesForChain.length > 0) {
     const { PriceUpdateService } = await import('@/lib/services/price-update-service');
     await PriceUpdateService.applyUpdates(
-      priceUpdatesForChain.map(u => ({
+      priceUpdatesForChain.map((u) => ({
         ...u,
         source: 'npc_trade',
         reason: 'NPC trading price impact',
@@ -1593,14 +1739,20 @@ Return your response as XML in this exact format:
   <resolutionCriteria>Clear criteria for resolution</resolutionCriteria>
 </response>`;
 
-    let response: { question: string; resolutionCriteria: string } | { response: { question: string; resolutionCriteria: string } } | null = null;
+    let response:
+      | { question: string; resolutionCriteria: string }
+      | { response: { question: string; resolutionCriteria: string } }
+      | null = null;
     let questionData: { question: string; resolutionCriteria: string } | null = null;
-    
+
     try {
-      response = await llm.generateJSON<{
-        question: string;
-        resolutionCriteria: string;
-      } | { response: { question: string; resolutionCriteria: string } }>(
+      response = await llm.generateJSON<
+        | {
+            question: string;
+            resolutionCriteria: string;
+          }
+        | { response: { question: string; resolutionCriteria: string } }
+      >(
         prompt,
         {
           properties: {
@@ -1609,19 +1761,24 @@ Return your response as XML in this exact format:
           },
           required: ['question', 'resolutionCriteria'],
         },
-        { temperature: 0.8, maxTokens: 300, model: 'moonshotai/kimi-k2-instruct-0905', format: 'xml' }
+        {
+          temperature: 0.8,
+          maxTokens: 300,
+          model: 'moonshotai/kimi-k2-instruct-0905',
+          format: 'xml',
+        }
       );
-      
+
       // Handle XML structure - extract question data from response
-      questionData = response && 'response' in response && response.response
-        ? response.response as { question: string; resolutionCriteria: string }
-        : response as { question: string; resolutionCriteria: string };
+      questionData =
+        response && 'response' in response && response.response
+          ? (response.response as {
+              question: string;
+              resolutionCriteria: string;
+            })
+          : (response as { question: string; resolutionCriteria: string });
     } catch (error) {
-      logger.warn(
-        'Failed to generate new question via LLM',
-        { error },
-        'GameTick'
-      );
+      logger.warn('Failed to generate new question via LLM', { error }, 'GameTick');
       continue;
     }
 
@@ -1670,7 +1827,11 @@ Return your response as XML in this exact format:
     if (!market.onChainMarketId) {
       const { ensureMarketOnChain } = await import('./services/onchain-market-service');
       await ensureMarketOnChain(market.id).catch((error) => {
-        logger.warn('Failed to create market on-chain (non-blocking)', { error, marketId: market.id }, 'GameTick');
+        logger.warn(
+          'Failed to create market on-chain (non-blocking)',
+          { error, marketId: market.id },
+          'GameTick'
+        );
       });
     }
 
@@ -1768,10 +1929,7 @@ export async function resolveQuestionPayouts(questionNumber: number): Promise<vo
       });
     }
 
-    const liquidityReduction = Math.min(
-      payoutAccumulator,
-      Number(market.liquidity ?? 0)
-    );
+    const liquidityReduction = Math.min(payoutAccumulator, Number(market.liquidity ?? 0));
 
     await tx.market.update({
       where: { id: market.id },
@@ -1806,12 +1964,7 @@ export async function resolveQuestionPayouts(questionNumber: number): Promise<vo
   for (const update of positionUpdates) {
     if (update.pnl === 0) continue;
     try {
-      await WalletService.recordPnL(
-        update.userId,
-        update.pnl,
-        'prediction_resolve',
-        market.id
-      );
+      await WalletService.recordPnL(update.userId, update.pnl, 'prediction_resolve', market.id);
     } catch (error) {
       logger.error(
         'Failed to record PnL for resolved prediction position',
@@ -1911,11 +2064,19 @@ export async function resolveQuestionPayouts(questionNumber: number): Promise<vo
     eventType: 'resolution',
     source: 'system',
   }).catch((error) => {
-    logger.warn('Failed to record price history for resolution', { error, marketId: market.id }, 'GameTick');
+    logger.warn(
+      'Failed to record price history for resolution',
+      { error, marketId: market.id },
+      'GameTick'
+    );
   });
 
   await invalidateAfterPredictionTrade(market.id).catch((error) => {
-    logger.warn('Failed to invalidate prediction cache after resolution', { error, marketId: market.id }, 'GameTick');
+    logger.warn(
+      'Failed to invalidate prediction cache after resolution',
+      { error, marketId: market.id },
+      'GameTick'
+    );
   });
 
   PredictionMarketEventService.emitResolution({
@@ -1995,7 +2156,12 @@ async function resolveMarketOnChain(
  * Publish question commitments to blockchain oracle
  */
 async function publishOracleCommitments(
-  questions: Array<{ id: string; questionNumber: number; text: string; outcome: boolean }>
+  questions: Array<{
+    id: string;
+    questionNumber: number;
+    text: string;
+    outcome: boolean;
+  }>
 ): Promise<{ committed: number; errors: number }> {
   let committed = 0;
   let errors = 0;
@@ -2017,12 +2183,12 @@ async function publishOracleCommitments(
     }
 
     // Batch commit games
-    const batch = questions.map(q => ({
+    const batch = questions.map((q) => ({
       questionId: q.id,
       questionNumber: q.questionNumber,
       question: q.text,
       category: 'general', // Could extract from question text
-      outcome: q.outcome
+      outcome: q.outcome,
     }));
 
     const result = await oracleService.batchCommitGames(batch);
@@ -2035,8 +2201,8 @@ async function publishOracleCommitments(
           oracleSessionId: success.sessionId,
           oracleCommitment: success.commitment,
           oracleCommitTxHash: success.txHash,
-          oracleCommitBlock: success.blockNumber || null
-        }
+          oracleCommitBlock: success.blockNumber || null,
+        },
       });
       committed++;
     }
@@ -2044,18 +2210,10 @@ async function publishOracleCommitments(
     errors = result.failed.length;
 
     if (errors > 0) {
-      logger.warn(
-        `${errors} oracle commits failed`,
-        { failures: result.failed },
-        'GameTick'
-      );
+      logger.warn(`${errors} oracle commits failed`, { failures: result.failed }, 'GameTick');
     }
 
-    logger.info(
-      `Oracle commits: ${committed} successful, ${errors} failed`,
-      undefined,
-      'GameTick'
-    );
+    logger.info(`Oracle commits: ${committed} successful, ${errors} failed`, undefined, 'GameTick');
   } catch (error) {
     logger.error('Oracle batch commit failed', { error }, 'GameTick');
     errors = questions.length;
@@ -2090,11 +2248,11 @@ async function publishOracleReveals(
     }
 
     // Batch reveal games
-    const batch = questions.map(q => ({
+    const batch = questions.map((q) => ({
       questionId: q.id,
       outcome: q.outcome,
       winners: [], // Could get from positions
-      totalPayout: BigInt(0) // Could calculate from positions
+      totalPayout: BigInt(0), // Could calculate from positions
     }));
 
     const result = await oracleService.batchRevealGames(batch);
@@ -2106,8 +2264,8 @@ async function publishOracleReveals(
         data: {
           oracleRevealTxHash: success.txHash,
           oracleRevealBlock: success.blockNumber || null,
-          oraclePublishedAt: new Date()
-        }
+          oraclePublishedAt: new Date(),
+        },
       });
       revealed++;
     }
@@ -2115,18 +2273,10 @@ async function publishOracleReveals(
     errors = result.failed.length;
 
     if (errors > 0) {
-      logger.warn(
-        `${errors} oracle reveals failed`,
-        { failures: result.failed },
-        'GameTick'
-      );
+      logger.warn(`${errors} oracle reveals failed`, { failures: result.failed }, 'GameTick');
     }
 
-    logger.info(
-      `Oracle reveals: ${revealed} successful, ${errors} failed`,
-      undefined,
-      'GameTick'
-    );
+    logger.info(`Oracle reveals: ${revealed} successful, ${errors} failed`, undefined, 'GameTick');
   } catch (error) {
     logger.error('Oracle batch reveal failed', { error }, 'GameTick');
     errors = questions.length;
@@ -2150,10 +2300,9 @@ async function updateWidgetCaches(): Promise<number> {
 
   const perpMarketsWithStats = await Promise.all(
     companies
-      .filter((company: typeof companies[number]) => company && company.id && company.name) // Filter out invalid companies
-      .map(async (company: typeof companies[number]) => {
-        const currentPrice =
-          company.currentPrice || company.initialPrice || 100;
+      .filter((company: (typeof companies)[number]) => company?.id && company.name) // Filter out invalid companies
+      .map(async (company: (typeof companies)[number]) => {
+        const currentPrice = company.currentPrice || company.initialPrice || 100;
 
         const priceHistory = await db().getPriceHistory(company.id, 1440);
 
@@ -2161,7 +2310,7 @@ async function updateWidgetCaches(): Promise<number> {
 
         if (priceHistory && priceHistory.length > 0) {
           const price24hAgo = priceHistory[priceHistory.length - 1];
-          if (price24hAgo && price24hAgo.price) {
+          if (price24hAgo?.price) {
             const change24h = currentPrice - price24hAgo.price;
             changePercent24h = (change24h / price24hAgo.price) * 100;
           }
@@ -2178,79 +2327,75 @@ async function updateWidgetCaches(): Promise<number> {
       })
   );
 
-    const topPerpGainers = perpMarketsWithStats
-      .sort(
-        (a: typeof perpMarketsWithStats[number], b: typeof perpMarketsWithStats[number]) => 
-          Math.abs(b.changePercent24h) - Math.abs(a.changePercent24h)
-      )
-      .slice(0, 3);
+  const topPerpGainers = perpMarketsWithStats
+    .sort(
+      (a: (typeof perpMarketsWithStats)[number], b: (typeof perpMarketsWithStats)[number]) =>
+        Math.abs(b.changePercent24h) - Math.abs(a.changePercent24h)
+    )
+    .slice(0, 3);
 
-    // 2. Get top 3 pool gainers
-    const pools = await prisma.pool.findMany({
-      where: { isActive: true },
-      include: {
-        Actor: {
-          select: { name: true },
-        },
+  // 2. Get top 3 pool gainers
+  const pools = await prisma.pool.findMany({
+    where: { isActive: true },
+    include: {
+      Actor: {
+        select: { name: true },
       },
-      orderBy: { totalValue: 'desc' },
+    },
+    orderBy: { totalValue: 'desc' },
+  });
+
+  const poolsWithReturn = pools
+    .filter((pool: (typeof pools)[number]) => pool?.id && pool.name) // Filter out invalid pools
+    .map((pool: (typeof pools)[number]) => {
+      const totalDeposits = parseFloat(pool.totalDeposits.toString());
+      const totalValue = parseFloat(pool.totalValue.toString());
+      const totalReturn =
+        totalDeposits > 0 ? ((totalValue - totalDeposits) / totalDeposits) * 100 : 0;
+
+      // Extract Actor name
+      const npcActorName = pool.Actor?.name || 'Unknown';
+
+      return {
+        id: pool.id,
+        name: pool.name,
+        npcActorName,
+        totalReturn,
+        totalValue,
+      };
     });
 
-    const poolsWithReturn = pools
-      .filter((pool: typeof pools[number]) => pool && pool.id && pool.name) // Filter out invalid pools
-      .map((pool: typeof pools[number]) => {
-        const totalDeposits = parseFloat(pool.totalDeposits.toString());
-        const totalValue = parseFloat(pool.totalValue.toString());
-        const totalReturn =
-          totalDeposits > 0
-            ? ((totalValue - totalDeposits) / totalDeposits) * 100
-            : 0;
-
-        // Extract Actor name
-        const npcActorName = pool.Actor?.name || 'Unknown';
-
-        return {
-          id: pool.id,
-          name: pool.name,
-          npcActorName,
-          totalReturn,
-          totalValue,
-        };
-      });
-
-    const topPoolGainers = poolsWithReturn
-      .sort((a: typeof poolsWithReturn[number], b: typeof poolsWithReturn[number]) => 
+  const topPoolGainers = poolsWithReturn
+    .sort(
+      (a: (typeof poolsWithReturn)[number], b: (typeof poolsWithReturn)[number]) =>
         b.totalReturn - a.totalReturn
-      )
-      .slice(0, 3);
+    )
+    .slice(0, 3);
 
-    // 3. Get top 3 questions by time-weighted volume
-    const activeMarkets = await prisma.market.findMany({
-      where: {
-        resolved: false,
-        endDate: { gte: new Date() },
-      },
-      select: {
-        id: true,
-        question: true,
-        yesShares: true,
-        noShares: true,
-        createdAt: true,
-      },
-    });
+  // 3. Get top 3 questions by time-weighted volume
+  const activeMarkets = await prisma.market.findMany({
+    where: {
+      resolved: false,
+      endDate: { gte: new Date() },
+    },
+    select: {
+      id: true,
+      question: true,
+      yesShares: true,
+      noShares: true,
+      createdAt: true,
+    },
+  });
 
-    const marketsWithTimeWeightedVolume = activeMarkets.map((market: typeof activeMarkets[number]) => {
+  const marketsWithTimeWeightedVolume = activeMarkets.map(
+    (market: (typeof activeMarkets)[number]) => {
       const yesShares = market.yesShares ? Number(market.yesShares) : 0;
       const noShares = market.noShares ? Number(market.noShares) : 0;
       const totalShares = yesShares + noShares;
       const totalVolume = totalShares * 0.5;
 
-      const ageInHours =
-        (Date.now() - market.createdAt.getTime()) / (1000 * 60 * 60);
-      const timeWeight =
-        ageInHours < 24
-          ? 2.0
-          : Math.max(1.0, 2.0 - (ageInHours - 24) / (6 * 24));
+      const ageInHours = (Date.now() - market.createdAt.getTime()) / (1000 * 60 * 60);
+      const timeWeight = ageInHours < 24 ? 2.0 : Math.max(1.0, 2.0 - (ageInHours - 24) / (6 * 24));
 
       const timeWeightedScore = totalVolume * timeWeight;
 
@@ -2263,21 +2408,25 @@ async function updateWidgetCaches(): Promise<number> {
         yesPrice,
         timeWeightedScore,
       };
-    });
+    }
+  );
 
-    const topVolumeQuestions = marketsWithTimeWeightedVolume
-      .sort((a: typeof marketsWithTimeWeightedVolume[number], b: typeof marketsWithTimeWeightedVolume[number]) => 
-        b.timeWeightedScore - a.timeWeightedScore
-      )
-      .slice(0, 3);
+  const topVolumeQuestions = marketsWithTimeWeightedVolume
+    .sort(
+      (
+        a: (typeof marketsWithTimeWeightedVolume)[number],
+        b: (typeof marketsWithTimeWeightedVolume)[number]
+      ) => b.timeWeightedScore - a.timeWeightedScore
+    )
+    .slice(0, 3);
 
-    // Update cache
-    const cacheData = {
-      topPerpGainers,
-      topPoolGainers,
-      topVolumeQuestions,
-      lastUpdated: new Date().toISOString(),
-    };
+  // Update cache
+  const cacheData = {
+    topPerpGainers,
+    topPoolGainers,
+    topVolumeQuestions,
+    lastUpdated: new Date().toISOString(),
+  };
 
   await prisma.widgetCache.upsert({
     where: { widget: 'markets' },
@@ -2303,14 +2452,14 @@ async function updateWidgetCaches(): Promise<number> {
  */
 async function forceTrendingCalculation(): Promise<boolean> {
   logger.info('Forcing trending calculation (first tick)', {}, 'GameTick');
-  
+
   // Wait 3 seconds for tag generation to complete (tags are generated async)
-  await new Promise(resolve => setTimeout(resolve, 3000));
-  
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+
   // Import and call trending calculation directly
   const { calculateTrendingTags } = await import('./services/trending-calculation-service');
   await calculateTrendingTags();
-  
+
   logger.info('Forced trending calculation complete', {}, 'GameTick');
   return true;
 }
@@ -2339,7 +2488,7 @@ async function shouldUpdateWorldFacts(): Promise<boolean> {
 /**
  * Update world facts if needed (called from game tick)
  * Only updates if it's been 24+ hours since the last update
- * 
+ *
  * @returns Object with updated status and optional stats
  */
 async function updateWorldFactsIfNeeded(): Promise<{
@@ -2375,7 +2524,7 @@ async function updateWorldFactsIfNeeded(): Promise<{
     // Step 2: Transform untransformed headlines into parodies
     logger.info('Generating parody headlines...', undefined, 'GameTick');
     const untransformedHeadlines = await rssFeedService.getUntransformedHeadlines(20); // Process 20 at a time
-    
+
     const generator = createParodyHeadlineGenerator();
     const parodies = await generator.processHeadlines(untransformedHeadlines);
     logger.info(
@@ -2390,13 +2539,17 @@ async function updateWorldFactsIfNeeded(): Promise<{
     logger.info(`Cleaned up ${cleaned} old headlines`, { count: cleaned }, 'GameTick');
 
     const duration = Date.now() - startTime;
-    logger.info('✅ World facts update completed', {
-      duration: `${duration}ms`,
-      feedsFetched: feedResult.fetched,
-      newHeadlines: feedResult.stored,
-      parodiesGenerated: parodies.length,
-      headlinesCleaned: cleaned,
-    }, 'GameTick');
+    logger.info(
+      '✅ World facts update completed',
+      {
+        duration: `${duration}ms`,
+        feedsFetched: feedResult.fetched,
+        newHeadlines: feedResult.stored,
+        parodiesGenerated: parodies.length,
+        headlinesCleaned: cleaned,
+      },
+      'GameTick'
+    );
 
     return {
       updated: true,

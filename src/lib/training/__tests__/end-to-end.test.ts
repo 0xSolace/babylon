@@ -3,14 +3,13 @@
  * Tests the complete trajectory recording and training flow
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { prisma } from '@/lib/prisma';
-import { trajectoryRecorder } from '../TrajectoryRecorder';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { AutomationPipeline } from '../AutomationPipeline';
-import { generateSnowflakeId } from '@/lib/snowflake';
+import { trajectoryRecorder } from '../TrajectoryRecorder';
 
 describe('Training Integration', () => {
-  let testAgentIds: string[] = [];
+  const testAgentIds: string[] = [];
 
   beforeAll(async () => {
     // Create test agents
@@ -25,10 +24,10 @@ describe('Training Integration', () => {
             updatedAt: new Date(),
             isAgent: true,
             virtualBalance: 10000,
-          }
+          },
         });
         testAgentIds.push(agentId);
-      } catch (error) {
+      } catch (_error) {
         // Agent might already exist
       }
     }
@@ -38,9 +37,9 @@ describe('Training Integration', () => {
     // Cleanup
     try {
       await prisma.user.deleteMany({
-        where: { id: { in: testAgentIds } }
+        where: { id: { in: testAgentIds } },
       });
-    } catch (error) {
+    } catch (_error) {
       // Cleanup errors not critical
     }
   });
@@ -49,7 +48,7 @@ describe('Training Integration', () => {
     const agentId = testAgentIds[0];
     const trajectoryId = await trajectoryRecorder.startTrajectory({
       agentId,
-      scenarioId: 'test-scenario'
+      scenarioId: 'test-scenario',
     });
 
     expect(trajectoryId).toBeDefined();
@@ -58,7 +57,7 @@ describe('Training Integration', () => {
     // Add a step
     trajectoryRecorder.startStep(trajectoryId, {
       agentBalance: 10000,
-      agentPnL: 0
+      agentPnL: 0,
     });
 
     trajectoryRecorder.logLLMCall(trajectoryId, {
@@ -68,18 +67,22 @@ describe('Training Integration', () => {
       response: 'BUY',
       temperature: 0.7,
       maxTokens: 100,
-      purpose: 'test'
+      purpose: 'test',
     });
 
-    trajectoryRecorder.completeStep(trajectoryId, {
-      actionType: 'BUY',
-      parameters: {},
-      success: true
-    }, 0.5);
+    trajectoryRecorder.completeStep(
+      trajectoryId,
+      {
+        actionType: 'BUY',
+        parameters: {},
+        success: true,
+      },
+      0.5
+    );
 
     // End recording
     await trajectoryRecorder.endTrajectory(trajectoryId, {
-      finalPnL: 100
+      finalPnL: 100,
     });
   });
 
@@ -90,5 +93,3 @@ describe('Training Integration', () => {
     expect(typeof status.ready).toBe('boolean');
   });
 });
-
-export {};

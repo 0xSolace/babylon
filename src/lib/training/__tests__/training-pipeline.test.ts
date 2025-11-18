@@ -3,7 +3,7 @@
  * Tests the training automation pipeline functionality
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { AutomationPipeline } from '../AutomationPipeline';
 
 describe('Training Automation Pipeline', () => {
@@ -17,15 +17,15 @@ describe('Training Automation Pipeline', () => {
       const pipeline = new AutomationPipeline({
         minTrajectoriesForTraining: 50,
         minGroupSize: 3,
-        dataQualityThreshold: 0.90,
+        dataQualityThreshold: 0.9,
         autoTriggerTraining: false,
         trainingInterval: 12,
         baseModel: 'custom-model',
         modelNamePrefix: 'test-model',
         modelStoragePath: './test-models',
-        dataStoragePath: './test-data'
+        dataStoragePath: './test-data',
       });
-      
+
       expect(pipeline).toBeDefined();
     });
   });
@@ -33,7 +33,7 @@ describe('Training Automation Pipeline', () => {
   describe('Data Status', () => {
     it('should return data status without errors', async () => {
       const pipeline = new AutomationPipeline();
-      
+
       const status = await pipeline.getStatus();
       expect(status).toBeDefined();
       expect('data' in status && status.data).toBeDefined();
@@ -43,7 +43,7 @@ describe('Training Automation Pipeline', () => {
   describe('Training Readiness', () => {
     it('should check training readiness without errors', async () => {
       const pipeline = new AutomationPipeline();
-      
+
       try {
         const readiness = await pipeline.checkTrainingReadiness();
         expect(readiness).toBeDefined();
@@ -59,10 +59,17 @@ describe('Training Automation Pipeline', () => {
   describe('System Status', () => {
     it('should get system status without crashing', async () => {
       const pipeline = new AutomationPipeline();
-      
+
       try {
         // Access private method for testing (type assertion needed)
-        const status = await (pipeline as unknown as { getSystemStatus: () => Promise<{ data?: unknown; training?: unknown }> }).getSystemStatus();
+        const status = await (
+          pipeline as unknown as {
+            getSystemStatus: () => Promise<{
+              data?: unknown;
+              training?: unknown;
+            }>;
+          }
+        ).getSystemStatus();
         expect(status).toBeDefined();
         expect(status.data).toBeDefined();
         expect(status.training).toBeDefined();
@@ -73,4 +80,3 @@ describe('Training Automation Pipeline', () => {
     });
   });
 });
-

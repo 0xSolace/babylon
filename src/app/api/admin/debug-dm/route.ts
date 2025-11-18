@@ -1,13 +1,13 @@
 /**
  * Admin Debug DM API
- * 
+ *
  * @route GET /api/admin/debug-dm - Debug user DM chats
  * @access Admin
- * 
+ *
  * @description
  * Debug endpoint to check what DM chats exist for a user. Bypasses RLS for
  * admin debugging purposes. Returns all chats and messages for the user.
- * 
+ *
  * @openapi
  * /api/admin/debug-dm:
  *   get:
@@ -42,7 +42,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * const debug = await fetch('/api/admin/debug-dm?userId=user-id', {
@@ -51,11 +51,11 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api/admin-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { prisma } from '@/lib/prisma';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   // Require admin authentication
@@ -120,7 +120,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Get details for each chat
-  const chatIds = participants.map(p => p.chatId);
+  const chatIds = participants.map((p) => p.chatId);
   const chats = await prisma.chat.findMany({
     where: {
       id: { in: chatIds },
@@ -135,7 +135,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Get all user IDs from participants
-  const participantUserIds = [...new Set(chats.flatMap(chat => chat.ChatParticipant.map(p => p.userId)))];
+  const participantUserIds = [
+    ...new Set(chats.flatMap((chat) => chat.ChatParticipant.map((p) => p.userId))),
+  ];
   const participantUsers = await prisma.user.findMany({
     where: {
       id: { in: participantUserIds },
@@ -147,17 +149,21 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 
-  const usersMap = new Map(participantUsers.map(u => [u.id, u]));
+  const usersMap = new Map(participantUsers.map((u) => [u.id, u]));
 
-  logger.info('Debug DM results', { 
-    userId, 
-    participantsCount: participants.length,
-    chatsCount: chats.length 
-  }, 'GET /api/admin/debug-dm');
+  logger.info(
+    'Debug DM results',
+    {
+      userId,
+      participantsCount: participants.length,
+      chatsCount: chats.length,
+    },
+    'GET /api/admin/debug-dm'
+  );
 
   // Get actual message counts for each chat
   const messageCounts = await Promise.all(
-    chats.map(chat =>
+    chats.map((chat) =>
       prisma.message.count({
         where: { chatId: chat.id },
       })
@@ -185,13 +191,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       }),
       totalMessageCount: messageCounts[index],
       loadedMessageCount: chat.Message.length,
-      recentMessages: chat.Message.slice(0, 3).map((m: { id: string; content: string; senderId: string; createdAt: Date }) => ({
-        id: m.id,
-        content: m.content.substring(0, 50),
-        senderId: m.senderId,
-        createdAt: m.createdAt,
-      })),
+      recentMessages: chat.Message.slice(0, 3).map(
+        (m: { id: string; content: string; senderId: string; createdAt: Date }) => ({
+          id: m.id,
+          content: m.content.substring(0, 50),
+          senderId: m.senderId,
+          createdAt: m.createdAt,
+        })
+      ),
     })),
   });
 });
-

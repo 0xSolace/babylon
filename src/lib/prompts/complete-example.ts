@@ -1,13 +1,13 @@
 /**
  * Complete Integration Example - EXAMPLE/DOCUMENTATION ONLY
- * 
+ *
  * ⚠️  This file is for DEMONSTRATION purposes only. It shows how to integrate
  * the prompt system but uses mock AI responses.
- * 
+ *
  * For production use, see:
  * - src/generator/GameGenerator.ts (actual LLM integration)
  * - src/engine/FeedGenerator.ts (production feed generation)
- * 
+ *
  * This demonstrates the full workflow:
  * 1. Generate world context from actors.json
  * 2. Render prompt with context
@@ -16,15 +16,15 @@
  * 5. Handle failures and regeneration
  */
 
+import { ambientPosts, newsPosts, reactions, replies } from '@/prompts';
+import { renderPrompt } from '@/prompts/loader';
 import {
+  CHARACTER_LIMITS,
+  type ValidationResult,
   generateWorldContext,
   validateFeedPost,
   validatePostBatch,
-  CHARACTER_LIMITS,
-  type ValidationResult,
 } from './index';
-import { renderPrompt } from '@/prompts/loader';
-import { ambientPosts, reactions, newsPosts, replies } from '@/prompts';
 
 // ============================================================================
 // Example 1: Generate a Single Ambient Post
@@ -66,7 +66,7 @@ export async function generateAmbientPost() {
   console.log('   Posts received:', generatedPosts.length);
 
   // Step 5: Validate each post
-  const results = generatedPosts.map(post => ({
+  const results = generatedPosts.map((post) => ({
     post,
     validation: validateFeedPost(post, {
       maxLength: CHARACTER_LIMITS.AMBIENT,
@@ -75,8 +75,8 @@ export async function generateAmbientPost() {
   }));
 
   // Step 6: Handle results
-  const valid = results.filter(r => r.validation.isValid);
-  const invalid = results.filter(r => !r.validation.isValid);
+  const valid = results.filter((r) => r.validation.isValid);
+  const invalid = results.filter((r) => !r.validation.isValid);
 
   console.log(`\n✅ Valid posts: ${valid.length}`);
   console.log(`❌ Invalid posts: ${invalid.length}\n`);
@@ -89,17 +89,14 @@ export async function generateAmbientPost() {
     });
   }
 
-  return valid.map(r => r.post);
+  return valid.map((r) => r.post);
 }
 
 // ============================================================================
 // Example 2: Generate Reactions with Retry Logic
 // ============================================================================
 
-export async function generateReactionsWithRetry(
-  eventDescription: string,
-  maxAttempts = 3
-) {
+export async function generateReactionsWithRetry(eventDescription: string, maxAttempts = 3) {
   console.log('🚀 Generating reactions with retry logic...\n');
 
   const worldContext = await generateWorldContext();
@@ -129,7 +126,7 @@ export async function generateReactionsWithRetry(
     const posts = await mockAIGeneration(prompt);
 
     const { allValid, results } = validatePostBatch(
-      posts.map(post => ({ post, type: 'REACTION' as const }))
+      posts.map((post) => ({ post, type: 'REACTION' as const }))
     );
 
     if (allValid) {
@@ -137,7 +134,7 @@ export async function generateReactionsWithRetry(
       console.log('✅ All posts valid!\n');
     } else {
       console.log('❌ Some posts invalid, retrying...');
-      results.forEach(r => {
+      results.forEach((r) => {
         if (!r.isValid) {
           console.log(`   - "${r.post}"`);
           console.log(`     ${r.violations.join(', ')}`);
@@ -208,18 +205,16 @@ export async function generateMixedFeedContent() {
     console.log(`\n📝 Generating ${task.name}...`);
     const posts = await mockAIGeneration(task.prompt);
 
-    const validation = validatePostBatch(
-      posts.map(post => ({ post, type: task.type }))
-    );
+    const validation = validatePostBatch(posts.map((post) => ({ post, type: task.type })));
 
     console.log(
       `   ${validation.allValid ? '✅' : '❌'} Valid: ${
-        validation.results.filter(r => r.isValid).length
+        validation.results.filter((r) => r.isValid).length
       }/${posts.length}`
     );
 
     // Only push if we have at least one result
-    const firstResult = validation.results[0]
+    const firstResult = validation.results[0];
     if (firstResult) {
       allResults.push({
         name: task.name,
@@ -274,12 +269,12 @@ export function setupValidationMonitoring() {
 
 /**
  * ⚠️  MOCK FUNCTION - FOR DEMONSTRATION ONLY
- * 
+ *
  * This is NOT production code. For actual AI generation, use:
  * - BabylonLLMClient (src/generator/llm/openai-client.ts) for Groq/OpenAI
  * - GameGenerator methods for structured game content
  * - FeedGenerator methods for feed posts
- * 
+ *
  * @param _prompt - The prompt to send (unused in mock)
  * @returns Mock post content for demonstration
  */
@@ -288,7 +283,7 @@ async function mockAIGeneration(_prompt: string): Promise<string[]> {
   console.log('   For production, use BabylonLLMClient or GameGenerator');
 
   // Simulate API delay for realistic example
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   // Return mock posts for demonstration purposes
   return [
@@ -309,9 +304,9 @@ async function mockAIGeneration(_prompt: string): Promise<string[]> {
 // ============================================================================
 
 export async function runAllExamples() {
-  console.log('=' .repeat(80));
+  console.log('='.repeat(80));
   console.log('FEED PROMPT SYSTEM - COMPLETE EXAMPLES');
-  console.log('=' .repeat(80));
+  console.log('='.repeat(80));
 
   try {
     // Example 1
@@ -319,16 +314,16 @@ export async function runAllExamples() {
     await generateAmbientPost();
 
     // Example 2
-    console.log('\n' + '='.repeat(80));
+    console.log(`\n${'='.repeat(80)}`);
     console.log('\n📌 Example 2: Reactions with Retry\n');
     await generateReactionsWithRetry('TeslAI announces Dogecoin acceptance');
 
     // Example 3
-    console.log('\n' + '='.repeat(80));
+    console.log(`\n${'='.repeat(80)}`);
     console.log('\n📌 Example 3: Mixed Feed Content\n');
     await generateMixedFeedContent();
 
-    console.log('\n' + '='.repeat(80));
+    console.log(`\n${'='.repeat(80)}`);
     console.log('\n✅ All examples completed successfully!\n');
   } catch (error) {
     console.error('\n❌ Error running examples:', error);
@@ -337,4 +332,3 @@ export async function runAllExamples() {
 
 // Uncomment to run:
 // runAllExamples();
-

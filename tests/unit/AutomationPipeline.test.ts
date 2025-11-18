@@ -1,15 +1,17 @@
 /**
  * Unit Tests for AutomationPipeline
- * 
+ *
  * Tests core functionality without external dependencies
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { AutomationPipeline, type AutomationConfig } from '@/lib/training/AutomationPipeline';
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import type { MockPrismaClient, MockLogger } from '../types/test-types';
-import type { Trajectory, TrainingBatch, TrainedModel } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { type AutomationConfig, AutomationPipeline } from '@/lib/training/AutomationPipeline';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { TrainedModel, TrainingBatch, Trajectory } from '@prisma/client';
+import type { MockLogger, MockPrismaClient } from '../types/test-types';
+
+type PrismaWithQueryRaw = typeof prisma & { $queryRaw: typeof prisma.$queryRaw };
 
 // Get original methods lazily to avoid issues with Prisma initialization
 function getOriginalPrisma() {
@@ -42,7 +44,7 @@ function getOriginalPrisma() {
       },
       $queryRaw: prisma.$queryRaw.bind(prisma),
     };
-  } catch (error) {
+  } catch (_error) {
     // If Prisma isn't initialized, return null
     return null;
   }
@@ -71,20 +73,37 @@ describe('AutomationPipeline - Unit Tests', () => {
     };
 
     pipeline = new AutomationPipeline(mockConfig);
-    
+
     // Setup default mocks with proper types
-    (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() => Promise.resolve(0));
-    (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() => Promise.resolve([]));
-    (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() => Promise.resolve([]));
-    (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findUnique = mock(() => Promise.resolve(null));
-    (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findFirst = mock(() => Promise.resolve(null));
-    (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).count = mock(() => Promise.resolve(0));
-    (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() => Promise.resolve(null));
-    (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).count = mock(() => Promise.resolve(0));
+    (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() =>
+      Promise.resolve(0)
+    );
+    (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() =>
+      Promise.resolve([])
+    );
+    (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() =>
+      Promise.resolve([])
+    );
+    (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findUnique = mock(() =>
+      Promise.resolve(null)
+    );
+    (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findFirst = mock(() =>
+      Promise.resolve(null)
+    );
+    (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).count = mock(() =>
+      Promise.resolve(0)
+    );
+    (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() =>
+      Promise.resolve(null)
+    );
+    (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).count = mock(() =>
+      Promise.resolve(0)
+    );
     (prisma.user as unknown as MockPrismaClient['user']).count = mock(() => Promise.resolve(1));
     // Mock $queryRaw with proper signature
-    (prisma as any).$queryRaw = mock(() => Promise.resolve([{ result: 1 }]));
-    
+    const queryRawMock = mock<typeof prisma.$queryRaw>(() => Promise.resolve([{ result: 1 }]));
+    (prisma as PrismaWithQueryRaw).$queryRaw = queryRawMock;
+
     (logger as unknown as MockLogger).info = mock(() => {});
     (logger as unknown as MockLogger).warn = mock(() => {});
     (logger as unknown as MockLogger).error = mock(() => {});
@@ -98,8 +117,7 @@ describe('AutomationPipeline - Unit Tests', () => {
       Object.assign(prisma.trainingBatch, originalPrisma.trainingBatch);
       Object.assign(prisma.trainedModel, originalPrisma.trainedModel);
       Object.assign(prisma.user, originalPrisma.user);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (prisma as any).$queryRaw = originalPrisma.$queryRaw;
+      (prisma as PrismaWithQueryRaw).$queryRaw = originalPrisma.$queryRaw;
     }
     Object.assign(logger, originalLogger);
   });
@@ -107,8 +125,8 @@ describe('AutomationPipeline - Unit Tests', () => {
   describe('Configuration', () => {
     test('should use default configuration when not provided', () => {
       const defaultPipeline = new AutomationPipeline();
-      const status = defaultPipeline['config'];
-      
+      const status = defaultPipeline.config;
+
       expect(status.minTrajectoriesForTraining).toBe(1000);
       expect(status.minGroupSize).toBe(10);
       expect(status.dataQualityThreshold).toBe(0.95);
@@ -116,8 +134,8 @@ describe('AutomationPipeline - Unit Tests', () => {
     });
 
     test('should merge custom config with defaults', () => {
-      const config = pipeline['config'];
-      
+      const config = pipeline.config;
+
       expect(config.minTrajectoriesForTraining).toBe(50);
       expect(config.minGroupSize).toBe(3);
       expect(config.dataQualityThreshold).toBe(0.9);
@@ -126,22 +144,28 @@ describe('AutomationPipeline - Unit Tests', () => {
 
     test('should use OpenPipe model by default', () => {
       const defaultPipeline = new AutomationPipeline();
-      expect(defaultPipeline['config'].baseModel).toBe('OpenPipe/Qwen3-14B-Instruct');
+      expect(defaultPipeline.config.baseModel).toBe('OpenPipe/Qwen3-14B-Instruct');
     });
 
     test('should allow custom model override', () => {
       const customPipeline = new AutomationPipeline({
-        baseModel: 'custom-model'
+        baseModel: 'custom-model',
       });
-      expect(customPipeline['config'].baseModel).toBe('custom-model');
+      expect(customPipeline.config.baseModel).toBe('custom-model');
     });
   });
 
   describe('Training Readiness Check', () => {
     test('should be not ready when insufficient trajectories', async () => {
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() => Promise.resolve(30));
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() => Promise.resolve([]));
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() => Promise.resolve([]));
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() =>
+        Promise.resolve(30)
+      );
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() =>
+        Promise.resolve([])
+      );
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() =>
+        Promise.resolve([])
+      );
 
       const result = await pipeline.checkTrainingReadiness();
 
@@ -151,12 +175,18 @@ describe('AutomationPipeline - Unit Tests', () => {
     });
 
     test('should be not ready when insufficient scenario groups', async () => {
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() => Promise.resolve(100));
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() => Promise.resolve([
-        { scenarioId: 'scenario-1', _count: 5 },
-        { scenarioId: 'scenario-2', _count: 4 },
-      ]));
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() => Promise.resolve([]));
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() =>
+        Promise.resolve(100)
+      );
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() =>
+        Promise.resolve([
+          { scenarioId: 'scenario-1', _count: 5 },
+          { scenarioId: 'scenario-2', _count: 4 },
+        ])
+      );
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() =>
+        Promise.resolve([])
+      );
 
       const result = await pipeline.checkTrainingReadiness();
 
@@ -166,27 +196,40 @@ describe('AutomationPipeline - Unit Tests', () => {
     });
 
     test('should be ready when all conditions met', async () => {
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() => Promise.resolve(100));
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() => Promise.resolve(
-        Array.from({ length: 15 }, (_, i) => ({
-          scenarioId: `scenario-${i}`,
-          _count: 5
-        }))
-      ));
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() => Promise.resolve(
-        Array.from({ length: 50 }, (_, i): Pick<Trajectory, 'trajectoryId' | 'stepsJson'> => ({
-          trajectoryId: `traj-${i}`,
-          stepsJson: JSON.stringify([{
-            llmCalls: [{
-              systemPrompt: 'a'.repeat(100),
-              userPrompt: 'b'.repeat(150),
-              response: 'Test'
-            }],
-            providerAccesses: [{ provider: 'test' }],
-            action: { result: 'success' }
-          }])
-        }))
-      ));
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() =>
+        Promise.resolve(100)
+      );
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() =>
+        Promise.resolve(
+          Array.from({ length: 15 }, (_, i) => ({
+            scenarioId: `scenario-${i}`,
+            _count: 5,
+          }))
+        )
+      );
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() =>
+        Promise.resolve(
+          Array.from(
+            { length: 50 },
+            (_, i): Pick<Trajectory, 'trajectoryId' | 'stepsJson'> => ({
+              trajectoryId: `traj-${i}`,
+              stepsJson: JSON.stringify([
+                {
+                  llmCalls: [
+                    {
+                      systemPrompt: 'a'.repeat(100),
+                      userPrompt: 'b'.repeat(150),
+                      response: 'Test',
+                    },
+                  ],
+                  providerAccesses: [{ provider: 'test' }],
+                  action: { result: 'success' },
+                },
+              ]),
+            })
+          )
+        )
+      );
 
       const result = await pipeline.checkTrainingReadiness();
 
@@ -196,24 +239,35 @@ describe('AutomationPipeline - Unit Tests', () => {
     });
 
     test('should check data quality', async () => {
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() => Promise.resolve(100));
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() => Promise.resolve(
-        Array.from({ length: 15 }, (_, i) => ({
-          scenarioId: `scenario-${i}`,
-          _count: 5
-        }))
-      ));
-      
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() =>
+        Promise.resolve(100)
+      );
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).groupBy = mock(() =>
+        Promise.resolve(
+          Array.from({ length: 15 }, (_, i) => ({
+            scenarioId: `scenario-${i}`,
+            _count: 5,
+          }))
+        )
+      );
+
       // Mock poor quality data
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() => Promise.resolve(
-        Array.from({ length: 50 }, (): Pick<Trajectory, 'trajectoryId' | 'stepsJson'> => ({
-          trajectoryId: 'traj-poor-quality',
-          stepsJson: JSON.stringify([{
-            llmCalls: [],  // No LLM calls = poor quality
-            action: {}
-          }])
-        }))
-      ));
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = mock(() =>
+        Promise.resolve(
+          Array.from(
+            { length: 50 },
+            (): Pick<Trajectory, 'trajectoryId' | 'stepsJson'> => ({
+              trajectoryId: 'traj-poor-quality',
+              stepsJson: JSON.stringify([
+                {
+                  llmCalls: [], // No LLM calls = poor quality
+                  action: {},
+                },
+              ]),
+            })
+          )
+        )
+      );
 
       const result = await pipeline.checkTrainingReadiness();
 
@@ -224,29 +278,35 @@ describe('AutomationPipeline - Unit Tests', () => {
 
   describe('Model Versioning', () => {
     test('should start at v1.0.0 when no models exist', async () => {
-      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() => Promise.resolve(null));
+      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() =>
+        Promise.resolve(null)
+      );
 
-      const version = await pipeline['getNextModelVersion']();
+      const version = await pipeline.getNextModelVersion();
 
       expect(version).toBe('v1.0.0');
     });
 
     test('should increment patch version', async () => {
-      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() => Promise.resolve({
-        version: 'v1.0.5'
-      } as TrainedModel));
+      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() =>
+        Promise.resolve({
+          version: 'v1.0.5',
+        } as TrainedModel)
+      );
 
-      const version = await pipeline['getNextModelVersion']();
+      const version = await pipeline.getNextModelVersion();
 
       expect(version).toBe('v1.0.6');
     });
 
     test('should handle double-digit versions', async () => {
-      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() => Promise.resolve({
-        version: 'v2.3.99'
-      } as TrainedModel));
+      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() =>
+        Promise.resolve({
+          version: 'v2.3.99',
+        } as TrainedModel)
+      );
 
-      const version = await pipeline['getNextModelVersion']();
+      const version = await pipeline.getNextModelVersion();
 
       expect(version).toBe('v2.3.100');
     });
@@ -261,9 +321,9 @@ describe('AutomationPipeline - Unit Tests', () => {
       ];
 
       const findManyMock = mock(() => Promise.resolve(mockTrajectories));
-      (prisma.trajectory as any).findMany = findManyMock;
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = findManyMock;
 
-      const ids = await pipeline['getTrajectoryIds'](3);
+      const ids = await pipeline.getTrajectoryIds(3);
 
       expect(ids).toEqual(['traj-1', 'traj-2', 'traj-3']);
       expect(findManyMock).toHaveBeenCalled();
@@ -276,9 +336,9 @@ describe('AutomationPipeline - Unit Tests', () => {
       ];
 
       const findManyMock = mock(() => Promise.resolve(mockTrajectories));
-      (prisma.trajectory as any).findMany = findManyMock;
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).findMany = findManyMock;
 
-      const ids = await pipeline['getTrajectoryIds']();
+      const ids = await pipeline.getTrajectoryIds();
 
       expect(ids).toHaveLength(2);
       expect(findManyMock).toHaveBeenCalled();
@@ -287,7 +347,9 @@ describe('AutomationPipeline - Unit Tests', () => {
 
   describe('Training Monitoring', () => {
     test('should return not_found for non-existent batch', async () => {
-      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findUnique = mock(() => Promise.resolve(null));
+      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findUnique = mock(() =>
+        Promise.resolve(null)
+      );
 
       const status = await pipeline.monitorTraining('non-existent');
 
@@ -295,11 +357,13 @@ describe('AutomationPipeline - Unit Tests', () => {
     });
 
     test('should return training status', async () => {
-      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findUnique = mock(() => Promise.resolve({
-        batchId: 'batch-1',
-        status: 'training',
-        error: null
-      } as TrainingBatch));
+      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findUnique = mock(() =>
+        Promise.resolve({
+          batchId: 'batch-1',
+          status: 'training',
+          error: null,
+        } as TrainingBatch)
+      );
 
       const status = await pipeline.monitorTraining('batch-1');
 
@@ -309,11 +373,13 @@ describe('AutomationPipeline - Unit Tests', () => {
     });
 
     test('should return completed status', async () => {
-      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findUnique = mock(() => Promise.resolve({
-        batchId: 'batch-1',
-        status: 'completed',
-        error: null
-      } as TrainingBatch));
+      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findUnique = mock(() =>
+        Promise.resolve({
+          batchId: 'batch-1',
+          status: 'completed',
+          error: null,
+        } as TrainingBatch)
+      );
 
       const status = await pipeline.monitorTraining('batch-1');
 
@@ -330,17 +396,25 @@ describe('AutomationPipeline - Unit Tests', () => {
         callCount++;
         return Promise.resolve(callCount === 1 ? 50 : 200);
       });
-      
-      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findFirst = mock(() => Promise.resolve({
-        completedAt: new Date('2024-01-01T12:00:00Z')
-      } as TrainingBatch));
-      
-      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() => Promise.resolve({
-        version: 'v1.2.3'
-      } as TrainedModel));
-      
-      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).count = mock(() => Promise.resolve(5));
-      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).count = mock(() => Promise.resolve(2));
+
+      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findFirst = mock(() =>
+        Promise.resolve({
+          completedAt: new Date('2024-01-01T12:00:00Z'),
+        } as TrainingBatch)
+      );
+
+      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() =>
+        Promise.resolve({
+          version: 'v1.2.3',
+        } as TrainedModel)
+      );
+
+      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).count = mock(() =>
+        Promise.resolve(5)
+      );
+      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).count = mock(() =>
+        Promise.resolve(2)
+      );
       (prisma.user as unknown as MockPrismaClient['user']).count = mock(() => Promise.resolve(1));
 
       const status = await pipeline.getStatus();
@@ -355,11 +429,21 @@ describe('AutomationPipeline - Unit Tests', () => {
     });
 
     test('should handle no training history', async () => {
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() => Promise.resolve(0));
-      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findFirst = mock(() => Promise.resolve(null));
-      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() => Promise.resolve(null));
-      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).count = mock(() => Promise.resolve(0));
-      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).count = mock(() => Promise.resolve(0));
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() =>
+        Promise.resolve(0)
+      );
+      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).findFirst = mock(() =>
+        Promise.resolve(null)
+      );
+      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).findFirst = mock(() =>
+        Promise.resolve(null)
+      );
+      (prisma.trainedModel as unknown as MockPrismaClient['trainedModel']).count = mock(() =>
+        Promise.resolve(0)
+      );
+      (prisma.trainingBatch as unknown as MockPrismaClient['trainingBatch']).count = mock(() =>
+        Promise.resolve(0)
+      );
       (prisma.user as unknown as MockPrismaClient['user']).count = mock(() => Promise.resolve(1));
 
       const status = await pipeline.getStatus();
@@ -373,9 +457,11 @@ describe('AutomationPipeline - Unit Tests', () => {
   describe('Health Checks', () => {
     test('should check database connectivity', async () => {
       (prisma.user as unknown as MockPrismaClient['user']).count = mock(() => Promise.resolve(1));
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() => Promise.resolve(10));
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() =>
+        Promise.resolve(10)
+      );
 
-      await pipeline['runHealthChecks']();
+      await pipeline.runHealthChecks();
 
       // Test passes if no error is thrown - verify mocks were called
       expect((prisma.user as unknown as MockPrismaClient['user']).count).toHaveBeenCalled();
@@ -384,10 +470,12 @@ describe('AutomationPipeline - Unit Tests', () => {
     test('should handle database errors gracefully', async () => {
       const errorMock = mock(() => {});
       (logger as unknown as MockLogger).error = errorMock;
-      
-      (prisma.user as unknown as MockPrismaClient['user']).count = mock(() => Promise.reject(new Error('DB Error')));
 
-      await pipeline['runHealthChecks']();
+      (prisma.user as unknown as MockPrismaClient['user']).count = mock(() =>
+        Promise.reject(new Error('DB Error'))
+      );
+
+      await pipeline.runHealthChecks();
 
       expect(errorMock).toHaveBeenCalled();
     });
@@ -395,14 +483,15 @@ describe('AutomationPipeline - Unit Tests', () => {
     test('should warn on low data collection rate', async () => {
       const warnMock = mock(() => {});
       (logger as unknown as MockLogger).warn = warnMock;
-      
-      (prisma.user as unknown as MockPrismaClient['user']).count = mock(() => Promise.resolve(1));
-      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() => Promise.resolve(0));
 
-      await pipeline['runHealthChecks']();
+      (prisma.user as unknown as MockPrismaClient['user']).count = mock(() => Promise.resolve(1));
+      (prisma.trajectory as unknown as MockPrismaClient['trajectory']).count = mock(() =>
+        Promise.resolve(0)
+      );
+
+      await pipeline.runHealthChecks();
 
       expect(warnMock).toHaveBeenCalled();
     });
   });
 });
-

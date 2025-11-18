@@ -1,14 +1,14 @@
 /**
  * Post Reply API
- * 
+ *
  * @route POST /api/posts/[id]/reply - Reply to a post
  * @access Authenticated
- * 
+ *
  * @description
  * Creates a reply/comment to a post with comprehensive quality checks, rate limiting,
  * and game mechanics integration. Includes following mechanics, group chat invites,
  * and quality scoring. Designed for NPC interaction and engagement.
- * 
+ *
  * @openapi
  * /api/posts/{id}/reply:
  *   post:
@@ -79,7 +79,7 @@
  *         description: Unauthorized
  *       404:
  *         description: Post not found
- * 
+ *
  * @example
  * ```typescript
  * const response = await fetch(`/api/posts/${postId}/reply`, {
@@ -92,17 +92,17 @@
  * });
  * const { comment, quality, following } = await response.json();
  * ```
- * 
+ *
  * @see {@link /lib/services/message-quality-checker} Quality checker
  * @see {@link /lib/services/following-mechanics} Following mechanics
  */
 
 import { authenticate } from '@/lib/api/auth-middleware';
-import { prisma } from '@/lib/prisma';
 import { BusinessLogicError } from '@/lib/errors';
 import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
 import { parsePostId } from '@/lib/post-id-parser';
+import { prisma } from '@/lib/prisma';
 import { FollowingMechanics } from '@/lib/services/following-mechanics';
 import { GroupChatInvite } from '@/lib/services/group-chat-invite';
 import { MessageQualityChecker } from '@/lib/services/message-quality-checker';
@@ -116,25 +116,23 @@ import type { NextRequest } from 'next/server';
  * POST /api/posts/[id]/reply
  * Reply to a post with comprehensive checks
  */
-export const POST = withErrorHandling(async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) => {
-  // 1. Authenticate user
-  const user = await authenticate(request);
-  const { id: postId } = PostIdParamSchema.parse(await context.params);
+export const POST = withErrorHandling(
+  async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
+    // 1. Authenticate user
+    const user = await authenticate(request);
+    const { id: postId } = PostIdParamSchema.parse(await context.params);
 
-  // 2. Parse and validate request body
-  const body = await request.json();
-  const { content, marketId, sentiment } = ReplyToPostSchema.parse(body);
+    // 2. Parse and validate request body
+    const body = await request.json();
+    const { content, marketId, sentiment } = ReplyToPostSchema.parse(body);
 
-  // 3. Extract NPC/author ID from post ID
-  const parseResult = parsePostId(postId);
+    // 3. Extract NPC/author ID from post ID
+    const parseResult = parsePostId(postId);
 
-  // Require valid format for replies (unlike likes, which can use defaults)
-  if (!parseResult.success) {
-    throw new BusinessLogicError('Invalid post ID format', 'INVALID_POST_ID_FORMAT');
-  }
+    // Require valid format for replies (unlike likes, which can use defaults)
+    if (!parseResult.success) {
+      throw new BusinessLogicError('Invalid post ID format', 'INVALID_POST_ID_FORMAT');
+    }
 
     const { gameId, authorId: npcId, timestamp } = parseResult.metadata;
 
@@ -149,7 +147,10 @@ export const POST = withErrorHandling(async (
     const rateLimitResult = await ReplyRateLimiter.canReply(canonicalUserId, npcId);
 
     if (!rateLimitResult.allowed) {
-      throw new BusinessLogicError(rateLimitResult.reason || 'Rate limit exceeded', 'RATE_LIMIT_EXCEEDED');
+      throw new BusinessLogicError(
+        rateLimitResult.reason || 'Rate limit exceeded',
+        'RATE_LIMIT_EXCEEDED'
+      );
     }
 
     // 5. Check message quality
@@ -251,46 +252,51 @@ export const POST = withErrorHandling(async (
       }
     }
 
-  // 12. Return success with all the feedback
-  logger.info('Reply created successfully', {
-    postId,
-    userId: canonicalUserId,
-    commentId: comment.id,
-    followed,
-    invitedToChat,
-    marketId, // Optional: for analytics/tracking
-    sentiment // Optional: for analytics/tracking
-  }, 'POST /api/posts/[id]/reply');
-
-  return successResponse(
-    {
-      comment: {
-        id: comment.id,
-        content: comment.content,
-        postId: comment.postId,
-        authorId: comment.authorId,
-        createdAt: comment.createdAt,
-        author: comment.User,
-      },
-      quality: {
-        score: qualityResult.score,
-        warnings: qualityResult.warnings,
-        factors: qualityResult.factors,
-      },
-      streak: {
-        current: rateLimitResult.replyStreak || 0,
-        reason: rateLimitResult.reason,
-      },
-      following: {
+    // 12. Return success with all the feedback
+    logger.info(
+      'Reply created successfully',
+      {
+        postId,
+        userId: canonicalUserId,
+        commentId: comment.id,
         followed,
-        probability: followingChance.probability,
-        reasons: followingChance.reasons,
+        invitedToChat,
+        marketId, // Optional: for analytics/tracking
+        sentiment, // Optional: for analytics/tracking
       },
-      groupChat: {
-        invited: invitedToChat,
-        ...(chatInfo || {}),
+      'POST /api/posts/[id]/reply'
+    );
+
+    return successResponse(
+      {
+        comment: {
+          id: comment.id,
+          content: comment.content,
+          postId: comment.postId,
+          authorId: comment.authorId,
+          createdAt: comment.createdAt,
+          author: comment.User,
+        },
+        quality: {
+          score: qualityResult.score,
+          warnings: qualityResult.warnings,
+          factors: qualityResult.factors,
+        },
+        streak: {
+          current: rateLimitResult.replyStreak || 0,
+          reason: rateLimitResult.reason,
+        },
+        following: {
+          followed,
+          probability: followingChance.probability,
+          reasons: followingChance.reasons,
+        },
+        groupChat: {
+          invited: invitedToChat,
+          ...(chatInfo || {}),
+        },
       },
-    },
-    201
-  );
-});
+      201
+    );
+  }
+);

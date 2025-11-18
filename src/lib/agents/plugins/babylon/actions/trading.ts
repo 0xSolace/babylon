@@ -3,9 +3,9 @@
  * Actions for trading on prediction and perpetual markets
  */
 
-import type { Action, IAgentRuntime, Memory, State, HandlerCallback } from '@elizaos/core'
+import type { Action, HandlerCallback, IAgentRuntime, Memory, State } from '@elizaos/core';
 // import { logger } from '@/lib/logger' // Commented out - not needed
-import type { BabylonRuntime } from '../types'
+import type { BabylonRuntime } from '../types';
 
 /**
  * Action: Buy Prediction Shares
@@ -19,20 +19,23 @@ export const buySharesAction: Action = {
     [
       {
         name: '{{user1}}',
-        content: { text: 'Buy 100 YES shares in market market-123' }
+        content: { text: 'Buy 100 YES shares in market market-123' },
       },
       {
         name: '{{agent}}',
-        content: { text: 'Buying 100 YES shares in market-123...', action: 'BUY_PREDICTION_SHARES' }
-      }
-    ]
+        content: {
+          text: 'Buying 100 YES shares in market-123...',
+          action: 'BUY_PREDICTION_SHARES',
+        },
+      },
+    ],
   ],
-  
+
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const content = message.content.text?.toLowerCase() || ''
-    return content.includes('buy') && (content.includes('shares') || content.includes('market'))
+    const content = message.content.text?.toLowerCase() || '';
+    return content.includes('buy') && (content.includes('shares') || content.includes('market'));
   },
-  
+
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
@@ -40,69 +43,83 @@ export const buySharesAction: Action = {
     _options?: unknown,
     callback?: HandlerCallback
   ): Promise<void> => {
-    const babylonRuntime = runtime as BabylonRuntime
-    
+    const babylonRuntime = runtime as BabylonRuntime;
+
     if (!babylonRuntime.a2aClient?.isConnected()) {
       if (callback) {
         callback({
           text: 'A2A client not connected. Cannot execute trade.',
-          action: 'BUY_PREDICTION_SHARES'
-        })
+          action: 'BUY_PREDICTION_SHARES',
+        });
       }
-      return
+      return;
     }
-    
+
     // Parse message to extract parameters
-    const content = message.content.text || ''
-    const marketIdMatch = content.match(/market[:\s-]+([a-zA-Z0-9-]+)/)
-    const amountMatch = content.match(/(\d+(?:\.\d+)?)\s*(?:shares|dollars|\$)/)
+    const content = message.content.text || '';
+    const marketIdMatch = content.match(/market[:\s-]+([a-zA-Z0-9-]+)/);
+    const amountMatch = content.match(/(\d+(?:\.\d+)?)\s*(?:shares|dollars|\$)/);
     // const _sideMatch = content.match(/\b(YES|NO)\b/i)
-    
+
     if (!marketIdMatch || !amountMatch) {
       if (callback) {
         callback({
           text: 'Could not parse trade parameters. Please specify market ID and amount.',
-          action: 'BUY_PREDICTION_SHARES'
-        })
+          action: 'BUY_PREDICTION_SHARES',
+        });
       }
-      return
+      return;
     }
-    
-    const marketId = marketIdMatch[1]!
-    const amount = parseFloat(amountMatch[1]!)
-    const sideMatch = content.match(/\b(YES|NO)\b/i)
-    const side = (sideMatch?.[1]?.toUpperCase() || 'YES') as 'YES' | 'NO'
-    
+
+    const marketId = marketIdMatch[1];
+    const amountString = amountMatch[1];
+
+    if (!marketId || !amountString) {
+      if (callback) {
+        callback({
+          text: 'Missing market ID or amount in trade request.',
+          action: 'BUY_PREDICTION_SHARES',
+        });
+      }
+      return;
+    }
+
+    const amount = parseFloat(amountString);
+    const sideMatch = content.match(/\b(YES|NO)\b/i);
+    const side = (sideMatch?.[1]?.toUpperCase() || 'YES') as 'YES' | 'NO';
+
     try {
-      const result = await babylonRuntime.a2aClient.buyShares(
-        marketId,
-        side,
-        amount
-      ) as { shares?: number; avgPrice?: number; cost?: number; success?: boolean; message?: string }
-      
+      const result = (await babylonRuntime.a2aClient.buyShares(marketId, side, amount)) as {
+        shares?: number;
+        avgPrice?: number;
+        cost?: number;
+        success?: boolean;
+        message?: string;
+      };
+
       if (callback) {
         if (result.success === false) {
           callback({
             text: `Failed to buy shares: ${result.message || 'Unknown error'}`,
-            action: 'BUY_PREDICTION_SHARES'
-          })
+            action: 'BUY_PREDICTION_SHARES',
+          });
         } else {
           callback({
             text: `Successfully bought ${result.shares || 0} ${side} shares at avg price ${result.avgPrice || 0}. Cost: $${result.cost || amount}`,
-            action: 'BUY_PREDICTION_SHARES'
-          })
+            action: 'BUY_PREDICTION_SHARES',
+          });
         }
       }
     } catch (error) {
       if (callback) {
         callback({
           text: `Error buying shares: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          action: 'BUY_PREDICTION_SHARES'
-        })
+          action: 'BUY_PREDICTION_SHARES',
+        });
       }
     }
-  }
-}
+  },
+};
 
 /**
  * Action: Sell Prediction Shares
@@ -116,20 +133,23 @@ export const sellSharesAction: Action = {
     [
       {
         name: '{{user1}}',
-        content: { text: 'Sell 50 YES shares from position pos-123' }
+        content: { text: 'Sell 50 YES shares from position pos-123' },
       },
       {
         name: '{{agent}}',
-        content: { text: 'Selling 50 YES shares...', action: 'SELL_PREDICTION_SHARES' }
-      }
-    ]
+        content: {
+          text: 'Selling 50 YES shares...',
+          action: 'SELL_PREDICTION_SHARES',
+        },
+      },
+    ],
   ],
-  
+
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const content = message.content.text?.toLowerCase() || ''
-    return content.includes('sell') && (content.includes('shares') || content.includes('position'))
+    const content = message.content.text?.toLowerCase() || '';
+    return content.includes('sell') && (content.includes('shares') || content.includes('position'));
   },
-  
+
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
@@ -137,65 +157,79 @@ export const sellSharesAction: Action = {
     _options?: unknown,
     callback?: HandlerCallback
   ): Promise<void> => {
-    const babylonRuntime = runtime as BabylonRuntime
-    
+    const babylonRuntime = runtime as BabylonRuntime;
+
     if (!babylonRuntime.a2aClient?.isConnected()) {
       if (callback) {
         callback({
           text: 'A2A client not connected. Cannot execute trade.',
-          action: 'SELL_PREDICTION_SHARES'
-        })
+          action: 'SELL_PREDICTION_SHARES',
+        });
       }
-      return
+      return;
     }
-    
+
     // Parse message to extract parameters
-    const content = message.content.text || ''
-    const positionIdMatch = content.match(/position[:\s-]+([a-zA-Z0-9-]+)/)
-    const amountMatch = content.match(/(\d+(?:\.\d+)?)\s*(?:shares)/)
-    
+    const content = message.content.text || '';
+    const positionIdMatch = content.match(/position[:\s-]+([a-zA-Z0-9-]+)/);
+    const amountMatch = content.match(/(\d+(?:\.\d+)?)\s*(?:shares)/);
+
     if (!positionIdMatch || !amountMatch) {
       if (callback) {
         callback({
           text: 'Could not parse trade parameters. Please specify position ID and share amount.',
-          action: 'SELL_PREDICTION_SHARES'
-        })
+          action: 'SELL_PREDICTION_SHARES',
+        });
       }
-      return
+      return;
     }
-    
-    const positionId = positionIdMatch[1]!
-    const shares = parseFloat(amountMatch[1]!)
-    
+
+    const positionId = positionIdMatch[1];
+    const amountString = amountMatch[1];
+
+    if (!positionId || !amountString) {
+      if (callback) {
+        callback({
+          text: 'Missing position ID or share amount in trade request.',
+          action: 'SELL_PREDICTION_SHARES',
+        });
+      }
+      return;
+    }
+
+    const shares = parseFloat(amountString);
+
     try {
-      const result = await babylonRuntime.a2aClient.sellShares(
-        positionId,
-        shares
-      ) as { success?: boolean; remainingShares?: number; proceeds?: number; message?: string }
-      
+      const result = (await babylonRuntime.a2aClient.sellShares(positionId, shares)) as {
+        success?: boolean;
+        remainingShares?: number;
+        proceeds?: number;
+        message?: string;
+      };
+
       if (callback) {
         if (result.success === false) {
           callback({
             text: `Failed to sell shares: ${result.message || 'Unknown error'}`,
-            action: 'SELL_PREDICTION_SHARES'
-          })
+            action: 'SELL_PREDICTION_SHARES',
+          });
         } else {
           callback({
             text: `Successfully sold ${shares} shares. Proceeds: $${result.proceeds || 0}. Remaining: ${result.remainingShares || 0} shares`,
-            action: 'SELL_PREDICTION_SHARES'
-          })
+            action: 'SELL_PREDICTION_SHARES',
+          });
         }
       }
     } catch (error) {
       if (callback) {
         callback({
           text: `Error selling shares: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          action: 'SELL_PREDICTION_SHARES'
-        })
+          action: 'SELL_PREDICTION_SHARES',
+        });
       }
     }
-  }
-}
+  },
+};
 
 /**
  * Action: Open Perpetual Position
@@ -209,21 +243,26 @@ export const openPerpPositionAction: Action = {
     [
       {
         name: '{{user1}}',
-        content: { text: 'Open a 5x long position on AAPL with $1000' }
+        content: { text: 'Open a 5x long position on AAPL with $1000' },
       },
       {
         name: '{{agent}}',
-        content: { text: 'Opening 5x long position on AAPL with $1000...', action: 'OPEN_PERP_POSITION' }
-      }
-    ]
+        content: {
+          text: 'Opening 5x long position on AAPL with $1000...',
+          action: 'OPEN_PERP_POSITION',
+        },
+      },
+    ],
   ],
-  
+
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const content = message.content.text?.toLowerCase() || ''
-    return (content.includes('open') || content.includes('long') || content.includes('short')) &&
-           (content.includes('position') || content.includes('perp'))
+    const content = message.content.text?.toLowerCase() || '';
+    return (
+      (content.includes('open') || content.includes('long') || content.includes('short')) &&
+      (content.includes('position') || content.includes('perp'))
+    );
   },
-  
+
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
@@ -231,73 +270,90 @@ export const openPerpPositionAction: Action = {
     _options?: unknown,
     callback?: HandlerCallback
   ): Promise<void> => {
-    const babylonRuntime = runtime as BabylonRuntime
-    
+    const babylonRuntime = runtime as BabylonRuntime;
+
     if (!babylonRuntime.a2aClient?.isConnected()) {
       if (callback) {
         callback({
           text: 'A2A client not connected. Cannot execute trade.',
-          action: 'OPEN_PERP_POSITION'
-        })
+          action: 'OPEN_PERP_POSITION',
+        });
       }
-      return
+      return;
     }
-    
+
     // Parse message to extract parameters
-    const content = message.content.text || ''
-    const tickerMatch = content.match(/\b([A-Z]{2,5})\b/)
-    const amountMatch = content.match(/\$?(\d+(?:\.\d+)?)\s*(?:dollars|\$)?/)
+    const content = message.content.text || '';
+    const tickerMatch = content.match(/\b([A-Z]{2,5})\b/);
+    const amountMatch = content.match(/\$?(\d+(?:\.\d+)?)\s*(?:dollars|\$)?/);
     // const _leverageMatch = content.match(/(\d+)x/)
     // const _sideMatch = content.match(/\b(long|short)\b/i)
-    
+
     if (!tickerMatch || !amountMatch) {
       if (callback) {
         callback({
           text: 'Could not parse trade parameters. Please specify ticker and amount.',
-          action: 'OPEN_PERP_POSITION'
-        })
+          action: 'OPEN_PERP_POSITION',
+        });
       }
-      return
+      return;
     }
-    
-    const ticker = tickerMatch[1]!
-    const amount = parseFloat(amountMatch[1]!)
-    const leverageMatch = content.match(/(\d+)x/)
-    const leverage = leverageMatch ? parseInt(leverageMatch[1]!) : 1
-    const sideMatch = content.match(/\b(long|short)\b/i)
-    const side = (sideMatch?.[1]?.toLowerCase() || 'long') as 'long' | 'short'
-    
+
+    const ticker = tickerMatch[1];
+    const amountString = amountMatch[1];
+
+    if (!ticker || !amountString) {
+      if (callback) {
+        callback({
+          text: 'Missing ticker or amount for perp trade.',
+          action: 'OPEN_PERP_POSITION',
+        });
+      }
+      return;
+    }
+
+    const amount = parseFloat(amountString);
+    const leverageMatch = content.match(/(\d+)x/);
+    const leverage = leverageMatch ? parseInt(leverageMatch[1] ?? '1', 10) : 1;
+    const sideMatch = content.match(/\b(long|short)\b/i);
+    const side = (sideMatch?.[1]?.toLowerCase() || 'long') as 'long' | 'short';
+
     try {
-      const result = await babylonRuntime.a2aClient.openPosition(
+      const result = (await babylonRuntime.a2aClient.openPosition(
         ticker,
         side.toUpperCase() as 'LONG' | 'SHORT',
         amount,
         leverage
-      ) as { success?: boolean; positionId?: string; entryPrice?: number; message?: string }
-      
+      )) as {
+        success?: boolean;
+        positionId?: string;
+        entryPrice?: number;
+        message?: string;
+      };
+
       if (callback) {
         if (result.success === false) {
           callback({
             text: `Failed to open position: ${result.message || 'Unknown error'}`,
-            action: 'OPEN_PERP_POSITION'
-          })
+            action: 'OPEN_PERP_POSITION',
+          });
         } else {
           callback({
             text: `Successfully opened ${leverage}x ${side} position on ${ticker}. Entry price: $${result.entryPrice || 0}. Position ID: ${result.positionId || 'unknown'}`,
-            action: 'OPEN_PERP_POSITION'
-          })
+            action: 'OPEN_PERP_POSITION',
+          });
         }
       }
     } catch (error) {
       if (callback) {
         callback({
           text: `Error opening position: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          action: 'OPEN_PERP_POSITION'
-        })
+          action: 'OPEN_PERP_POSITION',
+        });
       }
     }
-  }
-}
+  },
+};
 
 /**
  * Action: Close Perpetual Position
@@ -311,20 +367,20 @@ export const closePerpPositionAction: Action = {
     [
       {
         name: '{{user1}}',
-        content: { text: 'Close my AAPL position' }
+        content: { text: 'Close my AAPL position' },
       },
       {
         name: '{{agent}}',
-        content: { text: 'Closing position...', action: 'CLOSE_PERP_POSITION' }
-      }
-    ]
+        content: { text: 'Closing position...', action: 'CLOSE_PERP_POSITION' },
+      },
+    ],
   ],
-  
+
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const content = message.content.text?.toLowerCase() || ''
-    return content.includes('close') && content.includes('position')
+    const content = message.content.text?.toLowerCase() || '';
+    return content.includes('close') && content.includes('position');
   },
-  
+
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
@@ -332,71 +388,74 @@ export const closePerpPositionAction: Action = {
     _options?: unknown,
     callback?: HandlerCallback
   ): Promise<void> => {
-    const babylonRuntime = runtime as BabylonRuntime
-    
+    const babylonRuntime = runtime as BabylonRuntime;
+
     if (!babylonRuntime.a2aClient?.isConnected()) {
       if (callback) {
         callback({
           text: 'A2A client not connected. Cannot close position.',
-          action: 'CLOSE_PERP_POSITION'
-        })
+          action: 'CLOSE_PERP_POSITION',
+        });
       }
-      return
+      return;
     }
-    
+
     // Parse message to extract ticker or position ID
-    const content = message.content.text || ''
-    const tickerMatch = content.match(/\b([A-Z]{2,5})\b/)
-    const positionIdMatch = content.match(/position[:\s-]+([a-zA-Z0-9-]+)/)
-    
+    const content = message.content.text || '';
+    const tickerMatch = content.match(/\b([A-Z]{2,5})\b/);
+    const positionIdMatch = content.match(/position[:\s-]+([a-zA-Z0-9-]+)/);
+
     if (!tickerMatch && !positionIdMatch) {
       if (callback) {
         callback({
           text: 'Could not parse position. Please specify ticker or position ID.',
-          action: 'CLOSE_PERP_POSITION'
-        })
+          action: 'CLOSE_PERP_POSITION',
+        });
       }
-      return
+      return;
     }
-    
-    const positionId = positionIdMatch?.[1] || (tickerMatch ? `perp-${tickerMatch[1]}` : '')
-    
+
+    const tickerValue = tickerMatch?.[1];
+    const positionId = positionIdMatch?.[1] || (tickerValue ? `perp-${tickerValue}` : '');
+
     if (!positionId) {
       if (callback) {
         callback({
           text: 'Could not determine position ID. Please specify ticker or position ID.',
-          action: 'CLOSE_PERP_POSITION'
-        })
+          action: 'CLOSE_PERP_POSITION',
+        });
       }
-      return
+      return;
     }
-    
+
     try {
-      const result = await babylonRuntime.a2aClient.closePosition(
-        positionId
-      ) as { success?: boolean; exitPrice?: number; pnl?: number; message?: string }
-      
+      const result = (await babylonRuntime.a2aClient.closePosition(positionId)) as {
+        success?: boolean;
+        exitPrice?: number;
+        pnl?: number;
+        message?: string;
+      };
+
       if (callback) {
         if (result.success === false) {
           callback({
             text: `Failed to close position: ${result.message || 'Unknown error'}`,
-            action: 'CLOSE_PERP_POSITION'
-          })
+            action: 'CLOSE_PERP_POSITION',
+          });
         } else {
           callback({
             text: `Successfully closed position. Exit price: $${result.exitPrice || 0}. P&L: ${result.pnl && result.pnl >= 0 ? '+' : ''}$${result.pnl || 0}`,
-            action: 'CLOSE_PERP_POSITION'
-          })
+            action: 'CLOSE_PERP_POSITION',
+          });
         }
       }
     } catch (error) {
       if (callback) {
         callback({
           text: `Error closing position: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          action: 'CLOSE_PERP_POSITION'
-        })
+          action: 'CLOSE_PERP_POSITION',
+        });
       }
     }
-  }
-}
-
+  },
+};

@@ -1,17 +1,17 @@
 /**
  * Integration Tests for Trending Topics & News Article System
- * 
+ *
  * Tests the complete flow from question creation through resolution
  * with trending topics and news article generation.
  */
 
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
-import { TrendingTopicsEngine } from '../TrendingTopicsEngine';
-import { NewsArticlePacingEngine } from '../NewsArticlePacingEngine';
+import type { BabylonLLMClient } from '@/generator/llm/openai-client';
+import type { Actor, FeedPost, Organization, Question } from '@/shared/types';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { ArticleGenerator } from '../ArticleGenerator';
 import { FeedGenerator } from '../FeedGenerator';
-import type { BabylonLLMClient } from '@/generator/llm/openai-client';
-import type { FeedPost, Question, Organization, Actor } from '@/shared/types';
+import { NewsArticlePacingEngine } from '../NewsArticlePacingEngine';
+import { TrendingTopicsEngine } from '../TrendingTopicsEngine';
 
 describe('Trending Topics & News Integration', () => {
   let trendEngine: TrendingTopicsEngine;
@@ -32,10 +32,30 @@ describe('Trending Topics & News Integration', () => {
   };
 
   const mockOrgs: Organization[] = [
-    { id: 'msdnc', name: 'MSDNC', type: 'media', description: 'Progressive news network' },
-    { id: 'the-fud', name: 'The Fud', type: 'media', description: 'Investigative journalism' },
-    { id: 'channel-7', name: 'Channel 7', type: 'media', description: 'Breaking news' },
-    { id: 'xitter', name: 'Xitter', type: 'media', description: 'Social media platform' },
+    {
+      id: 'msdnc',
+      name: 'MSDNC',
+      type: 'media',
+      description: 'Progressive news network',
+    },
+    {
+      id: 'the-fud',
+      name: 'The Fud',
+      type: 'media',
+      description: 'Investigative journalism',
+    },
+    {
+      id: 'channel-7',
+      name: 'Channel 7',
+      type: 'media',
+      description: 'Breaking news',
+    },
+    {
+      id: 'xitter',
+      name: 'Xitter',
+      type: 'media',
+      description: 'Social media platform',
+    },
     { id: 'bbc', name: 'BBC', type: 'media', description: 'Global news' },
   ];
 
@@ -60,12 +80,18 @@ describe('Trending Topics & News Integration', () => {
         if (prompt.includes('TRENDING TOPICS')) {
           return {
             trends: [
-              { trendName: 'AI Breakthrough Buzz', description: 'Tech community debates potential TechCorp announcement.' },
-              { trendName: 'Market Speculation', description: 'Traders position ahead of expected news.' },
-            ]
+              {
+                trendName: 'AI Breakthrough Buzz',
+                description: 'Tech community debates potential TechCorp announcement.',
+              },
+              {
+                trendName: 'Market Speculation',
+                description: 'Traders position ahead of expected news.',
+              },
+            ],
           };
         }
-        
+
         if (prompt.includes('journalist writing for')) {
           return {
             response: {
@@ -76,12 +102,12 @@ describe('Trending Topics & News Integration', () => {
               sentiment: 'positive',
               category: 'tech',
               tags: { tag: ['ai', 'techcorp', 'breakthrough'] },
-            }
+            },
           };
         }
-        
+
         return {};
-      })
+      }),
     } as unknown as BabylonLLMClient;
 
     trendEngine = new TrendingTopicsEngine(mockLLM);
@@ -120,13 +146,7 @@ describe('Trending Topics & News Integration', () => {
         expect(article.title).toBeTruthy();
         expect(article.content.length).toBeGreaterThan(100);
 
-        pacingEngine.recordArticle(
-          mockQuestion.id as number,
-          org.id,
-          'breaking',
-          article.id,
-          10
-        );
+        pacingEngine.recordArticle(mockQuestion.id as number, org.id, 'breaking', article.id, 10);
 
         articles.push(article);
       }
@@ -160,13 +180,7 @@ describe('Trending Topics & News Integration', () => {
         );
 
         expect(article).toBeDefined();
-        pacingEngine.recordArticle(
-          mockQuestion.id as number,
-          org.id,
-          'commentary',
-          article.id,
-          50
-        );
+        pacingEngine.recordArticle(mockQuestion.id as number, org.id, 'commentary', article.id, 50);
       }
 
       const stats = pacingEngine.getStageStats(mockQuestion.id as number);
@@ -211,19 +225,19 @@ describe('Trending Topics & News Integration', () => {
     it('should maintain total article count < 10 per question', async () => {
       // Breaking
       const breaking = pacingEngine.selectOrgsForStage(mockOrgs, 1, 'breaking');
-      breaking.forEach(org => {
+      breaking.forEach((org) => {
         pacingEngine.recordArticle(1, org.id, 'breaking', `article-${org.id}-1`, 10);
       });
 
       // Commentary
       const commentary = pacingEngine.selectOrgsForStage(mockOrgs, 1, 'commentary');
-      commentary.forEach(org => {
+      commentary.forEach((org) => {
         pacingEngine.recordArticle(1, org.id, 'commentary', `article-${org.id}-2`, 50);
       });
 
       // Resolution
       const resolution = pacingEngine.selectOrgsForStage(mockOrgs, 1, 'resolution');
-      resolution.forEach(org => {
+      resolution.forEach((org) => {
         pacingEngine.recordArticle(1, org.id, 'resolution', `article-${org.id}-3`, 100);
       });
 
@@ -267,9 +281,9 @@ describe('Trending Topics & News Integration', () => {
 
     it('should provide trend context to feed generator', () => {
       feedGen.updateTrendContext();
-      
+
       // Context should never be empty
-      const context = feedGen['trendContext']; // Access private field for testing
+      const context = feedGen.trendContext; // Access private field for testing
       expect(context).toBeDefined();
       expect(context.trim().length).toBeGreaterThan(0);
       expect(context).toContain('TRENDING TOPICS');
@@ -293,7 +307,7 @@ describe('Trending Topics & News Integration', () => {
       feedGen.updateTrendContext();
 
       // Verify context was set
-      const context = feedGen['trendContext'];
+      const context = feedGen.trendContext;
       expect(context).toContain('AI Breakthrough Buzz');
     });
   });
@@ -334,7 +348,7 @@ describe('Trending Topics & News Integration', () => {
       await expect(async () => {
         await articleGen.generateArticleForQuestion(
           invalidQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           mockActors,
           []
@@ -364,7 +378,7 @@ describe('Trending Topics & News Integration', () => {
       await expect(async () => {
         await articleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           [], // Empty!
           []
@@ -376,11 +390,11 @@ describe('Trending Topics & News Integration', () => {
       const failingLLM = {
         generateJSON: mock(async () => {
           throw new Error('LLM timeout');
-        })
+        }),
       } as unknown as BabylonLLMClient;
 
       const engine = new TrendingTopicsEngine(failingLLM);
-      
+
       const posts: FeedPost[] = [
         {
           id: 'post-1',
@@ -395,7 +409,7 @@ describe('Trending Topics & News Integration', () => {
 
       // Should not throw - keeps previous trends
       await engine.updateTrends(posts, 10);
-      
+
       // Should have no trends (failed to generate)
       expect(engine.getTrends()).toEqual([]);
     });
@@ -405,14 +419,14 @@ describe('Trending Topics & News Integration', () => {
     it('should never provide empty trend context to agents', () => {
       // Before any updates
       feedGen.updateTrendContext();
-      let context = feedGen['trendContext'];
+      let context = feedGen.trendContext;
       expect(context.trim()).not.toBe('');
       expect(context).toContain('TRENDING TOPICS');
 
       // After trend update
       trendEngine.updateTrends([], 10); // Empty posts
       feedGen.updateTrendContext();
-      context = feedGen['trendContext'];
+      context = feedGen.trendContext;
       expect(context.trim()).not.toBe('');
       expect(context).toContain('TRENDING TOPICS');
     });
@@ -443,8 +457,8 @@ describe('Trending Topics & News Integration', () => {
             sentiment: 'neutral',
             category: 'tech',
             tags: { tag: ['test'] },
-          }
-        }))
+          },
+        })),
       } as unknown as BabylonLLMClient;
 
       const badArticleGen = new ArticleGenerator(badLLM);
@@ -452,7 +466,7 @@ describe('Trending Topics & News Integration', () => {
       await expect(async () => {
         await badArticleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           mockActors,
           []
@@ -471,8 +485,8 @@ describe('Trending Topics & News Integration', () => {
             sentiment: 'neutral',
             category: 'tech',
             tags: { tag: ['test'] },
-          }
-        }))
+          },
+        })),
       } as unknown as BabylonLLMClient;
 
       const badArticleGen = new ArticleGenerator(badLLM);
@@ -480,7 +494,7 @@ describe('Trending Topics & News Integration', () => {
       await expect(async () => {
         await badArticleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           mockActors,
           []
@@ -499,8 +513,8 @@ describe('Trending Topics & News Integration', () => {
             sentiment: 'neutral',
             category: 'tech',
             tags: { tag: ['test'] },
-          }
-        }))
+          },
+        })),
       } as unknown as BabylonLLMClient;
 
       const badArticleGen = new ArticleGenerator(badLLM);
@@ -508,7 +522,7 @@ describe('Trending Topics & News Integration', () => {
       await expect(async () => {
         await badArticleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           mockActors,
           []
@@ -523,12 +537,12 @@ describe('Trending Topics & News Integration', () => {
       const q2Orgs = pacingEngine.selectOrgsForStage(mockOrgs, 2, 'breaking');
 
       // Record Q1 articles
-      q1Orgs.forEach(org => {
+      q1Orgs.forEach((org) => {
         pacingEngine.recordArticle(1, org.id, 'breaking', `article-q1-${org.id}`, 10);
       });
 
       // Record Q2 articles
-      q2Orgs.forEach(org => {
+      q2Orgs.forEach((org) => {
         pacingEngine.recordArticle(2, org.id, 'breaking', `article-q2-${org.id}`, 15);
       });
 
@@ -634,4 +648,3 @@ describe('Trending Topics & News Integration', () => {
     });
   });
 });
-

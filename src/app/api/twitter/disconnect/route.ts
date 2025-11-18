@@ -1,13 +1,13 @@
 /**
  * Twitter Disconnect API
- * 
+ *
  * @route POST /api/twitter/disconnect - Disconnect Twitter account
  * @access Authenticated
- * 
+ *
  * @description
  * Disconnects user's Twitter account by removing OAuth 2.0 credentials from
  * user profile. Clears all Twitter-related fields.
- * 
+ *
  * @openapi
  * /api/twitter/disconnect:
  *   post:
@@ -29,7 +29,7 @@
  *                   type: boolean
  *       401:
  *         description: Unauthorized
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/twitter/disconnect', {
@@ -39,16 +39,16 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { authenticate } from '@/lib/api/auth-middleware'
-import { prisma } from '@/lib/prisma'
-import { logger } from '@/lib/logger'
-import { requireUserByIdentifier } from '@/lib/users/user-lookup'
+import { authenticate } from '@/lib/api/auth-middleware';
+import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { requireUserByIdentifier } from '@/lib/users/user-lookup';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
-  const authUser = await authenticate(request)
-  const user = await requireUserByIdentifier(authUser.userId, { id: true })
+  const authUser = await authenticate(request);
+  const user = await requireUserByIdentifier(authUser.userId, { id: true });
 
   // Clear Twitter OAuth 2.0 credentials from user
   await prisma.user.update({
@@ -61,10 +61,9 @@ export async function POST(request: NextRequest) {
       twitterUsername: null,
       hasTwitter: false,
     },
-  })
+  });
 
-  logger.info('Twitter account disconnected', { userId: user.id }, 'TwitterDisconnect')
+  logger.info('Twitter account disconnected', { userId: user.id }, 'TwitterDisconnect');
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true });
 }
-

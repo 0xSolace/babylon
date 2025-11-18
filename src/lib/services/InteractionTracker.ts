@@ -1,29 +1,31 @@
 /**
  * Interaction Tracker
- * 
+ *
  * Tracks all NPC-to-NPC interactions for relationship evolution.
  * Simple text-based system - just records what happened.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { generateSnowflakeId } from '@/lib/snowflake';
 import type { Actor } from '@/shared/types';
 
-export class InteractionTracker {
+const sortPair = (first: string, second: string): [string, string] => {
+  return first.localeCompare(second) <= 0 ? [first, second] : [second, first];
+};
+
+export const InteractionTracker = {
   /**
    * Track a post mentioning another NPC
    */
-  static async trackPostMention(
+  async trackPostMention(
     authorId: string,
     mentionedId: string,
     postContent: string,
     sentiment: number
   ): Promise<void> {
     // Sort IDs for consistency
-    const sorted = [authorId, mentionedId].sort();
-    const id1 = sorted[0]!;
-    const id2 = sorted[1]!;
+    const [id1, id2] = sortPair(authorId, mentionedId);
 
     await prisma.nPCInteraction.create({
       data: {
@@ -38,21 +40,23 @@ export class InteractionTracker {
       },
     });
 
-    logger.debug('Tracked post mention', { authorId, mentionedId, sentiment }, 'InteractionTracker');
-  }
+    logger.debug(
+      'Tracked post mention',
+      { authorId, mentionedId, sentiment },
+      'InteractionTracker'
+    );
+  },
 
   /**
    * Track a reply between NPCs
    */
-  static async trackReply(
+  async trackReply(
     replierId: string,
     originalAuthorId: string,
     replyContent: string,
     sentiment: number
   ): Promise<void> {
-    const sorted = [replierId, originalAuthorId].sort();
-    const id1 = sorted[0]!;
-    const id2 = sorted[1]!;
+    const [id1, id2] = sortPair(replierId, originalAuthorId);
 
     await prisma.nPCInteraction.create({
       data: {
@@ -68,24 +72,26 @@ export class InteractionTracker {
     });
 
     logger.debug('Tracked reply', { replierId, originalAuthorId, sentiment }, 'InteractionTracker');
-  }
+  },
 
   /**
    * Track article mentioning multiple NPCs
    */
-  static async trackArticleMention(
+  async trackArticleMention(
     actorIds: string[],
     articleTitle: string,
     articleSentiment: number
   ): Promise<void> {
     // Create interactions for all pairs
     for (let i = 0; i < actorIds.length; i++) {
+      const actor1 = actorIds[i];
+      if (!actor1) continue;
+
       for (let j = i + 1; j < actorIds.length; j++) {
-        const actor1 = actorIds[i]!;
-        const actor2 = actorIds[j]!;
-        const sorted = [actor1, actor2].sort();
-        const id1 = sorted[0]!;
-        const id2 = sorted[1]!;
+        const actor2 = actorIds[j];
+        if (!actor2) continue;
+
+        const [id1, id2] = sortPair(actor1, actor2);
 
         await prisma.nPCInteraction.create({
           data: {
@@ -102,13 +108,17 @@ export class InteractionTracker {
       }
     }
 
-    logger.debug('Tracked article mentions', { actorCount: actorIds.length, articleTitle }, 'InteractionTracker');
-  }
+    logger.debug(
+      'Tracked article mentions',
+      { actorCount: actorIds.length, articleTitle },
+      'InteractionTracker'
+    );
+  },
 
   /**
    * Track event involving multiple NPCs
    */
-  static async trackEventInvolvement(
+  async trackEventInvolvement(
     actorIds: string[],
     eventDescription: string,
     eventOutcome: 'positive' | 'negative' | 'neutral'
@@ -121,12 +131,14 @@ export class InteractionTracker {
 
     // Create interactions for all pairs
     for (let i = 0; i < actorIds.length; i++) {
+      const actor1 = actorIds[i];
+      if (!actor1) continue;
+
       for (let j = i + 1; j < actorIds.length; j++) {
-        const actor1 = actorIds[i]!;
-        const actor2 = actorIds[j]!;
-        const sorted = [actor1, actor2].sort();
-        const id1 = sorted[0]!;
-        const id2 = sorted[1]!;
+        const actor2 = actorIds[j];
+        if (!actor2) continue;
+
+        const [id1, id2] = sortPair(actor1, actor2);
 
         await prisma.nPCInteraction.create({
           data: {
@@ -136,23 +148,30 @@ export class InteractionTracker {
             interactionType: 'event',
             sentiment: sentimentMap[eventOutcome],
             context: `both involved in: ${eventDescription.substring(0, 100)}`,
-            metadata: { eventDescription: eventDescription.substring(0, 200), outcome: eventOutcome },
+            metadata: {
+              eventDescription: eventDescription.substring(0, 200),
+              outcome: eventOutcome,
+            },
             timestamp: new Date(),
           },
         });
       }
     }
 
-    logger.debug('Tracked event involvement', { actorCount: actorIds.length, eventDescription }, 'InteractionTracker');
-  }
+    logger.debug(
+      'Tracked event involvement',
+      { actorCount: actorIds.length, eventDescription },
+      'InteractionTracker'
+    );
+  },
 
   /**
    * Extract actor mentions from post content
    * Looks for actor names (simple text matching)
    */
-  static extractMentions(postContent: string, allActors: Actor[]): string[] {
+  extractMentions(postContent: string, allActors: Actor[]): string[] {
     const mentions: string[] = [];
-    
+
     for (const actor of allActors) {
       // Check for actor name in post
       if (postContent.includes(actor.name)) {
@@ -161,12 +180,12 @@ export class InteractionTracker {
     }
 
     return [...new Set(mentions)]; // Dedupe
-  }
+  },
 
   /**
    * Simple sentiment analysis from text
    */
-  static analyzeSentiment(text: string): number {
+  analyzeSentiment(text: string): number {
     const positive = /\b(great|good|amazing|love|support|agree|brilliant|smart)\b/gi;
     const negative = /\b(terrible|bad|awful|hate|stupid|wrong|fail|disaster|idiot)\b/gi;
 
@@ -177,6 +196,5 @@ export class InteractionTracker {
 
     const total = positiveCount + negativeCount;
     return ((positiveCount - negativeCount) / total) * 0.8; // Scale to -0.8 to 0.8
-  }
-}
-
+  },
+};

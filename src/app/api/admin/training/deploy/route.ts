@@ -1,13 +1,13 @@
 /**
  * Admin Training Deploy Model API
- * 
+ *
  * @route POST /api/admin/training/deploy - Deploy model version
  * @access Admin
- * 
+ *
  * @description
  * Deploys a trained model version to agents. Supports gradual rollout with
  * percentage-based deployment strategy.
- * 
+ *
  * @openapi
  * /api/admin/training/deploy:
  *   post:
@@ -46,7 +46,7 @@
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
- * 
+ *
  * @example
  * ```typescript
  * await fetch('/api/admin/training/deploy', {
@@ -57,9 +57,9 @@
  * ```
  */
 
+import { modelDeployer } from '@/lib/training/ModelDeployer';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { modelDeployer } from '@/lib/training/ModelDeployer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -67,28 +67,23 @@ export async function POST(request: NextRequest) {
     const { modelVersion, strategy = 'gradual', rolloutPercentage = 10 } = body;
 
     if (!modelVersion) {
-      return NextResponse.json(
-        { error: 'Model version required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Model version required' }, { status: 400 });
     }
 
     const result = await modelDeployer.deploy({
       modelVersion,
       strategy,
-      rolloutPercentage
+      rolloutPercentage,
     });
 
     return NextResponse.json(result);
-
   } catch (error) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Deployment failed'
+        error: error instanceof Error ? error.message : 'Deployment failed',
       },
       { status: 500 }
     );
   }
 }
-

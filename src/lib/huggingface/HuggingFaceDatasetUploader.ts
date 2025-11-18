@@ -1,16 +1,16 @@
 /**
  * HuggingFace Dataset Uploader
- * 
+ *
  * Prepares and uploads benchmark datasets to HuggingFace Hub for public access.
  * Creates dataset cards with visualizations, metrics, and usage examples.
  */
 
-import { promises as fs } from 'fs';
-import * as path from 'path';
-import { logger } from '@/lib/logger';
 import type { SimulationMetrics } from '@/lib/benchmark/SimulationEngine';
+import { logger } from '@/lib/logger';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 
-export interface BenchmarkRecord {
+export type BenchmarkRecord = {
   benchmarkId: string;
   modelId: string;
   modelVersion: string;
@@ -23,9 +23,9 @@ export interface BenchmarkRecord {
     markets: number;
     ticks: number;
   };
-}
+};
 
-export interface DatasetMetadata {
+export type DatasetMetadata = {
   datasetName: string;
   version: string;
   description: string;
@@ -34,30 +34,31 @@ export interface DatasetMetadata {
   models: string[];
   benchmarkTypes: string[];
   license: string;
-}
+};
 
-export interface UploadOptions {
+export type UploadOptions = {
   datasetName: string; // e.g., 'babylonlabs/agent-benchmarks'
   version?: string;
   description?: string;
   private?: boolean;
   benchmarkDir?: string;
   outputDir?: string;
-}
+};
 
-export interface UploadResult {
+export type UploadResult = {
   success: boolean;
   datasetUrl?: string;
   version: string;
   filesUploaded: number;
   error?: string;
-}
+};
 
 export class HuggingFaceDatasetUploader {
   private huggingFaceToken: string | undefined;
 
   constructor(huggingFaceToken?: string) {
-    this.huggingFaceToken = huggingFaceToken || process.env.HUGGING_FACE_TOKEN || process.env.HF_TOKEN;
+    this.huggingFaceToken =
+      huggingFaceToken || process.env.HUGGING_FACE_TOKEN || process.env.HF_TOKEN;
   }
 
   /**
@@ -65,17 +66,22 @@ export class HuggingFaceDatasetUploader {
    */
   async uploadDataset(options: UploadOptions): Promise<UploadResult> {
     try {
-      logger.info('Starting HuggingFace dataset upload', { datasetName: options.datasetName });
+      logger.info('Starting HuggingFace dataset upload', {
+        datasetName: options.datasetName,
+      });
 
       // Validate token
       if (!this.huggingFaceToken) {
-        throw new Error('HuggingFace token not configured. Set HUGGING_FACE_TOKEN or HF_TOKEN environment variable.');
+        throw new Error(
+          'HuggingFace token not configured. Set HUGGING_FACE_TOKEN or HF_TOKEN environment variable.'
+        );
       }
 
       // Set defaults
       const version = options.version || this.generateVersion();
       const benchmarkDir = options.benchmarkDir || path.join(process.cwd(), 'benchmarks');
-      const outputDir = options.outputDir || path.join(process.cwd(), 'exports', 'huggingface', version);
+      const outputDir =
+        options.outputDir || path.join(process.cwd(), 'exports', 'huggingface', version);
 
       // Step 1: Collect benchmark data
       logger.info('Collecting benchmark data', { benchmarkDir });
@@ -89,7 +95,7 @@ export class HuggingFaceDatasetUploader {
       // Step 2: Prepare dataset files
       logger.info('Preparing dataset files', { outputDir });
       await fs.mkdir(outputDir, { recursive: true });
-      
+
       const metadata = await this.prepareDatasetFiles(benchmarks, outputDir, {
         datasetName: options.datasetName,
         version,
@@ -101,11 +107,15 @@ export class HuggingFaceDatasetUploader {
       await this.generateDatasetCard(metadata, benchmarks, outputDir);
 
       // Step 4: Create repository if it doesn't exist
-      logger.info('Ensuring repository exists', { datasetName: options.datasetName });
+      logger.info('Ensuring repository exists', {
+        datasetName: options.datasetName,
+      });
       await this.ensureRepository(options.datasetName, options.private ?? false);
 
       // Step 5: Upload to HuggingFace
-      logger.info('Uploading to HuggingFace', { datasetName: options.datasetName });
+      logger.info('Uploading to HuggingFace', {
+        datasetName: options.datasetName,
+      });
       const filesUploaded = await this.uploadToHub(
         options.datasetName,
         outputDir,
@@ -113,8 +123,11 @@ export class HuggingFaceDatasetUploader {
       );
 
       const datasetUrl = `https://huggingface.co/datasets/${options.datasetName}`;
-      
-      logger.info('Dataset uploaded successfully', { datasetUrl, filesUploaded });
+
+      logger.info('Dataset uploaded successfully', {
+        datasetUrl,
+        filesUploaded,
+      });
 
       return {
         success: true,
@@ -174,10 +187,10 @@ export class HuggingFaceDatasetUploader {
         if (file.endsWith('.json') && file.startsWith('baseline-')) {
           const filePath = path.join(baselinesDir, file);
           const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-          
+
           // Skip if no metrics
           if (!data.metrics) continue;
-          
+
           records.push({
             benchmarkId: data.benchmark?.id || data.benchmark?.path || file.replace('.json', ''),
             modelId: data.model?.modelId || 'unknown',
@@ -189,7 +202,9 @@ export class HuggingFaceDatasetUploader {
               duration: data.timing?.totalDuration || data.metrics.timing?.totalDuration || 0,
               tickInterval: 60,
               markets: 10,
-              ticks: Math.floor((data.timing?.totalDuration || data.metrics.timing?.totalDuration || 0) / 60),
+              ticks: Math.floor(
+                (data.timing?.totalDuration || data.metrics.timing?.totalDuration || 0) / 60
+              ),
             },
           });
         }
@@ -204,10 +219,10 @@ export class HuggingFaceDatasetUploader {
         const metricsFile = path.join(testBaselinesDir, subdir, 'metrics.json');
         if (await this.fileExists(metricsFile)) {
           const data = JSON.parse(await fs.readFile(metricsFile, 'utf-8'));
-          
+
           // Skip if no required fields
           if (!data.totalPnl && !data.predictionMetrics) continue;
-          
+
           records.push({
             benchmarkId: data.benchmarkId || 'test-benchmark',
             modelId: subdir,
@@ -239,7 +254,7 @@ export class HuggingFaceDatasetUploader {
   ): Promise<DatasetMetadata> {
     // Create data.jsonl with all benchmark records
     const jsonlPath = path.join(outputDir, 'data.jsonl');
-    const jsonlLines = benchmarks.map(b => JSON.stringify(b)).join('\n');
+    const jsonlLines = benchmarks.map((b) => JSON.stringify(b)).join('\n');
     await fs.writeFile(jsonlPath, jsonlLines);
 
     // Create metadata.json
@@ -249,8 +264,8 @@ export class HuggingFaceDatasetUploader {
       description: options.description,
       createdAt: new Date().toISOString(),
       totalBenchmarks: benchmarks.length,
-      models: Array.from(new Set(benchmarks.map(b => b.modelName))),
-      benchmarkTypes: Array.from(new Set(benchmarks.map(b => b.benchmarkId))),
+      models: Array.from(new Set(benchmarks.map((b) => b.modelName))),
+      benchmarkTypes: Array.from(new Set(benchmarks.map((b) => b.benchmarkId))),
       license: 'MIT',
     };
 
@@ -419,13 +434,17 @@ For questions or issues, please open an issue on the Babylon repository.
    */
   private generateLeaderboardTable(benchmarks: BenchmarkRecord[]): string {
     // Group by model and calculate averages
-    const modelStats = new Map<string, { pnl: number[]; accuracy: number[]; optimality: number[] }>();
+    const modelStats = new Map<
+      string,
+      { pnl: number[]; accuracy: number[]; optimality: number[] }
+    >();
 
     for (const benchmark of benchmarks) {
-      if (!modelStats.has(benchmark.modelName)) {
-        modelStats.set(benchmark.modelName, { pnl: [], accuracy: [], optimality: [] });
+      let stats = modelStats.get(benchmark.modelName);
+      if (!stats) {
+        stats = { pnl: [], accuracy: [], optimality: [] };
+        modelStats.set(benchmark.modelName, stats);
       }
-      const stats = modelStats.get(benchmark.modelName)!;
       stats.pnl.push(benchmark.metrics.totalPnl);
       stats.accuracy.push(benchmark.metrics.predictionMetrics.accuracy);
       stats.optimality.push(benchmark.metrics.optimalityScore);
@@ -456,13 +475,33 @@ For questions or issues, please open an issue on the Babylon repository.
    * Calculate summary statistics
    */
   private calculateSummaryStatistics(benchmarks: BenchmarkRecord[]): {
-    pnl: { mean: number; median: number; std: number; min: number; max: number };
-    accuracy: { mean: number; median: number; std: number; min: number; max: number };
-    optimality: { mean: number; median: number; std: number; min: number; max: number };
+    pnl: {
+      mean: number;
+      median: number;
+      std: number;
+      min: number;
+      max: number;
+    };
+    accuracy: {
+      mean: number;
+      median: number;
+      std: number;
+      min: number;
+      max: number;
+    };
+    optimality: {
+      mean: number;
+      median: number;
+      std: number;
+      min: number;
+      max: number;
+    };
   } {
-    const pnls = benchmarks.map(b => b.metrics.totalPnl).sort((a, b) => a - b);
-    const accuracies = benchmarks.map(b => b.metrics.predictionMetrics.accuracy).sort((a, b) => a - b);
-    const optimalities = benchmarks.map(b => b.metrics.optimalityScore).sort((a, b) => a - b);
+    const pnls = benchmarks.map((b) => b.metrics.totalPnl).sort((a, b) => a - b);
+    const accuracies = benchmarks
+      .map((b) => b.metrics.predictionMetrics.accuracy)
+      .sort((a, b) => a - b);
+    const optimalities = benchmarks.map((b) => b.metrics.optimalityScore).sort((a, b) => a - b);
 
     return {
       pnl: this.calculateStats(pnls),
@@ -474,14 +513,20 @@ For questions or issues, please open an issue on the Babylon repository.
   /**
    * Calculate statistics for an array of numbers
    */
-  private calculateStats(values: number[]): { mean: number; median: number; std: number; min: number; max: number } {
+  private calculateStats(values: number[]): {
+    mean: number;
+    median: number;
+    std: number;
+    min: number;
+    max: number;
+  } {
     if (values.length === 0) {
       return { mean: 0, median: 0, std: 0, min: 0, max: 0 };
     }
 
     const mean = values.reduce((a, b) => a + b, 0) / values.length;
     const median = values[Math.floor(values.length / 2)] || 0;
-    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + (val - mean) ** 2, 0) / values.length;
     const std = Math.sqrt(variance);
     const min = Math.min(...values);
     const max = Math.max(...values);
@@ -499,7 +544,7 @@ For questions or issues, please open an issue on the Babylon repository.
     }
 
     const { HuggingFaceUploadUtil } = await import('./shared/HuggingFaceUploadUtil');
-    
+
     await HuggingFaceUploadUtil.ensureRepository(
       datasetName,
       'dataset',
@@ -524,7 +569,7 @@ For questions or issues, please open an issue on the Babylon repository.
     try {
       // Use shared upload utility
       const { HuggingFaceUploadUtil } = await import('./shared/HuggingFaceUploadUtil');
-      
+
       return await HuggingFaceUploadUtil.uploadDirectory(
         datasetName,
         'dataset',
@@ -533,7 +578,7 @@ For questions or issues, please open an issue on the Babylon repository.
       );
     } catch (error) {
       logger.error('Failed to upload to HuggingFace Hub', { error });
-      
+
       // Provide helpful manual upload instructions
       const { HuggingFaceUploadUtil } = await import('./shared/HuggingFaceUploadUtil');
       const instructions = HuggingFaceUploadUtil.getManualUploadInstructions(
@@ -541,9 +586,9 @@ For questions or issues, please open an issue on the Babylon repository.
         'dataset',
         localDir
       );
-      
+
       logger.info('To upload manually:', { instructions });
-      
+
       throw error;
     }
   }
@@ -571,4 +616,3 @@ For questions or issues, please open an issue on the Babylon repository.
     }
   }
 }
-

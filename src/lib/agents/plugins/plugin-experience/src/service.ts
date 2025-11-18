@@ -1,10 +1,10 @@
 import {
   type IAgentRuntime,
+  ModelType,
+  Service,
   type ServiceTypeName,
   type UUID,
   logger,
-  ModelType,
-  Service
 } from '@elizaos/core';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -13,10 +13,12 @@ import {
   type ExperienceQuery,
   ExperienceServiceType,
   ExperienceType,
-  OutcomeType
+  OutcomeType,
 } from './types';
 import { ConfidenceDecayManager } from './utils/confidenceDecay';
 import { ExperienceRelationshipManager } from './utils/experienceRelationships';
+
+// biome-disable lint/correctness/useHookAtTopLevel
 
 export class ExperienceService extends Service {
   static override serviceType: ServiceTypeName = ExperienceServiceType.EXPERIENCE;
@@ -45,79 +47,83 @@ export class ExperienceService extends Service {
 
   private async loadExperiences(): Promise<void> {
     try {
-      // Load experiences from memory/knowledge service
-      // Filter memories by checking content.type after fetching
       const allMemories = await this.runtime.getMemories({
         entityId: this.runtime.agentId,
         count: this.maxExperiences,
         tableName: 'memories',
       });
-      
-      // Filter for experience type memories
-      const memories = allMemories.filter(m => m.content.type === 'experience');
+
+      const memories = allMemories.filter((memory) => memory.content.type === 'experience');
+
+      const toTimestamp = (value: number | Date | undefined, fallback: number): number => {
+        if (value === undefined) return fallback;
+        if (typeof value === 'number') return value;
+        if (value instanceof Date) return value.getTime();
+        return fallback;
+      };
 
       for (const memory of memories) {
         try {
           const experienceData = memory.content.data as Partial<Experience> | null;
-          if (experienceData && experienceData.id) {
-            // Memory.createdAt is a number (timestamp) from @elizaos/core
-            const memoryCreatedAt = (typeof memory.createdAt === 'number' ? memory.createdAt : Date.now());
-            
-            // Convert experienceData timestamps to numbers (they should already be numbers, but handle Date objects if present)
-            const toTimestamp = (value: number | Date | undefined, fallback: number): number => {
-              if (value === undefined) return fallback;
-              if (typeof value === 'number') return value;
-              if (value instanceof Date) return value.getTime();
-              return fallback;
-            };
-            
-            const experience: Experience = {
-              id: experienceData.id as UUID,
-              agentId: this.runtime.agentId,
-              type: experienceData.type || ExperienceType.LEARNING,
-              outcome: experienceData.outcome || OutcomeType.NEUTRAL,
-              context: experienceData.context || '',
-              action: experienceData.action || '',
-              result: experienceData.result || '',
-              learning: experienceData.learning || '',
-              domain: experienceData.domain || 'general',
-              tags: experienceData.tags || [],
-              confidence: experienceData.confidence || 0.5,
-              importance: experienceData.importance || 0.5,
-              createdAt: toTimestamp(experienceData.createdAt as number | Date | undefined, memoryCreatedAt),
-              updatedAt: toTimestamp(experienceData.updatedAt as number | Date | undefined, memoryCreatedAt),
-              accessCount: experienceData.accessCount ?? 0,
-              lastAccessedAt: toTimestamp(experienceData.lastAccessedAt as number | Date | undefined, memoryCreatedAt),
-              embedding: experienceData.embedding,
-              relatedExperiences: experienceData.relatedExperiences,
-              supersedes: experienceData.supersedes,
-              previousBelief: experienceData.previousBelief,
-              correctedBelief: experienceData.correctedBelief,
-            };
-
-            this.experiences.set(experience.id, experience);
-
-            // Update indexes
-            if (!this.experiencesByDomain.has(experience.domain)) {
-              this.experiencesByDomain.set(experience.domain, new Set());
-            }
-            this.experiencesByDomain.get(experience.domain)!.add(experience.id);
-
-            if (!this.experiencesByType.has(experience.type)) {
-              this.experiencesByType.set(experience.type, new Set());
-            }
-            this.experiencesByType.get(experience.type)!.add(experience.id);
+          if (!experienceData?.id) {
+            continue;
           }
+
+          const createdAt =
+            typeof memory.createdAt === 'number' ? memory.createdAt : Date.now();
+
+          const experience: Experience = {
+            id: experienceData.id as UUID,
+            agentId: this.runtime.agentId,
+            type: experienceData.type || ExperienceType.LEARNING,
+            outcome: experienceData.outcome || OutcomeType.NEUTRAL,
+            context: experienceData.context || '',
+            action: experienceData.action || '',
+            result: experienceData.result || '',
+            learning: experienceData.learning || '',
+            domain: experienceData.domain || 'general',
+            tags: experienceData.tags || [],
+            confidence: experienceData.confidence || 0.5,
+            importance: experienceData.importance || 0.5,
+            createdAt: toTimestamp(experienceData.createdAt as number | Date | undefined, createdAt),
+            updatedAt: toTimestamp(experienceData.updatedAt as number | Date | undefined, createdAt),
+            accessCount: experienceData.accessCount ?? 0,
+            lastAccessedAt: toTimestamp(
+              experienceData.lastAccessedAt as number | Date | undefined,
+              createdAt
+            ),
+            embedding: experienceData.embedding,
+            relatedExperiences: experienceData.relatedExperiences,
+            supersedes: experienceData.supersedes,
+            previousBelief: experienceData.previousBelief,
+            correctedBelief: experienceData.correctedBelief,
+          };
+
+          this.experiences.set(experience.id, experience);
+
+          if (!this.experiencesByDomain.has(experience.domain)) {
+            this.experiencesByDomain.set(experience.domain, new Set());
+          }
+          this.experiencesByDomain.get(experience.domain)?.add(experience.id);
+
+          if (!this.experiencesByType.has(experience.type)) {
+            this.experiencesByType.set(experience.type, new Set());
+          }
+          this.experiencesByType.get(experience.type)?.add(experience.id);
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error)
-          logger.warn(`[ExperienceService] Failed to load experience from memory ${memory.id}`, errorMessage);
+          logger.warn(
+            '[ExperienceService] Failed to load experience from memory',
+            error instanceof Error ? error.message : String(error)
+          );
         }
       }
 
       logger.info(`[ExperienceService] Loaded ${this.experiences.size} experiences from memory`);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.warn('[ExperienceService] Failed to load experiences from memory', errorMessage);
+      logger.warn(
+        '[ExperienceService] Failed to load experiences from memory',
+        error instanceof Error ? error.message : String(error)
+      );
       logger.info('[ExperienceService] Initialized with empty experiences');
     }
   }
@@ -160,12 +166,12 @@ export class ExperienceService extends Service {
     if (!this.experiencesByDomain.has(experience.domain)) {
       this.experiencesByDomain.set(experience.domain, new Set());
     }
-    this.experiencesByDomain.get(experience.domain)!.add(experience.id);
+    this.experiencesByDomain.get(experience.domain)?.add(experience.id);
 
     if (!this.experiencesByType.has(experience.type)) {
       this.experiencesByType.set(experience.type, new Set());
     }
-    this.experiencesByType.get(experience.type)!.add(experience.id);
+    this.experiencesByType.get(experience.type)?.add(experience.id);
 
     // Save to memory/knowledge service
     await this.saveExperienceToMemory(experience);
@@ -242,8 +248,11 @@ export class ExperienceService extends Service {
 
       await this.runtime.createMemory(memory, 'experiences', true);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.warn(`[ExperienceService] Failed to save experience ${experience.id} to memory`, errorMessage);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        `[ExperienceService] Failed to save experience ${experience.id} to memory`,
+        errorMessage
+      );
       // Don't throw - memory save failure shouldn't block experience recording
     }
   }
@@ -273,24 +282,26 @@ export class ExperienceService extends Service {
       }
 
       if (query.tags && query.tags.length > 0) {
-        candidates = candidates.filter((exp) => query.tags!.some((tag) => exp.tags.includes(tag)));
+        candidates = candidates.filter((exp) => query.tags?.some((tag) => exp.tags.includes(tag)));
       }
 
       if (query.minConfidence !== undefined) {
+        const minConfidence = query.minConfidence;
         candidates = candidates.filter((exp) => {
           const decayedConfidence = this.decayManager.getDecayedConfidence(exp);
-          return decayedConfidence >= query.minConfidence!;
+          return decayedConfidence >= minConfidence;
         });
       }
 
       if (query.minImportance !== undefined) {
-        candidates = candidates.filter((exp) => exp.importance >= query.minImportance!);
+        const minImportance = query.minImportance;
+        candidates = candidates.filter((exp) => exp.importance >= minImportance);
       }
 
       if (query.timeRange) {
         candidates = candidates.filter((exp) => {
-          if (query.timeRange!.start && exp.createdAt < query.timeRange!.start) return false;
-          if (query.timeRange!.end && exp.createdAt > query.timeRange!.end) return false;
+          if (query.timeRange?.start && exp.createdAt < query.timeRange?.start) return false;
+          if (query.timeRange?.end && exp.createdAt > query.timeRange?.end) return false;
           return true;
         });
       }
@@ -325,24 +336,26 @@ export class ExperienceService extends Service {
       }
 
       if (query.tags && query.tags.length > 0) {
-        candidates = candidates.filter((exp) => query.tags!.some((tag) => exp.tags.includes(tag)));
+        candidates = candidates.filter((exp) => query.tags?.some((tag) => exp.tags.includes(tag)));
       }
 
       if (query.minConfidence !== undefined) {
+        const minConfidence = query.minConfidence;
         candidates = candidates.filter((exp) => {
           const decayedConfidence = this.decayManager.getDecayedConfidence(exp);
-          return decayedConfidence >= query.minConfidence!;
+          return decayedConfidence >= minConfidence;
         });
       }
 
       if (query.minImportance !== undefined) {
-        candidates = candidates.filter((exp) => exp.importance >= query.minImportance!);
+        const minImportance = query.minImportance;
+        candidates = candidates.filter((exp) => exp.importance >= minImportance);
       }
 
       if (query.timeRange) {
         candidates = candidates.filter((exp) => {
-          if (query.timeRange!.start && exp.createdAt < query.timeRange!.start) return false;
-          if (query.timeRange!.end && exp.createdAt > query.timeRange!.end) return false;
+          if (query.timeRange?.start && exp.createdAt < query.timeRange?.start) return false;
+          if (query.timeRange?.end && exp.createdAt > query.timeRange?.end) return false;
           return true;
         });
       }
@@ -363,7 +376,9 @@ export class ExperienceService extends Service {
       const relatedIds = new Set<UUID>();
       for (const exp of results) {
         if (exp.relatedExperiences) {
-          exp.relatedExperiences.forEach((id) => relatedIds.add(id as UUID));
+          exp.relatedExperiences.forEach((id) => {
+            relatedIds.add(id as UUID);
+          });
         }
       }
 
@@ -385,14 +400,16 @@ export class ExperienceService extends Service {
   }
 
   async findSimilarExperiences(text: string, limit: number = 5): Promise<Experience[]> {
-    if (!text || this.experiences.size === 0) {
-      return [];
-    }
+    const shouldSkip = !text || this.experiences.size === 0;
 
     // Generate embedding for the query text
     const queryEmbedding = (await this.runtime.useModel(ModelType.TEXT_EMBEDDING, {
       prompt: text,
     })) as number[];
+
+    if (shouldSkip) {
+      return [];
+    }
 
     // Calculate similarities
     const similarities: Array<{
@@ -567,12 +584,12 @@ export class ExperienceService extends Service {
         failureTypes.set(key, (failureTypes.get(key) || 0) + 1);
       });
 
-      if (failureTypes.size > 0) {
-        const mostCommonFailure = Array.from(failureTypes.entries()).sort((a, b) => b[1] - a[1])[0];
+    if (failureTypes.size > 0) {
+      const mostCommonFailure = Array.from(failureTypes.entries()).sort((a, b) => b[1] - a[1])[0];
 
-        if (mostCommonFailure && mostCommonFailure[1] > 1) {
-          recommendations.push(`Address recurring issue: ${mostCommonFailure[0]}`);
-        }
+      if (mostCommonFailure && mostCommonFailure[1] > 1) {
+        recommendations.push(`Address recurring issue: ${mostCommonFailure[0]}`);
+      }
     }
 
     // Add domain-specific recommendations
@@ -643,7 +660,7 @@ export class ExperienceService extends Service {
 
   async stop(): Promise<void> {
     logger.info('[ExperienceService] Stopping...');
-    
+
     // Save all experiences to memory
     const experiencesToSave = Array.from(this.experiences.values());
     let savedCount = 0;
@@ -653,13 +670,18 @@ export class ExperienceService extends Service {
       try {
         await this.saveExperienceToMemory(experience);
         savedCount++;
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error)
-          logger.warn(`[ExperienceService] Failed to save experience ${experience.id} during stop`, errorMessage);
-          failedCount++;
-        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.warn(
+          `[ExperienceService] Failed to save experience ${experience.id} during stop`,
+          errorMessage
+        );
+        failedCount++;
+      }
     }
 
     logger.info(`[ExperienceService] Saved ${savedCount} experiences, ${failedCount} failed`);
   }
+
+  // biome-enable lint/correctness/useHookAtTopLevel
 }

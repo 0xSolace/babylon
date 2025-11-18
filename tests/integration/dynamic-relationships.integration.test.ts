@@ -1,6 +1,6 @@
 /**
  * Dynamic Relationships Integration Test
- * 
+ *
  * Tests the complete flow:
  * 1. Generate initial relationships
  * 2. Create interactions
@@ -8,22 +8,22 @@
  * 4. Use in prompts
  */
 
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { PrismaClient } from '@prisma/client';
-import { RelationshipEvolutionEngine } from '@/engine/RelationshipEvolutionEngine';
 import { InteractionTracker } from '@/lib/services/InteractionTracker';
+import { RelationshipEvolutionEngine } from '@/engine/RelationshipEvolutionEngine';
 import { BabylonLLMClient } from '@/generator/llm/openai-client';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 describe('Dynamic Relationships Integration', () => {
   let llmClient: BabylonLLMClient;
-  
+
   beforeAll(async () => {
     // Initialize LLM client for evolution tests
     try {
       llmClient = new BabylonLLMClient();
-    } catch (error) {
+    } catch (_error) {
       console.log('⚠️  No LLM client available, skipping evolution tests');
     }
 
@@ -36,7 +36,7 @@ describe('Dynamic Relationships Integration', () => {
         ],
       },
     });
-    
+
     await prisma.actorRelationship.deleteMany({
       where: {
         OR: [
@@ -48,8 +48,18 @@ describe('Dynamic Relationships Integration', () => {
 
     // Create test actors
     const testActors = [
-      { id: 'e2e-actor-ailon', name: 'E2E AIlon', domain: ['tech'], affiliations: ['e2e-spacex'] },
-      { id: 'e2e-actor-sam', name: 'E2E Sam', domain: ['ai'], affiliations: ['e2e-openai'] },
+      {
+        id: 'e2e-actor-ailon',
+        name: 'E2E AIlon',
+        domain: ['tech'],
+        affiliations: ['e2e-spacex'],
+      },
+      {
+        id: 'e2e-actor-sam',
+        name: 'E2E Sam',
+        domain: ['ai'],
+        affiliations: ['e2e-openai'],
+      },
     ];
 
     for (const actor of testActors) {
@@ -79,7 +89,7 @@ describe('Dynamic Relationships Integration', () => {
         ],
       },
     });
-    
+
     await prisma.actorRelationship.deleteMany({
       where: {
         OR: [
@@ -97,25 +107,47 @@ describe('Dynamic Relationships Integration', () => {
   });
 
   test('Complete relationship lifecycle', async () => {
-    console.log('\n' + '='.repeat(60));
+    console.log(`\n${'='.repeat(60)}`);
     console.log('END-TO-END RELATIONSHIP TEST');
     console.log('='.repeat(60));
 
     // Step 1: Generate initial relationship
     console.log('\n1️⃣  Generating initial relationships...');
     const engine = new RelationshipEvolutionEngine(llmClient);
-    
+
     // Give actors shared domain to ensure relationship is created
     const actors = [
-      { id: 'e2e-actor-ailon', name: 'E2E AIlon', domain: ['tech', 'ai'], affiliations: ['e2e-spacex'] },
-      { id: 'e2e-actor-sam', name: 'E2E Sam', domain: ['tech', 'ai'], affiliations: ['e2e-openai'] },
+      {
+        id: 'e2e-actor-ailon',
+        name: 'E2E AIlon',
+        domain: ['tech', 'ai'],
+        affiliations: ['e2e-spacex'],
+      },
+      {
+        id: 'e2e-actor-sam',
+        name: 'E2E Sam',
+        domain: ['tech', 'ai'],
+        affiliations: ['e2e-openai'],
+      },
     ];
-    
+
     const orgs = [
-      { id: 'e2e-spacex', name: 'test spacex', description: 'Test', type: 'company' as const, canBeInvolved: true },
-      { id: 'e2e-openai', name: 'test openai', description: 'Test', type: 'company' as const, canBeInvolved: true },
+      {
+        id: 'e2e-spacex',
+        name: 'test spacex',
+        description: 'Test',
+        type: 'company' as const,
+        canBeInvolved: true,
+      },
+      {
+        id: 'e2e-openai',
+        name: 'test openai',
+        description: 'Test',
+        type: 'company' as const,
+        canBeInvolved: true,
+      },
     ];
-    
+
     const created = await engine.generateInitialRelationships(actors, orgs);
     console.log(`   ✅ Created ${created} initial relationships`);
 
@@ -130,12 +162,12 @@ describe('Dynamic Relationships Integration', () => {
     });
 
     expect(initial).toBeTruthy();
-    expect(initial!.history).toBeTruthy();
-    console.log(`   ✅ Initial relationship: "${initial!.history}"`);
+    expect(initial?.history).toBeTruthy();
+    console.log(`   ✅ Initial relationship: "${initial?.history}"`);
 
     // Step 2: Simulate interactions
     console.log('\n2️⃣  Simulating interactions...');
-    
+
     // AIlon mentions Sam positively
     await InteractionTracker.trackPostMention(
       'e2e-actor-ailon',
@@ -176,27 +208,27 @@ describe('Dynamic Relationships Integration', () => {
     // Step 3: Evolve relationship (if LLM available)
     if (llmClient) {
       console.log('\n3️⃣  Evolving relationship with LLM...');
-      
+
       try {
         const updated = await engine.analyzeAndUpdateRelationships();
         console.log(`   ✅ Updated ${updated} relationships`);
 
-      // Check updated relationship
-      const evolved = await prisma.actorRelationship.findFirst({
-        where: {
-          actor1Id: 'e2e-actor-ailon',
-          actor2Id: 'e2e-actor-sam',
-        },
-      });
+        // Check updated relationship
+        const evolved = await prisma.actorRelationship.findFirst({
+          where: {
+            actor1Id: 'e2e-actor-ailon',
+            actor2Id: 'e2e-actor-sam',
+          },
+        });
 
-      expect(evolved).toBeTruthy();
-      expect(evolved!.history).toBeTruthy();
-      expect(evolved!.evolutionCount).toBeGreaterThan(0);
-      
-        console.log(`   ✅ Evolved relationship: "${evolved!.history}"`);
-        console.log(`   ✅ Evolution count: ${evolved!.evolutionCount}`);
-        console.log(`   ✅ Interaction count: ${evolved!.interactionCount}`);
-      } catch (error) {
+        expect(evolved).toBeTruthy();
+        expect(evolved?.history).toBeTruthy();
+        expect(evolved?.evolutionCount).toBeGreaterThan(0);
+
+        console.log(`   ✅ Evolved relationship: "${evolved?.history}"`);
+        console.log(`   ✅ Evolution count: ${evolved?.evolutionCount}`);
+        console.log(`   ✅ Interaction count: ${evolved?.interactionCount}`);
+      } catch (_error) {
         console.log(`   ⚠️  LLM evolution timed out or failed (non-critical)`);
         console.log(`   ℹ️  This is expected if LLM is slow - skipping evolution check`);
       }
@@ -206,30 +238,35 @@ describe('Dynamic Relationships Integration', () => {
 
     // Step 4: Generate context for prompts
     console.log('\n4️⃣  Generating prompt context...');
-    
+
     const context = await engine.getRelationshipContextForActor('e2e-actor-ailon');
     expect(context).toBeTruthy();
     expect(context.length).toBeGreaterThan(0);
     expect(context).toContain('E2E Sam');
-    
+
     console.log(`   ✅ Relationship context generated:`);
-    console.log(context.split('\n').map(l => `      ${l}`).join('\n'));
+    console.log(
+      context
+        .split('\n')
+        .map((l) => `      ${l}`)
+        .join('\n')
+    );
 
     // Step 5: Verify context is simple and usable
     console.log('\n5️⃣  Verifying context quality...');
-    
-    const lines = context.split('\n').filter(l => l.trim());
+
+    const lines = context.split('\n').filter((l) => l.trim());
     expect(lines.length).toBeLessThanOrEqual(5); // Max 5 relationships
-    
+
     for (const line of lines) {
       expect(line).toContain(':'); // Format: "- Name: description"
       expect(line.length).toBeLessThan(150); // Keep it short
     }
-    
+
     console.log(`   ✅ Context is simple (${lines.length} lines)`);
     console.log(`   ✅ Format is clean and narrative`);
-    
-    console.log('\n' + '='.repeat(60));
+
+    console.log(`\n${'='.repeat(60)}`);
     console.log('✅ END-TO-END TEST COMPLETE');
     console.log('='.repeat(60));
     console.log('\nRelationship lifecycle verified:');
@@ -247,22 +284,22 @@ describe('Dynamic Relationships Integration', () => {
     if (context) {
       // Should be simple list format
       expect(context).toMatch(/^- .+: .+$/m);
-      
+
       // Should NOT have complex structure
       expect(context).not.toContain('╔');
       expect(context).not.toContain('│');
       expect(context).not.toContain('┌');
-      
+
       // Should be injectable into prompts as-is
       const testPrompt = `You are E2E AIlon.
 
-${context ? 'Your relationships:\n' + context : ''}
+${context ? `Your relationships:\n${context}` : ''}
 
 Write a post.`;
 
       expect(testPrompt).toContain('Your relationships:');
       expect(testPrompt).toContain('-');
-      
+
       console.log('\n✅ Context is prompt-ready:');
       console.log('━'.repeat(40));
       console.log(testPrompt);
@@ -270,4 +307,3 @@ Write a post.`;
     }
   });
 });
-

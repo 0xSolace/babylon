@@ -1,14 +1,14 @@
 /**
  * User Posts API
- * 
+ *
  * @route GET /api/users/[userId]/posts - Get user posts and replies
  * @access Public
- * 
+ *
  * @description
  * Returns user's posts and comments/replies with interaction counts. Supports
  * filtering by type (posts or replies). Includes reposts/shares and excludes
  * future posts. Optimized with batch queries to prevent N+1 problems.
- * 
+ *
  * @openapi
  * /api/users/{userId}/posts:
  *   get:
@@ -67,62 +67,64 @@
  *                         type: boolean
  *                 total:
  *                   type: integer
- * 
+ *
  * @example
  * ```typescript
  * // Get user posts
  * const posts = await fetch('/api/users/user_123/posts?type=posts');
- * 
+ *
  * // Get user replies
  * const replies = await fetch('/api/users/user_123/posts?type=replies');
  * ```
- * 
+ *
  * @see {@link /lib/db/context} RLS context
  */
 
-import type { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { optionalAuth } from '@/lib/api/auth-middleware';
-import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
-import { UserIdParamSchema, UserPostsQuerySchema } from '@/lib/validation/schemas';
+import { successResponse, withErrorHandling } from '@/lib/errors/error-handler';
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { findUserByIdentifier } from '@/lib/users/user-lookup';
+import { UserIdParamSchema, UserPostsQuerySchema } from '@/lib/validation/schemas';
+import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/users/[userId]/posts
  * Get user's posts and comments/replies
  */
-export const GET = withErrorHandling(async (
-  request: NextRequest,
-  context: { params: Promise<{ userId: string }> }
-) => {
-  const params = await context.params;
-  const { userId } = UserIdParamSchema.parse(params);
-  const targetUser = await findUserByIdentifier(userId, { id: true });
-  
-  // If user doesn't exist yet (new Privy user), return empty data
-  if (!targetUser) {
-    logger.info('User not found - returning empty data (may be new Privy user)', { userId }, 'GET /api/users/[userId]/posts');
-    return successResponse({
-      items: [],
-      total: 0,
-      type: 'posts',
-    });
-  }
-  
-  const canonicalUserId = targetUser.id;
-  
-  // Validate query parameters
-  const { searchParams } = new URL(request.url);
-  const queryParams = {
-    type: searchParams.get('type') || 'posts',
-    page: searchParams.get('page') ?? undefined,
-    limit: searchParams.get('limit') ?? undefined,
-  };
-  const { type } = UserPostsQuerySchema.parse(queryParams);
+export const GET = withErrorHandling(
+  async (request: NextRequest, context: { params: Promise<{ userId: string }> }) => {
+    const params = await context.params;
+    const { userId } = UserIdParamSchema.parse(params);
+    const targetUser = await findUserByIdentifier(userId, { id: true });
 
-  // Optional authentication
-  const user = await optionalAuth(request);
+    // If user doesn't exist yet (new Privy user), return empty data
+    if (!targetUser) {
+      logger.info(
+        'User not found - returning empty data (may be new Privy user)',
+        { userId },
+        'GET /api/users/[userId]/posts'
+      );
+      return successResponse({
+        items: [],
+        total: 0,
+        type: 'posts',
+      });
+    }
+
+    const canonicalUserId = targetUser.id;
+
+    // Validate query parameters
+    const { searchParams } = new URL(request.url);
+    const queryParams = {
+      type: searchParams.get('type') || 'posts',
+      page: searchParams.get('page') ?? undefined,
+      limit: searchParams.get('limit') ?? undefined,
+    };
+    const { type } = UserPostsQuerySchema.parse(queryParams);
+
+    // Optional authentication
+    const user = await optionalAuth(request);
 
     if (type === 'replies') {
       // Get user's comments (replies) - query by authorId
@@ -164,8 +166,8 @@ export const GET = withErrorHandling(async (
       });
 
       // Get unique post author IDs to fetch author info
-      const postAuthorIds = [...new Set(comments.map(c => c.Post.authorId))];
-      
+      const postAuthorIds = [...new Set(comments.map((c) => c.Post.authorId))];
+
       // Fetch User and Actor info for post authors
       const [postAuthorsUsers, postAuthorsActors] = await Promise.all([
         prisma.user.findMany({
@@ -186,16 +188,16 @@ export const GET = withErrorHandling(async (
           },
         }),
       ]);
-      
+
       // Create author lookup maps
-      const userAuthorsMap = new Map(postAuthorsUsers.map(u => [u.id, u]));
-      const actorAuthorsMap = new Map(postAuthorsActors.map(a => [a.id, a]));
-      
+      const userAuthorsMap = new Map(postAuthorsUsers.map((u) => [u.id, u]));
+      const actorAuthorsMap = new Map(postAuthorsActors.map((a) => [a.id, a]));
+
       // Format comments as replies
       const replies = comments.map((comment) => {
         const authorUser = userAuthorsMap.get(comment.Post.authorId);
         const authorActor = actorAuthorsMap.get(comment.Post.authorId);
-        
+
         return {
           id: comment.id,
           content: comment.content,
@@ -229,7 +231,11 @@ export const GET = withErrorHandling(async (
         };
       });
 
-      logger.info('User replies fetched successfully', { userId: canonicalUserId, total: replies.length }, 'GET /api/users/[userId]/posts');
+      logger.info(
+        'User replies fetched successfully',
+        { userId: canonicalUserId, total: replies.length },
+        'GET /api/users/[userId]/posts'
+      );
 
       return successResponse({
         type: 'replies',
@@ -323,10 +329,10 @@ export const GET = withErrorHandling(async (
           profileImageUrl: true,
         },
       });
-      
+
       // Get unique author IDs from shared posts
-      const sharedPostAuthorIds = [...new Set(shares.map(s => s.Post.authorId))];
-      
+      const sharedPostAuthorIds = [...new Set(shares.map((s) => s.Post.authorId))];
+
       // Fetch User, Actor, and Organization info for shared post authors
       const [sharedAuthorsUsers, sharedAuthorsActors, sharedAuthorsOrgs] = await Promise.all([
         prisma.user.findMany({
@@ -355,12 +361,12 @@ export const GET = withErrorHandling(async (
           },
         }),
       ]);
-      
+
       // Create author lookup maps
-      const userAuthorsMap = new Map(sharedAuthorsUsers.map(u => [u.id, u]));
-      const actorAuthorsMap = new Map(sharedAuthorsActors.map(a => [a.id, a]));
-      const orgAuthorsMap = new Map(sharedAuthorsOrgs.map(o => [o.id, o]));
-      
+      const userAuthorsMap = new Map(sharedAuthorsUsers.map((u) => [u.id, u]));
+      const actorAuthorsMap = new Map(sharedAuthorsActors.map((a) => [a.id, a]));
+      const orgAuthorsMap = new Map(sharedAuthorsOrgs.map((o) => [o.id, o]));
+
       // Format posts
       const formattedPosts = posts.map((post) => ({
         id: post.id,
@@ -388,7 +394,7 @@ export const GET = withErrorHandling(async (
         const authorUser = userAuthorsMap.get(share.Post.authorId);
         const authorActor = actorAuthorsMap.get(share.Post.authorId);
         const authorOrg = orgAuthorsMap.get(share.Post.authorId);
-        
+
         return {
           id: `share-${share.id}`,
           content: share.Post.content,
@@ -417,13 +423,13 @@ export const GET = withErrorHandling(async (
                   profileImageUrl: authorActor.profileImageUrl,
                 }
               : authorOrg
-              ? {
-                  id: authorOrg.id,
-                  displayName: authorOrg.name,
-                  username: null,
-                  profileImageUrl: authorOrg.imageUrl,
-                }
-              : null,
+                ? {
+                    id: authorOrg.id,
+                    displayName: authorOrg.name,
+                    username: null,
+                    profileImageUrl: authorOrg.imageUrl,
+                  }
+                : null,
         };
       });
 
@@ -432,7 +438,11 @@ export const GET = withErrorHandling(async (
         (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       );
 
-      logger.info('User posts fetched successfully', { userId: canonicalUserId, total: allItems.length }, 'GET /api/users/[userId]/posts');
+      logger.info(
+        'User posts fetched successfully',
+        { userId: canonicalUserId, total: allItems.length },
+        'GET /api/users/[userId]/posts'
+      );
 
       return successResponse({
         type: 'posts',
@@ -440,4 +450,5 @@ export const GET = withErrorHandling(async (
         total: allItems.length,
       });
     }
-});
+  }
+);

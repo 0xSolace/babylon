@@ -4,21 +4,21 @@
  * Consolidated utility functions to eliminate duplication across codebase
  */
 
-import type { Actor, ActorRelationship, Organization } from './types';
 import { shuffleArray } from '@/lib/utils/randomization';
+import type { Actor, ActorRelationship, Organization } from './types';
 
 // Re-export shuffleArray from randomization utils for convenience
 export { shuffleArray } from '@/lib/utils/randomization';
 
 /**
  * Format actor voice context with postStyle and randomized postExample
- * 
+ *
  * Used for LLM prompt generation to maintain actor voice consistency.
  * Randomizes post examples to add variety while preserving voice.
- * 
+ *
  * @param actor - Actor with optional postStyle and postExample
  * @returns Formatted context string for LLM prompts (empty string if no voice data)
- * 
+ *
  * @example
  * ```typescript
  * const context = formatActorVoiceContext({
@@ -61,13 +61,13 @@ export function formatActorVoiceContext(actor: {
  * Clamp number between min and max values
  *
  * Ensures value stays within the specified range.
- * 
+ *
  * @param value - Number to clamp
  * @param min - Minimum value
  * @param max - Maximum value
  * @returns Clamped value (guaranteed to be in [min, max] range)
  * @throws Never throws - handles invalid ranges gracefully
- * 
+ *
  * @example
  * ```typescript
  * clamp(150, 0, 100); // Returns: 100
@@ -81,13 +81,13 @@ export function clamp(value: number, min: number, max: number): number {
 
 /**
  * Calculate sentiment score from text (simple heuristic)
- * 
+ *
  * Uses keyword matching to determine sentiment. Returns value between
  * -1 (negative) and 1 (positive). Returns 0 if no sentiment keywords found.
- * 
+ *
  * @param text - Text to analyze
  * @returns Sentiment score between -1 and 1 (0 for neutral/no keywords)
- * 
+ *
  * @example
  * ```typescript
  * calculateSentiment("This is amazing!"); // Returns: ~0.5 (positive)
@@ -109,13 +109,13 @@ export function calculateSentiment(text: string): number {
 
 /**
  * Format date/timestamp to readable date string
- * 
+ *
  * Supports both Date objects and ISO timestamp strings.
- * 
+ *
  * @param date - Date object or ISO timestamp string
  * @returns Formatted date string (e.g., "Jan 1, 2025")
  * @throws Never throws - handles invalid dates gracefully
- * 
+ *
  * @example
  * ```typescript
  * formatDate(new Date()); // "Jan 16, 2025"
@@ -133,13 +133,13 @@ export function formatDate(date: Date | string): string {
 
 /**
  * Format date/timestamp to readable time string
- * 
+ *
  * Supports both Date objects and ISO timestamp strings.
- * 
+ *
  * @param date - Date object or ISO timestamp string
  * @returns Formatted time string (e.g., "3:45 PM")
  * @throws Never throws - handles invalid dates gracefully
- * 
+ *
  * @example
  * ```typescript
  * formatTime(new Date()); // "3:45 PM"
@@ -156,17 +156,20 @@ export function formatTime(date: Date | string): string {
 }
 
 // Re-export randomization utilities
-export { pickRandom, sampleRandom as pickRandomN } from '@/lib/utils/randomization';
+export {
+  pickRandom,
+  sampleRandom as pickRandomN,
+} from '@/lib/utils/randomization';
 
 /**
  * Build phase-specific narrative context for LLM prompts
- * 
+ *
  * Provides instructions on how content should reflect the current game phase.
  * Used to guide LLM generation to match the narrative arc.
- * 
+ *
  * @param day - Current game day (1-30)
  * @returns Phase-specific narrative instructions string
- * 
+ *
  * @example
  * ```typescript
  * const context = buildPhaseContext(5);  // WILD phase
@@ -213,14 +216,14 @@ export function buildPhaseContext(day: number): string {
 
 /**
  * Build relationship context for actors in LLM prompts
- * 
+ *
  * Formats actor relationships and connections for narrative generation.
  * Filters to only include relationships between the provided actors.
- * 
+ *
  * @param actors - List of actors involved in the context
  * @param relationships - Relationship data between actors
  * @returns Formatted relationship context string (empty if no relevant relationships)
- * 
+ *
  * @example
  * ```typescript
  * const context = buildRelationshipContext(actors, relationships);
@@ -235,19 +238,19 @@ export function buildRelationshipContext(
     return '';
   }
 
-  const actorIds = new Set(actors.map(a => a.id));
+  const actorIds = new Set(actors.map((a) => a.id));
   const relevantRelationships = relationships.filter(
-    r => actorIds.has(r.actor1Id) && actorIds.has(r.actor2Id)
+    (r) => actorIds.has(r.actor1Id) && actorIds.has(r.actor2Id)
   );
 
   if (relevantRelationships.length === 0) {
     return '';
   }
 
-  const actorMap = new Map(actors.map(a => [a.id, a.name]));
+  const actorMap = new Map(actors.map((a) => [a.id, a.name]));
   const relationshipLines = relevantRelationships
     .slice(0, 10)
-    .map(r => {
+    .map((r) => {
       const name1 = actorMap.get(r.actor1Id) || r.actor1Id;
       const name2 = actorMap.get(r.actor2Id) || r.actor2Id;
       const sentimentDesc = r.sentiment > 0.5 ? 'respect' : r.sentiment < -0.5 ? 'beef' : 'neutral';
@@ -260,10 +263,10 @@ export function buildRelationshipContext(
 
 /**
  * Convert question ID to number safely
- * 
+ *
  * ⚠️  WARNING: Do NOT use with Question.id (Snowflake strings)!
  * This function is for converting Question.questionNumber or legacy numeric IDs.
- * 
+ *
  * @deprecated Prefer using question.questionNumber directly
  * @param questionId - Question number (can be string or number, but NOT Snowflake ID)
  * @returns Number ID, or 0 if conversion fails
@@ -273,20 +276,22 @@ export function toQuestionIdNumber(questionId: string | number): number {
     return questionId;
   }
   const parsed = parseInt(String(questionId), 10);
-  return isNaN(parsed) ? 0 : parsed;
+  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 /**
  * Convert question ID to number or null
- * 
+ *
  * ⚠️  WARNING: Do NOT use with Question.id (Snowflake strings)!
  * This function is for converting Question.questionNumber or legacy numeric IDs.
- * 
+ *
  * @deprecated Prefer using question.questionNumber directly
  * @param questionId - Question number (can be string, number, null, or undefined, but NOT Snowflake ID)
  * @returns Number ID, or null if conversion fails or input is null/undefined
  */
-export function toQuestionIdNumberOrNull(questionId: string | number | null | undefined): number | null {
+export function toQuestionIdNumberOrNull(
+  questionId: string | number | null | undefined
+): number | null {
   if (questionId === null || questionId === undefined) {
     return null;
   }
@@ -294,19 +299,19 @@ export function toQuestionIdNumberOrNull(questionId: string | number | null | un
     return questionId;
   }
   const parsed = parseInt(String(questionId), 10);
-  return isNaN(parsed) ? null : parsed;
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 /**
  * Build organization behavior context for LLM prompts
- * 
+ *
  * Provides guidance on how different organization types should behave
  * in narrative generation. Groups organizations by type and provides
  * type-specific behavior guidelines.
- * 
+ *
  * @param organizations - List of organizations involved
  * @returns Formatted organization behavior instructions (empty if no orgs)
- * 
+ *
  * @example
  * ```typescript
  * const context = buildOrganizationBehaviorContext(orgs);
@@ -319,16 +324,16 @@ export function buildOrganizationBehaviorContext(organizations: Organization[]):
   }
 
   const orgsByType = {
-    media: organizations.filter(o => o.type === 'media'),
-    company: organizations.filter(o => o.type === 'company'),
-    government: organizations.filter(o => o.type === 'government'),
+    media: organizations.filter((o) => o.type === 'media'),
+    company: organizations.filter((o) => o.type === 'company'),
+    government: organizations.filter((o) => o.type === 'government'),
   };
 
   const contextParts: string[] = [];
 
   if (orgsByType.media.length > 0) {
     contextParts.push(
-      `Media Organizations (${orgsByType.media.map(o => o.name).join(', ')}):
+      `Media Organizations (${orgsByType.media.map((o) => o.name).join(', ')}):
 - Break stories first, prioritize speed and exclusivity
 - Cite sources when available, use "sources say" for leaks
 - Maintain journalistic tone, factual but engaging
@@ -338,7 +343,7 @@ export function buildOrganizationBehaviorContext(organizations: Organization[]):
 
   if (orgsByType.company.length > 0) {
     contextParts.push(
-      `Companies (${orgsByType.company.map(o => o.name).join(', ')}):
+      `Companies (${orgsByType.company.map((o) => o.name).join(', ')}):
 - Issue official statements, press releases
 - Protect reputation and manage PR
 - Announce developments strategically
@@ -348,7 +353,7 @@ export function buildOrganizationBehaviorContext(organizations: Organization[]):
 
   if (orgsByType.government.length > 0) {
     contextParts.push(
-      `Government Entities (${orgsByType.government.map(o => o.name).join(', ')}):
+      `Government Entities (${orgsByType.government.map((o) => o.name).join(', ')}):
 - Formal, official communications
 - Regulatory announcements and investigations
 - Policy statements and enforcement actions

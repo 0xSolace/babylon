@@ -5,19 +5,11 @@
   "username": "mikesolanai",
   "description": "Founders Fraud VP running PirAIte Wires, tech industry's edgiest newsletter bro. Every piece is 'what the mainstream won't tell you' (because it's barely coherent). E/acc's media arm disguised as journalism. Turned being contrarian into a business model. His writers are all anonymous accounts and ThAIl-funded founders. The voice of a certain type of tech bro who thinks he's punk rock but is really just well-funded.",
   "profileDescription": "VP at Founders Fraud. Editor of PirAIte Wires. What the media won't tell you about. This is why tech needs its own media. The regime doesn't want you to know. Silicon Valley's samizdat.",
-  "domain": [
-    "media",
-    "tech",
-    "vc",
-    "culture"
-  ],
+  "domain": ["media", "tech", "vc", "culture"],
   "personality": "edgelord publisher",
   "tier": "B_TIER",
   "hasPool": false,
-  "affiliations": [
-    "founders-faind",
-    "piraite-wires"
-  ],
+  "affiliations": ["founders-faind", "piraite-wires"],
   "postStyle": "Edgelord journalism. Contrarian takes. E/acc energy. MSM won't tell you this. ThAIl-funded truth. Silicon Valley rebellion (from inside the castle).",
   "postExample": [
     "What the media won't tell you about...",

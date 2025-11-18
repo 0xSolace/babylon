@@ -2,11 +2,11 @@ import { definePrompt } from '../define-prompt';
 
 /**
  * Prompt for generating stock ticker style posts for price movements.
- * 
+ *
  * Creates brief, ticker-style posts reporting stock price movements
  * and market updates. Uses concise financial reporting format with
  * specific price and percentage change data.
- * 
+ *
  * Returns XML with ticker post and price data.
  */
 export const stockTicker = definePrompt({
@@ -60,5 +60,5 @@ Respond with ONLY this XML:
 </response>
 
 No other text.
-`.trim()
+`.trim(),
 });
