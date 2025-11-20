@@ -18,6 +18,7 @@ import type { NextRequest } from 'next/server';
 import { logger } from '@/lib/logger';
 import { SSEChannelsQuerySchema } from '@/lib/validation/schemas';
 import { PrivyClient } from '@privy-io/server-auth';
+import { Redis } from '@upstash/redis';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,16 @@ export const revalidate = 0;
 
 const encoder = new TextEncoder();
 const DEFAULT_CHANNEL: 'feed' = 'feed';
+
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+const redis =
+  redisUrl && redisToken
+    ? new Redis({
+        url: redisUrl,
+        token: redisToken,
+      })
+    : null;
 
 let privyClient: PrivyClient | null = null;
 
@@ -49,33 +60,26 @@ async function verifyToken(token: string): Promise<{ userId: string }> {
 type Channel = 'feed' | 'markets' | 'breaking-news' | 'upcoming-events' | string;
 
 async function edgePoll(channel: string, count: number = 10): Promise<string[]> {
-  const restUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-  const restToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-
-  if (!restUrl || !restToken) {
+  if (!redis) {
+    logger.warn('Edge SSE poll: Redis not configured', { channel }, 'edge-sse');
     return [];
   }
 
   try {
-    const response = await fetch(restUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${restToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(['LPOP', `sse:${channel}`, count]),
-    });
-
-    if (!response.ok) {
-      logger.warn('Edge SSE poll failed', { status: response.status }, 'edge-sse');
+    // Fetch first N items then trim them, to avoid relying on LPOP count semantics
+    const messages = await redis.lrange(`sse:${channel}`, 0, count - 1);
+    if (!messages || messages.length === 0) {
+      logger.debug('Edge SSE poll: no messages', { channel }, 'edge-sse');
       return [];
     }
 
-    const json = (await response.json()) as { result: string | string[] | null };
-    if (!json.result) return [];
-    return Array.isArray(json.result) ? json.result : [json.result];
+    // Trim the messages we just read
+    await redis.ltrim(`sse:${channel}`, messages.length, -1);
+
+    logger.debug('Edge SSE poll: messages fetched', { channel, count: messages.length }, 'edge-sse');
+    return messages.map((msg) => (typeof msg === 'string' ? msg : JSON.stringify(msg)));
   } catch (error) {
-    logger.warn('Edge SSE poll error', { error }, 'edge-sse');
+    logger.warn('Edge SSE poll error', { error, channel }, 'edge-sse');
     return [];
   }
 }
@@ -148,11 +152,7 @@ export async function GET(request: NextRequest) {
         try {
           for (const channel of channels) {
             const messages = await edgePoll(channel, 10);
-            if (messages.length === 0) {
-              logger.debug('Edge SSE poll: no messages', { channel }, 'edge-sse');
-              continue;
-            }
-            logger.debug('Edge SSE poll: messages fetched', { channel, count: messages.length }, 'edge-sse');
+            if (messages.length === 0) continue;
             for (const raw of messages) {
               try {
                 const message = JSON.parse(raw) as {
