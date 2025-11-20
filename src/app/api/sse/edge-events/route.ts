@@ -13,11 +13,11 @@
  * NEXT_PUBLIC_SSE_PATH=/api/sse/edge-events.
  */
 
-import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { NextRequest } from 'next/server';
 
 import { logger } from '@/lib/logger';
 import { SSEChannelsQuerySchema } from '@/lib/validation/schemas';
+import { PrivyClient } from '@privy-io/server-auth';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -27,26 +27,22 @@ export const revalidate = 0;
 const encoder = new TextEncoder();
 const DEFAULT_CHANNEL: 'feed' = 'feed';
 
-// JWKS loader is cached across invocations in the same edge worker
-let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+let privyClient: PrivyClient | null = null;
 
 async function verifyToken(token: string): Promise<{ userId: string }> {
-  const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-  if (!appId) {
-    throw new Error('Missing NEXT_PUBLIC_PRIVY_APP_ID');
+  if (!privyClient) {
+    const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    const appSecret = process.env.PRIVY_APP_SECRET;
+    if (!appId || !appSecret) {
+      throw new Error('Missing Privy configuration');
+    }
+    privyClient = new PrivyClient(appId, appSecret);
   }
-
-  if (!jwks) {
-    const jwksUrl = new URL(`/api/v1/apps/${appId}/jwks`, 'https://auth.privy.io');
-    jwks = createRemoteJWKSet(jwksUrl);
-  }
-
-  const { payload } = await jwtVerify(token, jwks);
-  const userId = (payload as { userId?: string; sub?: string }).userId ?? payload.sub;
+  const claims = await privyClient.verifyAuthToken(token);
+  const userId = claims.userId ?? (claims as { sub?: string }).sub;
   if (!userId) {
     throw new Error('Invalid token payload');
   }
-
   return { userId };
 }
 
