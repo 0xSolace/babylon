@@ -93,13 +93,14 @@ export default function ChatsPage() {
   const [messageInput, setMessageInput] = useState('')
   const [_loading, setLoading] = useState(true)
   const [loadingChat, setLoadingChat] = useState(false)
-  const [isLoadingNewDM, setIsLoadingNewDM] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [sendSuccess, setSendSuccess] = useState(false)
   const [isLeaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
   const [isLeavingChat, setIsLeavingChat] = useState(false)
   const [leaveChatError, setLeaveChatError] = useState<string | null>(null)
+  // Track chats that are new DMs (not yet persisted to DB)
+  const [newDMChats, setNewDMChats] = useState<Set<string>>(new Set())
   // Group modals
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false)
   const [isGroupManagementModalOpen, setIsGroupManagementModalOpen] = useState(false)
@@ -355,38 +356,37 @@ export default function ChatsPage() {
   }, [loadChats, selectedChatId, loadChatDetails])
 
   const loadNewDMChat = useCallback(async (chatId: string, targetUserId: string) => {
-    setIsLoadingNewDM(true)
+    console.log('[ChatsPage] Loading new DM chat:', chatId, targetUserId)
     setLoadingChat(true)
+    
+    // Mark this as a new DM chat
+    setNewDMChats(prev => new Set(prev).add(chatId))
     
     const token = await getAccessToken()
     if (!token) {
       console.error('Failed to get access token')
       setLoadingChat(false)
-      setIsLoadingNewDM(false)
       return
     }
 
-    // Fetch target user info
-    const response = await fetch(`/api/users/${targetUserId}/profile`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }).catch(() => {
-      console.error('Failed to load user info')
-      setLoadingChat(false)
-      setIsLoadingNewDM(false)
-      throw new Error('Failed to load user info')
-    })
-    
-    if (!response.ok) {
-      console.error('Failed to load user info')
-      setLoadingChat(false)
-      setIsLoadingNewDM(false)
-      return
-    }
+    try {
+      // Fetch target user info
+      const response = await fetch(`/api/users/${targetUserId}/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      
+      if (!response.ok) {
+        console.error('Failed to load user info')
+        setLoadingChat(false)
+        return
+      }
 
-    const userData = await response.json()
-    const targetUser = userData.user
+      const userData = await response.json()
+      const targetUser = userData.user
+        
+      console.log('[ChatsPage] Creating virtual chat details for new DM')
       
       // Create a virtual chat details object for new DM
       setChatDetails({
@@ -437,8 +437,12 @@ export default function ChatsPage() {
         return [newChat, ...prev]
       })
       
+      console.log('[ChatsPage] New DM chat loaded successfully')
+    } catch (error) {
+      console.error('[ChatsPage] Error loading new DM chat:', error)
+    } finally {
       setLoadingChat(false)
-      setIsLoadingNewDM(false)
+    }
   }, [getAccessToken, user])
   
   // Check for chat ID in URL query params
@@ -471,11 +475,13 @@ export default function ChatsPage() {
 
   // Load selected chat details from database
   useEffect(() => {
-    // Skip loadChatDetails if we're loading a new DM (it will be handled by loadNewDMChat)
-    if (selectedChatId && !isLoadingNewDM) {
-      loadChatDetails(selectedChatId)
+    if (selectedChatId) {
+      // Skip loading for new DM chats (they're handled by loadNewDMChat)
+      if (!newDMChats.has(selectedChatId)) {
+        loadChatDetails(selectedChatId)
+      }
     }
-  }, [selectedChatId, isLoadingNewDM, loadChatDetails])
+  }, [selectedChatId, loadChatDetails, newDMChats])
 
   // Update chatDetails with realtime messages
   useEffect(() => {
@@ -488,7 +494,7 @@ export default function ChatsPage() {
         }
       })
     }
-  }, [realtimeMessages]) // Remove chatDetails from dependencies to avoid infinite loop
+  }, [realtimeMessages, chatDetails])
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -599,6 +605,17 @@ export default function ChatsPage() {
     } else {
       setSendSuccess(true)
       setTimeout(() => setSendSuccess(false), 2000)
+      
+      // If this was a new DM chat, remove it from newDMChats set
+      // (the chat has now been created in the DB)
+      if (newDMChats.has(selectedChatId)) {
+        console.log('[ChatsPage] Removing new DM flag after first message sent')
+        setNewDMChats(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(selectedChatId)
+          return newSet
+        })
+      }
     }
 
     // SSE will handle adding the message in real-time
@@ -693,10 +710,10 @@ export default function ChatsPage() {
           }
         `
       }} />
-      <PageContainer noPadding className="flex flex-col h-full">
+      <PageContainer noPadding className="flex flex-col">
         {/* Desktop: Two Column Layout */}
-        <div className="hidden xl:flex flex-1 flex-col overflow-hidden h-full">
-          <div className="flex-1 overflow-hidden h-full">
+        <div className="hidden xl:flex flex-1 flex-col overflow-hidden">
+          <div className="flex-1 overflow-hidden">
             <div className="flex h-full">
               {/* Left Column: Chat List with Filters */}
               <div className="w-96 flex flex-col bg-background">
@@ -847,8 +864,8 @@ export default function ChatsPage() {
               <Separator orientation="vertical" className="shrink-0" />
 
               {/* Right Column: Chat View */}
-              <div className="flex-1 flex flex-col bg-background overflow-hidden h-full min-h-0">
-                {selectedChatId && chatDetails && chatDetails.chat ? (
+              <div className="flex-1 flex flex-col bg-background">
+                {selectedChatId && chatDetails ? (
                   <>
                     {/* Chat Header */}
                     <div className="px-4 py-4 bg-background flex items-center justify-between">
@@ -1169,8 +1186,8 @@ export default function ChatsPage() {
         </div>
 
         {/* Mobile/Tablet: Responsive Layout */}
-        <div className="flex xl:hidden flex-col flex-1 overflow-hidden h-full">
-          <div className="flex-1 overflow-hidden h-full">
+        <div className="flex xl:hidden flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden">
             <div className="flex h-full">
               {/* Chat List (full screen on mobile, side panel on tablet when chat selected) */}
               <div
@@ -1328,10 +1345,10 @@ export default function ChatsPage() {
               )}
 
               {/* Chat View (full screen on mobile, shared on tablet) */}
-              {selectedChatId && chatDetails && chatDetails.chat && (
+              {selectedChatId && chatDetails && (
                 <div
                   className={cn(
-                    'flex flex-col bg-background overflow-hidden flex-1 h-full min-h-0',
+                    'flex-1 flex-col bg-background',
                     !selectedChatId ? 'hidden lg:flex' : 'flex',
                   )}
                 >

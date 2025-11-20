@@ -106,6 +106,12 @@ export function useChatMessages(chatId: string | null) {
           hasMore: data.pagination?.hasMore 
         }, 'useChatMessages');
       }
+    } else if (response.status === 404) {
+      // Chat doesn't exist yet (new DM that hasn't been persisted)
+      // This is expected for new DMs - chat will be created when first message is sent
+      logger.debug(`Chat not found (likely new DM): ${chatId}`, { chatId }, 'useChatMessages');
+      setMessages([]);
+      hasLoadedRef.current.add(chatId); // Mark as loaded to prevent retries
     } else {
       const errorData = await response.json().catch(() => null);
       logger.error(`Failed to load messages`, { chatId, errorData, status: response.status }, 'useChatMessages');
