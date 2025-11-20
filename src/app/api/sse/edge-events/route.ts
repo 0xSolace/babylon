@@ -17,7 +17,6 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { NextRequest } from 'next/server';
 
 import { logger } from '@/lib/logger';
-import { safePoll } from '@/lib/redis';
 import { SSEChannelsQuerySchema } from '@/lib/validation/schemas';
 
 export const runtime = 'edge';
@@ -52,6 +51,38 @@ async function verifyToken(token: string): Promise<{ userId: string }> {
 }
 
 type Channel = 'feed' | 'markets' | 'breaking-news' | 'upcoming-events' | string;
+
+async function edgePoll(channel: string, count: number = 10): Promise<string[]> {
+  const restUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const restToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+
+  if (!restUrl || !restToken) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(restUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${restToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(['LPOP', `sse:${channel}`, count]),
+    });
+
+    if (!response.ok) {
+      logger.warn('Edge SSE poll failed', { status: response.status }, 'edge-sse');
+      return [];
+    }
+
+    const json = (await response.json()) as { result: string | string[] | null };
+    if (!json.result) return [];
+    return Array.isArray(json.result) ? json.result : [json.result];
+  } catch (error) {
+    logger.warn('Edge SSE poll error', { error }, 'edge-sse');
+    return [];
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -120,7 +151,7 @@ export async function GET(request: NextRequest) {
         pollInFlight = true;
         try {
           for (const channel of channels) {
-            const messages = await safePoll(`sse:${channel}`, 10);
+            const messages = await edgePoll(channel, 10);
             for (const raw of messages) {
               try {
                 const message = JSON.parse(raw) as {
