@@ -485,7 +485,7 @@ export default function ChatsPage() {
 
   // Update chatDetails with realtime messages
   useEffect(() => {
-    if (chatDetails && realtimeMessages.length > 0) {
+    if (realtimeMessages.length > 0) {
       setChatDetails(prev => {
         if (!prev) return prev
         return {
@@ -494,7 +494,7 @@ export default function ChatsPage() {
         }
       })
     }
-  }, [realtimeMessages, chatDetails])
+  }, [realtimeMessages])
 
   // Scroll to bottom when messages change
   useEffect(() => {
