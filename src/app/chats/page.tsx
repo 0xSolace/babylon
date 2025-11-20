@@ -864,7 +864,7 @@ export default function ChatsPage() {
               <Separator orientation="vertical" className="shrink-0" />
 
               {/* Right Column: Chat View */}
-              <div className="flex-1 flex flex-col bg-background">
+              <div className="flex-1 flex flex-col bg-background min-h-screen h-screen">
                 {selectedChatId && chatDetails ? (
                   <>
                     {/* Chat Header */}
@@ -1348,7 +1348,7 @@ export default function ChatsPage() {
               {selectedChatId && chatDetails && (
                 <div
                   className={cn(
-                    'flex-1 flex-col bg-background',
+                    'flex-1 flex-col bg-background min-h-screen h-screen',
                     !selectedChatId ? 'hidden lg:flex' : 'flex',
                   )}
                 >
