@@ -93,6 +93,7 @@ export default function ChatsPage() {
   const [messageInput, setMessageInput] = useState('')
   const [_loading, setLoading] = useState(true)
   const [loadingChat, setLoadingChat] = useState(false)
+  const [isLoadingNewDM, setIsLoadingNewDM] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [sendSuccess, setSendSuccess] = useState(false)
@@ -354,12 +355,14 @@ export default function ChatsPage() {
   }, [loadChats, selectedChatId, loadChatDetails])
 
   const loadNewDMChat = useCallback(async (chatId: string, targetUserId: string) => {
+    setIsLoadingNewDM(true)
     setLoadingChat(true)
     
     const token = await getAccessToken()
     if (!token) {
       console.error('Failed to get access token')
       setLoadingChat(false)
+      setIsLoadingNewDM(false)
       return
     }
 
@@ -371,12 +374,14 @@ export default function ChatsPage() {
     }).catch(() => {
       console.error('Failed to load user info')
       setLoadingChat(false)
+      setIsLoadingNewDM(false)
       throw new Error('Failed to load user info')
     })
     
     if (!response.ok) {
       console.error('Failed to load user info')
       setLoadingChat(false)
+      setIsLoadingNewDM(false)
       return
     }
 
@@ -433,6 +438,7 @@ export default function ChatsPage() {
       })
       
       setLoadingChat(false)
+      setIsLoadingNewDM(false)
   }, [getAccessToken, user])
   
   // Check for chat ID in URL query params
@@ -465,10 +471,11 @@ export default function ChatsPage() {
 
   // Load selected chat details from database
   useEffect(() => {
-    if (selectedChatId) {
+    // Skip loadChatDetails if we're loading a new DM (it will be handled by loadNewDMChat)
+    if (selectedChatId && !isLoadingNewDM) {
       loadChatDetails(selectedChatId)
     }
-  }, [selectedChatId, loadChatDetails])
+  }, [selectedChatId, isLoadingNewDM, loadChatDetails])
 
   // Update chatDetails with realtime messages
   useEffect(() => {
@@ -481,7 +488,7 @@ export default function ChatsPage() {
         }
       })
     }
-  }, [realtimeMessages, chatDetails])
+  }, [realtimeMessages]) // Remove chatDetails from dependencies to avoid infinite loop
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -841,7 +848,7 @@ export default function ChatsPage() {
 
               {/* Right Column: Chat View */}
               <div className="flex-1 flex flex-col bg-background">
-                {selectedChatId && chatDetails ? (
+                {selectedChatId && chatDetails && chatDetails.chat ? (
                   <>
                     {/* Chat Header */}
                     <div className="px-4 py-4 bg-background flex items-center justify-between">
@@ -1321,7 +1328,7 @@ export default function ChatsPage() {
               )}
 
               {/* Chat View (full screen on mobile, shared on tablet) */}
-              {selectedChatId && chatDetails && (
+              {selectedChatId && chatDetails && chatDetails.chat && (
                 <div
                   className={cn(
                     'flex-1 flex-col bg-background',
