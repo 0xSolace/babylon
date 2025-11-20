@@ -386,7 +386,7 @@ class ServerlessBroadcaster extends EventEmitter {
     );
     
     if (published) {
-      logger.debug(`Published to Redis channel ${message.channel}`, { channel: message.channel }, 'ServerlessBroadcaster');
+      logger.info(`Published to Redis channel ${message.channel}`, { channel: message.channel, type: message.type }, 'ServerlessBroadcaster');
     }
   }
 
@@ -482,6 +482,7 @@ export function broadcastToChannel(
     timestamp: Date.now()
   };
 
+  logger.info('Dispatching SSE broadcast', { channel, type: message.type }, 'event-broadcaster');
   broadcaster.broadcast(message);
 }
 

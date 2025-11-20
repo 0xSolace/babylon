@@ -125,7 +125,7 @@ export class PriceUpdateService {
       // Write prices to blockchain
       await this.writePricesToChain(appliedUpdates);
 
-      logger.debug('Broadcasting price updates', { count: appliedUpdates.length }, 'PriceUpdateService');
+      logger.info('Broadcasting price updates', { count: appliedUpdates.length }, 'PriceUpdateService');
       broadcastToChannel('markets', {
         type: 'price_update',
         updates: appliedUpdates as unknown as JsonValue,
