@@ -148,6 +148,11 @@ export async function GET(request: NextRequest) {
         try {
           for (const channel of channels) {
             const messages = await edgePoll(channel, 10);
+            if (messages.length === 0) {
+              logger.debug('Edge SSE poll: no messages', { channel }, 'edge-sse');
+              continue;
+            }
+            logger.debug('Edge SSE poll: messages fetched', { channel, count: messages.length }, 'edge-sse');
             for (const raw of messages) {
               try {
                 const message = JSON.parse(raw) as {

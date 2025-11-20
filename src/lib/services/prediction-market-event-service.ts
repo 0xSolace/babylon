@@ -38,6 +38,7 @@ export interface PredictionResolutionEvent {
 export class PredictionMarketEventService {
   static emitTradeUpdate(event: PredictionTradeEvent): void {
     try {
+      logger.debug('Broadcasting prediction trade', { marketId: event.marketId, type: event.trade.action, side: event.trade.side }, 'PredictionMarketEventService');
       broadcastToChannel('markets', {
         type: 'prediction_trade',
         ...event,
@@ -49,6 +50,7 @@ export class PredictionMarketEventService {
 
   static emitResolution(event: PredictionResolutionEvent): void {
     try {
+      logger.debug('Broadcasting prediction resolution', { marketId: event.marketId, winningSide: event.winningSide }, 'PredictionMarketEventService');
       broadcastToChannel('markets', {
         type: 'prediction_resolution',
         ...event,
