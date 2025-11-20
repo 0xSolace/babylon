@@ -115,8 +115,10 @@ export const POST = withErrorHandling(async (
 ) => {
   const { id: marketId } = PredictionMarketIdSchema.parse(await context.params);
 
+  logger.info('PRED BUY: entering handler', { marketId }, 'POST /api/markets/predictions/[id]/buy');
   // Authentication - errors propagate to withErrorHandling
   const user = await authenticate(request);
+  logger.info('PRED BUY: authenticated', { marketId, userId: user.userId }, 'POST /api/markets/predictions/[id]/buy');
 
   logger.info('Buy request START', {
     marketId,
@@ -390,6 +392,7 @@ export const POST = withErrorHandling(async (
     logger.warn('Failed to invalidate prediction trades cache after buy', { error, marketId }, 'POST /api/markets/predictions/[id]/buy');
   });
 
+  logger.info('Emitting SSE prediction_trade', { marketId, side, amount, userId: user.userId }, 'POST /api/markets/predictions/[id]/buy');
   PredictionMarketEventService.emitTradeUpdate({
     marketId,
     yesPrice: calculation.newYesPrice,

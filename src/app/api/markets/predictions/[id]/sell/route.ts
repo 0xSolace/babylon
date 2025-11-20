@@ -113,7 +113,9 @@ export const POST = withErrorHandling(async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) => {
+  logger.info('PRED SELL: entering handler', undefined, 'POST /api/markets/predictions/[id]/sell');
   const user = await authenticate(request);
+  logger.info('PRED SELL: authenticated', { userId: user.userId }, 'POST /api/markets/predictions/[id]/sell');
   const { id: marketId } = PredictionMarketIdSchema.parse(await context.params);
 
   if (!marketId) {
@@ -345,6 +347,7 @@ export const POST = withErrorHandling(async (
     logger.warn('Failed to invalidate prediction trades cache after sell', { error, marketId }, 'POST /api/markets/predictions/[id]/sell');
   });
 
+  logger.info('Emitting SSE prediction_trade (sell)', { marketId, side: sellSide, shares, netProceeds }, 'POST /api/markets/predictions/[id]/sell');
   PredictionMarketEventService.emitTradeUpdate({
     marketId,
     yesPrice: calculation.newYesPrice,
