@@ -129,6 +129,8 @@ export const maxDuration = 300; // 5 minutes max for SSE connections
 // Disable buffering for SSE
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)

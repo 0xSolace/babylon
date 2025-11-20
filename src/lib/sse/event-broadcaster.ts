@@ -41,7 +41,7 @@ export interface BroadcastMessage {
  */
 class InMemoryBroadcaster extends EventEmitter {
   private clients: Map<string, SSEClient> = new Map();
-  private pingInterval: NodeJS.Timeout | null = null;
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     super();
@@ -187,8 +187,8 @@ class InMemoryBroadcaster extends EventEmitter {
  */
 class ServerlessBroadcaster extends EventEmitter {
   private clients: Map<string, SSEClient> = new Map();
-  private pingInterval: NodeJS.Timeout | null = null;
-  private redisPollers: Map<string, NodeJS.Timeout> = new Map();
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
+  private redisPollers: Map<string, ReturnType<typeof setInterval>> = new Map();
   private redisAvailable: boolean = false;
 
   constructor() {
@@ -258,6 +258,20 @@ class ServerlessBroadcaster extends EventEmitter {
   }
 
   /**
+   * Check if at least one client is subscribed to a channel.
+   * Avoids draining Redis queues when no listeners are connected,
+   * which can otherwise drop events during reconnects.
+   */
+  private hasSubscribers(channel: Channel) {
+    for (const client of this.clients.values()) {
+      if (client.channels.has(channel)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Setup Redis polling to receive messages from other instances
    */
   private setupRedisPolling() {
@@ -265,6 +279,10 @@ class ServerlessBroadcaster extends EventEmitter {
     
     for (const channel of channels) {
       const pollInterval = setInterval(async () => {
+        if (!this.hasSubscribers(channel)) {
+          return;
+        }
+
         const messages = await safePoll(`sse:${channel}`, 10);
         
         for (const msgStr of messages) {

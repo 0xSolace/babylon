@@ -203,7 +203,11 @@ async function ensureConnection(forceReconnect = false) {
   }
 
   const channelsList = Array.from(requestedChannels);
-  const url = `${window.location.origin}/api/sse/events?channels=${encodeURIComponent(channelsList.join(','))}&token=${encodeURIComponent(token)}`;
+  const ssePath =
+    process.env.NEXT_PUBLIC_SSE_PATH?.trim() || '/api/sse/events';
+  const url = `${window.location.origin}${ssePath}?channels=${encodeURIComponent(
+    channelsList.join(',')
+  )}&token=${encodeURIComponent(token)}`;
 
   logger.debug(
     'Connecting to SSE endpoint...',
