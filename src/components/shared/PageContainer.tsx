@@ -31,8 +31,8 @@ export const PageContainer = forwardRef<HTMLDivElement, PageContainerProps>(
         ref={ref}
         className={cn(
           // Sharp corners, simple boxy layout
-          'bg-background overflow-hidden',
-          'h-full min-h-full w-full',
+          'bg-background',
+          'h-full w-full',
           // Desktop: Simple container - use full height
           'md:h-full',
           // Consistent padding: 16px mobile, 24px desktop

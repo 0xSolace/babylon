@@ -92,14 +92,14 @@ export default function RootLayout({
             <MobileHeader />
           </Suspense>
 
-          <div className="flex min-h-screen max-w-screen-xl mx-auto bg-sidebar">
+          <div className="flex h-screen max-w-screen-xl mx-auto bg-sidebar overflow-hidden">
             {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
             <Suspense fallback={null}>
               <Sidebar />
             </Suspense>
 
             {/* Main Content Area - Scrollable content with pull-to-refresh */}
-            <main className="flex-1 min-h-screen w-full pt-14 pb-14 md:pt-0 md:pb-0 bg-background">
+            <main className="flex-1 h-full w-full pt-14 pb-14 md:pt-0 md:pb-0 bg-background overflow-hidden">
               {children}
             </main>
 

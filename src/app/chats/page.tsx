@@ -693,10 +693,10 @@ export default function ChatsPage() {
           }
         `
       }} />
-      <PageContainer noPadding className="flex flex-col">
+      <PageContainer noPadding className="flex flex-col h-full">
         {/* Desktop: Two Column Layout */}
-        <div className="hidden xl:flex flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-hidden">
+        <div className="hidden xl:flex flex-1 flex-col overflow-hidden h-full">
+          <div className="flex-1 overflow-hidden h-full">
             <div className="flex h-full">
               {/* Left Column: Chat List with Filters */}
               <div className="w-96 flex flex-col bg-background">
@@ -847,7 +847,7 @@ export default function ChatsPage() {
               <Separator orientation="vertical" className="shrink-0" />
 
               {/* Right Column: Chat View */}
-              <div className="flex-1 flex flex-col bg-background">
+              <div className="flex-1 flex flex-col bg-background overflow-hidden h-full min-h-0">
                 {selectedChatId && chatDetails && chatDetails.chat ? (
                   <>
                     {/* Chat Header */}
@@ -1169,8 +1169,8 @@ export default function ChatsPage() {
         </div>
 
         {/* Mobile/Tablet: Responsive Layout */}
-        <div className="flex xl:hidden flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-hidden">
+        <div className="flex xl:hidden flex-col flex-1 overflow-hidden h-full">
+          <div className="flex-1 overflow-hidden h-full">
             <div className="flex h-full">
               {/* Chat List (full screen on mobile, side panel on tablet when chat selected) */}
               <div
@@ -1331,7 +1331,7 @@ export default function ChatsPage() {
               {selectedChatId && chatDetails && chatDetails.chat && (
                 <div
                   className={cn(
-                    'flex-1 flex-col bg-background',
+                    'flex flex-col bg-background overflow-hidden flex-1 h-full min-h-0',
                     !selectedChatId ? 'hidden lg:flex' : 'flex',
                   )}
                 >
