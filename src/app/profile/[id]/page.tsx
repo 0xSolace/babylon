@@ -111,7 +111,6 @@ export default function ActorProfilePage() {
 
   // Handle creating DM with user
   const handleMessageClick = async () => {
-    console.log('!!!!!!!!!!!!!!!!!!!!!!!! handleMessageClick')
     if (!authenticated || !actorInfo?.id || isCreatingDM || !user?.id) return
 
     setIsCreatingDM(true)
