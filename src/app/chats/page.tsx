@@ -585,6 +585,14 @@ export default function ChatsPage() {
       throw error
     })
 
+    if (!response.ok) {
+      const data = await response.json().catch(() => null)
+      const msg = data?.error || data?.message || 'Failed to send message'
+      setSendError(msg)
+      setSending(false)
+      return
+    }
+
     const data = await response.json()
 
     if (data.warnings && data.warnings.length > 0) {

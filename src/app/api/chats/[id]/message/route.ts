@@ -273,20 +273,40 @@ export const POST = withErrorHandling(async (
     // Actual kicks happen via sweep background job
   }
 
-  // 6. Check message quality
-  const contextType = isDMChat ? 'dm' : 'groupchat'
-  const qualityResult = await MessageQualityChecker.checkQuality(
-    content,
-    user.userId,
-    contextType,
-    isGameChat ? '' : chatId
-  )
+  // 6. Check message quality (skip heavy checks for DMs to keep UX snappy)
+  const qualityResult = isDMChat
+    ? {
+        score: 1,
+        passed: true,
+        warnings: [] as string[],
+        errors: [] as string[],
+        factors: {
+          length: 1,
+          uniqueness: 1,
+          contentQuality: 1,
+        },
+      }
+    : await MessageQualityChecker.checkQuality(
+        content,
+        user.userId,
+        'groupchat',
+        isGameChat ? '' : chatId
+      );
 
   if (!qualityResult.passed) {
-    throw new BusinessLogicError(
-      qualityResult.errors.join('; '),
-      'QUALITY_CHECK_FAILED'
-    )
+    return new Response(
+      JSON.stringify({
+        error: 'Message rejected by quality checks',
+        warnings: qualityResult.errors,
+        quality: {
+          score: qualityResult.score,
+          warnings: qualityResult.warnings,
+          errors: qualityResult.errors,
+          factors: qualityResult.factors,
+        },
+      }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
     // 7. Create message
@@ -427,5 +447,3 @@ export const POST = withErrorHandling(async (
     201
   )
 })
-
-
