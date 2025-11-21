@@ -14,6 +14,7 @@ import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useErrorToasts } from '@/hooks/useErrorToasts'
 import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import { useSSEChannel } from '@/hooks/useSSE'
 import { cn } from '@/lib/utils'
 import type { FeedPost } from '@/shared/types'
 import { useAuthStore } from '@/stores/authStore'
@@ -132,6 +133,21 @@ function FeedPageContent() {
       unregisterOptimisticPostCallback()
     }
   }, [registerOptimisticPostCallback, unregisterOptimisticPostCallback])
+
+  // Live updates: subscribe to feed SSE channel and prepend new posts
+  useSSEChannel('feed', (payload) => {
+    if (!payload || typeof payload !== 'object') return
+    if (payload.type !== 'new_post') return
+    const post = (payload as { post?: FeedPost }).post
+    if (!post || typeof post.id !== 'string') return
+
+    setLocalPosts((prev) => {
+      if (prev.some((p) => p.id === post.id)) {
+        return prev
+      }
+      return [post, ...prev]
+    })
+  })
 
   const fetchLatestPosts = useCallback(async (requestCursor: string | null, append = false, skipLoadingState = false) => {
     if (tab !== 'latest') return

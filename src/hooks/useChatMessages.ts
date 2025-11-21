@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useSSEChannel } from './useSSE';
+
+import { apiFetch } from '@/lib/api/fetch';
 import { logger } from '@/lib/logger';
+import { useSSEChannel } from './useSSE';
 
 /**
  * Represents a chat message in the system.
@@ -78,7 +80,7 @@ export function useChatMessages(chatId: string | null) {
 
     logger.debug(`Loading initial messages for chat ${chatId}`, { chatId }, 'useChatMessages');
     setIsLoading(true);
-    const response = await fetch(`/api/chats/${chatId}?limit=50`);
+    const response = await apiFetch(`/api/chats/${chatId}?limit=50`);
     logger.debug(`Response status: ${response.status}`, { chatId, status: response.status }, 'useChatMessages');
     
     if (response.ok) {
@@ -123,7 +125,7 @@ export function useChatMessages(chatId: string | null) {
     logger.debug(`Loading more messages with cursor: ${nextCursor}`, { chatId, cursor: nextCursor }, 'useChatMessages');
     setIsLoadingMore(true);
     
-    const response = await fetch(`/api/chats/${chatId}?cursor=${nextCursor}&limit=50`);
+    const response = await apiFetch(`/api/chats/${chatId}?cursor=${nextCursor}&limit=50`);
     
     if (response.ok) {
       const data = await response.json();
@@ -281,4 +283,3 @@ export function useChatMessages(chatId: string | null) {
     isConnected
   };
 }
-
