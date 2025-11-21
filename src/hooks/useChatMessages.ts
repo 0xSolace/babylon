@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 
-import { apiFetch } from '@/lib/api/fetch';
 import { logger } from '@/lib/logger';
 import { useSSEChannel } from './useSSE';
+import { usePrivy } from '@privy-io/react-auth';
 
 /**
  * Represents a chat message in the system.
@@ -61,6 +61,7 @@ export interface ChatMessage {
  * ```
  */
 export function useChatMessages(chatId: string | null) {
+  const { getAccessToken } = usePrivy();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -80,7 +81,22 @@ export function useChatMessages(chatId: string | null) {
 
     logger.debug(`Loading initial messages for chat ${chatId}`, { chatId }, 'useChatMessages');
     setIsLoading(true);
-    const response = await apiFetch(`/api/chats/${chatId}?limit=50`);
+    const token = await getAccessToken().catch((error) => {
+      logger.warn('Failed to get access token for chat fetch', { error }, 'useChatMessages');
+      return null;
+    });
+
+    if (!token) {
+      logger.warn('Missing access token for chat fetch', { chatId }, 'useChatMessages');
+      setIsLoading(false);
+      return;
+    }
+
+    const response = await fetch(`/api/chats/${chatId}?limit=50`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
     logger.debug(`Response status: ${response.status}`, { chatId, status: response.status }, 'useChatMessages');
     
     if (response.ok) {
@@ -125,7 +141,22 @@ export function useChatMessages(chatId: string | null) {
     logger.debug(`Loading more messages with cursor: ${nextCursor}`, { chatId, cursor: nextCursor }, 'useChatMessages');
     setIsLoadingMore(true);
     
-    const response = await apiFetch(`/api/chats/${chatId}?cursor=${nextCursor}&limit=50`);
+    const token = await getAccessToken().catch((error) => {
+      logger.warn('Failed to get access token for chat pagination', { error }, 'useChatMessages');
+      return null;
+    });
+
+    if (!token) {
+      logger.warn('Missing access token for chat pagination', { chatId }, 'useChatMessages');
+      setIsLoadingMore(false);
+      return;
+    }
+
+    const response = await fetch(`/api/chats/${chatId}?cursor=${nextCursor}&limit=50`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
     
     if (response.ok) {
       const data = await response.json();

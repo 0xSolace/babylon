@@ -114,7 +114,8 @@ export default function ChatsPage() {
     isConnected: _sseConnected,
     isLoadingMore,
     hasMore,
-    loadMore
+    loadMore,
+    addMessage
   } = useChatMessages(selectedChatId)
   
   // Pull-to-refresh state
@@ -594,7 +595,19 @@ export default function ChatsPage() {
       setTimeout(() => setSendSuccess(false), 2000)
     }
 
-    // SSE will handle adding the message in real-time
+    // Optimistically add the message (deduped in hook) for instant UI feedback
+    if (data?.message && typeof data.message.id === 'string') {
+      addMessage({
+        id: data.message.id,
+        content: data.message.content,
+        chatId: data.message.chatId,
+        senderId: data.message.senderId,
+        createdAt: typeof data.message.createdAt === 'string'
+          ? data.message.createdAt
+          : new Date(data.message.createdAt).toISOString(),
+      })
+    }
+
     setMessageInput('')
     void loadChats() // Refresh chat list to update last message
     
