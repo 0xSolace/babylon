@@ -91,7 +91,7 @@
  * @see {@link /lib/services/group-chat-sweep} Group chat sweep
  */
 
-import type { NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { authenticate } from '@/lib/api/auth-middleware'
 import { asUser } from '@/lib/db/context'
 import { withErrorHandling, successResponse } from '@/lib/errors/error-handler'
@@ -294,19 +294,16 @@ export const POST = withErrorHandling(async (
       );
 
   if (!qualityResult.passed) {
-    return new Response(
-      JSON.stringify({
-        error: 'Message rejected by quality checks',
-        warnings: qualityResult.errors,
-        quality: {
-          score: qualityResult.score,
-          warnings: qualityResult.warnings,
-          errors: qualityResult.errors,
-          factors: qualityResult.factors,
-        },
-      }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } }
-    );
+    return NextResponse.json({
+      error: 'Message rejected by quality checks',
+      warnings: qualityResult.errors,
+      quality: {
+        score: qualityResult.score,
+        warnings: qualityResult.warnings,
+        errors: qualityResult.errors,
+        factors: qualityResult.factors,
+      },
+    }, { status: 400 });
   }
 
     // 7. Create message
