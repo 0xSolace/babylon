@@ -105,8 +105,11 @@ export function usePredictionMarketStream(
     if (data.marketId !== normalizedMarketId) return;
 
     if (data.type === 'prediction_trade') {
+      // Debug visibility when investigating missing updates
+      console.debug('[usePredictionMarketStream] trade event', data);
       onTrade?.(data as PredictionTradeSSE);
     } else if (data.type === 'prediction_resolution') {
+      console.debug('[usePredictionMarketStream] resolution event', data);
       onResolution?.(data as PredictionResolutionSSE);
     }
   });

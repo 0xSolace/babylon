@@ -17,6 +17,8 @@ import { usePredictionHistory } from '@/hooks/usePredictionHistory'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/shared/Skeleton'
 import { useMarketTracking } from '@/hooks/usePostHog'
+import { SSEDebugPanel } from '@/components/debug/SSEDebugPanel'
+import { SSEDebugPanel } from '@/components/debug/SSEDebugPanel'
 
 interface PredictionPosition {
   id: string
@@ -62,6 +64,8 @@ export default function PredictionDetailPage() {
   const marketId = params.id as string
   const { trackMarketView } = useMarketTracking()
   const from = searchParams.get('from')
+  const showSseDebug = searchParams.get('sseDebug') === '1'
+  const showSseDebug = searchParams.get('sseDebug') === '1'
 
   const [market, setMarket] = useState<PredictionMarket | null>(null)
   const [loading, setLoading] = useState(true)
@@ -375,6 +379,9 @@ export default function PredictionDetailPage() {
 
   return (
     <PageContainer className="max-w-7xl mx-auto" ref={pageContainerRef}>
+      {showSseDebug && (
+        <SSEDebugPanel channels={['markets']} filterMarketId={marketId} />
+      )}
       {/* Header */}
       <div className="mb-6">
         <button

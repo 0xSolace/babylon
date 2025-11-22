@@ -122,8 +122,12 @@ export class PriceUpdateService {
     if (priceMap.size > 0) {
       perpsEngine.updatePositions(priceMap);
 
-      // Write prices to blockchain
-      await this.writePricesToChain(appliedUpdates);
+      // Write prices to blockchain (best-effort, do not block or fail broadcast)
+      try {
+        await this.writePricesToChain(appliedUpdates);
+      } catch (error) {
+        logger.warn('Skipping on-chain price update (non-blocking)', { error }, 'PriceUpdateService');
+      }
 
       logger.info('Broadcasting price updates', { count: appliedUpdates.length }, 'PriceUpdateService');
       broadcastToChannel('markets', {
