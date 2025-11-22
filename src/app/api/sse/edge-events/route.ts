@@ -60,9 +60,8 @@ async function verifyToken(token: string): Promise<{ userId: string }> {
 type Channel = 'feed' | 'markets' | 'breaking-news' | 'upcoming-events' | string;
 
 async function edgePoll(
-  cursorMap: Map<string, number>,
   channel: string,
-  count: number = 10
+  count: number = 20
 ): Promise<string[]> {
   if (!redis) {
     logger.warn('Edge SSE poll: Redis not configured', { channel }, 'edge-sse');
@@ -70,16 +69,12 @@ async function edgePoll(
   }
 
   try {
-    const cursor = cursorMap.get(channel) ?? 0;
-    const messages = await redis.lrange(`sse:${channel}`, cursor, cursor + count - 1);
+    // Pull the latest messages from the tail; dedupe client-side to avoid missing/duplicating
+    const messages = await redis.lrange(`sse:${channel}`, -count, -1);
     if (!messages || messages.length === 0) {
       return [];
     }
-
-    // Advance cursor for this connection; no trim to keep fan-out
-    cursorMap.set(channel, cursor + messages.length);
-
-    logger.debug('Edge SSE poll: messages fetched', { channel, count: messages.length, cursor }, 'edge-sse');
+    logger.debug('Edge SSE poll: messages fetched', { channel, count: messages.length }, 'edge-sse');
     return messages.map((msg) => (typeof msg === 'string' ? msg : JSON.stringify(msg)));
   } catch (error) {
     logger.warn('Edge SSE poll error', { error, channel }, 'edge-sse');
@@ -128,7 +123,7 @@ export async function GET(request: NextRequest) {
 
   let pingHandle: ReturnType<typeof setInterval> | null = null;
   let pollHandle: ReturnType<typeof setInterval> | null = null;
-  const channelCursors = new Map<string, number>(); // per-connection cursor for fan-out
+  const seenIds = new Set<string>(); // per-connection dedupe
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -136,18 +131,6 @@ export async function GET(request: NextRequest) {
         if (closed) return;
         controller.enqueue(encoder.encode(payload));
       };
-
-      // Initialize cursors at current tail to avoid replaying old messages on new connections
-      for (const channel of channels) {
-        if (!redis) break;
-        try {
-          const len = await redis.llen(`sse:${channel}`);
-          channelCursors.set(channel, len);
-          logger.debug('Edge SSE cursor initialized', { channel, start: len }, 'edge-sse');
-        } catch (err) {
-          logger.warn('Edge SSE cursor init failed', { channel, err }, 'edge-sse');
-        }
-      }
 
       // Connected event
       send(
@@ -167,7 +150,7 @@ export async function GET(request: NextRequest) {
         pollInFlight = true;
         try {
           for (const channel of channels) {
-            const messages = await edgePoll(channelCursors, channel, 10);
+            const messages = await edgePoll(channel, 50);
             if (messages.length === 0) continue;
             for (const raw of messages) {
               try {
@@ -177,6 +160,15 @@ export async function GET(request: NextRequest) {
                   data: Record<string, unknown>;
                   timestamp: number;
                 };
+                const dedupeId = `${message.channel}:${message.timestamp || ''}:${(message.data as { marketId?: string }).marketId ?? ''}:${message.type}`;
+                if (seenIds.has(dedupeId)) {
+                  continue;
+                }
+                // Keep bounded dedupe set
+                if (seenIds.size > 500) {
+                  seenIds.clear();
+                }
+                seenIds.add(dedupeId);
                 send(
                   `event: message\ndata: ${JSON.stringify(message)}\n\n`
                 );
