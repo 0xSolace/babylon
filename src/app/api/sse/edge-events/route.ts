@@ -27,6 +27,7 @@ export const revalidate = 0;
 
 const encoder = new TextEncoder();
 const DEFAULT_CHANNEL: 'feed' = 'feed';
+const channelCursors = new Map<string, number>();
 
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
@@ -66,17 +67,16 @@ async function edgePoll(channel: string, count: number = 10): Promise<string[]> 
   }
 
   try {
-    // Fetch first N items then trim them, to avoid relying on LPOP count semantics
-    const messages = await redis.lrange(`sse:${channel}`, 0, count - 1);
+    const cursor = channelCursors.get(channel) ?? 0;
+    const messages = await redis.lrange(`sse:${channel}`, cursor, cursor + count - 1);
     if (!messages || messages.length === 0) {
-      logger.debug('Edge SSE poll: no messages', { channel }, 'edge-sse');
       return [];
     }
 
-    // Trim the messages we just read
-    await redis.ltrim(`sse:${channel}`, messages.length, -1);
+    // Advance cursor for this connection; no trim to keep fan-out
+    channelCursors.set(channel, cursor + messages.length);
 
-    logger.debug('Edge SSE poll: messages fetched', { channel, count: messages.length }, 'edge-sse');
+    logger.debug('Edge SSE poll: messages fetched', { channel, count: messages.length, cursor }, 'edge-sse');
     return messages.map((msg) => (typeof msg === 'string' ? msg : JSON.stringify(msg)));
   } catch (error) {
     logger.warn('Edge SSE poll error', { error, channel }, 'edge-sse');
