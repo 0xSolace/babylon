@@ -27,7 +27,6 @@ export const revalidate = 0;
 
 const encoder = new TextEncoder();
 const DEFAULT_CHANNEL: 'feed' = 'feed';
-const channelCursors = new Map<string, number>();
 
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
@@ -60,21 +59,25 @@ async function verifyToken(token: string): Promise<{ userId: string }> {
 
 type Channel = 'feed' | 'markets' | 'breaking-news' | 'upcoming-events' | string;
 
-async function edgePoll(channel: string, count: number = 10): Promise<string[]> {
+async function edgePoll(
+  cursorMap: Map<string, number>,
+  channel: string,
+  count: number = 10
+): Promise<string[]> {
   if (!redis) {
     logger.warn('Edge SSE poll: Redis not configured', { channel }, 'edge-sse');
     return [];
   }
 
   try {
-    const cursor = channelCursors.get(channel) ?? 0;
+    const cursor = cursorMap.get(channel) ?? 0;
     const messages = await redis.lrange(`sse:${channel}`, cursor, cursor + count - 1);
     if (!messages || messages.length === 0) {
       return [];
     }
 
     // Advance cursor for this connection; no trim to keep fan-out
-    channelCursors.set(channel, cursor + messages.length);
+    cursorMap.set(channel, cursor + messages.length);
 
     logger.debug('Edge SSE poll: messages fetched', { channel, count: messages.length, cursor }, 'edge-sse');
     return messages.map((msg) => (typeof msg === 'string' ? msg : JSON.stringify(msg)));
@@ -125,6 +128,7 @@ export async function GET(request: NextRequest) {
 
   let pingHandle: ReturnType<typeof setInterval> | null = null;
   let pollHandle: ReturnType<typeof setInterval> | null = null;
+  const channelCursors = new Map<string, number>(); // per-connection cursor for fan-out
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -151,7 +155,7 @@ export async function GET(request: NextRequest) {
         pollInFlight = true;
         try {
           for (const channel of channels) {
-            const messages = await edgePoll(channel, 10);
+            const messages = await edgePoll(channelCursors, channel, 10);
             if (messages.length === 0) continue;
             for (const raw of messages) {
               try {
