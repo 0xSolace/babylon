@@ -36,7 +36,7 @@ export function SSEDebugPanel({ channels = ['markets'], filterMarketId }: SSEDeb
   const subscribeChannels = useMemo(() => channels, [channels])
 
   useEffect(() => {
-    const handlers: Array<{ channel: Channel; handler: (msg: SSEMessage) => void }> = []
+    const handlers: Array<{ channel: Channel }> = []
 
     for (const ch of subscribeChannels) {
       const handler = (msg: SSEMessage) => {
@@ -59,7 +59,7 @@ export function SSEDebugPanel({ channels = ['markets'], filterMarketId }: SSEDeb
         })
       }
       subscribe(ch, handler)
-      handlers.push({ channel: ch, handler })
+      handlers.push({ channel: ch })
     }
 
     return () => {

@@ -64,7 +64,6 @@ export default function PredictionDetailPage() {
   const { trackMarketView } = useMarketTracking()
   const from = searchParams.get('from')
   const showSseDebug = searchParams.get('sseDebug') === '1'
-  const showSseDebug = searchParams.get('sseDebug') === '1'
 
   const [market, setMarket] = useState<PredictionMarket | null>(null)
   const [loading, setLoading] = useState(true)
