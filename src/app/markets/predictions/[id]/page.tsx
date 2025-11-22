@@ -18,7 +18,6 @@ import { toast } from 'sonner'
 import { Skeleton } from '@/components/shared/Skeleton'
 import { useMarketTracking } from '@/hooks/usePostHog'
 import { SSEDebugPanel } from '@/components/debug/SSEDebugPanel'
-import { SSEDebugPanel } from '@/components/debug/SSEDebugPanel'
 
 interface PredictionPosition {
   id: string
