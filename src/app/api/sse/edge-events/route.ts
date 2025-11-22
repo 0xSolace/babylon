@@ -137,6 +137,18 @@ export async function GET(request: NextRequest) {
         controller.enqueue(encoder.encode(payload));
       };
 
+      // Initialize cursors at current tail to avoid replaying old messages on new connections
+      for (const channel of channels) {
+        if (!redis) break;
+        try {
+          const len = await redis.llen(`sse:${channel}`);
+          channelCursors.set(channel, len);
+          logger.debug('Edge SSE cursor initialized', { channel, start: len }, 'edge-sse');
+        } catch (err) {
+          logger.warn('Edge SSE cursor init failed', { channel, err }, 'edge-sse');
+        }
+      }
+
       // Connected event
       send(
         `event: connected\ndata: ${JSON.stringify({
