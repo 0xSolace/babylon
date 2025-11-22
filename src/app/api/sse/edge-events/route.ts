@@ -155,12 +155,15 @@ export async function GET(request: NextRequest) {
             for (const raw of messages) {
               try {
                 const message = JSON.parse(raw) as {
+                  id?: string;
                   channel: Channel;
                   type: string;
                   data: Record<string, unknown>;
                   timestamp: number;
                 };
-                const dedupeId = `${message.channel}:${message.timestamp || ''}:${(message.data as { marketId?: string }).marketId ?? ''}:${message.type}`;
+                const dedupeId =
+                  message.id ??
+                  `${message.channel}:${message.timestamp || ''}:${(message.data as { marketId?: string }).marketId ?? ''}:${message.type}`;
                 if (seenIds.has(dedupeId)) {
                   continue;
                 }

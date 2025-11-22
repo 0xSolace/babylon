@@ -11,6 +11,7 @@
 import { logger } from '@/lib/logger';
 import { isRedisAvailable, safePoll, safePublish } from '@/lib/redis';
 import { EventEmitter } from 'events';
+import { randomUUID } from 'crypto';
 import type { JsonValue } from '@/types/common';
 
 const textEncoder = new TextEncoder();
@@ -29,6 +30,7 @@ export interface SSEClient {
 }
 
 export interface BroadcastMessage {
+  id: string;
   channel: Channel;
   type: string;
   data: Record<string, JsonValue>;
@@ -476,10 +478,11 @@ export function broadcastToChannel(
 ): void {
   const broadcaster = getEventBroadcaster();
   const message: BroadcastMessage = {
+    id: randomUUID(),
     channel,
-    type: data.type as string || 'update',
+    type: (data.type as string) || 'update',
     data,
-    timestamp: Date.now()
+    timestamp: Date.now(),
   };
 
   logger.info('Dispatching SSE broadcast', { channel, type: message.type }, 'event-broadcaster');
