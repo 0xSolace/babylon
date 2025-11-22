@@ -63,7 +63,7 @@ export function SSEDebugPanel({ channels = ['markets'], filterMarketId }: SSEDeb
     }
 
     return () => {
-      handlers.forEach(({ channel, handler }) => {
+      handlers.forEach(({ channel }) => {
         unsubscribe(channel)
       })
     }
