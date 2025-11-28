@@ -4,10 +4,11 @@ import { useEffect, useMemo } from 'react';
 
 import {
   type ConnectedWallet,
-  type User as PrivyUser,
   usePrivy,
   useWallets,
+  getIdentityToken as fetchIdentityToken,
 } from '@privy-io/react-auth';
+import { useIdentityToken } from '@privy-io/react-auth';
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets';
 
 import { toast } from 'sonner';
@@ -59,9 +60,6 @@ let globalTokenRetryTimeout: number | null = null;
 const linkedSocialUsers = new Set<string>();
 // Track in-flight linking operations to prevent race conditions
 const linkingInProgress = new Set<string>();
-// Track failed linking attempts (409 = account already linked to different user)
-// Key format: `${userId}:${platform}:${identifier}` (e.g., "did:privy:123:wallet:0x...")
-const failedLinkAttempts = new Set<string>();
 
 /**
  * Main authentication hook for managing user authentication state.
@@ -102,6 +100,7 @@ export function useAuth(): UseAuthReturn {
     logout,
     getAccessToken,
   } = usePrivy();
+  const { identityToken } = useIdentityToken();
   const { wallets } = useWallets();
   const { client } = useSmartWallets();
   const {
@@ -318,8 +317,8 @@ export function useAuth(): UseAuthReturn {
     if (!authenticated || !privyUser) return;
     if (isLoadingProfile) return; // Wait for profile to load
     if (needsOnboarding || needsOnchain) return;
-    if (!user) return; // Don't link social accounts if user doesn't exist yet
-    
+    if (!user) return; // Don't sync social accounts if user doesn't exist yet
+
     // Prevent duplicate calls - check both sets synchronously
     if (linkedSocialUsers.has(privyUser.id)) return;
     if (linkingInProgress.has(privyUser.id)) return;
@@ -327,160 +326,47 @@ export function useAuth(): UseAuthReturn {
     const token = await getAccessToken();
     if (!token) return;
 
+    const idToken = identityToken ?? (await fetchIdentityToken().catch(() => null));
+    if (!idToken) {
+      logger.warn('Skipping sync: missing Privy identity token', { userId: privyUser.id }, 'useAuth');
+      return;
+    }
+
     // Mark as in progress immediately to prevent race conditions
     linkingInProgress.add(privyUser.id);
 
-    const userWithFarcaster = privyUser as PrivyUser & {
-      farcaster?: { username?: string; displayName?: string };
-    };
-    const userWithTwitter = privyUser as PrivyUser & {
-      twitter?: { username?: string };
-    };
-
     try {
-      // Only link accounts that aren't already linked
-      if (userWithFarcaster.farcaster && !user.hasFarcaster) {
-        const farcaster = userWithFarcaster.farcaster;
-        const farcasterKey = `${privyUser.id}:farcaster:${farcaster.username || farcaster.displayName}`;
-
-        // Skip if this link attempt previously failed with 409
-        if (!failedLinkAttempts.has(farcasterKey)) {
-          const response = await apiFetch(
-            `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                platform: 'farcaster',
-                username: farcaster.username || farcaster.displayName,
-              }),
-            }
-          );
-
-          if (response.status === 409) {
-            // 409 = account already linked to another user - don't retry
-            failedLinkAttempts.add(farcasterKey);
-            toast.error('Farcaster Account Already Linked', {
-              description: `The Farcaster account @${farcaster.username || farcaster.displayName} is already linked to another Babylon account.`,
-              duration: 6000,
-            });
-            logger.info(
-              'Farcaster account already linked to another user, skipping future retries',
-              { username: farcaster.username },
-              'useAuth'
-            );
-          } else if (!response.ok) {
-            // Log other errors but don't throw - we don't want to break auth flow
-            const errorText = await response.text().catch(() => 'Unknown error');
-            logger.warn(
-              'Failed to link Farcaster account',
-              { username: farcaster.username, status: response.status, error: errorText },
-              'useAuth'
-            );
-          }
-          // 200 means successfully linked - great!
+      const response = await apiFetch(
+        '/api/users/sync-linked',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            'privy-id-token': idToken,
+          },
         }
-      }
+      );
 
-      if (userWithTwitter.twitter && !user.hasTwitter) {
-        const twitter = userWithTwitter.twitter;
-        const twitterKey = `${privyUser.id}:twitter:${twitter.username}`;
-
-        // Skip if this link attempt previously failed with 409
-        if (!failedLinkAttempts.has(twitterKey)) {
-          const response = await apiFetch(
-            `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                platform: 'twitter',
-                username: twitter.username,
-              }),
-            }
-          );
-
-          if (response.status === 409) {
-            // 409 = account already linked to another user - don't retry
-            failedLinkAttempts.add(twitterKey);
-            toast.error('Twitter Account Already Linked', {
-              description: `The Twitter account @${twitter.username} is already linked to another Babylon account.`,
-              duration: 6000,
-            });
-            logger.info(
-              'Twitter account already linked to another user, skipping future retries',
-              { username: twitter.username },
-              'useAuth'
-            );
-          } else if (!response.ok) {
-            // Log other errors but don't throw - we don't want to break auth flow
-            const errorText = await response.text().catch(() => 'Unknown error');
-            logger.warn(
-              'Failed to link Twitter account',
-              { username: twitter.username, status: response.status, error: errorText },
-              'useAuth'
-            );
-          }
-          // 200 means successfully linked - great!
-        }
-      }
-
-      // Only link wallet if it's different from the stored wallet address
-      if (wallet?.address && user.walletAddress?.toLowerCase() !== wallet.address.toLowerCase()) {
-        const walletKey = `${privyUser.id}:wallet:${wallet.address.toLowerCase()}`;
-
-        // Skip if this link attempt previously failed with 409
-        if (!failedLinkAttempts.has(walletKey)) {
-          const response = await apiFetch(
-            `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                platform: 'wallet',
-                address: wallet.address.toLowerCase(),
-              }),
-            }
-          );
-
-          if (response.status === 409) {
-            // 409 = wallet already linked to another account - don't retry
-            failedLinkAttempts.add(walletKey);
-            logger.info(
-              'Wallet already linked to another account, skipping future retries',
-              { address: wallet.address },
-              'useAuth'
-            );
-          } else if (!response.ok) {
-            const errorText = await response.text().catch(() => 'Unknown error');
-            logger.warn(
-              'Failed to link wallet',
-              { address: wallet.address, status: response.status, error: errorText },
-              'useAuth'
-            );
-          }
-          // 200 means successfully linked - great!
-        }
+      if (response.status === 409) {
+        const errorText = await response.text().catch(() => 'Account already linked');
+        toast.error('Account already linked', {
+          description: errorText,
+          duration: 6000,
+        });
+        logger.info('Sync-linked conflict', { status: response.status, error: errorText }, 'useAuth');
+      } else if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        logger.warn('Failed to sync linked accounts', { status: response.status, error: errorText }, 'useAuth');
+      } else {
+        linkedSocialUsers.add(privyUser.id);
+        // Refresh profile so UI reflects newly synced socials/wallet immediately
+        await fetchCurrentUser();
       }
     } catch (error) {
-      // Catch any unexpected errors and log them, but don't break the auth flow
-      logger.error(
-        'Unexpected error during social account linking',
-        { error: error instanceof Error ? error.message : String(error) },
-        'useAuth'
-      );
+      logger.error('Error syncing linked accounts', { error }, 'useAuth');
     } finally {
-      // Mark as completed and remove from in-progress set
       linkingInProgress.delete(privyUser.id);
-      // Always mark as "linked" to prevent retries, even if some links failed
-      // The function checks if accounts are already linked before attempting
-      linkedSocialUsers.add(privyUser.id);
     }
   };
 
@@ -521,13 +407,6 @@ export function useAuth(): UseAuthReturn {
     if (!authenticated || !privyUser) {
       linkedSocialUsers.delete(privyUser?.id ?? '');
       linkingInProgress.delete(privyUser?.id ?? '');
-      // Clear failed link attempts for this user (keys start with userId)
-      const userPrefix = `${privyUser?.id ?? ''}:`;
-      failedLinkAttempts.forEach((key) => {
-        if (key.startsWith(userPrefix)) {
-          failedLinkAttempts.delete(key);
-        }
-      });
       lastSyncedWalletAddress = null;
       clearAuth();
       // Clear any stale localStorage cache
@@ -615,12 +494,11 @@ export function useAuth(): UseAuthReturn {
       });
     }
     
-    // Clear module-level state
-    linkedSocialUsers.clear();
-    linkingInProgress.clear();
-    failedLinkAttempts.clear();
-    lastSyncedWalletAddress = null;
-    globalFetchInFlight = null;
+  // Clear module-level state
+  linkedSocialUsers.clear();
+  linkingInProgress.clear();
+  lastSyncedWalletAddress = null;
+  globalFetchInFlight = null;
     if (globalTokenRetryTimeout !== null) {
       clearTimeout(globalTokenRetryTimeout);
       globalTokenRetryTimeout = null;
