@@ -2,11 +2,12 @@
   "name": "@babylon/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Babylon API Middleware and Utilities",
+  "description": "Babylon API Infrastructure - Elysia plugins, auth, services",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./elysia": "./src/elysia/index.ts"
   },
   "scripts": {
     "lint": "biome lint .",
@@ -15,16 +16,17 @@
   "dependencies": {
     "@babylon/contracts": "workspace:*",
     "@babylon/shared": "workspace:*",
+    "@elysiajs/swagger": "^1.2.2",
     "@privy-io/server-auth": "^1.18.4",
     "@upstash/redis": "^1.34.3",
+    "elysia": "^1.2.25",
     "ioredis": "^5.6.1",
     "nanoid": "^5.1.6",
     "viem": "^2.40.3"
   },
   "peerDependencies": {
     "@babylon/db": "workspace:*",
-    "@babylon/engine": "workspace:*",
-    "next": "^16.0.5"
+    "@babylon/engine": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

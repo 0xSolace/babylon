@@ -29,7 +29,7 @@ import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { useMarketTracking } from '@/hooks/usePostHog';
 import { useUserPositions } from '@/hooks/useUserPositions';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
-import { FEE_CONFIG } from '@babylon/engine';
+import { FEE_CONFIG } from '@babylon/engine/client';
 import { cn } from '@babylon/shared';
 
 interface PerpMarket {

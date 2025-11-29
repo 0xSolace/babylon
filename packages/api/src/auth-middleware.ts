@@ -87,11 +87,39 @@ export async function authenticate(
     };
   }
 
-  // Try Privy authentication
+  // Try Privy authentication - separate token verification from database lookup
+  const privy = getPrivyClient();
+  
+  // Step 1: Verify the Privy token (authentication)
+  let claims: { userId: string };
   try {
-    const privy = getPrivyClient();
-    const claims = await privy.verifyAuthToken(token);
+    claims = await privy.verifyAuthToken(token);
+  } catch (error) {
+    const errorMessage = extractErrorMessage(
+      error instanceof Error
+        ? error
+        : typeof error === 'string'
+          ? error
+          : { message: String(error) }
+    );
+    
+    logger.warn(
+      'Privy token verification failed',
+      { error: errorMessage },
+      'auth-middleware'
+    );
 
+    if (errorMessage.includes('expired') || errorMessage.includes('exp')) {
+      throw new AuthenticationError('Authentication token has expired. Please refresh your session.');
+    }
+
+    throw new AuthenticationError('Invalid or expired authentication token');
+  }
+
+  // Step 2: Look up user in database (optional enrichment, not authentication)
+  // If database fails, we still have a valid authenticated user from Privy
+  let dbUser: { id: string; walletAddress: string | null } | undefined;
+  try {
     const result = await db
       .select({
         id: users.id,
@@ -101,21 +129,14 @@ export async function authenticate(
       .where(eq(users.privyId, claims.userId))
       .limit(1);
 
-    const dbUser = result[0];
-
-    return {
-      userId: dbUser?.id ?? claims.userId,
-      dbUserId: dbUser?.id,
-      privyId: claims.userId,
-      walletAddress: dbUser?.walletAddress ?? undefined,
-      email: undefined,
-      isAgent: false,
-    };
+    dbUser = result[0];
   } catch (error) {
-    // Log the specific error for debugging purposes
+    // Database lookup failed - log but don't fail authentication
+    // The user is still authenticated via Privy, just without DB enrichment
     logger.warn(
-      'Privy authentication failed',
+      'Database user lookup failed (user is still authenticated)',
       {
+        privyId: claims.userId,
         error: extractErrorMessage(
           error instanceof Error
             ? error
@@ -126,22 +147,16 @@ export async function authenticate(
       },
       'auth-middleware'
     );
-
-    // Check for specific error types
-    const errorMessage = extractErrorMessage(
-      error instanceof Error
-        ? error
-        : typeof error === 'string'
-          ? error
-          : { message: String(error) }
-    );
-    if (errorMessage.includes('expired') || errorMessage.includes('exp')) {
-      throw new AuthenticationError('Authentication token has expired. Please refresh your session.');
-    }
-
-    // Privy token verification failed
-    throw new AuthenticationError('Invalid or expired authentication token');
   }
+
+  return {
+    userId: dbUser?.id ?? claims.userId,
+    dbUserId: dbUser?.id,
+    privyId: claims.userId,
+    walletAddress: dbUser?.walletAddress ?? undefined,
+    email: undefined,
+    isAgent: false,
+  };
 }
 
 /**
@@ -190,11 +205,20 @@ export async function optionalAuth(
     };
   }
 
-  // Try Privy authentication - return null on failure (optional auth)
+  // Try Privy authentication - return null on token verification failure
+  const privy = getPrivyClient();
+  
+  let claims: { userId: string };
   try {
-    const privy = getPrivyClient();
-    const claims = await privy.verifyAuthToken(token);
+    claims = await privy.verifyAuthToken(token);
+  } catch {
+    // Token verification failed - return null for optional auth
+    return null;
+  }
 
+  // Database lookup for user enrichment
+  let dbUser: { id: string; walletAddress: string | null } | undefined;
+  try {
     const result = await db
       .select({
         id: users.id,
@@ -204,20 +228,19 @@ export async function optionalAuth(
       .where(eq(users.privyId, claims.userId))
       .limit(1);
 
-    const dbUser = result[0];
-
-    return {
-      userId: dbUser?.id ?? claims.userId,
-      dbUserId: dbUser?.id,
-      privyId: claims.userId,
-      walletAddress: dbUser?.walletAddress ?? undefined,
-      email: undefined,
-      isAgent: false,
-    };
+    dbUser = result[0];
   } catch {
-    // Token verification failed - return null for optional auth
-    return null;
+    // Database lookup failed - user is still authenticated, just without DB enrichment
   }
+
+  return {
+    userId: dbUser?.id ?? claims.userId,
+    dbUserId: dbUser?.id,
+    privyId: claims.userId,
+    walletAddress: dbUser?.walletAddress ?? undefined,
+    email: undefined,
+    isAgent: false,
+  };
 }
 
 /**

@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import type { PortfolioPnLSnapshot } from '@babylon/engine';
+import type { PortfolioPnLSnapshot } from '@babylon/engine/client';
 
 // Re-export for components that import from this hook
-export type { PortfolioPnLSnapshot } from '@babylon/engine';
+export type { PortfolioPnLSnapshot } from '@babylon/engine/client';
 
 /**
  * Return type for the usePortfolioPnL hook.
@@ -94,70 +94,81 @@ export function usePortfolioPnL(): UsePortfolioPnLResult {
     setLoading(true);
     setError(null);
 
-    const [balanceRes, positionsRes] = await Promise.all([
-      fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, {
-        signal: abortController.signal,
-      }),
-      fetch(`/api/markets/positions/${encodeURIComponent(user.id)}`, {
-        signal: abortController.signal,
-      }),
-    ]);
+    try {
+      const [balanceRes, positionsRes] = await Promise.all([
+        fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, {
+          signal: abortController.signal,
+        }),
+        fetch(`/api/markets/positions/${encodeURIComponent(user.id)}`, {
+          signal: abortController.signal,
+        }),
+      ]);
 
-    // Check if request was aborted before parsing
-    if (abortController.signal.aborted) {
-      return;
+      // Check if request was aborted before parsing
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      const balanceJson = await balanceRes.json();
+      const positionsJson = await positionsRes.json();
+
+      // Check if request was aborted after parsing
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      const totalDeposited = toNumber(balanceJson.totalDeposited);
+      const totalWithdrawn = toNumber(balanceJson.totalWithdrawn);
+      const lifetimePnL = toNumber(balanceJson.lifetimePnL);
+      const availableBalance = toNumber(balanceJson.balance);
+
+      const perpUnrealized = (positionsJson?.perpetuals?.positions ?? []).reduce(
+        (sum: number, position: { unrealizedPnL?: number }) =>
+          sum + toNumber(position?.unrealizedPnL),
+        0
+      );
+
+      const predictionUnrealized = (
+        positionsJson?.predictions?.positions ?? []
+      ).reduce(
+        (sum: number, position: { unrealizedPnL?: number }) =>
+          sum + toNumber(position?.unrealizedPnL),
+        0
+      );
+
+      const totalUnrealizedPnL = perpUnrealized + predictionUnrealized;
+      const totalPnL = lifetimePnL + totalUnrealizedPnL;
+      const netContributions = totalDeposited - totalWithdrawn;
+      const accountEquity = netContributions + totalPnL;
+
+      setData({
+        lifetimePnL,
+        netContributions,
+        totalDeposited,
+        totalWithdrawn,
+        availableBalance,
+        unrealizedPerpPnL: perpUnrealized,
+        unrealizedPredictionPnL: predictionUnrealized,
+        totalUnrealizedPnL,
+        totalPnL,
+        accountEquity,
+      });
+      setLastUpdated(Date.now());
+      setLoading(false);
+    } catch (err) {
+      // Ignore abort errors - these are expected when component unmounts
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Failed to fetch portfolio data');
+      setLoading(false);
     }
-
-    const balanceJson = await balanceRes.json();
-    const positionsJson = await positionsRes.json();
-
-    // Check if request was aborted after parsing
-    if (abortController.signal.aborted) {
-      return;
-    }
-
-    const totalDeposited = toNumber(balanceJson.totalDeposited);
-    const totalWithdrawn = toNumber(balanceJson.totalWithdrawn);
-    const lifetimePnL = toNumber(balanceJson.lifetimePnL);
-    const availableBalance = toNumber(balanceJson.balance);
-
-    const perpUnrealized = (positionsJson?.perpetuals?.positions ?? []).reduce(
-      (sum: number, position: { unrealizedPnL?: number }) =>
-        sum + toNumber(position?.unrealizedPnL),
-      0
-    );
-
-    const predictionUnrealized = (
-      positionsJson?.predictions?.positions ?? []
-    ).reduce(
-      (sum: number, position: { unrealizedPnL?: number }) =>
-        sum + toNumber(position?.unrealizedPnL),
-      0
-    );
-
-    const totalUnrealizedPnL = perpUnrealized + predictionUnrealized;
-    const totalPnL = lifetimePnL + totalUnrealizedPnL;
-    const netContributions = totalDeposited - totalWithdrawn;
-    const accountEquity = netContributions + totalPnL;
-
-    setData({
-      lifetimePnL,
-      netContributions,
-      totalDeposited,
-      totalWithdrawn,
-      availableBalance,
-      unrealizedPerpPnL: perpUnrealized,
-      unrealizedPredictionPnL: predictionUnrealized,
-      totalUnrealizedPnL,
-      totalPnL,
-      accountEquity,
-    });
-    setLastUpdated(Date.now());
-    setLoading(false);
   }, [authenticated, user?.id]);
 
   useEffect(() => {
-    refresh();
+    refresh().catch(() => {
+      // Error already handled in refresh()
+    });
 
     return () => {
       abortControllerRef.current?.abort();
