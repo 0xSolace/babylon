@@ -3,6 +3,7 @@
 import { Check, ExternalLink, Shield, X as XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { usePrivy } from '@privy-io/react-auth';
 import { signInWithFarcaster } from '@babylon/shared';
 import { cn } from '@babylon/shared';
 import { useAuthStore } from '@/stores/authStore';
@@ -44,6 +45,7 @@ export function LinkSocialAccountsModal({
   onClose,
 }: LinkSocialAccountsModalProps) {
   const { user, setUser } = useAuthStore();
+  const { linkTelegram } = usePrivy();
   const [linking, setLinking] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -143,6 +145,22 @@ export function LinkSocialAccountsModal({
       }
 
       toast.error('Failed to connect Farcaster. Please try again.');
+    } finally {
+      setLinking(null);
+    }
+  };
+
+  const handleTelegramLink = async () => {
+    if (!user?.id || !linkTelegram) return;
+
+    setLinking('telegram');
+    try {
+      await linkTelegram();
+      toast.success('Telegram account linked in Privy. Finishing sync...');
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      toast.error(errorMessage || 'Failed to link Telegram. Please try again.');
     } finally {
       setLinking(null);
     }
@@ -294,6 +312,65 @@ export function LinkSocialAccountsModal({
                     <>
                       <Shield className="h-4 w-4" />
                       <span>Sign in with Farcaster</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Telegram */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <svg
+                className="h-5 w-5"
+                viewBox="0 0 240 240"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M28.4 114.3 207.8 45c7.9-3.1 14.8 1.9 12 13.5l-30.5 143.6c-2.3 10.4-9 12.9-18.2 8.1l-50.4-37.2-24.3 23.4c-2.7 2.7-5 5-10.2 5l3.6-51.4 93.6-84.5c4.1-3.6-.9-5.6-6.3-2.1L76 146.6 28.1 131c-10.1-3.2-10.3-10-1.7-16.7z" />
+              </svg>
+              <h3 className="font-semibold">Telegram</h3>
+              {user?.hasTelegram && (
+                <span className="ml-auto flex items-center gap-1 text-green-500 text-sm">
+                  <Check className="h-4 w-4" />
+                  Verified
+                </span>
+              )}
+            </div>
+
+            {user?.hasTelegram ? (
+              <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/10 p-3">
+                <Check className="h-4 w-4 text-green-500" />
+                <span className="font-medium text-sm">
+                  @{user.telegramUsername || 'Telegram'}
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 rounded-lg border border-sky-500/20 bg-sky-500/10 p-3">
+                  <Shield className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
+                  <p className="text-muted-foreground text-xs">
+                    Link your Telegram account to enable Telegram login and earn
+                    rewards.
+                  </p>
+                </div>
+                <button
+                  onClick={handleTelegramLink}
+                  disabled={linking === 'telegram' || !linkTelegram}
+                  className={cn(
+                    'w-full rounded-lg px-4 py-2 font-semibold transition-colors',
+                    'bg-sky-500 text-primary-foreground hover:bg-sky-600',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                    'flex items-center justify-center gap-2'
+                  )}
+                >
+                  {linking === 'telegram' ? (
+                    <span>Connecting...</span>
+                  ) : (
+                    <>
+                      <Shield className="h-4 w-4" />
+                      <span>Link Telegram</span>
                     </>
                   )}
                 </button>

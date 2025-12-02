@@ -174,9 +174,13 @@ const userSelectFields = {
   hasFarcaster: users.hasFarcaster,
   hasTwitter: users.hasTwitter,
   hasDiscord: users.hasDiscord,
+  hasTelegram: users.hasTelegram,
   farcasterUsername: users.farcasterUsername,
   twitterUsername: users.twitterUsername,
   discordUsername: users.discordUsername,
+  telegramUsername: users.telegramUsername,
+  telegramId: users.telegramId,
+  telegramLinkedAt: users.telegramLinkedAt,
   showTwitterPublic: users.showTwitterPublic,
   showFarcasterPublic: users.showFarcasterPublic,
   showWalletPublic: users.showWalletPublic,
@@ -215,6 +219,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     let farcasterFid: string | null = null;
     let twitterUsername: string | null = null;
     let twitterId: string | null = null;
+    let telegramId: string | null = null;
+    let telegramUsername: string | null = null;
 
     try {
       const privyClient = getPrivyClient();
@@ -239,6 +245,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         twitterId = privyUser.twitter.subject ?? null;
       }
 
+      if (privyUser.telegram) {
+        telegramId = privyUser.telegram.telegramUserId ?? null;
+        telegramUsername = privyUser.telegram.username ?? null;
+      }
+
       logger.info(
         'Fetched Privy user data for new user',
         {
@@ -246,6 +257,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           hasEmail: !!email,
           hasFarcaster: !!farcasterUsername,
           hasTwitter: !!twitterUsername,
+          hasTelegram: !!telegramId,
         },
         'GET /api/users/me'
       );
@@ -336,6 +348,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         email,
         farcasterUsername,
         twitterUsername,
+        telegramUsername,
       },
       'GET /api/users/me'
     );
@@ -352,8 +365,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         farcasterFid,
         twitterUsername,
         twitterId,
+        telegramId,
+        telegramUsername,
         hasFarcaster: !!farcasterUsername,
         hasTwitter: !!twitterUsername,
+        hasTelegram: !!telegramId,
+        telegramLinkedAt: telegramId ? new Date() : null,
         profileComplete: false,
         hasUsername: false,
         hasBio: false,
@@ -374,6 +391,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         privyId,
         referredBy: dbUser.referredBy,
         email: dbUser.email,
+        telegramId: dbUser.telegramId,
       },
       'GET /api/users/me'
     );
@@ -485,9 +503,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     hasFarcaster: dbUser.hasFarcaster,
     hasTwitter: dbUser.hasTwitter,
     hasDiscord: dbUser.hasDiscord,
+    hasTelegram: dbUser.hasTelegram,
     farcasterUsername: dbUser.farcasterUsername,
     twitterUsername: dbUser.twitterUsername,
     discordUsername: dbUser.discordUsername,
+    telegramUsername: dbUser.telegramUsername,
+    telegramId: dbUser.telegramId,
+    telegramLinkedAt: dbUser.telegramLinkedAt
+      ? dbUser.telegramLinkedAt.toISOString()
+      : null,
     showTwitterPublic: dbUser.showTwitterPublic,
     showFarcasterPublic: dbUser.showFarcasterPublic,
     showWalletPublic: dbUser.showWalletPublic,

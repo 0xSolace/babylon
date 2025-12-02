@@ -12440,6 +12440,13 @@
           "notNull": true,
           "default": false
         },
+        "hasTelegram": {
+          "name": "hasTelegram",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "nftTokenId": {
           "name": "nftTokenId",
           "type": "integer",
@@ -12504,6 +12511,13 @@
         },
         "pointsAwardedForDiscordJoin": {
           "name": "pointsAwardedForDiscordJoin",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "pointsAwardedForTelegram": {
+          "name": "pointsAwardedForTelegram",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -12903,6 +12917,24 @@
         },
         "discordVerifiedAt": {
           "name": "discordVerifiedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telegramId": {
+          "name": "telegramId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telegramUsername": {
+          "name": "telegramUsername",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telegramLinkedAt": {
+          "name": "telegramLinkedAt",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
@@ -13632,6 +13664,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "discordId"
+          ]
+        },
+        "User_telegramId_unique": {
+          "name": "User_telegramId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "telegramId"
           ]
         }
       },

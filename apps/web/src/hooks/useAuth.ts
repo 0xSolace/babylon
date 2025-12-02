@@ -249,6 +249,7 @@ export function useAuth(): UseAuthReturn {
             referralCode: me.user.referralCode ?? undefined,
             hasFarcaster: me.user.hasFarcaster ?? undefined,
             hasTwitter: me.user.hasTwitter ?? undefined,
+            hasTelegram: me.user.hasTelegram ?? undefined,
             hasDiscord: me.user.hasDiscord ?? undefined,
             pointsAwardedForFarcasterFollow:
               me.user.pointsAwardedForFarcasterFollow ?? undefined,
@@ -258,6 +259,7 @@ export function useAuth(): UseAuthReturn {
               me.user.pointsAwardedForDiscordJoin ?? undefined,
             farcasterUsername: me.user.farcasterUsername ?? undefined,
             twitterUsername: me.user.twitterUsername ?? undefined,
+            telegramUsername: me.user.telegramUsername ?? undefined,
             discordUsername: me.user.discordUsername ?? undefined,
             showTwitterPublic: me.user.showTwitterPublic ?? undefined,
             showFarcasterPublic: me.user.showFarcasterPublic ?? undefined,
@@ -286,7 +288,9 @@ export function useAuth(): UseAuthReturn {
             currentUser.showWalletPublic !== hydratedUser.showWalletPublic ||
             currentUser.reputationPoints !== hydratedUser.reputationPoints ||
             currentUser.hasFarcaster !== hydratedUser.hasFarcaster ||
-            currentUser.hasTwitter !== hydratedUser.hasTwitter;
+            currentUser.hasTwitter !== hydratedUser.hasTwitter ||
+            currentUser.hasTelegram !== hydratedUser.hasTelegram ||
+            currentUser.telegramUsername !== hydratedUser.telegramUsername;
 
           if (hasChanged) {
             setUser(hydratedUser);
@@ -367,6 +371,9 @@ export function useAuth(): UseAuthReturn {
     };
     const userWithTwitter = privyUser as PrivyUser & {
       twitter?: { username?: string };
+    };
+    const userWithTelegram = privyUser as PrivyUser & {
+      telegram?: { telegramUserId?: string; username?: string };
     };
 
     try {
@@ -470,6 +477,55 @@ export function useAuth(): UseAuthReturn {
             );
           }
           // 200 means successfully linked - great!
+        }
+      }
+
+      if (userWithTelegram.telegram && !currentUser.hasTelegram) {
+        const { telegramUserId, username } = userWithTelegram.telegram;
+        const telegramKey = `${privyUser.id}:telegram:${telegramUserId || username}`;
+
+        if (telegramUserId && !failedLinkAttempts.has(telegramKey)) {
+          const response = await apiFetch(
+            `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                platform: 'telegram',
+                telegramId: telegramUserId,
+                username,
+              }),
+            }
+          );
+
+          if (response.status === 409) {
+            failedLinkAttempts.add(telegramKey);
+            toast.error('Telegram Account Already Linked', {
+              description:
+                'This Telegram account is already linked to another Babylon account.',
+              duration: 6000,
+            });
+            logger.info(
+              'Telegram account already linked to another user, skipping future retries',
+              { telegramUserId },
+              'useAuth'
+            );
+          } else if (!response.ok) {
+            const errorText = await response
+              .text()
+              .catch(() => 'Unknown error');
+            logger.warn(
+              'Failed to link Telegram account',
+              {
+                telegramUserId,
+                status: response.status,
+                error: errorText,
+              },
+              'useAuth'
+            );
+          }
         }
       }
 

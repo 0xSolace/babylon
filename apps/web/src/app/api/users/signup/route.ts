@@ -155,6 +155,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Fetch identity data from Privy if token provided
   let identityFarcasterUsername: string | undefined;
   let identityTwitterUsername: string | undefined;
+  let identityTelegramId: string | undefined;
+  let identityTelegramUsername: string | undefined;
 
   if (identityToken) {
     try {
@@ -164,6 +166,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
       identityFarcasterUsername = identityUser.farcaster?.username ?? undefined;
       identityTwitterUsername = identityUser.twitter?.username ?? undefined;
+      identityTelegramId = identityUser.telegram?.telegramUserId ?? undefined;
+      identityTelegramUsername = identityUser.telegram?.username ?? undefined;
     } catch (error) {
       logger.warn(
         'Failed to decode identity token during signup',
@@ -266,21 +270,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
         const baseUserData: Partial<typeof users.$inferInsert> = {
           username: parsedProfile.username,
-          displayName: parsedProfile.displayName,
-          email: parsedProfile.email || null,
-          bio: parsedProfile.bio ?? '',
-          profileImageUrl: parsedProfile.profileImageUrl ?? null,
-          coverImageUrl: parsedProfile.coverImageUrl ?? null,
-          walletAddress,
-          profileComplete: true,
-          profileSetupCompletedAt: new Date(), // Track when profile was completed
-          hasUsername: true,
-          hasBio: Boolean(
-            parsedProfile.bio && parsedProfile.bio.trim().length > 0
-          ),
-          hasProfileImage: Boolean(parsedProfile.profileImageUrl),
-          // Waitlist users start with 100 points instead of 1000
-          ...(isWaitlist ? { reputationPoints: 100 } : {}),
+        displayName: parsedProfile.displayName,
+        email: parsedProfile.email || null,
+        bio: parsedProfile.bio ?? '',
+        profileImageUrl: parsedProfile.profileImageUrl ?? null,
+        coverImageUrl: parsedProfile.coverImageUrl ?? null,
+        walletAddress,
+        profileComplete: true,
+        profileSetupCompletedAt: new Date(), // Track when profile was completed
+        hasUsername: true,
+        hasBio: Boolean(
+          parsedProfile.bio && parsedProfile.bio.trim().length > 0
+        ),
+        hasProfileImage: Boolean(parsedProfile.profileImageUrl),
+        // Waitlist users start with 100 points instead of 1000
+        ...(isWaitlist ? { reputationPoints: 100 } : {}),
           // Store IP hash for self-referral detection
           ...(registrationIpHash ? { registrationIpHash } : {}),
           // Legal acceptance (GDPR compliance)
@@ -318,6 +322,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           if (parsedProfile.twitterId) {
             baseUserData.twitterId = parsedProfile.twitterId;
           }
+        }
+
+        // Handle Telegram from Privy identity
+        if (identityTelegramId) {
+          baseUserData.hasTelegram = true;
+          baseUserData.telegramId = identityTelegramId;
+          baseUserData.telegramUsername =
+            parsedProfile.telegramUsername ?? identityTelegramUsername;
+          baseUserData.telegramLinkedAt = new Date();
         }
 
         // Upsert user (insert or update)
@@ -433,6 +446,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const pointsAwarded = {
     farcaster: 0,
     twitter: 0,
+    telegram: 0,
     wallet: 0,
     profile: 0,
     referral: 0,
@@ -564,6 +578,22 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       );
     }
   }
+  if (identityTelegramId) {
+    const pointsResult = await PointsService.awardTelegramLink(
+      result.user.id,
+      identityTelegramUsername
+    );
+    pointsAwarded.telegram = pointsResult.pointsAwarded;
+    logger.info(
+      'Awarded Telegram link points',
+      {
+        userId: result.user.id,
+        username: identityTelegramUsername,
+        points: pointsResult.pointsAwarded,
+      },
+      'POST /api/users/signup'
+    );
+  }
   if (walletAddress) {
     const pointsResult = await PointsService.awardWalletConnect(
       result.user.id,
@@ -657,8 +687,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       pointsAwardedForProfile: result.user.pointsAwardedForProfile,
       hasFarcaster: result.user.hasFarcaster,
       hasTwitter: result.user.hasTwitter,
+      hasTelegram: result.user.hasTelegram,
       farcasterUsername: result.user.farcasterUsername,
       twitterUsername: result.user.twitterUsername,
+      telegramUsername: result.user.telegramUsername,
       createdAt: result.user.createdAt.toISOString(),
       updatedAt: result.user.updatedAt.toISOString(),
     },

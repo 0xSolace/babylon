@@ -22,6 +22,7 @@ export const POINTS = {
   TWITTER_FOLLOW: 100, // Follow Babylon on Twitter/X
   DISCORD_LINK: 300, // Link Discord account
   DISCORD_JOIN: 100, // Join Babylon Discord server
+  TELEGRAM_LINK: 300, // Link Telegram account
   WALLET_CONNECT: 300,
   SHARE_ACTION: 500,
   SHARE_TO_TWITTER: 500,
@@ -47,6 +48,7 @@ export type PointsReason =
   | 'twitter_follow'
   | 'discord_link'
   | 'discord_join'
+  | 'telegram_link'
   | 'wallet_connect'
   | 'share_action'
   | 'share_to_twitter'
@@ -61,4 +63,3 @@ export type PointsReason =
   | 'transfer_sent'
   | 'transfer_received'
   | 'report_reward'; // Reward for successful reporting of CSAM/scammer
-

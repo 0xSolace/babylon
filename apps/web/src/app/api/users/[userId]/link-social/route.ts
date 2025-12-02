@@ -80,14 +80,32 @@ import { PointsService } from '@babylon/api';
 import { requireUserByIdentifier } from '@babylon/api';
 import { UserIdParamSchema } from '@babylon/shared';
 
-const LinkSocialRequestSchema = z.object({
-  platform: z.enum(['farcaster', 'twitter', 'wallet']),
-  username: z.string().optional(),
-  address: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
-    .optional(),
-});
+const LinkSocialRequestSchema = z
+  .object({
+    platform: z.enum(['farcaster', 'twitter', 'wallet', 'telegram']),
+    username: z.string().optional(),
+    address: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/)
+      .optional(),
+    telegramId: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.platform === 'wallet' && !value.address) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Wallet address is required when linking a wallet',
+        path: ['address'],
+      });
+    }
+    if (value.platform === 'telegram' && !value.telegramId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Telegram ID is required when linking Telegram',
+        path: ['telegramId'],
+      });
+    }
+  });
 
 /**
  * POST /api/users/[userId]/link-social
@@ -121,7 +139,8 @@ export const POST = withErrorHandling(
 
     // Parse and validate request body
     const body = await request.json();
-    const { platform, username, address } = LinkSocialRequestSchema.parse(body);
+    const { platform, username, address, telegramId } =
+      LinkSocialRequestSchema.parse(body);
 
     // Get current user state
     const [user] = await db
@@ -131,6 +150,9 @@ export const POST = withErrorHandling(
         walletAddress: users.walletAddress,
         farcasterFid: users.farcasterFid,
         twitterId: users.twitterId,
+        hasTelegram: users.hasTelegram,
+        telegramId: users.telegramId,
+        telegramUsername: users.telegramUsername,
       })
       .from(users)
       .where(eq(users.id, canonicalUserId))
@@ -187,6 +209,40 @@ export const POST = withErrorHandling(
           }
         }
         break;
+      case 'telegram':
+        alreadyLinked = user.hasTelegram;
+        if (telegramId && !alreadyLinked) {
+          const [existingTelegramUser] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.telegramId, telegramId))
+            .limit(1);
+          if (existingTelegramUser && existingTelegramUser.id !== canonicalUserId) {
+            throw new ConflictError(
+              'Telegram account already linked to another user',
+              'User.telegramId'
+            );
+          }
+        }
+        if (username && !alreadyLinked) {
+          const [existingTelegramUsernameUser] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(
+              and(eq(users.telegramUsername, username), ne(users.id, canonicalUserId))
+            )
+            .limit(1);
+          if (
+            existingTelegramUsernameUser &&
+            existingTelegramUsernameUser.id !== canonicalUserId
+          ) {
+            throw new ConflictError(
+              'Telegram username already linked to another user',
+              'User.telegramUsername'
+            );
+          }
+        }
+        break;
       case 'wallet':
         alreadyLinked = !!user.walletAddress;
         break;
@@ -219,6 +275,12 @@ export const POST = withErrorHandling(
         updateData.hasTwitter = true;
         if (username) updateData.twitterUsername = username;
         break;
+      case 'telegram':
+        updateData.hasTelegram = true;
+        if (username) updateData.telegramUsername = username;
+        if (telegramId) updateData.telegramId = telegramId;
+        updateData.telegramLinkedAt = new Date();
+        break;
       case 'wallet':
         if (address) updateData.walletAddress = address.toLowerCase();
         break;
@@ -238,6 +300,12 @@ export const POST = withErrorHandling(
           break;
         case 'twitter':
           pointsResult = await PointsService.awardTwitterLink(
+            canonicalUserId,
+            username
+          );
+          break;
+        case 'telegram':
+          pointsResult = await PointsService.awardTelegramLink(
             canonicalUserId,
             username
           );

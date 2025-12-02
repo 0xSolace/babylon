@@ -36,6 +36,7 @@ export interface User {
   hasFarcaster?: boolean;
   hasTwitter?: boolean;
   hasDiscord?: boolean;
+  hasTelegram?: boolean;
   pointsAwardedForEmail?: boolean;
   pointsAwardedForFarcasterFollow?: boolean;
   pointsAwardedForTwitterFollow?: boolean;
@@ -43,6 +44,7 @@ export interface User {
   farcasterUsername?: string;
   twitterUsername?: string;
   discordUsername?: string;
+  telegramUsername?: string;
   showTwitterPublic?: boolean;
   showFarcasterPublic?: boolean;
   showWalletPublic?: boolean;

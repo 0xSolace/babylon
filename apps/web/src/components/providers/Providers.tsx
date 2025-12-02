@@ -273,7 +273,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     config={privyConfig.config as PrivyClientConfig}
                   >
                     <SmartWalletsProvider>
-                      <FarcasterMiniAppProvider>
+                      {/* <FarcasterMiniAppProvider> */}
                         {/* PostHog user identification */}
                         <PostHogIdentifier />
                         {/* Capture referral code from URL if present */}
@@ -290,7 +290,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                             )}
                           </WidgetRefreshProvider>
                         </OnboardingProvider>
-                      </FarcasterMiniAppProvider>
+                      {/* </FarcasterMiniAppProvider> */}
                     </SmartWalletsProvider>
                   </PrivyProviderWrapper>
                 </QueryClientProvider>

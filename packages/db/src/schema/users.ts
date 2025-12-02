@@ -55,6 +55,7 @@ export const users = pgTable(
     hasFarcaster: boolean('hasFarcaster').notNull().default(false),
     hasTwitter: boolean('hasTwitter').notNull().default(false),
     hasDiscord: boolean('hasDiscord').notNull().default(false),
+    hasTelegram: boolean('hasTelegram').notNull().default(false),
     nftTokenId: integer('nftTokenId').unique(),
     onChainRegistered: boolean('onChainRegistered').notNull().default(false),
     pointsAwardedForFarcaster: boolean('pointsAwardedForFarcaster')
@@ -79,6 +80,9 @@ export const users = pgTable(
       .notNull()
       .default(false),
     pointsAwardedForDiscordJoin: boolean('pointsAwardedForDiscordJoin')
+      .notNull()
+      .default(false),
+    pointsAwardedForTelegram: boolean('pointsAwardedForTelegram')
       .notNull()
       .default(false),
     pointsAwardedForUsername: boolean('pointsAwardedForUsername')
@@ -165,6 +169,9 @@ export const users = pgTable(
     discordRefreshToken: text('discordRefreshToken'),
     discordTokenExpiresAt: timestamp('discordTokenExpiresAt', { mode: 'date' }),
     discordVerifiedAt: timestamp('discordVerifiedAt', { mode: 'date' }),
+    telegramId: text('telegramId').unique(),
+    telegramUsername: text('telegramUsername'),
+    telegramLinkedAt: timestamp('telegramLinkedAt', { mode: 'date' }),
     tosAccepted: boolean('tosAccepted').notNull().default(false),
     tosAcceptedAt: timestamp('tosAcceptedAt', { mode: 'date' }),
     tosAcceptedVersion: text('tosAcceptedVersion').default('2025-11-11'),
@@ -717,7 +724,6 @@ export type UserInteraction = typeof userInteractions.$inferSelect;
 export type NewUserInteraction = typeof userInteractions.$inferInsert;
 export type UserApiKey = typeof userApiKeys.$inferSelect;
 export type NewUserApiKey = typeof userApiKeys.$inferInsert;
-
 
 
 

@@ -82,12 +82,12 @@ export const privyConfig: {
     } satisfies ExtendedAppearance,
     // Prioritize Farcaster login for Mini Apps
     // Reference: https://docs.privy.io/recipes/farcaster/mini-apps
-    loginMethods: ['farcaster', 'wallet', 'email', 'twitter'],
+    loginMethods: ['farcaster', 'telegram', 'wallet', 'email', 'twitter'],
     embeddedWallets: {
       // Embedded wallets are created manually post-auth (see FarcasterFrameProvider)
       // Automatic creation is disabled to stay compatible with Farcaster Mini Apps
       ethereum: {
-        createOnLogin: 'off' as const,
+        createOnLogin: 'users-without-wallets' as const,
       },
       // Solana is not configured - we only support Ethereum wallets
     },
@@ -104,4 +104,3 @@ export const privyConfig: {
     }),
   },
 };
-

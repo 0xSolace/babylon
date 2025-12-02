@@ -8,6 +8,13 @@
       "when": 1764237293545,
       "tag": "0000_demonic_ego",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1765000000000,
+      "tag": "0001_telegram_fields",
+      "breakpoints": true
     }
   ]
 }

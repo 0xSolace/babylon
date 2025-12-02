@@ -86,6 +86,7 @@ export class PointsService {
         pointsAwardedForTwitterFollow: users.pointsAwardedForTwitterFollow,
         pointsAwardedForDiscord: users.pointsAwardedForDiscord,
         pointsAwardedForDiscordJoin: users.pointsAwardedForDiscordJoin,
+        pointsAwardedForTelegram: users.pointsAwardedForTelegram,
         pointsAwardedForWallet: users.pointsAwardedForWallet,
         pointsAwardedForReferralBonus: users.pointsAwardedForReferralBonus,
         pointsAwardedForShare: users.pointsAwardedForShare,
@@ -174,6 +175,10 @@ export class PointsService {
       case 'discord_join':
         updateData.bonusPoints = user.bonusPoints + amount;
         updateData.pointsAwardedForDiscordJoin = true;
+        break;
+      case 'telegram_link':
+        updateData.bonusPoints = user.bonusPoints + amount;
+        updateData.pointsAwardedForTelegram = true;
         break;
       case 'wallet_connect':
         updateData.bonusPoints = user.bonusPoints + amount;
@@ -305,6 +310,18 @@ export class PointsService {
       POINTS.DISCORD_JOIN,
       'discord_join',
       discordUsername ? { discordUsername } : undefined
+    );
+  }
+
+  static async awardTelegramLink(
+    userId: string,
+    telegramUsername?: string
+  ): Promise<AwardPointsResult> {
+    return PointsService.awardPoints(
+      userId,
+      POINTS.TELEGRAM_LINK,
+      'telegram_link',
+      telegramUsername ? { telegramUsername } : undefined
     );
   }
 
@@ -929,6 +946,7 @@ export class PointsService {
       pointsAwardedForTwitterFollow: boolean;
       pointsAwardedForDiscord: boolean;
       pointsAwardedForDiscordJoin: boolean;
+      pointsAwardedForTelegram: boolean;
       pointsAwardedForWallet: boolean;
       pointsAwardedForReferralBonus: boolean;
       pointsAwardedForShare: boolean;
@@ -950,6 +968,8 @@ export class PointsService {
         return user.pointsAwardedForDiscord;
       case 'discord_join':
         return user.pointsAwardedForDiscordJoin;
+      case 'telegram_link':
+        return user.pointsAwardedForTelegram;
       case 'wallet_connect':
         return user.pointsAwardedForWallet;
       case 'referral_bonus':
