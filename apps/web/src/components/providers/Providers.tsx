@@ -1,6 +1,11 @@
 'use client';
 
-import { type PrivyClientConfig, PrivyProvider } from '@privy-io/react-auth';
+import {
+  type PrivyClientConfig,
+  PrivyProvider,
+  usePrivy,
+  useIdentityToken,
+} from '@privy-io/react-auth';
 import { SmartWalletsProvider } from '@privy-io/react-auth/smart-wallets';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Fragment, Suspense, useEffect, useRef, useState } from 'react';
@@ -14,6 +19,7 @@ import { privyConfig } from '@babylon/shared';
 import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
 import { GamePlaybackManager } from './GamePlaybackManager';
 import { OnboardingProvider } from './OnboardingProvider';
+import { setAccessTokenProvider, setIdentityTokenProvider } from '@/lib/api';
 
 import { PostHogProvider } from './PostHogProvider';
 import { ReferralCaptureProvider } from './ReferralCaptureProvider';
@@ -166,6 +172,26 @@ function PrivyProviderWrapper({
 }
 
 /**
+ * Bridge Privy token providers into the shared API client.
+ */
+function PrivyTokenBridge() {
+  const { getAccessToken } = usePrivy();
+  const { identityToken } = useIdentityToken();
+
+  useEffect(() => {
+    if (getAccessToken) {
+      setAccessTokenProvider(getAccessToken);
+    }
+  }, [getAccessToken]);
+
+  useEffect(() => {
+    setIdentityTokenProvider(async () => identityToken ?? null);
+  }, [identityToken]);
+
+  return null;
+}
+
+/**
  * Root providers component wrapping the application with all necessary providers.
  *
  * Provides all application-level context providers including:
@@ -273,6 +299,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     config={privyConfig.config as PrivyClientConfig}
                   >
                     <SmartWalletsProvider>
+                      <PrivyTokenBridge />
                       <FarcasterMiniAppProvider>
                         {/* PostHog user identification */}
                         <PostHogIdentifier />
