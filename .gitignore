@@ -101,3 +101,7 @@ migration-data/
 # Vendor docs (generated)
 docs/vendors/
 local_db.bak
+
+# Drizzle auto-generated schema snapshots (can be regenerated)
+packages/db/drizzle/migrations/schema.ts
+packages/db/drizzle/migrations/relations.ts
