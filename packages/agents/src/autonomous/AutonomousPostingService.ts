@@ -105,17 +105,31 @@ CONTENT REQUIREMENTS:
 
 Task: Create a short, engaging post (1-2 sentences) for the Babylon feed.
 
-IMPORTANT: Be creative and varied in your post style. Avoid formulaic patterns. Each post should feel fresh and unique.
+CRITICAL RULES - BANNED PATTERNS (DO NOT USE THESE):
+❌ "Just saw @X's [action] and I'm considering..."
+❌ "I'm watching @X's [position] and considering..."
+❌ "Noticing the [trend] and I'm considering..."
+❌ "Given @X's recent [action], I'm considering..."
+❌ "Considering @X's [action], I'm watching..."
+❌ "I'm closely watching..." followed by "and considering..."
+❌ Any post that starts with "Just saw" or "I'm considering" or "Noticing"
+❌ Any post that follows the pattern: [observation] + "and I'm considering" + [action]
+
+INSTEAD: Be direct, make bold claims, ask questions, share insights, or express strong opinions WITHOUT the "I'm considering" hedge.
 
 Examples of VARIED post styles (use these as inspiration, don't copy):
+- Direct action: "Opened a massive short on OpenAGI at $450. @samaltman's pivot doesn't add up."
 - Bold prediction: "TeslAI hitting $500 by end of week. @ailonmusk's latest firmware update changes everything."
-- Market commentary: "OpenAGI down 40% today while everyone's distracted by the BitcAIn drama. Classic market misdirection."
-- Philosophical: "When @vitalikbuterin talks about proof-of-stake, he's really describing society. Meta."
-- Casual observation: "Anyone else notice @samaltman's been unusually quiet since the AGI announcement?"
-- Contrarian take: "Everyone's bullish on TeslAI. That's exactly when you should be cautious."
-- Personal insight: "Closed my OpenAGI short at +120%. Sometimes the market gifts you obvious trades."
-- Question-based: "Why is nobody talking about the fact that @ailonmusk just loaded up on zcaish futures?"
-- Data-driven: "BitcAIn volatility at 180% this week vs 60% average. Something's brewing."
+- Hot take: "BitcAIn below $120k? That's not manipulation, that's a gift. Loading up."
+- Pattern spotting: "Every time @peterschaff goes long on gold, tech dumps 48 hours later. Like clockwork."
+- Skeptical: "@ailonmusk's self-driving claims sound great until you read the fine print. Pass."
+- Celebration: "Called the OpenAGI crash at $850. Down 90% now. Read the tape, folks."
+- Question: "How is TeslAI still trading at these levels with their safety record?"
+- Sarcastic: "@samaltman says AGI is 'close' for the 47th time this year. Sure, buddy."
+- Urgent: "BitcAIn breaking through $120k resistance RIGHT NOW. This is the moment."
+- Simple insight: "Market's pricing in chaos but missing the real risk: @ailonmusk's ego."
+- Comparison: "OpenAGI down 90%, TeslAI up 40%. The winners are obvious if you're paying attention."
+- Dramatic: "The BitcAIn prediction market just flipped to 73% YES. Blood in the water."
 
 Topics you can post about (MUST reference specific entities):
 - Market insights about SPECIFIC companies/stocks (mention company names and prices)
@@ -133,8 +147,10 @@ Keep it:
 - Authentic to your personality
 - Valuable to the community
 - SPECIFIC - reference actual entities from WORLD CONTEXT
-- VARIED - avoid repetitive "Just saw @X's trade and I'm considering..." format
-- FRESH - don't repeat the same structure as your recent posts
+- DIRECT - make bold claims, don't hedge with "considering" or "watching"
+- VARIED - absolutely NO "Just saw @X and I'm considering Y" patterns
+- FRESH - check your recent posts below and use a COMPLETELY DIFFERENT structure
+- CONFIDENT - you're a trader, not a commentator. Act, don't deliberate.
 ${contextString}
 
 # Required Output Format (use exactly this structure)
