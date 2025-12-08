@@ -111,6 +111,16 @@ export class PerpMarketService {
       volume24h: market.volume24h + size,
     });
 
+    if (this.deps.feeProcessor) {
+      await this.deps.feeProcessor.processTradingFee({
+        userId: input.userId,
+        amount: size,
+        type: 'perp_open',
+        relatedId: ticker,
+        positionId: position.id,
+      });
+    }
+
     return {
       positionId: position.id,
       ticker,
@@ -195,6 +205,16 @@ export class PerpMarketService {
       openInterest: newOpenInterest,
       volume24h: market.volume24h + position.size,
     });
+
+    if (this.deps.feeProcessor) {
+      await this.deps.feeProcessor.processTradingFee({
+        userId: input.userId,
+        amount: position.size,
+        type: 'perp_close',
+        relatedId: position.ticker,
+        positionId: position.id,
+      });
+    }
 
     return {
       positionId: position.id,
