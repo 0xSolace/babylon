@@ -215,12 +215,21 @@ export class AutonomousCoordinator {
 
     // === PRIORITY 1: RESPONSES (Always do first) ===
     // Use batch response service for intelligent response handling
-    const responses = await autonomousBatchResponseService.processBatch(
-      agentUserId,
-      runtime
-    );
-    result.actionsExecuted.comments += responses; // Comments include replies
-    result.actionsExecuted.messages += responses; // Messages include DM responses
+    try {
+      const responses = await autonomousBatchResponseService.processBatch(
+        agentUserId,
+        runtime
+      );
+      result.actionsExecuted.comments += responses; // Comments include replies
+      result.actionsExecuted.messages += responses; // Messages include DM responses
+    } catch (responseError) {
+      logger.error(
+        'Error during batch response processing',
+        responseError,
+        'AutonomousCoordinator'
+      );
+      // Don't fail the entire tick if responses fail - continue with trading and posting
+    }
 
     // === PRIORITY 2: TRADING ===
     if (agent.autonomousTrading) {
