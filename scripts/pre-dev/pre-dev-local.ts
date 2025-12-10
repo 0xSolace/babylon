@@ -369,9 +369,9 @@ console.info('  Redis:      localhost:6380');
 console.info('  MinIO:      http://localhost:9000 (console: :9001)');
 console.info('');
 console.info('App Routes:');
-console.info('  Main:       http://localhost:3000');
+console.info('  Main:       http://localhost:5007');
 console.info(
-  '  Betting:    http://localhost:3000/betting (Oracle-powered markets)'
+  '  Betting:    http://localhost:5007/betting (Oracle-powered markets)'
 );
 console.info('');
 if (isLocalnet) {

@@ -569,7 +569,7 @@ async function runGameTest(config: PipelineConfig): Promise<{
   // First, check if the dev server is running
   let serverRunning = false;
   try {
-    const response = await fetch('http://localhost:3000/api/health', {
+    const response = await fetch('http://localhost:5007/api/health', {
       signal: AbortSignal.timeout(3000),
     });
     serverRunning = response.ok;
@@ -592,7 +592,7 @@ async function runGameTest(config: PipelineConfig): Promise<{
     for (let i = 0; i < 60; i++) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       try {
-        const response = await fetch('http://localhost:3000/api/health', {
+        const response = await fetch('http://localhost:5007/api/health', {
           signal: AbortSignal.timeout(3000),
         });
         if (response.ok) {

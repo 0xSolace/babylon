@@ -611,11 +611,11 @@ setup('authenticate as admin', async ({ page }) => {
 
   console.log(`🔐 Authenticating with email: ${email}`);
   console.log(
-    `🌐 Base URL: ${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}`
+    `🌐 Base URL: ${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}`
   );
 
   // Verify server is responding before starting auth flow
-  const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
   try {
     const response = await page.request.get(`${baseURL}/api/health`);
     if (!response.ok()) {

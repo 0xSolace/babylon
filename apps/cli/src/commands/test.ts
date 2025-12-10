@@ -24,11 +24,11 @@ COMMANDS:
 
 OPTIONS (load):
   --scenario=NAME   Test scenario: light, normal, heavy, stress (default: normal)
-  --url=URL         Base URL (default: http://localhost:3000)
+  --url=URL         Base URL (default: http://localhost:5007)
 
 OPTIONS (a2a):
   --scenario=NAME   Test scenario: light, normal, heavy, rate-limit, coalition (default: normal)
-  --url=URL         Base URL (default: http://localhost:3000)
+  --url=URL         Base URL (default: http://localhost:5007)
 
 EXAMPLES:
   babylon test load                       Normal load test
@@ -39,7 +39,7 @@ EXAMPLES:
 
 async function runLoadTest(args: ReturnType<typeof parseArgs>): Promise<void> {
   const scenario = getOption(args, 'scenario') || 'normal';
-  const baseUrl = getOption(args, 'url') || 'http://localhost:3000';
+  const baseUrl = getOption(args, 'url') || 'http://localhost:5007';
 
   const validScenarios = ['light', 'normal', 'heavy', 'stress'];
   if (!validScenarios.includes(scenario)) {
@@ -129,7 +129,7 @@ async function runA2AStressTest(
   args: ReturnType<typeof parseArgs>
 ): Promise<void> {
   const scenario = getOption(args, 'scenario') || 'normal';
-  const baseUrl = getOption(args, 'url') || 'http://localhost:3000';
+  const baseUrl = getOption(args, 'url') || 'http://localhost:5007';
 
   const validScenarios = [
     'light',

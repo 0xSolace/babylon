@@ -16,7 +16,7 @@ const tokenFile = path.join(__dirname, '../../../.playwright/test-tokens.json');
 const baseURL =
   process.env.PLAYWRIGHT_BASE_URL ||
   process.env.API_URL?.replace('/api', '') ||
-  'http://localhost:3000';
+  'http://localhost:5007';
 
 let apiRequest: APIRequestContext | null = null;
 let testUserId: string | null = null;

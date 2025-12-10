@@ -46,9 +46,9 @@
     "development": {
       "network": "local",
       "endpoints": {
-        "apiBaseUrl": "http://localhost:3000/api",
+        "apiBaseUrl": "http://localhost:5007/api",
         "a2aEndpoint": "ws://localhost:3001/ws/a2a",
-        "mcpEndpoint": "http://localhost:3000/mcp"
+        "mcpEndpoint": "http://localhost:5007/mcp"
       }
     },
     "staging": {

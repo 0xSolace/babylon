@@ -6,7 +6,7 @@
 
 import type { Page } from '@playwright/test';
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
 
 /**
  * Waits for the server to be responsive before proceeding.

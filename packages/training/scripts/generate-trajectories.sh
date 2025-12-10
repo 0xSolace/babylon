@@ -31,8 +31,8 @@ echo "  Parallel execution: $PARALLEL"
 echo ""
 
 # Check if server is running
-if ! curl -s http://localhost:3000 > /dev/null 2>&1; then
-    echo -e "${YELLOW}⚠️  Server not running at localhost:3000${NC}"
+if ! curl -s http://localhost:5007 > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Server not running at localhost:5007${NC}"
     echo ""
     echo "Starting server in background..."
     echo "Run this in another terminal first:"

@@ -94,8 +94,8 @@ export default function SwaggerUI({ spec, url }: SwaggerUIProps) {
             if (s.url.includes('babylon.market') && s.url.endsWith('/api')) {
               return { ...s, url: 'https://babylon.market' };
             }
-            if (s.url === 'http://localhost:3000/api') {
-              return { ...s, url: 'http://localhost:3000' };
+            if (s.url === 'http://localhost:5007/api') {
+              return { ...s, url: 'http://localhost:5007' };
             }
             return s;
           });
@@ -116,7 +116,7 @@ export default function SwaggerUI({ spec, url }: SwaggerUIProps) {
             description: 'Production server',
           },
           {
-            url: 'http://localhost:3000',
+            url: 'http://localhost:5007',
             description: 'Development server',
           },
         ];

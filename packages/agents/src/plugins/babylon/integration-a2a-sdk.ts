@@ -69,7 +69,7 @@ async function initializeA2ASdkClient(agentUserId: string): Promise<A2AClient> {
   const baseUrl =
     process.env.BABYLON_A2A_ENDPOINT ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    'http://localhost:3000';
+    'http://localhost:5007';
   const agentCardUrl = `${baseUrl}/.well-known/agent-card.json`;
 
   logger.info(
@@ -837,7 +837,7 @@ export async function enhanceRuntimeWithBabylon(
     a2aEndpoint:
       process.env.NEXT_PUBLIC_APP_URL ||
       process.env.BABYLON_A2A_ENDPOINT ||
-      'http://localhost:3000',
+      'http://localhost:5007',
   });
 
   runtime.registerPlugin(plugin);

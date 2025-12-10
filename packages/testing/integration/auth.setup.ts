@@ -16,7 +16,7 @@ import path from 'path';
 
 const authFile = path.join(__dirname, '../../.playwright/auth.json');
 const tokenFile = path.join(__dirname, '../../.playwright/test-tokens.json');
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
 
 setup('extract auth tokens for integration tests', async ({ page }) => {
   // Check if auth state exists (from E2E setup)

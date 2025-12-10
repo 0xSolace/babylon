@@ -12,7 +12,7 @@ import type { AgentCard } from '@a2a-js/sdk';
 const BASE_URL =
   process.env.BABYLON_A2A_ENDPOINT ||
   process.env.NEXT_PUBLIC_APP_URL ||
-  'http://localhost:3000';
+  'http://localhost:5007';
 const SECURITY_SCHEME_NAME = 'babylonApiKey';
 
 export const babylonAgentCard: AgentCard = {

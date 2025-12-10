@@ -63,7 +63,7 @@ export async function registerAgent(): Promise<AgentIdentity> {
   agent.setActive(true);
 
   // Set A2A endpoint (Babylon A2A server)
-  const babylonA2AUrl = process.env.BABYLON_API_URL || 'http://localhost:3000';
+  const babylonA2AUrl = process.env.BABYLON_API_URL || 'http://localhost:5007';
   await agent.setA2A(`${babylonA2AUrl}/a2a`, '1.0.0', false);
 
   // Register on-chain

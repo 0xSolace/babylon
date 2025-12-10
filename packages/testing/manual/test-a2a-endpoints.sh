@@ -1,11 +1,11 @@
 #!/bin/bash
 # Manual Test Script for A2A HTTP Endpoints
 # Usage: ./tests/manual/test-a2a-endpoints.sh
-# Requires: Server running on http://localhost:3000
+# Requires: Server running on http://localhost:5007
 
 set -e
 
-BASE_URL="${BASE_URL:-http://localhost:3000}"
+BASE_URL="${BASE_URL:-http://localhost:5007}"
 echo "🧪 Testing A2A HTTP Endpoints"
 echo "Server: $BASE_URL"
 echo ""

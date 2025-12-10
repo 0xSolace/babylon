@@ -64,7 +64,7 @@ test.describe('Settings - Profile Tab', () => {
     await navigateTo(page, ROUTES.HOME);
     await loginWithWallet(page);
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/settings?tab=profile`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/settings?tab=profile`
     );
     await waitForPageLoad(page);
     await page.waitForTimeout(2000);
@@ -120,7 +120,7 @@ test.describe('Settings - Theme Tab', () => {
     await navigateTo(page, ROUTES.HOME);
     await loginWithWallet(page);
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/settings?tab=theme`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/settings?tab=theme`
     );
     await waitForPageLoad(page);
     await page.waitForTimeout(2000);
@@ -159,7 +159,7 @@ test.describe('Settings - Privacy Tab', () => {
     await navigateTo(page, ROUTES.HOME);
     await loginWithWallet(page);
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/settings?tab=privacy`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/settings?tab=privacy`
     );
     await waitForPageLoad(page);
     await page.waitForTimeout(2000);
@@ -187,7 +187,7 @@ test.describe('Settings - API Keys Tab', () => {
     await navigateTo(page, ROUTES.HOME);
     await loginWithWallet(page);
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/settings?tab=api`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/settings?tab=api`
     );
     await waitForPageLoad(page);
     await page.waitForTimeout(2000);

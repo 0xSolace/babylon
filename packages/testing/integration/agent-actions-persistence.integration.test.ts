@@ -81,7 +81,7 @@ describe('Agent Actions Persistence Integration', () => {
         const baseUrl =
           process.env.NEXT_PUBLIC_APP_URL ||
           process.env.BABYLON_A2A_ENDPOINT ||
-          'http://localhost:3000';
+          'http://localhost:5007';
         const agentCard = {
           protocolVersion: '0.3.0',
           name: 'Test Agent',

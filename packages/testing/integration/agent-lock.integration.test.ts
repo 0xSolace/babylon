@@ -33,7 +33,7 @@ import type {
 const BASE_URL =
   process.env.TEST_API_URL ||
   process.env.TEST_BASE_URL ||
-  'http://localhost:3000';
+  'http://localhost:5007';
 let serverAvailable = false;
 let cronEndpointAvailable = false;
 let testSetupComplete = false;

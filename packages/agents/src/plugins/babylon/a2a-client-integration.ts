@@ -24,7 +24,7 @@ export async function initializeA2AClient(
     endpoint ||
     process.env.BABYLON_A2A_ENDPOINT ||
     process.env.NEXT_PUBLIC_APP_URL + '/.well-known/agent-card.json' ||
-    'http://localhost:3000/.well-known/agent-card.json';
+    'http://localhost:5007/.well-known/agent-card.json';
 
   logger.info('Initializing A2A client for Babylon', {
     endpoint: babylonEndpoint,

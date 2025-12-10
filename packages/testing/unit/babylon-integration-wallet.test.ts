@@ -63,7 +63,7 @@ describeTests('initializeAgentA2AClient wallet provisioning', () => {
     createWalletMock.mockClear();
     sdkFromCardMock.mockClear();
     process.env.AUTO_CREATE_AGENT_WALLETS = 'true';
-    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
+    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:5007';
   });
 
   test('auto-creates wallet when missing', async () => {

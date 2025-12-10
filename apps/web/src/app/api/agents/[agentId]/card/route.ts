@@ -91,7 +91,7 @@ export async function GET(
   }
 
   // Build agent card from registration data
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:5007';
 
   const agentCard: AgentCard = {
     version: '1.0',

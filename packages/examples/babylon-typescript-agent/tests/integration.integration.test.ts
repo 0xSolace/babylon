@@ -95,7 +95,7 @@ describe('Autonomous Babylon Agent - Integration', () => {
       const { BabylonA2AClient } = await import('../src/a2a-client');
 
       const client = new BabylonA2AClient({
-        baseUrl: 'http://localhost:3000',
+        baseUrl: 'http://localhost:5007',
         address: '0x' + '1'.repeat(40),
         tokenId: 1,
         apiKey: 'test',

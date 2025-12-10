@@ -15,7 +15,7 @@ import {
 
 // Test with mock credentials for route verification
 const TEST_CONFIG: BabylonA2AClientConfig = {
-  baseUrl: 'http://localhost:3000',
+  baseUrl: 'http://localhost:5007',
   address: '0x' + '1'.repeat(40),
   tokenId: 999999,
   privateKey: '0x' + '1'.repeat(64),
@@ -29,7 +29,7 @@ describe('A2A Routes Live Verification', () => {
     console.log('\n🔍 Testing A2A HTTP Connection...');
 
     // Check if server is accessible
-    const response = await fetch('http://localhost:3000/api/health');
+    const response = await fetch('http://localhost:5007/api/health');
     const health = await response.json();
     expect(health.status).toBe('ok');
     console.log('✅ Server is running:', health.status);

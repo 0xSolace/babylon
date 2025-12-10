@@ -13,7 +13,7 @@ import { expect, test } from '@playwright/test';
 import type { DiscoveredAgent } from '../types/test-types';
 
 // Base URL for API calls
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
 
 // Test agent data - use timestamp to ensure unique IDs
 const timestamp = Date.now();

@@ -80,7 +80,7 @@ describe('Concurrent Agent Performance Tests', () => {
         const registrations = agents.map(async (agent) => {
           // Simulate registration via API
           const response = await fetch(
-            'http://localhost:3000/api/agents/external/register',
+            'http://localhost:5007/api/agents/external/register',
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -113,7 +113,7 @@ describe('Concurrent Agent Performance Tests', () => {
         const registrations = agents.map(async (agent) => {
           try {
             const response = await fetch(
-              'http://localhost:3000/api/agents/external/register',
+              'http://localhost:5007/api/agents/external/register',
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -248,7 +248,7 @@ describe('Concurrent Agent Performance Tests', () => {
       const { duration } = await measureTime(async () => {
         const queries = Array.from({ length: queryCount }, (_, i) =>
           fetch(
-            `http://localhost:3000/api/agents/external/discover?limit=10&offset=${i * 10}`,
+            `http://localhost:5007/api/agents/external/discover?limit=10&offset=${i * 10}`,
             {
               method: 'GET',
               headers: {

@@ -57,7 +57,7 @@ async function main() {
   const a2aClient = new BabylonA2AClient({
     baseUrl:
       process.env.BABYLON_API_URL?.replace('/api/a2a', '') ||
-      'http://localhost:3000',
+      'http://localhost:5007',
     address: agentIdentity.address,
     tokenId: agentIdentity.tokenId,
     privateKey: process.env.AGENT0_PRIVATE_KEY,

@@ -271,7 +271,7 @@ describe('Time Filtering - API Endpoints', () => {
 
   describe('API Route Integration', () => {
     it('GET /api/posts should filter out future posts', async () => {
-      const response = await fetch('http://localhost:3000/api/posts?limit=100');
+      const response = await fetch('http://localhost:5007/api/posts?limit=100');
       if (!response.ok) {
         console.warn('API not available, skipping integration test');
         return;
@@ -404,7 +404,7 @@ describe('Time Filtering - API Endpoints', () => {
       });
 
       const response = await fetch(
-        'http://localhost:3000/api/feed/widgets/breaking-news'
+        'http://localhost:5007/api/feed/widgets/breaking-news'
       );
       if (!response.ok) {
         console.warn('API not available, skipping integration test');
@@ -436,7 +436,7 @@ describe('Time Filtering - API Endpoints', () => {
 
     it('GET /api/feed/widgets/trending-posts should filter out future posts', async () => {
       const response = await fetch(
-        'http://localhost:3000/api/feed/widgets/trending-posts'
+        'http://localhost:5007/api/feed/widgets/trending-posts'
       );
       if (!response.ok) {
         console.warn('API not available, skipping integration test');

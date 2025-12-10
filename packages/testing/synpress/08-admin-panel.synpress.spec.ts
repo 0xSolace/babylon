@@ -91,7 +91,7 @@ test.describe('Admin Users Tab', () => {
     await navigateTo(page, ROUTES.HOME);
     await loginWithWallet(page);
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/admin?tab=users`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/admin?tab=users`
     );
     await waitForPageLoad(page);
     await page.waitForTimeout(2000);
@@ -135,7 +135,7 @@ test.describe('Admin Agents Tab', () => {
     await navigateTo(page, ROUTES.HOME);
     await loginWithWallet(page);
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/admin?tab=agents`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/admin?tab=agents`
     );
     await waitForPageLoad(page);
     await page.waitForTimeout(2000);
@@ -192,7 +192,7 @@ test.describe('Admin Reports Tab', () => {
     await navigateTo(page, ROUTES.HOME);
     await loginWithWallet(page);
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/admin?tab=reports`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/admin?tab=reports`
     );
     await waitForPageLoad(page);
     await page.waitForTimeout(2000);

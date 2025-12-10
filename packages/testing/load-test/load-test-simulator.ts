@@ -89,7 +89,7 @@ export class LoadTestSimulator {
   private startTime: Date = new Date();
   private errorCounts: Map<string, number> = new Map();
 
-  constructor(baseUrl = 'http://localhost:3000') {
+  constructor(baseUrl = 'http://localhost:5007') {
     this.baseUrl = baseUrl;
   }
 

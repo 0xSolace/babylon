@@ -15,7 +15,7 @@
  *    - Get leaderboard and stats
  *
  * Prerequisites:
- * - Babylon server running on localhost:3000
+ * - Babylon server running on localhost:5007
  * - Database accessible
  * - At least one active prediction market
  * - At least one perpetual market (organization)
@@ -30,7 +30,7 @@ import { BabylonA2AClient } from '../src/a2a-client';
 
 dotenv.config({ path: '.env.local' });
 
-const SERVER_URL = process.env.BABYLON_API_URL || 'http://localhost:3000';
+const SERVER_URL = process.env.BABYLON_API_URL || 'http://localhost:5007';
 const _A2A_ENDPOINT = `${SERVER_URL}/api/a2a`;
 
 // Test agent identity

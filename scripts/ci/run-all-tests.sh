@@ -100,7 +100,7 @@ SERVER_PID=$!
 
 # Wait for server to be ready
 echo "⏳ Waiting for server to start..."
-timeout 120 bash -c 'until curl -f http://localhost:3000/api/health > /dev/null 2>&1; do sleep 2; done' || {
+timeout 120 bash -c 'until curl -f http://localhost:5007/api/health > /dev/null 2>&1; do sleep 2; done' || {
     echo -e "${RED}❌ Server failed to start${NC}"
     exit 1
 }

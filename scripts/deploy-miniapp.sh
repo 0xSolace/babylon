@@ -57,9 +57,9 @@ fi
 # Step 5: Check if dev server is running
 echo ""
 echo "🌐 Step 5: Testing local manifest serving..."
-if curl -s http://localhost:3000/.well-known/farcaster.json > /dev/null 2>&1; then
+if curl -s http://localhost:5007/.well-known/farcaster.json > /dev/null 2>&1; then
   echo -e "${GREEN}✅ Manifest accessible locally${NC}"
-  echo "   URL: http://localhost:3000/.well-known/farcaster.json"
+  echo "   URL: http://localhost:5007/.well-known/farcaster.json"
 else
   echo -e "${YELLOW}⚠️  Dev server not running (OK for production)${NC}"
   echo "   💡 To test locally: bun run dev"

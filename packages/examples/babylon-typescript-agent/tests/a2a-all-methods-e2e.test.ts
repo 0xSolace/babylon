@@ -1,6 +1,6 @@
 /**
  * Comprehensive E2E tests for ALL A2A methods
- * Tests against real server running on localhost:3000
+ * Tests against real server running on localhost:5007
  *
  * This test suite verifies that ALL ~60 A2A methods are:
  * 1. Available in the client
@@ -17,7 +17,7 @@ dotenv.config({ path: '.env.local' });
 const TEST_CONFIG = {
   baseUrl:
     process.env.BABYLON_API_URL?.replace('/api/a2a', '') ||
-    'http://localhost:3000',
+    'http://localhost:5007',
   address: process.env.AGENT0_ADDRESS || '0x' + '1'.repeat(40),
   tokenId: Number.parseInt(process.env.AGENT0_TOKEN_ID || '999999', 10),
   privateKey: process.env.AGENT0_PRIVATE_KEY || '0x' + '1'.repeat(64),
@@ -29,10 +29,10 @@ describe('A2A All Methods E2E Tests', () => {
 
   beforeAll(async () => {
     // Check if server is running
-    const healthCheck = await fetch('http://localhost:3000/api/health');
+    const healthCheck = await fetch('http://localhost:5007/api/health');
     if (!healthCheck.ok) {
       throw new Error(
-        'Babylon server must be running on localhost:3000. Run: bun run dev'
+        'Babylon server must be running on localhost:5007. Run: bun run dev'
       );
     }
 

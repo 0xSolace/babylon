@@ -174,7 +174,7 @@ export async function GET(req: NextRequest) {
   );
 
   // Build agent cards for discovered agents
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:5007';
 
   // If includeExternal is true, use AgentDiscoveryService for merged results
   if (includeExternal) {

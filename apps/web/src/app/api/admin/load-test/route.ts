@@ -123,7 +123,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     baseUrl ||
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000');
+      : 'http://localhost:5007');
 
   logger.info(
     'Starting load test',

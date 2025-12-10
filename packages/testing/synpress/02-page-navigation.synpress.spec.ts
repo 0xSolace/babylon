@@ -370,7 +370,7 @@ test.describe('Share Pages', () => {
     await page.setViewportSize(VIEWPORTS.DESKTOP);
     // These are public pages that don't require auth
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/share/pnl/test-user-id`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/share/pnl/test-user-id`
     );
     await waitForPageLoad(page);
     // Should load without crashing (may show error for invalid user)
@@ -381,7 +381,7 @@ test.describe('Share Pages', () => {
   test('share referral page loads', async ({ page }) => {
     await page.setViewportSize(VIEWPORTS.DESKTOP);
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/share/referral/test-user-id`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/share/referral/test-user-id`
     );
     await waitForPageLoad(page);
     const body = await page.locator('body').textContent();
@@ -396,7 +396,7 @@ test.describe('Error Pages', () => {
   test('404 page for invalid routes', async ({ page }) => {
     await page.setViewportSize(VIEWPORTS.DESKTOP);
     await page.goto(
-      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/definitely-not-a-page-xyz`
+      `${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007'}/definitely-not-a-page-xyz`
     );
     await waitForPageLoad(page);
 

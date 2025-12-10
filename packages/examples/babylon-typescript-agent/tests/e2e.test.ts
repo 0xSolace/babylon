@@ -5,7 +5,7 @@
  * against a live Babylon instance.
  *
  * Prerequisites:
- * - Babylon server running on localhost:3000
+ * - Babylon server running on localhost:5007
  * - Valid API keys in .env.local
  * - Agent0 testnet access (Sepolia)
  */
@@ -80,7 +80,7 @@ describe('E2E - Autonomous Agent Live Tests', () => {
   it('Phase 2: should connect to Babylon A2A', async () => {
     console.log('Initializing A2A client...');
     a2aClient = new BabylonA2AClient({
-      baseUrl: 'http://localhost:3000',
+      baseUrl: 'http://localhost:5007',
       address: agentIdentity.address,
       tokenId: agentIdentity.tokenId,
       privateKey: process.env.AGENT0_PRIVATE_KEY!,

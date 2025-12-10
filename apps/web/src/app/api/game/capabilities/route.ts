@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
  * Returns detailed game capabilities
  */
 export async function GET() {
-  const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5007';
 
   const capabilities = {
     name: babylonAgentCard.name,

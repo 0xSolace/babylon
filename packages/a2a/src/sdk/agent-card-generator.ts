@@ -6,7 +6,7 @@
 import type { AgentCard } from '@a2a-js/sdk';
 import { db, eq, userAgentConfigs, users } from '@babylon/db';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5007';
 
 /**
  * Common skills for agent cards

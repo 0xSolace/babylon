@@ -280,7 +280,7 @@ export class AgentWalletService {
     const agent0Client = getAgent0Client();
 
     // Use individual agent's A2A endpoint, not the game's endpoint
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5007';
     const individualAgentA2AEndpoint = `${baseUrl}/api/agents/${agentUserId}/a2a`;
 
     const registration = await agent0Client.registerAgent({

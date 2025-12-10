@@ -19,7 +19,7 @@ import { generateSnowflakeId } from '@babylon/shared';
 const BASE_URL =
   process.env.TEST_API_URL ||
   process.env.TEST_BASE_URL ||
-  'http://localhost:3000';
+  'http://localhost:5007';
 let serverAvailable = false;
 
 describe('Admin Agents Reputation Integration', () => {

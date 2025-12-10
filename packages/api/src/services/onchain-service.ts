@@ -739,7 +739,7 @@ export async function processOnchainRegistration({
     const agent0Client = getOnboardingServices().getAgent0Client();
 
     // Use individual agent's A2A endpoint if provided, otherwise construct it
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5007';
     const individualAgentA2AEndpoint =
       endpoint || `${baseUrl}/api/agents/${dbUser.id}/a2a`;
 

@@ -13,8 +13,9 @@
  */
 
 const CRON_INTERVAL = 60000; // 60 seconds
-const GAME_TICK_URL = 'http://localhost:3000/api/cron/game-tick';
-const AGENT_TICK_URL = 'http://localhost:3000/api/cron/agent-tick';
+const BABYLON_PORT = process.env.BABYLON_PORT || '5007';
+const GAME_TICK_URL = `http://localhost:${BABYLON_PORT}/api/cron/game-tick`;
+const AGENT_TICK_URL = `http://localhost:${BABYLON_PORT}/api/cron/agent-tick`;
 
 let intervalId: NodeJS.Timeout | null = null;
 let tickCount = 0;
@@ -173,7 +174,7 @@ async function waitForServer(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const response = await fetch('http://localhost:3000/api/health', {
+      const response = await fetch(`http://localhost:${BABYLON_PORT}/api/health`, {
         method: 'GET',
         signal: AbortSignal.timeout(1000),
       });

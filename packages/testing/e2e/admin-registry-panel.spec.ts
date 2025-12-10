@@ -14,7 +14,7 @@ import { expect, test } from '@playwright/test';
 const BASE_URL =
   process.env.TEST_BASE_URL ||
   process.env.NEXT_PUBLIC_APP_URL ||
-  'http://localhost:3000';
+  'http://localhost:5007';
 
 test.describe('Admin Registry Panel', () => {
   test.beforeEach(async ({ page }) => {

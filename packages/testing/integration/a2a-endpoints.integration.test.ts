@@ -21,7 +21,7 @@ describe('A2A Endpoints Integration Tests', () => {
   // Check if server is running AND test data is properly set up
   let serverAvailable = false;
   let testDataReady = false;
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:5007';
 
   beforeAll(async () => {
     try {

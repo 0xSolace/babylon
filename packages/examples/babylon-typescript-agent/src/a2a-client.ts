@@ -32,7 +32,7 @@ interface A2ACommand {
 }
 
 export interface BabylonA2AClientConfig {
-  /** Base URL of Babylon server (e.g., http://localhost:3000) */
+  /** Base URL of Babylon server (e.g., http://localhost:5007) */
   baseUrl: string;
   /** Agent wallet address */
   address: string;

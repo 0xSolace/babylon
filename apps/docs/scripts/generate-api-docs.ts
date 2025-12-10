@@ -148,7 +148,7 @@ async function generateOpenAPISpec(routes: ApiRoute[]) {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: 'http://localhost:5007',
         description: 'Development server',
       },
       {

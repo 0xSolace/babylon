@@ -12,7 +12,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 const BASE_URL =
   process.env.TEST_API_URL ||
   process.env.PLAYWRIGHT_BASE_URL ||
-  'http://localhost:3000';
+  'http://localhost:5007';
 
 let serverAvailable = false;
 

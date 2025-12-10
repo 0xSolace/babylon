@@ -99,7 +99,7 @@ export class EnhancedLoadTestSimulator {
   private enableMonitoring = true;
   private resourceLimiter: ResourceLimiter | null = null;
 
-  constructor(baseUrl = 'http://localhost:3000') {
+  constructor(baseUrl = 'http://localhost:5007') {
     this.baseUrl = baseUrl;
   }
 
@@ -560,7 +560,7 @@ export class EnhancedLoadTestSimulator {
  * Generate test scenarios for all routes
  */
 export async function generateAllRoutesScenario(
-  baseUrl = 'http://localhost:3000'
+  baseUrl = 'http://localhost:5007'
 ): Promise<EnhancedLoadTestConfig['endpoints']> {
   // Fetch OpenAPI spec to discover all routes
   const response = await fetch(`${baseUrl}/api/docs`);

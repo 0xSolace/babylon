@@ -16,7 +16,7 @@ const rootDir = path.resolve(__dirname, '../..');
 dotenv.config({ path: path.resolve(rootDir, '.env.local') });
 dotenv.config({ path: path.resolve(rootDir, '.env') });
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
 
 export default defineConfig({
   testDir: './synpress',
