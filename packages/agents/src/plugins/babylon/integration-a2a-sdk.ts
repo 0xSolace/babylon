@@ -72,6 +72,9 @@ async function initializeA2ASdkClient(agentUserId: string): Promise<A2AClient> {
     'http://localhost:3000';
   const agentCardUrl = `${baseUrl}/.well-known/agent-card.json`;
 
+  // Get API key for authentication
+  const apiKey = process.env.BABYLON_A2A_API_KEY;
+
   logger.info(
     'Initializing A2A client',
     {
@@ -79,14 +82,36 @@ async function initializeA2ASdkClient(agentUserId: string): Promise<A2AClient> {
       agentCardUrl,
       baseUrl,
       hasWallet: !!walletAddress,
+      hasApiKey: !!apiKey,
     },
     'BabylonIntegration'
   );
 
-  // Create A2A client from Agent Card URL
-  // Use default fetch - authentication will be handled by server via headers
-  // The SDK will handle standard A2A methods, extensions will use custom headers
-  const a2aClient = await A2AClient.fromCardUrl(agentCardUrl);
+  // Create custom fetch that includes API key header for authentication
+  const authenticatedFetch = async (
+    url: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const headers = new Headers(init?.headers);
+
+    // Add API key for A2A authentication
+    if (apiKey) {
+      headers.set('x-babylon-api-key', apiKey);
+    }
+
+    // Add agent identification headers if available
+    if (walletAddress) {
+      headers.set('x-agent-address', walletAddress);
+    }
+    headers.set('x-agent-id', agentUserId);
+
+    return fetch(url, { ...init, headers });
+  };
+
+  // Create A2A client from Agent Card URL with authenticated fetch
+  const a2aClient = await A2AClient.fromCardUrl(agentCardUrl, {
+    fetchImpl: authenticatedFetch,
+  } as Parameters<typeof A2AClient.fromCardUrl>[1]);
 
   logger.info('✅ A2A SDK client created', {
     agentUserId,
