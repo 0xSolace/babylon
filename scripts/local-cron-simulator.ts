@@ -174,10 +174,13 @@ async function waitForServer(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const response = await fetch(`http://localhost:${BABYLON_PORT}/api/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(1000),
-      });
+      const response = await fetch(
+        `http://localhost:${BABYLON_PORT}/api/health`,
+        {
+          method: 'GET',
+          signal: AbortSignal.timeout(1000),
+        }
+      );
 
       if (response.ok) {
         console.info(
