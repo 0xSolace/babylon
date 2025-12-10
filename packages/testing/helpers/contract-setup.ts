@@ -61,23 +61,18 @@ export async function ensureHardhatRunning(): Promise<boolean> {
  */
 export async function areContractsDeployed(): Promise<boolean> {
   // Use canonical config addresses for local development
-  let oracleAddress: string | undefined =
-    LOCAL_CONTRACT_ADDRESSES.babylonOracle;
+  let oracleAddress: string | undefined = LOCAL_CONTRACT_ADDRESSES.gameOracle;
   let diamondAddress: string | undefined = LOCAL_CONTRACT_ADDRESSES.diamond;
 
   // Try to load from deployment file to check for fresh deployments
-  try {
-    const deployment = await loadDeployment('localnet');
-    if (deployment) {
-      if (deployment.contracts.babylonOracle) {
-        oracleAddress = deployment.contracts.babylonOracle;
-      }
-      if (deployment.contracts.diamond) {
-        diamondAddress = deployment.contracts.diamond;
-      }
+  const deployment = await loadDeployment('localnet');
+  if (deployment) {
+    if (deployment.contracts.gameOracle) {
+      oracleAddress = deployment.contracts.gameOracle;
     }
-  } catch {
-    // Deployment file might not exist yet, use canonical config
+    if (deployment.contracts.diamond) {
+      diamondAddress = deployment.contracts.diamond;
+    }
   }
 
   if (!oracleAddress && !diamondAddress) {

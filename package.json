@@ -50,7 +50,7 @@
     "hardhat": "cd packages/contracts && npx hardhat node",
     "contracts:setup": "rm -rf packages/contracts/dependencies && bun run scripts/postinstall-solidity-deps.ts",
     "contracts:test": "cd packages/contracts && forge test",
-    "contracts:test:oracle": "cd packages/contracts && forge test --match-contract BabylonGameOracleTest",
+    "contracts:test:oracle": "echo 'Oracle tests now in Jeju: cd packages/contracts && forge test --match-contract GameOracleTest'",
     "contracts:deploy:local": "bun run apps/cli/src/index.ts deploy local",
     "oracle:test:e2e": "bun test packages/testing/integration/oracle-full-flow.test.ts",
     "oracle:test:betting": "bun test packages/testing/integration/betting/ packages/testing/e2e/betting-on-chain.test.ts",

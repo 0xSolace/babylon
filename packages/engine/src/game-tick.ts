@@ -2823,10 +2823,7 @@ async function publishOracleCommitments(
   let errors = 0;
 
   // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
+  if (!process.env.NEXT_PUBLIC_GAME_ORACLE || !process.env.ORACLE_PRIVATE_KEY) {
     logger.info(
       'Oracle not configured, skipping commitments',
       undefined,
@@ -2903,10 +2900,7 @@ async function publishOracleReveals(
   let errors = 0;
 
   // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
+  if (!process.env.NEXT_PUBLIC_GAME_ORACLE || !process.env.ORACLE_PRIVATE_KEY) {
     logger.info(
       'Oracle not configured, skipping reveals',
       undefined,

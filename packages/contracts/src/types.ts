@@ -4,6 +4,15 @@
  * Complete TypeScript interfaces for blockchain contract interactions.
  * These types provide type safety when interacting with Babylon's smart contracts.
  *
+ * NOTE: Babylon contracts have been migrated to Jeju Network contracts.
+ * See packages/contracts/src in the Jeju workspace for:
+ * - GameOracle.sol: Generic game prediction oracle
+ * - Predimarket.sol: LMSR prediction markets
+ * - Contest.sol: TEE-based contest oracle
+ * - ModerationMarketplace.sol: Futarchy-based moderation
+ *
+ * Babylon should import from Jeju contracts instead of maintaining its own.
+ *
  * @packageDocumentation
  */
 
@@ -105,39 +114,44 @@ export interface FeedbackResult {
  * Contains addresses for all deployed Babylon smart contracts on a specific network.
  *
  * Architecture:
- * - Diamond: Upgradeable proxy with facets for prediction markets, perps, etc.
- * - BabylonGameOracle: The game IS the prediction oracle (IPredictionOracle)
- * - GameOracleFacet: Bridges oracle outcomes to Diamond markets
+ * - Uses Jeju Network GameOracle for prediction outcomes
+ * - Uses Jeju Network Predimarket for market trading
+ * - Uses Jeju Network ModerationMarketplace for moderation
+ *
+ * @deprecated Diamond pattern facets are being migrated to Jeju contracts.
+ * Use Jeju's GameOracle, Predimarket, Contest, and ModerationMarketplace instead.
  */
 export interface DeploymentContracts {
-  /** Diamond proxy contract address */
+  /** Diamond proxy contract address (legacy) */
   diamond: string;
-  /** DiamondCut facet address */
+  /** DiamondCut facet address (legacy) */
   diamondCutFacet: string;
-  /** DiamondLoupe facet address */
+  /** DiamondLoupe facet address (legacy) */
   diamondLoupeFacet: string;
-  /** PredictionMarket facet address */
+  /** PredictionMarket facet address (legacy - use Jeju Predimarket) */
   predictionMarketFacet: string;
-  /** Oracle facet address (Chainlink/Mock) */
+  /** Oracle facet address (legacy) */
   oracleFacet: string;
-  /** GameOracle facet address (bridges BabylonGameOracle to Diamond) */
+  /** GameOracle facet address (legacy - use Jeju GameOracle) */
   gameOracleFacet?: string;
-  /** LiquidityPool facet address */
+  /** LiquidityPool facet address (legacy) */
   liquidityPoolFacet: string;
-  /** PerpetualMarket facet address */
+  /** PerpetualMarket facet address (legacy) */
   perpetualMarketFacet: string;
-  /** ReferralSystem facet address */
+  /** ReferralSystem facet address (legacy) */
   referralSystemFacet: string;
-  /** PriceStorage facet address */
+  /** PriceStorage facet address (legacy) */
   priceStorageFacet: string;
-  /** ERC-8004 Identity Registry address */
+  /** ERC-8004 Identity Registry address (use Jeju IdentityRegistry) */
   identityRegistry: string;
-  /** ERC-8004 Reputation System address */
+  /** ERC-8004 Reputation System address (use Jeju ReputationRegistry) */
   reputationSystem: string;
-  /** Babylon Game Oracle address - THE GAME IS THE PREDICTION ORACLE */
-  babylonOracle?: string;
-  /** Ban Manager address (optional) */
+  /** Game Oracle address - use Jeju GameOracle instead */
+  gameOracle?: string;
+  /** Ban Manager address - use Jeju BanManager instead */
   banManager?: string;
+  /** Moderation Marketplace - use Jeju ModerationMarketplace */
+  moderationMarketplace?: string;
   /** Chainlink Oracle mock address (testnet only) */
   chainlinkOracle?: string;
   /** Mock Oracle address (testnet only) */

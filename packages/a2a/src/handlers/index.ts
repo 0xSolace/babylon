@@ -5,3 +5,4 @@
  */
 
 export * from './escrow-handlers';
+export * from './moderation-handlers';

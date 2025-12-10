@@ -3,29 +3,31 @@ pragma solidity ^0.8.27;
 
 import {LibMarket} from "../libraries/LibMarket.sol";
 import {LibDiamond} from "../libraries/LibDiamond.sol";
-import {IPredictionOracle} from "../src/prediction-markets/IPredictionOracle.sol";
+// Import IPredictionOracle from Jeju Network contracts
+import {IPredictionOracle} from "@jeju/contracts/prediction-markets/IPredictionOracle.sol";
 
 /**
  * @title GameOracleFacet
  * @notice Diamond facet for game-based prediction oracle integration
- * @dev Connects Diamond prediction markets to BabylonGameOracle
- * 
+ * @dev Connects Diamond prediction markets to Jeju GameOracle
+ *
  * Architecture:
- * - Game engine commits/reveals outcomes to BabylonGameOracle
- * - BabylonGameOracle stores outcomes on-chain (IPredictionOracle)
+ * - Game engine commits/reveals outcomes to Jeju GameOracle
+ * - GameOracle stores outcomes on-chain (IPredictionOracle)
  * - This facet reads outcomes and resolves Diamond markets
- * - External contracts can query BabylonGameOracle directly
- * 
- * The game IS the prediction oracle - this facet just bridges
- * the oracle outcomes to the Diamond market system.
+ * - External contracts can query GameOracle directly
+ *
+ * Uses Jeju Network contracts:
+ * - GameOracle: packages/contracts/src/games/GameOracle.sol
+ * - IPredictionOracle: packages/contracts/src/prediction-markets/IPredictionOracle.sol
  */
 contract GameOracleFacet {
     // ============ Storage ============
-    
+
     bytes32 constant GAME_ORACLE_STORAGE = keccak256("babylon.gameoracle.storage");
-    
+
     struct GameOracleStorage {
-        address gameOracle;  // BabylonGameOracle address
+        address gameOracle; // Jeju GameOracle address
         mapping(bytes32 => bytes32) marketToSession;  // marketId => oracle sessionId
         mapping(bytes32 => bytes32) sessionToMarket;  // sessionId => marketId
     }
@@ -53,7 +55,7 @@ contract GameOracleFacet {
     // ============ Admin Functions ============
     
     /**
-     * @notice Set the game oracle address (BabylonGameOracle)
+     * @notice Set the game oracle address (Jeju GameOracle)
      * @param _oracle Address of the IPredictionOracle implementation
      */
     function setGameOracle(address _oracle) external {
@@ -78,7 +80,7 @@ contract GameOracleFacet {
     /**
      * @notice Link a Diamond market to an oracle session
      * @param _marketId Diamond market ID
-     * @param _sessionId Oracle session ID (from BabylonGameOracle)
+     * @param _sessionId Oracle session ID (from Jeju GameOracle)
      * @dev Called after market creation to enable oracle-based resolution
      */
     function linkMarketToSession(bytes32 _marketId, bytes32 _sessionId) external {
@@ -113,9 +115,9 @@ contract GameOracleFacet {
      * @notice Resolve a market from the game oracle
      * @param _marketId Market to resolve
      * @dev Anyone can call - resolution is trustless based on oracle state
-     * 
+     *
      * Flow:
-     * 1. Game engine reveals outcome to BabylonGameOracle
+     * 1. Game engine reveals outcome to Jeju GameOracle
      * 2. Anyone calls this function
      * 3. Function queries oracle for finalized outcome
      * 4. Market is resolved with outcome (0=NO, 1=YES)

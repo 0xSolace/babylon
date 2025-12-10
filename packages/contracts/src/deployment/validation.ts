@@ -36,11 +36,11 @@ export interface ContractAddresses {
   referralSystemFacet?: string;
   /** ERC-8004 Identity Registry address */
   identityRegistry: string;
-  /** ERC-8004 Reputation System address */
+  /** ERC-8004 Reputation System address (or Jeju ReputationRegistry) */
   reputationSystem: string;
-  /** Babylon Game Oracle address (optional) */
-  babylonOracle?: string;
-  /** Ban Manager address (optional) */
+  /** Jeju GameOracle address (optional) */
+  gameOracle?: string;
+  /** Jeju BanManager address (optional) */
   banManager?: string;
   /** Chainlink Oracle mock address (testnet only) */
   chainlinkOracle?: string;

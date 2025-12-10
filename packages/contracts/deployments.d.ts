@@ -11,7 +11,7 @@ declare module '@babylon/contracts/deployments/local' {
     priceStorageFacet: string;
     identityRegistry: string;
     reputationSystem: string;
-    babylonOracle: string;
+    gameOracle: string;
     banManager?: string;
     chainlinkOracle?: string;
     mockOracle?: string;
@@ -44,7 +44,7 @@ declare module '@babylon/contracts/deployments/base-sepolia' {
     priceStorageFacet: string;
     identityRegistry: string;
     reputationSystem: string;
-    babylonOracle?: string;
+    gameOracle?: string;
     banManager?: string;
     chainlinkOracle?: string;
     mockOracle?: string;
@@ -77,7 +77,7 @@ declare module '@babylon/contracts/deployments/base' {
     priceStorageFacet: string;
     identityRegistry: string;
     reputationSystem: string;
-    babylonOracle?: string;
+    gameOracle?: string;
     banManager?: string;
   }
 

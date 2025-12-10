@@ -3,8 +3,19 @@ pragma solidity ^0.8.27;
 
 import {LibMarket} from "../libraries/LibMarket.sol";
 import {LibDiamond} from "../libraries/LibDiamond.sol";
-import {ChainlinkOracleMock} from "../oracles/ChainlinkOracleMock.sol";
-import {MockOracle} from "../oracles/MockOracle.sol";
+
+/// @notice Interface for oracle mock that can request resolutions
+interface IChainlinkOracleMock {
+    function requestResolution(bytes32 marketId, string calldata question)
+        external
+        payable
+        returns (bytes32 requestId);
+}
+
+/// @notice Interface for mock oracle using UMA-style assertions
+interface IMockOracle {
+    function assertTruth(bytes32 marketId, bytes32 assertedValue) external payable returns (bytes32 assertionId);
+}
 
 /// @title OracleFacet
 /// @notice Facet for oracle integration and market resolution
@@ -32,11 +43,8 @@ contract OracleFacet {
         LibMarket.MarketStorage storage ms = LibMarket.marketStorage();
         require(ms.chainlinkOracle != address(0), "Chainlink oracle not set");
 
-        ChainlinkOracleMock oracle = ChainlinkOracleMock(payable(ms.chainlinkOracle));
-        bytes32 requestId = oracle.requestResolution{value: msg.value}(
-            _marketId,
-            market.question
-        );
+        IChainlinkOracleMock oracle = IChainlinkOracleMock(ms.chainlinkOracle);
+        bytes32 requestId = oracle.requestResolution{value: msg.value}(_marketId, market.question);
 
         emit OracleRequested(_marketId, requestId, "chainlink");
     }
@@ -57,11 +65,8 @@ contract OracleFacet {
         LibMarket.MarketStorage storage ms = LibMarket.marketStorage();
         require(ms.mockOracle != address(0), "Mock oracle not set");
 
-        MockOracle oracle = MockOracle(payable(ms.mockOracle));
-        bytes32 assertionId = oracle.assertTruth{value: msg.value}(
-            _marketId,
-            bytes32(uint256(_proposedOutcome))
-        );
+        IMockOracle oracle = IMockOracle(ms.mockOracle);
+        bytes32 assertionId = oracle.assertTruth{value: msg.value}(_marketId, bytes32(uint256(_proposedOutcome)));
 
         emit OracleRequested(_marketId, assertionId, "mock");
     }

@@ -96,7 +96,7 @@ function parseDeploymentOutput(output: string): Record<string, string> {
     ['priceStorageFacet', /PriceStorageFacet:\s*(0x[a-fA-F0-9]{40})/],
     ['identityRegistry', /IdentityRegistry:\s*(0x[a-fA-F0-9]{40})/],
     ['reputationSystem', /ReputationSystem:\s*(0x[a-fA-F0-9]{40})/],
-    ['babylonGameOracle', /BabylonGameOracle:\s*(0x[a-fA-F0-9]{40})/],
+    ['gameOracle', /GameOracle:\s*(0x[a-fA-F0-9]{40})/],
     ['banManager', /BanManager:\s*(0x[a-fA-F0-9]{40})/],
     ['testToken', /TestToken:\s*(0x[a-fA-F0-9]{40})/],
   ] as const;

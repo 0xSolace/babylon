@@ -21,7 +21,7 @@ export interface CoreContractAddresses {
 }
 
 export interface LocalContractAddresses extends CoreContractAddresses {
-  babylonOracle: Address;
+  gameOracle: Address;
 }
 
 export interface NetworkConfig {

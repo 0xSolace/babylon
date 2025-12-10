@@ -12,30 +12,27 @@ import "../core/LiquidityPoolFacet.sol";
 import "../core/PerpetualMarketFacet.sol";
 import "../core/ReferralSystemFacet.sol";
 import "../core/PriceStorageFacet.sol";
-import "../identity/ERC8004IdentityRegistry.sol";
-import "../identity/ERC8004ReputationSystem.sol";
-import "../oracles/ChainlinkOracleMock.sol";
-import "../oracles/MockOracle.sol";
 import "../libraries/LibDiamond.sol";
 
-// Oracle system - Game as Prediction Oracle
-import {BabylonGameOracle} from "../src/game/BabylonGameOracle.sol";
-import {BanManager} from "../src/moderation/BanManager.sol";
+// Import from Jeju Network contracts
+import {GameOracle} from "@jeju/contracts/games/GameOracle.sol";
+import {IdentityRegistry} from "@jeju/contracts/registry/IdentityRegistry.sol";
+import {BanManager} from "@jeju/contracts/moderation/BanManager.sol";
 
 /// @title DeployBabylon
 /// @notice Deployment script for Babylon prediction market on Base L2
-/// @dev Consolidated architecture: Diamond + BabylonGameOracle
-/// 
+/// @dev Uses Jeju Network contracts for GameOracle, IdentityRegistry, and BanManager
+///
 /// Architecture:
 /// - Diamond: PredictionMarketFacet handles LMSR trading
-/// - BabylonGameOracle: IPredictionOracle interface for game outcomes
+/// - Jeju GameOracle: IPredictionOracle interface for game outcomes
 /// - GameOracleFacet: Bridges oracle outcomes to Diamond markets
-/// 
+///
 /// Flow:
-/// 1. Game engine commits/reveals outcomes to BabylonGameOracle
-/// 2. BabylonGameOracle stores outcomes on-chain
+/// 1. Game engine commits/reveals outcomes to Jeju GameOracle
+/// 2. GameOracle stores outcomes on-chain
 /// 3. GameOracleFacet reads outcomes and resolves Diamond markets
-/// 4. External contracts can query BabylonGameOracle directly
+/// 4. External contracts can query GameOracle directly
 contract DeployBabylon is Script {
     // Deployed contracts - Diamond system
     Diamond public diamond;
@@ -48,19 +45,14 @@ contract DeployBabylon is Script {
     PerpetualMarketFacet public perpetualMarketFacet;
     ReferralSystemFacet public referralSystemFacet;
     PriceStorageFacet public priceStorageFacet;
-    
-    // Identity system
-    ERC8004IdentityRegistry public identityRegistry;
-    ERC8004ReputationSystem public reputationSystem;
-    
-    // Oracle mocks
-    ChainlinkOracleMock public chainlinkOracle;
-    MockOracle public mockOracle;
-    
-    // Game Oracle - The game IS the prediction oracle
-    BabylonGameOracle public babylonOracle;
-    
-    // Moderation
+
+    // Identity system (from Jeju Network)
+    IdentityRegistry public identityRegistry;
+
+    // Game Oracle (from Jeju Network) - THE GAME IS THE PREDICTION ORACLE
+    GameOracle public gameOracle;
+
+    // Moderation (from Jeju Network)
     BanManager public banManager;
 
     // Deployment configuration
@@ -292,44 +284,23 @@ contract DeployBabylon is Script {
 
         IDiamondCut(address(diamond)).diamondCut(newFacetsCut, address(0), "");
 
-        // 8. Deploy ERC-8004 Identity Registry
-        console.log("\n8. Deploying ERC-8004 Identity Registry...");
-        identityRegistry = new ERC8004IdentityRegistry();
+        // 8. Deploy Jeju IdentityRegistry
+        console.log("\n8. Deploying Jeju IdentityRegistry...");
+        identityRegistry = new IdentityRegistry();
         console.log("IdentityRegistry:", address(identityRegistry));
 
-        // 9. Deploy ERC-8004 Reputation System
-        console.log("\n9. Deploying ERC-8004 Reputation System...");
-        reputationSystem = new ERC8004ReputationSystem(address(identityRegistry));
-        console.log("ReputationSystem:", address(reputationSystem));
+        // 9. Deploy Jeju GameOracle - THE GAME IS THE PREDICTION ORACLE
+        console.log("\n9. Deploying Jeju GameOracle (IPredictionOracle)...");
+        gameOracle = new GameOracle(deployer, deployer); // gameServer, owner
+        console.log("GameOracle:", address(gameOracle));
 
-        // 10. Deploy Oracle Mocks (for testnet)
-        if (block.chainid == 84532 || block.chainid == 31337) { // Base Sepolia or Localnet
-            console.log("\n10. Deploying Oracle Mocks (Testnet)...");
-            chainlinkOracle = new ChainlinkOracleMock();
-            console.log("ChainlinkOracle:", address(chainlinkOracle));
-
-            mockOracle = new MockOracle();
-            console.log("MockOracle:", address(mockOracle));
-
-            // Set oracle addresses in diamond
-            OracleFacet(address(diamond)).setChainlinkOracle(address(chainlinkOracle));
-            OracleFacet(address(diamond)).setMockOracle(address(mockOracle));
-        } else {
-            console.log("\n10. Skipping Oracle Mocks (Mainnet - use real oracles)");
-        }
-        
-        // 11. Deploy Babylon Game Oracle - THE GAME IS THE PREDICTION ORACLE
-        console.log("\n11. Deploying Babylon Game Oracle (IPredictionOracle)...");
-        babylonOracle = new BabylonGameOracle(deployer); // Deployer is game server initially
-        console.log("BabylonGameOracle:", address(babylonOracle));
-        
-        // 12. Configure GameOracleFacet to use BabylonGameOracle
-        console.log("\n12. Configuring GameOracleFacet...");
-        GameOracleFacet(address(diamond)).setGameOracle(address(babylonOracle));
+        // 10. Configure GameOracleFacet to use Jeju GameOracle
+        console.log("\n10. Configuring GameOracleFacet...");
+        GameOracleFacet(address(diamond)).setGameOracle(address(gameOracle));
         console.log("GameOracle set in Diamond");
-        
-        // 13. Deploy BanManager (standalone moderation)
-        console.log("\n13. Deploying BanManager...");
+
+        // 11. Deploy Jeju BanManager (standalone moderation)
+        console.log("\n11. Deploying Jeju BanManager...");
         banManager = new BanManager(deployer, deployer); // governance, owner
         console.log("BanManager:", address(banManager));
 
@@ -348,25 +319,16 @@ contract DeployBabylon is Script {
         console.log("PerpetualMarketFacet:", address(perpetualMarketFacet));
         console.log("ReferralSystemFacet:", address(referralSystemFacet));
         console.log("PriceStorageFacet:", address(priceStorageFacet));
-        
-        console.log("\n--- Identity System ---");
+
+        console.log("\n--- Jeju Network Contracts ---");
         console.log("IdentityRegistry:", address(identityRegistry));
-        console.log("ReputationSystem:", address(reputationSystem));
-        
+        console.log("GameOracle:", address(gameOracle));
+        console.log("BanManager:", address(banManager));
+
         console.log("\n--- Game Oracle (IPredictionOracle) ---");
-        console.log("BabylonGameOracle:", address(babylonOracle));
         console.log("  -> External contracts query: oracle.getOutcome(sessionId)");
         console.log("  -> Diamond resolves via: GameOracleFacet.resolveFromGameOracle()");
-        
-        console.log("\n--- Moderation ---");
-        console.log("BanManager:", address(banManager));
-        
-        if (block.chainid == 84532 || block.chainid == 31337) {
-            console.log("\n--- Test Infrastructure ---");
-            console.log("ChainlinkOracle (Mock):", address(chainlinkOracle));
-            console.log("MockOracle:", address(mockOracle));
-        }
-        
+
         console.log("\n==========================================================");
     }
 }

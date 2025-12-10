@@ -93,7 +93,7 @@ export async function updateEnvFile(
     NEXT_PUBLIC_PERPETUAL_MARKET_FACET: contracts.perpetualMarketFacet,
     NEXT_PUBLIC_REFERRAL_SYSTEM_FACET: contracts.referralSystemFacet,
     NEXT_PUBLIC_BAN_MANAGER: contracts.banManager,
-    NEXT_PUBLIC_BABYLON_ORACLE: contracts.babylonOracle,
+    NEXT_PUBLIC_GAME_ORACLE: contracts.gameOracle,
     NEXT_PUBLIC_TEST_TOKEN: contracts.testToken,
   };
 

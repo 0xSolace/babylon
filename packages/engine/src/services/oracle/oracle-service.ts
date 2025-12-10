@@ -1,15 +1,18 @@
 /**
  * Oracle Service
  *
- * Main service for interacting with BabylonGameOracle contract
+ * Main service for interacting with Jeju GameOracle contract
  * Handles commit-reveal pattern for publishing game results on-chain
+ *
+ * NOTE: Uses Jeju Network's GameOracle contract.
+ * See packages/contracts/src/games/GameOracle.sol for implementation.
  */
 
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
 import { getCurrentChainId, logger } from '@babylon/shared';
 import { ethers } from 'ethers';
 import { CommitmentStore } from '../oracle-commitment-store';
-import { BabylonGameOracleABI } from './abi/BabylonGameOracle';
+import { GameOracleABI } from './abi/GameOracle';
 import type {
   BatchCommitResult,
   BatchRevealResult,
@@ -29,7 +32,7 @@ export class OracleService {
     const contractAddresses = getContractAddresses();
 
     this.config = {
-      oracleAddress: config?.oracleAddress || contractAddresses.babylonOracle,
+      oracleAddress: config?.oracleAddress || contractAddresses.gameOracle,
       privateKey:
         config?.privateKey ||
         process.env.ORACLE_PRIVATE_KEY ||
@@ -54,10 +57,10 @@ export class OracleService {
     this.provider = new ethers.JsonRpcProvider(this.config.rpcUrl);
     this.wallet = new ethers.Wallet(this.config.privateKey, this.provider);
 
-    // Setup contract
+    // Setup contract with Jeju GameOracle ABI
     this.contract = new ethers.Contract(
       this.config.oracleAddress,
-      BabylonGameOracleABI,
+      GameOracleABI,
       this.wallet
     );
 
@@ -112,8 +115,8 @@ export class OracleService {
     });
 
     // Call contract - verify method exists
-    if (!this.contract?.commitBabylonGame) {
-      throw new Error('commitBabylonGame not available on contract');
+    if (!this.contract?.commitGame) {
+      throw new Error('commitGame not available on contract');
     }
 
     // Verify contract has code at address
@@ -126,7 +129,7 @@ export class OracleService {
 
     // Encode the function call to verify it works
     const iface = this.contract.interface;
-    const data = iface.encodeFunctionData('commitBabylonGame', [
+    const data = iface.encodeFunctionData('commitGame', [
       questionId,
       questionNumber,
       question,
@@ -139,7 +142,7 @@ export class OracleService {
       );
     }
 
-    const tx = await this.contract.commitBabylonGame(
+    const tx = await this.contract.commitGame(
       questionId,
       questionNumber,
       question,
@@ -168,8 +171,7 @@ export class OracleService {
         });
       })
       .find(
-        (e: ethers.LogDescription | null) =>
-          e && e.name === 'BabylonGameCommitted'
+        (e: ethers.LogDescription | null) => e && e.name === 'GameCommitted'
       );
 
     const sessionId = event?.args?.sessionId || ethers.ZeroHash;
@@ -232,10 +234,10 @@ export class OracleService {
     }
 
     // Call contract
-    if (!this.contract?.revealBabylonGame) {
-      throw new Error('revealBabylonGame not available on contract');
+    if (!this.contract?.revealGame) {
+      throw new Error('revealGame not available on contract');
     }
-    const tx = await this.contract.revealBabylonGame(
+    const tx = await this.contract.revealGame(
       stored.sessionId,
       outcome,
       stored.salt,
@@ -337,8 +339,8 @@ export class OracleService {
     }
 
     // Call batch contract method - verify method exists
-    if (!this.contract?.batchCommitBabylonGames) {
-      throw new Error('batchCommitBabylonGames not available on contract');
+    if (!this.contract?.batchCommitGames) {
+      throw new Error('batchCommitGames not available on contract');
     }
 
     // Verify contract has code at address
@@ -351,7 +353,7 @@ export class OracleService {
 
     // Encode the function call to verify it works
     const iface = this.contract.interface;
-    const data = iface.encodeFunctionData('batchCommitBabylonGames', [
+    const data = iface.encodeFunctionData('batchCommitGames', [
       questionIds,
       questionNumbers,
       questions,
@@ -364,7 +366,7 @@ export class OracleService {
       );
     }
 
-    const tx = await this.contract.batchCommitBabylonGames(
+    const tx = await this.contract.batchCommitGames(
       questionIds,
       questionNumbers,
       questions,
@@ -386,8 +388,7 @@ export class OracleService {
         });
       })
       .filter(
-        (e: ethers.LogDescription | null) =>
-          e && e.name === 'BabylonGameCommitted'
+        (e: ethers.LogDescription | null) => e && e.name === 'GameCommitted'
       );
 
     // Update stored commitments and build results
@@ -498,8 +499,8 @@ export class OracleService {
     }
 
     // Call batch contract method - verify method exists
-    if (!this.contract?.batchRevealBabylonGames) {
-      throw new Error('batchRevealBabylonGames not available on contract');
+    if (!this.contract?.batchRevealGames) {
+      throw new Error('batchRevealGames not available on contract');
     }
 
     // Verify contract has code at address
@@ -524,7 +525,7 @@ export class OracleService {
 
     // Encode the function call to verify it works
     const iface = this.contract.interface;
-    const data = iface.encodeFunctionData('batchRevealBabylonGames', [
+    const data = iface.encodeFunctionData('batchRevealGames', [
       sessionIds,
       outcomes,
       salts,
@@ -538,7 +539,7 @@ export class OracleService {
       );
     }
 
-    const tx = await this.contract.batchRevealBabylonGames(
+    const tx = await this.contract.batchRevealGames(
       sessionIds,
       outcomes,
       salts,

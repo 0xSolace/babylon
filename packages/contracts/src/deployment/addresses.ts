@@ -7,6 +7,11 @@
  * Loads deployed contract addresses based on the current network environment.
  * Uses canonical config from @babylon/shared/config for network detection.
  *
+ * NOTE: Babylon now uses Jeju Network contracts for:
+ * - GameOracle: packages/contracts/src/games/GameOracle.sol
+ * - IdentityRegistry: packages/contracts/src/registry/IdentityRegistry.sol
+ * - BanManager: packages/contracts/src/moderation/BanManager.sol
+ *
  * @remarks Base mainnet support will be added when contracts are deployed.
  */
 
@@ -20,20 +25,22 @@ import localDeployment from '../../deployments/local';
  *
  * Architecture:
  * - Diamond: Upgradeable proxy with facets for prediction markets
- * - BabylonGameOracle: The game IS the prediction oracle (IPredictionOracle)
- * - External contracts query: babylonOracle.getOutcome(sessionId)
+ * - Jeju GameOracle: The game IS the prediction oracle (IPredictionOracle)
+ * - External contracts query: gameOracle.getOutcome(sessionId)
  */
 export interface DeployedContracts {
   /** Diamond proxy contract address */
   diamond: Address;
-  /** Babylon Game Oracle - THE GAME IS THE PREDICTION ORACLE */
-  babylonOracle: Address;
+  /** Jeju GameOracle - THE GAME IS THE PREDICTION ORACLE */
+  gameOracle: Address;
   /** Prediction Market Facet address */
   predictionMarketFacet: Address;
-  /** ERC-8004 Identity Registry contract address */
+  /** Jeju IdentityRegistry contract address */
   identityRegistry: Address;
-  /** ERC-8004 Reputation System contract address */
+  /** Jeju ReputationRegistry contract address */
   reputationSystem: Address;
+  /** Jeju BanManager contract address */
+  banManager: Address;
   /** Chain ID for the network */
   chainId: number;
   /** Network name identifier */
@@ -53,39 +60,35 @@ export interface DeployedContracts {
  * ```typescript
  * const addresses = getContractAddresses();
  * console.log(addresses.diamond); // Main Diamond proxy address
+ * console.log(addresses.gameOracle); // Jeju GameOracle address
  * ```
  */
 export function getContractAddresses(): DeployedContracts {
   const chainId = getCurrentChainId();
 
   if (chainId === 31337) {
+    const contracts = localDeployment.contracts as Record<string, string>;
     return {
-      diamond: localDeployment.contracts.diamond as Address,
-      babylonOracle: localDeployment.contracts.babylonOracle as Address,
-      predictionMarketFacet: localDeployment.contracts
-        .predictionMarketFacet as Address,
-      identityRegistry: localDeployment.contracts.identityRegistry as Address,
-      reputationSystem: localDeployment.contracts.reputationSystem as Address,
+      diamond: contracts.diamond as Address,
+      gameOracle: contracts.gameOracle as Address,
+      predictionMarketFacet: contracts.predictionMarketFacet as Address,
+      identityRegistry: contracts.identityRegistry as Address,
+      reputationSystem: contracts.reputationSystem as Address,
+      banManager: contracts.banManager as Address,
       chainId: 31337,
       network: 'localnet',
     };
   }
 
   if (chainId === 84532) {
-    // Note: BabylonGameOracle needs to be deployed to Sepolia
-    // Currently using oracleFacet as placeholder until deployed
+    const contracts = baseSepoliaDeployment.contracts as Record<string, string>;
     return {
-      diamond: baseSepoliaDeployment.contracts.diamond as Address,
-      babylonOracle:
-        ((baseSepoliaDeployment.contracts as Record<string, string>)
-          .babylonOracle as Address) ||
-        (baseSepoliaDeployment.contracts.oracleFacet as Address),
-      predictionMarketFacet: baseSepoliaDeployment.contracts
-        .predictionMarketFacet as Address,
-      identityRegistry: baseSepoliaDeployment.contracts
-        .identityRegistry as Address,
-      reputationSystem: baseSepoliaDeployment.contracts
-        .reputationSystem as Address,
+      diamond: contracts.diamond as Address,
+      gameOracle: contracts.gameOracle as Address,
+      predictionMarketFacet: contracts.predictionMarketFacet as Address,
+      identityRegistry: contracts.identityRegistry as Address,
+      reputationSystem: contracts.reputationSystem as Address,
+      banManager: contracts.banManager as Address,
       chainId: 84532,
       network: 'base-sepolia',
     };
@@ -98,13 +101,14 @@ export function getContractAddresses(): DeployedContracts {
   }
 
   // Default to localnet for unknown chains
+  const contracts = localDeployment.contracts as Record<string, string>;
   return {
-    diamond: localDeployment.contracts.diamond as Address,
-    babylonOracle: localDeployment.contracts.babylonOracle as Address,
-    predictionMarketFacet: localDeployment.contracts
-      .predictionMarketFacet as Address,
-    identityRegistry: localDeployment.contracts.identityRegistry as Address,
-    reputationSystem: localDeployment.contracts.reputationSystem as Address,
+    diamond: contracts.diamond as Address,
+    gameOracle: contracts.gameOracle as Address,
+    predictionMarketFacet: contracts.predictionMarketFacet as Address,
+    identityRegistry: contracts.identityRegistry as Address,
+    reputationSystem: contracts.reputationSystem as Address,
+    banManager: contracts.banManager as Address,
     chainId: 31337,
     network: 'localnet',
   };

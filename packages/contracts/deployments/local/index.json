@@ -12,7 +12,7 @@
     "diamond": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
     "identityRegistry": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
     "reputationSystem": "0x9A676e781A523b5d0C0e43731313A708CB607508",
-    "babylonOracle": "0xc6e7DF5E7b4f2A278906862b61205850344D4e7d",
+    "gameOracle": "0xc6e7DF5E7b4f2A278906862b61205850344D4e7d",
     "banManager": "0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f",
     "chainlinkOracle": "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
     "mockOracle": "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
