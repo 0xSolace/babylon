@@ -7,6 +7,7 @@ export * from './actors';
 export * from './agents';
 // Enums
 export * from './enums';
+export * from './group-invites';
 export * from './markets';
 export * from './messaging';
 export * from './misc';

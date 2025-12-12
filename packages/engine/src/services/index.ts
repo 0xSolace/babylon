@@ -21,6 +21,13 @@ export {
   type InviteChance,
   type SweepDecision,
 } from './group-chat-service';
+// Group Invite Orchestrator (unified invite system)
+export {
+  GroupInviteOrchestrator,
+  type InviteTriggerType,
+  type QueueInviteParams,
+  type InviteProcessingResult,
+} from './group-invite-orchestrator';
 export * from './InteractionTracker';
 export * from './initial-investment-service';
 export * from './lookahead-generation-service';

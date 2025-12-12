@@ -870,6 +870,8 @@ export interface GetGroupInvitesResult {
     groupName: string | null;
     inviterId: string;
     timestamp: string;
+    /** Source of the invite - 'user' for user-initiated, 'npc' for NPC-initiated */
+    source?: 'user' | 'npc';
   }>;
 }
 

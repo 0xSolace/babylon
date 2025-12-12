@@ -52,7 +52,7 @@ import { PredictionPricing } from './prediction-pricing';
 import { generateWorldContext } from './prompts';
 import { QuestionManager } from './QuestionManager';
 import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
-import { AlphaGroupInviteService } from './services/alpha-group-invite-service';
+import { GroupInviteOrchestrator } from './services/group-invite-orchestrator';
 import { characterMappingService } from './services/character-mapping-service';
 // Content generation helpers
 import { generateEvents } from './services/event-generation-helpers';
@@ -723,16 +723,9 @@ export async function executeGameTick(
     );
   }
 
-  // Process alpha group invites (small chance for highly engaged users)
-  const invites = await AlphaGroupInviteService.processTickInvites();
-  result.alphaInvitesSent = invites.length;
-  if (invites.length > 0) {
-    logger.info(
-      'Alpha group invites sent',
-      { count: invites.length, invites },
-      'GameTick'
-    );
-  }
+  // Alpha group invites now handled by GroupInviteOrchestrator in NPCGroupDynamicsService
+  // The orchestrator processes queued candidates from event-driven triggers
+  result.alphaInvitesSent = 0; // Counted in npcGroupDynamics.usersInvited
 
   // Evolve NPC relationships based on recent interactions (every 10 ticks to save compute)
   const shouldEvolveRelationships =
@@ -762,6 +755,23 @@ export async function executeGameTick(
     usersKicked: dynamics.usersKicked,
     messagesPosted: dynamics.messagesPosted,
   };
+
+  // Cleanup: Expire old pending invites and processed candidates (every 10 ticks)
+  const shouldCleanup = Math.floor(timestamp.getTime() / 60000) % 10 === 0;
+  if (shouldCleanup) {
+    const [expiredInvites, cleanedCandidates] = await Promise.all([
+      GroupInviteOrchestrator.expireOldInvites(),
+      GroupInviteOrchestrator.cleanupProcessedCandidates(),
+    ]);
+    if (expiredInvites > 0 || cleanedCandidates > 0) {
+      logger.info(
+        'Group invite cleanup',
+        { expiredInvites, cleanedCandidates },
+        'GameTick'
+      );
+    }
+  }
+
   if (
     dynamics.groupsCreated > 0 ||
     dynamics.membersAdded > 0 ||

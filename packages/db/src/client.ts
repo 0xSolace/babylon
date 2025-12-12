@@ -1380,6 +1380,11 @@ export interface DrizzleClient {
     InferSelect<typeof schema.userGroupMembers>,
     InferInsert<typeof schema.userGroupMembers>
   >;
+  pendingGroupInviteCandidate: TableRepository<
+    typeof schema.pendingGroupInviteCandidates,
+    InferSelect<typeof schema.pendingGroupInviteCandidates>,
+    InferInsert<typeof schema.pendingGroupInviteCandidates>
+  >;
   userBlock: TableRepository<
     typeof schema.userBlocks,
     InferSelect<typeof schema.userBlocks>,
@@ -1812,6 +1817,11 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
       drizzle,
       schema.userGroupMembers,
       'userGroupMembers'
+    ),
+    pendingGroupInviteCandidate: new TableRepository(
+      drizzle,
+      schema.pendingGroupInviteCandidates,
+      'pendingGroupInviteCandidates'
     ),
     userBlock: new TableRepository(drizzle, schema.userBlocks, 'userBlocks'),
     userMute: new TableRepository(drizzle, schema.userMutes, 'userMutes'),

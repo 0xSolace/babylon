@@ -2,10 +2,12 @@
  * Reply Rate Limiter Service
  *
  * Enforces exactly 1 reply per hour per NPC for each player.
+ * Also triggers event-driven group invite queueing on quality replies.
  */
 
 import { and, db, desc, eq, userInteractions } from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+import { generateSnowflakeId, logger } from '@babylon/shared';
+import { GroupInviteOrchestrator } from './group-invite-orchestrator';
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -155,6 +157,10 @@ export class ReplyRateLimiter {
 
   /**
    * Record a reply interaction
+   *
+   * Also queues the user as an invite candidate if the quality score is high enough.
+   * This enables event-driven invitations that feel natural - invites come shortly
+   * after positive interactions rather than at random times.
    */
   static async recordReply(
     userId: string,
@@ -172,6 +178,28 @@ export class ReplyRateLimiter {
       qualityScore,
       timestamp: new Date(),
     });
+
+    // Queue for invite if quality is good enough (>= 0.7)
+    // Higher quality replies get higher priority multiplier
+    if (qualityScore >= 0.7) {
+      const priorityMultiplier = qualityScore >= 0.9 ? 1.5 : qualityScore >= 0.8 ? 1.2 : 1.0;
+
+      const queueResult = await GroupInviteOrchestrator.queueInviteCandidate({
+        userId,
+        npcId,
+        triggerType: 'quality_reply',
+        triggerId: commentId,
+        priorityMultiplier,
+      });
+
+      if (queueResult.queued) {
+        logger.debug(
+          'Queued invite candidate from quality reply',
+          { userId, npcId, qualityScore, priorityMultiplier },
+          'ReplyRateLimiter'
+        );
+      }
+    }
   }
 
   /**

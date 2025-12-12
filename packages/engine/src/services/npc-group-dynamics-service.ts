@@ -27,13 +27,11 @@ import {
   inArray,
   lt,
   messages,
-  notInArray,
   or,
   poolPositions,
   posts,
   reactions,
   shares,
-  userGroupInvites,
   userInteractions,
   users,
 } from '@babylon/db';
@@ -43,6 +41,7 @@ import {
   validateNoRealNames,
 } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
+import { GroupInviteOrchestrator } from './group-invite-orchestrator';
 import { MarketContextService } from './market-context-service';
 import { NPCGroupDynamicsCalculations } from './npc-group-dynamics-calculations';
 import { StaticDataRegistry } from './static-data-registry';
@@ -119,9 +118,9 @@ export class NPCGroupDynamicsService {
       result.messagesPosted = messages;
     }
 
-    // 5. Invite users to groups
-    const invites = await NPCGroupDynamicsService.inviteUsersToGroups();
-    result.usersInvited = invites;
+    // 5. Invite users to groups (via unified orchestrator)
+    const inviteResult = await GroupInviteOrchestrator.processQueuedInvites();
+    result.usersInvited = inviteResult.invitesSent;
 
     // 6. Kick users based on weighted participation metrics
     const kicks = await NPCGroupDynamicsService.kickUsersWithWeightedLogic();
@@ -987,255 +986,18 @@ Return your response as XML:
   }
 
   /**
-   * Invite users to NPC groups based on quality engagement
+   * @deprecated Use GroupInviteOrchestrator.processQueuedInvites() instead.
+   * This method is now a no-op - invites are processed by the orchestrator.
    *
-   * Users earn invitation chances by:
-   * - Following NPCs
-   * - Commenting thoughtfully (not spamming)
-   * - Liking posts moderately
-   * - Reposting occasionally
-   *
-   * Excessive engagement (spam) reduces invitation likelihood
+   * The new event-driven system works as follows:
+   * 1. When users do positive actions (reply, follow, share), they're queued
+   *    as invite candidates via GroupInviteOrchestrator.queueInviteCandidate()
+   * 2. On each tick, processQueuedInvites() processes the queue with probability
+   * 3. NPC tier affects selectivity (legendary NPCs are more selective)
    */
   private static async inviteUsersToGroups(): Promise<number> {
-    let usersInvited = 0;
-
-    // Get groups with space for more members
-    const groupList = await db
-      .select()
-      .from(chats)
-      .where(eq(chats.isGroup, true));
-
-    for (const group of groupList) {
-      // Get participants for this group
-      const participants = await db
-        .select({ userId: chatParticipants.userId })
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
-
-      // Check if group has space
-      if (participants.length >= NPCGroupDynamicsService.MAX_GROUP_SIZE) {
-        continue;
-      }
-
-      // Random chance to invite
-      if (Math.random() > NPCGroupDynamicsService.INVITE_USER_CHANCE) {
-        continue;
-      }
-
-      const currentMemberIds = new Set(participants.map((p) => p.userId));
-      const memberIdsArray = Array.from(currentMemberIds);
-
-      // Get NPCs in this group (for scoring user interactions)
-      // Check which members are NPCs using static registry
-      const allActorIds = new Set(
-        StaticDataRegistry.getAllActors().map((a) => a.id)
-      );
-      const npcMemberIds = memberIdsArray.filter((id) => allActorIds.has(id));
-
-      if (npcMemberIds.length === 0) {
-        continue; // No NPCs in group
-      }
-
-      const npcIds = npcMemberIds;
-
-      // Get active real users (not NPCs) who aren't in this group
-      // First get users who have at least one share
-      const usersWithShares = await db
-        .select({ userId: shares.userId })
-        .from(shares);
-      const userIdsWithShares = [
-        ...new Set(usersWithShares.map((s) => s.userId)),
-      ];
-
-      const potentialInvites =
-        userIdsWithShares.length > 0
-          ? await db
-              .select()
-              .from(users)
-              .where(
-                and(
-                  eq(users.isActor, false),
-                  notInArray(
-                    users.id,
-                    memberIdsArray.length > 0 ? memberIdsArray : ['']
-                  ),
-                  inArray(users.id, userIdsWithShares)
-                )
-              )
-              .limit(30)
-          : [];
-
-      if (potentialInvites.length === 0) {
-        continue;
-      }
-
-      // Calculate "reply guy" scores for all candidates
-      const scoredUsers = await Promise.all(
-        potentialInvites.map(async (user) => {
-          const { score, breakdown } =
-            await NPCGroupDynamicsService.calculateReplyGuyScore(
-              user.id,
-              npcIds
-            );
-          return {
-            user,
-            score,
-            breakdown,
-          };
-        })
-      );
-
-      // Filter out users with negative scores (spammers)
-      let eligibleUsers = scoredUsers.filter((su) => su.score > 0);
-
-      // Filter users at their group limit or in cooldown
-      eligibleUsers =
-        await NPCGroupDynamicsService.filterUsersForInvite(eligibleUsers);
-
-      if (eligibleUsers.length === 0) {
-        continue;
-      }
-
-      // Sort by score descending (best reply guys first)
-      eligibleUsers.sort((a, b) => b.score - a.score);
-
-      // Pick from top 5 candidates with weighted randomness
-      // Higher scores = higher chance to be selected
-      const topCandidates = eligibleUsers.slice(0, 5);
-      const totalScore = topCandidates.reduce((sum, c) => sum + c.score, 0);
-
-      if (totalScore === 0) {
-        continue;
-      }
-
-      // Weighted random selection
-      if (topCandidates.length === 0) continue;
-      let randomValue = Math.random() * totalScore;
-      let selectedCandidate = topCandidates[0];
-
-      for (const candidate of topCandidates) {
-        randomValue -= candidate.score;
-        if (randomValue <= 0) {
-          selectedCandidate = candidate;
-          break;
-        }
-      }
-
-      if (!selectedCandidate) continue;
-
-      // Get an NPC admin from the group to send the invite
-      if (npcMemberIds.length === 0) continue;
-      const invitingNpcId = npcMemberIds[0];
-      if (!invitingNpcId) continue;
-
-      // Get NPC name for logging from STATIC REGISTRY (no DB call!)
-      const npcData = StaticDataRegistry.getActor(invitingNpcId);
-
-      // Create the invitation
-      await db.insert(userGroupInvites).values({
-        id: await generateSnowflakeId(),
-        groupId: group.id,
-        invitedUserId: selectedCandidate.user.id,
-        invitedBy: invitingNpcId,
-        status: 'pending',
-        message: `Join our group chat "${group.name}"!`,
-        invitedAt: new Date(),
-      });
-      usersInvited++;
-      logger.info(
-        'User invited to NPC group (reply guy score)',
-        {
-          userId: selectedCandidate.user.id,
-          userName: selectedCandidate.user.displayName,
-          chatId: group.id,
-          chatName: group.name,
-          invitedBy: npcData?.name,
-          replyGuyScore: selectedCandidate.score,
-          breakdown: selectedCandidate.breakdown,
-        },
-        'NPCGroupDynamicsService'
-      );
-    }
-
-    return usersInvited;
-  }
-
-  /**
-   * Filter users who are at their group limit or in invite cooldown
-   * Prevents unlimited group chat accumulation
-   */
-  private static async filterUsersForInvite<
-    T extends {
-      user: { id: string };
-      score: number;
-      breakdown: Record<string, number | string>;
-    },
-  >(candidates: T[]): Promise<T[]> {
-    const filtered: T[] = [];
-
-    for (const candidate of candidates) {
-      // Check 1: Total active groups limit
-      const [countResult] = await db
-        .select({ count: count() })
-        .from(groupChatMemberships)
-        .where(
-          and(
-            eq(groupChatMemberships.userId, candidate.user.id),
-            eq(groupChatMemberships.isActive, true)
-          )
-        );
-      const activeGroupCount = countResult?.count ?? 0;
-
-      if (activeGroupCount >= NPCGroupDynamicsService.MAX_ACTIVE_USER_GROUPS) {
-        logger.debug(
-          'User at group limit, skipping invite',
-          {
-            userId: candidate.user.id,
-            activeGroups: activeGroupCount,
-            maxGroups: NPCGroupDynamicsService.MAX_ACTIVE_USER_GROUPS,
-          },
-          'NPCGroupDynamicsService'
-        );
-        continue;
-      }
-
-      // Check 2: Invite cooldown
-      const [latestMembership] = await db
-        .select()
-        .from(groupChatMemberships)
-        .where(
-          and(
-            eq(groupChatMemberships.userId, candidate.user.id),
-            eq(groupChatMemberships.isActive, true)
-          )
-        )
-        .orderBy(desc(groupChatMemberships.joinedAt))
-        .limit(1);
-
-      if (latestMembership) {
-        const hoursSinceJoin =
-          (Date.now() - latestMembership.joinedAt.getTime()) / (1000 * 60 * 60);
-
-        if (hoursSinceJoin < NPCGroupDynamicsService.INVITE_COOLDOWN_HOURS) {
-          logger.debug(
-            'User in invite cooldown, skipping',
-            {
-              userId: candidate.user.id,
-              hoursSinceJoin: hoursSinceJoin.toFixed(2),
-              cooldownRequired: NPCGroupDynamicsService.INVITE_COOLDOWN_HOURS,
-            },
-            'NPCGroupDynamicsService'
-          );
-          continue;
-        }
-      }
-
-      // User passed all checks
-      filtered.push(candidate);
-    }
-
-    return filtered;
+    // Delegated to GroupInviteOrchestrator in processTickDynamics
+    return 0;
   }
 
   /**

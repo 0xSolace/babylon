@@ -21,6 +21,7 @@ import {
   userInteractions,
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
+import { GroupInviteOrchestrator } from './group-invite-orchestrator';
 // Notification handled by API layer - engine doesn't depend on api
 
 export interface FollowingChance {
@@ -165,6 +166,10 @@ export class FollowingMechanics {
 
   /**
    * Record an NPC following a player
+   *
+   * Also queues the user as a high-priority invite candidate.
+   * Being followed by an NPC is a strong signal that the user has demonstrated
+   * quality engagement and should be considered for group invitations.
    */
   static async recordFollow(
     userId: string,
@@ -216,6 +221,23 @@ export class FollowingMechanics {
           eq(userInteractions.npcId, npcId)
         )
       );
+
+    // Queue as high-priority invite candidate
+    // Being followed is a very strong signal - use 2.0x priority multiplier
+    const queueResult = await GroupInviteOrchestrator.queueInviteCandidate({
+      userId,
+      npcId,
+      triggerType: 'follow',
+      priorityMultiplier: 2.0,
+    });
+
+    if (queueResult.queued) {
+      logger.debug(
+        'Queued invite candidate from NPC follow',
+        { userId, npcId },
+        'FollowingMechanics'
+      );
+    }
 
     // Create notification for the user (NPCs follow users, not the other way around)
     // For NPC follows, use the NPC's ID as actorId since they're not real users

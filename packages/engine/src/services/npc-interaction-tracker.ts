@@ -6,7 +6,8 @@
  * - Likes on NPC posts
  * - Shares/retweets of NPC posts
  *
- * Calculates engagement scores for group invite eligibility
+ * Calculates engagement scores for group invite eligibility.
+ * Also triggers event-driven group invite queueing on positive interactions.
  */
 
 import {
@@ -24,6 +25,7 @@ import {
   users,
 } from '@babylon/db';
 import { logger } from '@babylon/shared';
+import { GroupInviteOrchestrator } from './group-invite-orchestrator';
 
 export interface NPCInteractionScore {
   userId: string;
@@ -94,6 +96,9 @@ export class NPCInteractionTracker {
 
   /**
    * Track a share/retweet interaction
+   *
+   * Shares of NPC posts are good signals of engagement and trigger
+   * event-driven invite queueing.
    */
   static async trackShare(userId: string, postId: string): Promise<void> {
     // Get post author (should be an NPC)
@@ -118,14 +123,28 @@ export class NPCInteractionTracker {
       return; // Not an NPC post
     }
 
-    // We don't need to store individual shares in UserInteraction
-    // They're already in the Share table
+    // Queue for invite consideration - shares are moderate priority
+    const queueResult = await GroupInviteOrchestrator.queueInviteCandidate({
+      userId,
+      npcId: post.authorId,
+      triggerType: 'share',
+      triggerId: postId,
+      priorityMultiplier: 1.3, // Shares are valuable but less than follows or quality replies
+    });
 
-    logger.debug(
-      `User ${userId} shared NPC ${post.authorId}'s post`,
-      undefined,
-      'NPCInteractionTracker'
-    );
+    if (queueResult.queued) {
+      logger.debug(
+        'Queued invite candidate from NPC post share',
+        { userId, npcId: post.authorId, postId },
+        'NPCInteractionTracker'
+      );
+    } else {
+      logger.debug(
+        `User ${userId} shared NPC ${post.authorId}'s post`,
+        undefined,
+        'NPCInteractionTracker'
+      );
+    }
   }
 
   /**
