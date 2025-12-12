@@ -50,13 +50,13 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { asUser } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { generateSnowflakeId, logger } from '@babylon/shared';
 import { nanoid } from 'nanoid';
 import type { NextRequest } from 'next/server';
 
 /**
  * POST /api/groups/invites/[inviteId]/accept
- * Accept a group invitation
+ * Accept a group invitation (supports both user groups and NPC group chats)
  */
 export const POST = withErrorHandling(
   async (
@@ -67,7 +67,6 @@ export const POST = withErrorHandling(
     const { inviteId } = await params;
 
     const result = await asUser(user, async (db) => {
-      // Get the invite
       const invite = await db.userGroupInvite.findUnique({
         where: { id: inviteId },
       });
@@ -84,27 +83,72 @@ export const POST = withErrorHandling(
         throw new ApiError('This invite has already been processed', 400);
       }
 
-      // Check if user is already a member
+      // Check if this is an NPC group chat (groupId is a chat ID)
+      const npcChat = await db.chat.findFirst({
+        where: { id: invite.groupId, isGroup: true },
+      });
+
+      if (npcChat) {
+        // NPC group chat flow
+        const existingParticipant = await db.chatParticipant.findFirst({
+          where: { chatId: npcChat.id, userId: user.userId },
+        });
+
+        if (existingParticipant) {
+          await db.userGroupInvite.update({
+            where: { id: inviteId },
+            data: { status: 'accepted', respondedAt: new Date() },
+          });
+          throw new ApiError('You are already in this group chat', 400);
+        }
+
+        // Add as chat participant
+        await db.chatParticipant.create({
+          data: {
+            id: await generateSnowflakeId(),
+            chatId: npcChat.id,
+            userId: user.userId,
+            invitedBy: invite.invitedBy,
+          },
+        });
+
+        // Add group chat membership record
+        await db.groupChatMembership.create({
+          data: {
+            id: await generateSnowflakeId(),
+            userId: user.userId,
+            chatId: npcChat.id,
+            npcAdminId: npcChat.npcAdminId || invite.invitedBy,
+            isActive: true,
+          },
+        });
+
+        await db.userGroupInvite.update({
+          where: { id: inviteId },
+          data: { status: 'accepted', respondedAt: new Date() },
+        });
+
+        await db.notification.updateMany({
+          where: { userId: user.userId, type: 'group_invite' },
+          data: { read: true },
+        });
+
+        return { groupId: invite.groupId, chatId: npcChat.id, isNpcGroup: true };
+      }
+
+      // User group flow (existing logic)
       const existingMember = await db.userGroupMember.findFirst({
-        where: {
-          groupId: invite.groupId,
-          userId: user.userId,
-        },
+        where: { groupId: invite.groupId, userId: user.userId },
       });
 
       if (existingMember) {
-        // Update invite status and return
         await db.userGroupInvite.update({
           where: { id: inviteId },
-          data: {
-            status: 'accepted',
-            respondedAt: new Date(),
-          },
+          data: { status: 'accepted', respondedAt: new Date() },
         });
         throw new ApiError('You are already a member of this group', 400);
       }
 
-      // Add user as member
       await db.userGroupMember.create({
         data: {
           id: nanoid(),
@@ -115,12 +159,9 @@ export const POST = withErrorHandling(
         },
       });
 
-      // Add to associated chat
+      // Add to associated chat if exists
       const chat = await db.chat.findFirst({
-        where: {
-          groupId: invite.groupId,
-          isGroup: true,
-        },
+        where: { groupId: invite.groupId, isGroup: true },
       });
 
       if (chat) {
@@ -134,35 +175,22 @@ export const POST = withErrorHandling(
         });
       }
 
-      // Update invite status
       await db.userGroupInvite.update({
         where: { id: inviteId },
-        data: {
-          status: 'accepted',
-          respondedAt: new Date(),
-        },
+        data: { status: 'accepted', respondedAt: new Date() },
       });
 
-      // Mark notification as read
       await db.notification.updateMany({
-        where: {
-          userId: user.userId,
-          type: 'group_invite',
-        },
-        data: {
-          read: true,
-        },
+        where: { userId: user.userId, type: 'group_invite' },
+        data: { read: true },
       });
 
-      return {
-        groupId: invite.groupId,
-        chatId: chat?.id,
-      };
+      return { groupId: invite.groupId, chatId: chat?.id, isNpcGroup: false };
     });
 
     logger.info(
       'Group invite accepted',
-      { userId: user.userId, inviteId },
+      { userId: user.userId, inviteId, isNpcGroup: result.isNpcGroup },
       'POST /api/groups/invites/:inviteId/accept'
     );
 

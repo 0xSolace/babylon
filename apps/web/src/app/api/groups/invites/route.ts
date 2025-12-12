@@ -72,7 +72,8 @@ import type { NextRequest } from 'next/server';
 
 /**
  * GET /api/groups/invites
- * Get all pending group invites for the current user
+ * Get all pending group invites for the current user.
+ * Supports both user-created groups (userGroup) and NPC-administered group chats (chats).
  */
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const user = await authenticate(request);
@@ -88,35 +89,45 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       },
     });
 
-    // Fetch group details separately
     const groupIds = pendingInvites.map((inv) => inv.groupId);
-    const groups = await db.userGroup.findMany({
-      where: {
-        id: { in: groupIds },
-      },
-    });
 
-    // Get member counts for each group
+    // Fetch from both user groups AND NPC group chats
+    const [userGroups, npcChats] = await Promise.all([
+      db.userGroup.findMany({ where: { id: { in: groupIds } } }),
+      db.chat.findMany({ where: { id: { in: groupIds }, isGroup: true } }),
+    ]);
+
+    const userGroupMap = new Map(userGroups.map((g) => [g.id, g]));
+    const npcChatMap = new Map(npcChats.map((c) => [c.id, c]));
+
+    // Get member counts - check both userGroupMember and chatParticipant
     const memberCounts = await Promise.all(
-      groupIds.map((gid) =>
-        db.userGroupMember.count({ where: { groupId: gid } })
-      )
+      groupIds.map(async (gid) => {
+        if (userGroupMap.has(gid)) {
+          return db.userGroupMember.count({ where: { groupId: gid } });
+        }
+        if (npcChatMap.has(gid)) {
+          return db.chatParticipant.count({ where: { chatId: gid } });
+        }
+        return 0;
+      })
     );
-    const memberCountMap = new Map(
-      groupIds.map((gid, i) => [gid, memberCounts[i] ?? 0])
-    );
-    const groupMap = new Map(groups.map((g) => [g.id, g]));
+    const memberCountMap = new Map(groupIds.map((gid, i) => [gid, memberCounts[i] ?? 0]));
 
     return pendingInvites.map((invite) => {
-      const group = groupMap.get(invite.groupId);
+      const userGroup = userGroupMap.get(invite.groupId);
+      const npcChat = npcChatMap.get(invite.groupId);
+
       return {
         inviteId: invite.id,
         groupId: invite.groupId,
-        groupName: group?.name || 'Unknown Group',
-        groupDescription: group?.description,
+        groupName: userGroup?.name || npcChat?.name || 'Unknown Group',
+        groupDescription: userGroup?.description || null,
         memberCount: memberCountMap.get(invite.groupId) ?? 0,
         invitedAt: invite.invitedAt,
         invitedBy: invite.invitedBy,
+        isNpcGroup: !!npcChat,
+        npcAdminId: npcChat?.npcAdminId || null,
       };
     });
   });
