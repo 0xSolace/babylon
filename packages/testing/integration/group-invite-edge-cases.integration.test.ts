@@ -656,6 +656,49 @@ describe('Unverified Code Paths', () => {
   });
 });
 
+describe('Admin Stats Endpoint', () => {
+  beforeEach(cleanupTestData);
+  afterEach(cleanupTestData);
+
+  test('getInviteStats returns correct structure', async () => {
+    const stats = await GroupInviteOrchestrator.getInviteStats();
+
+    expect(typeof stats.pendingCandidates).toBe('number');
+    expect(typeof stats.pendingInvites).toBe('number');
+    expect(typeof stats.invitesLast24h).toBe('number');
+    expect(typeof stats.acceptsLast24h).toBe('number');
+    expect(stats.pendingCandidates).toBeGreaterThanOrEqual(0);
+    expect(stats.pendingInvites).toBeGreaterThanOrEqual(0);
+  });
+
+  test('getInviteStats counts pending candidates correctly', async () => {
+    const npc = await createTestNPC('Stats Pending NPC');
+
+    // Get initial count
+    const before = await GroupInviteOrchestrator.getInviteStats();
+
+    // Add 3 candidates
+    for (let i = 0; i < 3; i++) {
+      const user = await createTestUser(`Stats User ${i}`);
+      const candidateId = await generateSnowflakeId();
+      await db.pendingGroupInviteCandidate.create({
+        data: {
+          id: candidateId,
+          userId: user.id,
+          npcId: npc.id,
+          engagementScore: 50,
+          triggerType: 'quality_reply',
+          processed: false,
+        },
+      });
+      testIds.candidateIds.push(candidateId);
+    }
+
+    const after = await GroupInviteOrchestrator.getInviteStats();
+    expect(after.pendingCandidates).toBe(before.pendingCandidates + 3);
+  });
+});
+
 describe('Priority Ordering', () => {
   beforeEach(cleanupTestData);
   afterEach(cleanupTestData);
