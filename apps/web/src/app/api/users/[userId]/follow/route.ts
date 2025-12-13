@@ -98,7 +98,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { and, db, eq, follows, userActorFollows, users } from '@babylon/db';
-import { StaticDataRegistry } from '@babylon/engine';
+import { GroupInviteOrchestrator, StaticDataRegistry } from '@babylon/engine';
 import {
   generateSnowflakeId,
   logger,
@@ -282,6 +282,15 @@ export const POST = withErrorHandling(
       id: followId,
       userId: user.userId,
       actorId: targetId,
+    });
+
+    // Queue for group invite consideration (following an NPC shows engagement)
+    await GroupInviteOrchestrator.queueInviteCandidate({
+      userId: user.userId,
+      npcId: targetId,
+      triggerType: 'follow',
+      engagementScore: 50, // Following is moderate engagement
+      priorityMultiplier: 1.2,
     });
 
     // Fetch the created follow for the response

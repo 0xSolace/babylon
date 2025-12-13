@@ -108,6 +108,7 @@ import { comments, db, eq, posts, users } from '@babylon/db';
 import {
   FollowingMechanics,
   GroupChatService,
+  GroupInviteOrchestrator,
   MessageQualityChecker,
   parsePostId,
   ReplyRateLimiter,
@@ -242,6 +243,20 @@ export const POST = withErrorHandling(
       newComment.id,
       qualityResult.score
     );
+
+    // 8b. Queue for group invite consideration (processed on next tick)
+    // High-quality replies (score > 0.7) get priority
+    const engagementScore = Math.round(qualityResult.score * 100);
+    if (engagementScore >= 25) {
+      await GroupInviteOrchestrator.queueInviteCandidate({
+        userId: canonicalUserId,
+        npcId,
+        triggerType: 'quality_reply',
+        triggerId: newComment.id,
+        engagementScore,
+        priorityMultiplier: qualityResult.score > 0.7 ? 1.5 : 1.0,
+      });
+    }
 
     // 9. Check for following chance
     const followingChance = await FollowingMechanics.calculateFollowingChance(
