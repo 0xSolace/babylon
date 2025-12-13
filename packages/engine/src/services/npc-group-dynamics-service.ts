@@ -41,6 +41,7 @@ import {
   validateNoRealNames,
 } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
+import { NPCGroupDynamicsConfig } from '../config/group-chat-config';
 import { GroupInviteOrchestrator } from './group-invite-orchestrator';
 import { MarketContextService } from './market-context-service';
 import { NPCGroupDynamicsCalculations } from './npc-group-dynamics-calculations';
@@ -59,23 +60,6 @@ export interface GroupDynamicsResult {
 }
 
 export class NPCGroupDynamicsService {
-  // Probabilities for actions per tick
-  private static readonly FORM_NEW_GROUP_CHANCE = 0.05; // 5% chance per NPC
-  private static readonly JOIN_GROUP_CHANCE = 0.1; // 10% chance if eligible
-  private static readonly LEAVE_GROUP_CHANCE = 0.02; // 2% chance per membership
-  private static readonly POST_MESSAGE_CHANCE = 0.25; // 25% chance per active group
-  private static readonly INVITE_USER_CHANCE = 0.08; // 8% chance per group with space
-  private static readonly KICK_CHECK_CHANCE = 0.15; // 15% chance to check for kicks
-
-  // Group size limits
-  private static readonly MIN_GROUP_SIZE = 3;
-  private static readonly MAX_GROUP_SIZE = 12;
-  private static readonly IDEAL_GROUP_SIZE = 7;
-
-  // User group participation limits (prevent unlimited accumulation)
-  private static readonly MAX_ACTIVE_USER_GROUPS = 5; // Max groups a user can be in simultaneously
-  private static readonly INVITE_COOLDOWN_HOURS = 4; // Hours after joining before next invite eligible
-
   /**
    * Process all NPC group dynamics for one tick
    */
@@ -150,7 +134,7 @@ export class NPCGroupDynamicsService {
 
     for (const npc of npcs) {
       // Random chance to form a group
-      if (Math.random() > NPCGroupDynamicsService.FORM_NEW_GROUP_CHANCE) {
+      if (Math.random() > NPCGroupDynamicsConfig.formNewGroupChance) {
         continue;
       }
 
@@ -187,7 +171,7 @@ export class NPCGroupDynamicsService {
             gte(actorRelationships.sentiment, 0.5)
           )
         )
-        .limit(NPCGroupDynamicsService.IDEAL_GROUP_SIZE - 1);
+        .limit(NPCGroupDynamicsConfig.idealGroupSize - 1);
 
       const memberIds = new Set<string>([npc.id]);
 
@@ -197,7 +181,7 @@ export class NPCGroupDynamicsService {
         memberIds.add(memberId);
       }
 
-      if (memberIds.size < NPCGroupDynamicsService.MIN_GROUP_SIZE) {
+      if (memberIds.size < NPCGroupDynamicsConfig.minGroupSize) {
         continue; // Not enough members
       }
 
@@ -258,7 +242,7 @@ export class NPCGroupDynamicsService {
         .where(eq(chatParticipants.chatId, group.id));
 
       // Don't add to full groups
-      if (participants.length >= NPCGroupDynamicsService.MAX_GROUP_SIZE) {
+      if (participants.length >= NPCGroupDynamicsConfig.maxGroupSize) {
         continue;
       }
 
@@ -274,7 +258,7 @@ export class NPCGroupDynamicsService {
 
       for (const candidate of potentialMembers) {
         // Random chance to join
-        if (Math.random() > NPCGroupDynamicsService.JOIN_GROUP_CHANCE) {
+        if (Math.random() > NPCGroupDynamicsConfig.joinGroupChance) {
           continue;
         }
 
@@ -350,13 +334,13 @@ export class NPCGroupDynamicsService {
         .where(eq(chatParticipants.chatId, chat.id));
 
       // Don't process if group would become too small
-      if (participantList.length <= NPCGroupDynamicsService.MIN_GROUP_SIZE) {
+      if (participantList.length <= NPCGroupDynamicsConfig.minGroupSize) {
         continue;
       }
 
       for (const membership of participantList) {
         // Random chance to leave
-        if (Math.random() > NPCGroupDynamicsService.LEAVE_GROUP_CHANCE) {
+        if (Math.random() > NPCGroupDynamicsConfig.leaveGroupChance) {
           continue;
         }
 
@@ -438,7 +422,7 @@ export class NPCGroupDynamicsService {
 
     for (const group of groupList) {
       // Random chance to post
-      if (Math.random() > NPCGroupDynamicsService.POST_MESSAGE_CHANCE) {
+      if (Math.random() > NPCGroupDynamicsConfig.postMessageChance) {
         continue;
       }
 
@@ -1041,7 +1025,7 @@ Return your response as XML:
     let usersKicked = 0;
 
     // Only check for kicks some of the time
-    if (Math.random() > NPCGroupDynamicsService.KICK_CHECK_CHANCE) {
+    if (Math.random() > NPCGroupDynamicsConfig.kickCheckChance) {
       return 0;
     }
 
@@ -1219,7 +1203,7 @@ Return your response as XML:
         .where(eq(chatParticipants.chatId, group.id));
       const participantCount = partCountResult?.count ?? 0;
 
-      if (participantCount >= NPCGroupDynamicsService.MIN_GROUP_SIZE) {
+      if (participantCount >= NPCGroupDynamicsConfig.minGroupSize) {
         activeGroups++;
       }
       totalMembers += participantCount;

@@ -1,3 +1,4 @@
+import { notifyGroupChatInvite } from '@babylon/api';
 import {
   and,
   chatParticipants,
@@ -13,12 +14,18 @@ import {
   userGroupInvites,
   users,
 } from '@babylon/db';
-import { notifyGroupChatInvite } from '@babylon/api';
 import { generateSnowflakeId, logger } from '@babylon/shared';
+import { GroupInviteConfig } from '../config/group-chat-config';
 import { NPCInteractionTracker } from './npc-interaction-tracker';
 import { StaticDataRegistry } from './static-data-registry';
 
-export type InviteTriggerType = 'quality_reply' | 'follow' | 'trade' | 'share' | 'like_streak' | 'manual';
+export type InviteTriggerType =
+  | 'quality_reply'
+  | 'follow'
+  | 'trade'
+  | 'share'
+  | 'like_streak'
+  | 'manual';
 
 export interface QueueInviteParams {
   userId: string;
@@ -37,110 +44,162 @@ export interface InviteProcessingResult {
   alreadyMembers: number;
 }
 
-const MAX_ACTIVE_USER_GROUPS = 5;
-const INVITE_COOLDOWN_HOURS = 4;
-const CANDIDATE_EXPIRY_HOURS = 48;
-const MAX_CANDIDATES_PER_TICK = 20;
-const BASE_INVITE_PROBABILITY = 0.15;
-const MIN_ENGAGEMENT_SCORE = 25;
-
-const TIER_MULTIPLIERS: Record<string, number> = {
-  S_TIER: 0.3, A_TIER: 0.5, B_TIER: 0.7, C_TIER: 0.9, NONE: 1.0,
-};
-
 export class GroupInviteOrchestrator {
   static async queueInviteCandidate(
     params: QueueInviteParams
   ): Promise<{ queued: boolean; reason?: string }> {
-    const { userId, npcId, triggerType, triggerId, priorityMultiplier = 1.0 } = params;
+    const {
+      userId,
+      npcId,
+      triggerType,
+      triggerId,
+      priorityMultiplier = 1.0,
+    } = params;
 
-    const [[user], [existingMembership], [existingCandidate]] = await Promise.all([
-      db.select({ isActor: users.isActor }).from(users).where(eq(users.id, userId)).limit(1),
-      db.select({ id: groupChatMemberships.id }).from(groupChatMemberships)
-        .where(and(
-          eq(groupChatMemberships.userId, userId),
-          eq(groupChatMemberships.npcAdminId, npcId),
-          eq(groupChatMemberships.isActive, true)
-        )).limit(1),
-      db.select({ id: pendingGroupInviteCandidates.id }).from(pendingGroupInviteCandidates)
-        .where(and(
-          eq(pendingGroupInviteCandidates.userId, userId),
-          eq(pendingGroupInviteCandidates.npcId, npcId),
-          eq(pendingGroupInviteCandidates.processed, false)
-        )).limit(1),
-    ]);
+    const [[user], [existingMembership], [existingCandidate]] =
+      await Promise.all([
+        db
+          .select({ isActor: users.isActor })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1),
+        db
+          .select({ id: groupChatMemberships.id })
+          .from(groupChatMemberships)
+          .where(
+            and(
+              eq(groupChatMemberships.userId, userId),
+              eq(groupChatMemberships.npcAdminId, npcId),
+              eq(groupChatMemberships.isActive, true)
+            )
+          )
+          .limit(1),
+        db
+          .select({ id: pendingGroupInviteCandidates.id })
+          .from(pendingGroupInviteCandidates)
+          .where(
+            and(
+              eq(pendingGroupInviteCandidates.userId, userId),
+              eq(pendingGroupInviteCandidates.npcId, npcId),
+              eq(pendingGroupInviteCandidates.processed, false)
+            )
+          )
+          .limit(1),
+      ]);
 
     if (!user || user.isActor) {
-      logger.debug('Invite candidate rejected: not a user', { userId, npcId }, 'GroupInviteOrchestrator');
+      logger.debug(
+        'Invite candidate rejected: not a user',
+        { userId, npcId },
+        'GroupInviteOrchestrator'
+      );
       return { queued: false, reason: 'User is NPC or not found' };
     }
     if (existingMembership) {
-      logger.debug('Invite candidate rejected: already member', { userId, npcId }, 'GroupInviteOrchestrator');
+      logger.debug(
+        'Invite candidate rejected: already member',
+        { userId, npcId },
+        'GroupInviteOrchestrator'
+      );
       return { queued: false, reason: 'Already a member' };
     }
 
     if (existingCandidate) {
       if (priorityMultiplier > 1.0) {
-        await db.update(pendingGroupInviteCandidates)
+        await db
+          .update(pendingGroupInviteCandidates)
           .set({ priorityMultiplier, triggerId, triggerType })
           .where(eq(pendingGroupInviteCandidates.id, existingCandidate.id));
-        logger.debug('Invite candidate priority updated', { userId, npcId, priorityMultiplier }, 'GroupInviteOrchestrator');
+        logger.debug(
+          'Invite candidate priority updated',
+          { userId, npcId, priorityMultiplier },
+          'GroupInviteOrchestrator'
+        );
       }
       return { queued: false, reason: 'Already queued (priority updated)' };
     }
 
     const limitCheck = await this.checkUserLimits(userId);
     if (!limitCheck.eligible) {
-      logger.debug('Invite candidate rejected: limit check failed', { userId, reason: limitCheck.reason }, 'GroupInviteOrchestrator');
+      logger.debug(
+        'Invite candidate rejected: limit check failed',
+        { userId, reason: limitCheck.reason },
+        'GroupInviteOrchestrator'
+      );
       return { queued: false, reason: limitCheck.reason };
     }
 
-    const engagementScore = params.engagementScore ??
-      (await NPCInteractionTracker.calculateEngagementScore(userId, npcId)).engagementScore;
+    const engagementScore =
+      params.engagementScore ??
+      (await NPCInteractionTracker.calculateEngagementScore(userId, npcId))
+        .engagementScore;
 
-    if (engagementScore < MIN_ENGAGEMENT_SCORE) {
-      logger.debug('Invite candidate rejected: low engagement', { userId, npcId, engagementScore }, 'GroupInviteOrchestrator');
+    if (engagementScore < GroupInviteConfig.minEngagementScore) {
+      logger.debug(
+        'Invite candidate rejected: low engagement',
+        { userId, npcId, engagementScore },
+        'GroupInviteOrchestrator'
+      );
       return { queued: false, reason: 'Engagement score too low' };
     }
 
-    const [existingChat] = await db.select({ id: chats.id }).from(chats)
-      .where(and(eq(chats.isGroup, true), eq(chats.npcAdminId, npcId))).limit(1);
+    const [existingChat] = await db
+      .select({ id: chats.id })
+      .from(chats)
+      .where(and(eq(chats.isGroup, true), eq(chats.npcAdminId, npcId)))
+      .limit(1);
 
-    const inserted = await db.insert(pendingGroupInviteCandidates).values({
-      id: await generateSnowflakeId(),
-      userId,
-      npcId,
-      groupChatId: existingChat?.id ?? null,
-      engagementScore,
-      triggerType,
-      triggerId,
-      priorityMultiplier,
-      queuedAt: new Date(),
-      processed: false,
-    }).onConflictDoNothing().returning({ id: pendingGroupInviteCandidates.id });
+    const inserted = await db
+      .insert(pendingGroupInviteCandidates)
+      .values({
+        id: await generateSnowflakeId(),
+        userId,
+        npcId,
+        groupChatId: existingChat?.id ?? null,
+        engagementScore,
+        triggerType,
+        triggerId,
+        priorityMultiplier,
+        queuedAt: new Date(),
+        processed: false,
+      })
+      .onConflictDoNothing()
+      .returning({ id: pendingGroupInviteCandidates.id });
 
     if (inserted.length === 0) {
       return { queued: false, reason: 'Already queued (concurrent)' };
     }
 
-    logger.info('Queued invite candidate', { userId, npcId, triggerType, engagementScore }, 'GroupInviteOrchestrator');
+    logger.info(
+      'Queued invite candidate',
+      { userId, npcId, triggerType, engagementScore },
+      'GroupInviteOrchestrator'
+    );
     return { queued: true };
   }
 
   static async processQueuedInvites(): Promise<InviteProcessingResult> {
     const result: InviteProcessingResult = {
-      candidatesProcessed: 0, invitesSent: 0, skipped: 0, expired: 0, alreadyMembers: 0,
+      candidatesProcessed: 0,
+      invitesSent: 0,
+      skipped: 0,
+      expired: 0,
+      alreadyMembers: 0,
     };
 
-    const expiryThreshold = new Date(Date.now() - CANDIDATE_EXPIRY_HOURS * 60 * 60 * 1000);
-    const candidates = await db.select().from(pendingGroupInviteCandidates)
+    const expiryThreshold = new Date(
+      Date.now() - GroupInviteConfig.candidateExpiryHours * 60 * 60 * 1000
+    );
+    const candidates = await db
+      .select()
+      .from(pendingGroupInviteCandidates)
       .where(eq(pendingGroupInviteCandidates.processed, false))
       .orderBy(
         desc(pendingGroupInviteCandidates.priorityMultiplier),
         desc(pendingGroupInviteCandidates.engagementScore),
         pendingGroupInviteCandidates.queuedAt
       )
-      .limit(MAX_CANDIDATES_PER_TICK);
+      .limit(GroupInviteConfig.maxCandidatesPerTick);
 
     for (const candidate of candidates) {
       result.candidatesProcessed++;
@@ -151,13 +210,17 @@ export class GroupInviteOrchestrator {
         continue;
       }
 
-      const [membership] = await db.select({ id: groupChatMemberships.id })
+      const [membership] = await db
+        .select({ id: groupChatMemberships.id })
         .from(groupChatMemberships)
-        .where(and(
-          eq(groupChatMemberships.userId, candidate.userId),
-          eq(groupChatMemberships.npcAdminId, candidate.npcId),
-          eq(groupChatMemberships.isActive, true)
-        )).limit(1);
+        .where(
+          and(
+            eq(groupChatMemberships.userId, candidate.userId),
+            eq(groupChatMemberships.npcAdminId, candidate.npcId),
+            eq(groupChatMemberships.isActive, true)
+          )
+        )
+        .limit(1);
 
       if (membership) {
         await this.markCandidateProcessed(candidate.id, 'already_member');
@@ -173,17 +236,33 @@ export class GroupInviteOrchestrator {
       }
 
       const npcActor = StaticDataRegistry.getActor(candidate.npcId);
-      const tierMultiplier = TIER_MULTIPLIERS[npcActor?.tier ?? 'NONE'] ?? 1.0;
+      const tierMultiplier = GroupInviteConfig.tierMultipliers[npcActor?.tier ?? 'NONE'] ?? 1.0;
       const scoreMultiplier = Math.min(candidate.engagementScore / 50, 2.0);
-      const probability = BASE_INVITE_PROBABILITY * scoreMultiplier * candidate.priorityMultiplier * tierMultiplier;
+      const probability =
+        GroupInviteConfig.baseInviteProbability *
+        scoreMultiplier *
+        candidate.priorityMultiplier *
+        tierMultiplier;
 
       if (Math.random() >= probability) continue;
 
-      const inviteResult = await this.createInvite(candidate.userId, candidate.npcId, candidate.groupChatId);
+      const inviteResult = await this.createInvite(
+        candidate.userId,
+        candidate.npcId,
+        candidate.groupChatId
+      );
       if (inviteResult.success) {
         await this.markCandidateProcessed(candidate.id, 'invited');
         result.invitesSent++;
-        logger.info('Invite sent', { userId: candidate.userId, npcId: candidate.npcId, probability: probability.toFixed(3) }, 'GroupInviteOrchestrator');
+        logger.info(
+          'Invite sent',
+          {
+            userId: candidate.userId,
+            npcId: candidate.npcId,
+            probability: probability.toFixed(3),
+          },
+          'GroupInviteOrchestrator'
+        );
       } else {
         await this.markCandidateProcessed(candidate.id, 'skipped');
         result.skipped++;
@@ -197,18 +276,27 @@ export class GroupInviteOrchestrator {
   }
 
   private static async createInvite(
-    userId: string, npcId: string, groupChatId: string | null
+    userId: string,
+    npcId: string,
+    groupChatId: string | null
   ): Promise<{ success: boolean; chatId?: string }> {
     const npcName = StaticDataRegistry.getActor(npcId)?.name ?? 'Unknown NPC';
     let chatId = groupChatId;
     let chatName: string;
 
     if (chatId) {
-      const [chat] = await db.select({ name: chats.name }).from(chats).where(eq(chats.id, chatId)).limit(1);
+      const [chat] = await db
+        .select({ name: chats.name })
+        .from(chats)
+        .where(eq(chats.id, chatId))
+        .limit(1);
       chatName = chat?.name ?? `${npcName}'s Circle`;
     } else {
-      const [existing] = await db.select().from(chats)
-        .where(and(eq(chats.isGroup, true), eq(chats.npcAdminId, npcId))).limit(1);
+      const [existing] = await db
+        .select()
+        .from(chats)
+        .where(and(eq(chats.isGroup, true), eq(chats.npcAdminId, npcId)))
+        .limit(1);
 
       if (existing) {
         chatId = existing.id;
@@ -216,17 +304,32 @@ export class GroupInviteOrchestrator {
       } else {
         chatId = await generateSnowflakeId();
         chatName = `${npcName}'s Circle`;
-        await db.insert(chats).values({ id: chatId, name: chatName, isGroup: true, npcAdminId: npcId, updatedAt: new Date() });
-        await db.insert(chatParticipants).values({ id: await generateSnowflakeId(), chatId, userId: npcId });
+        await db
+          .insert(chats)
+          .values({
+            id: chatId,
+            name: chatName,
+            isGroup: true,
+            npcAdminId: npcId,
+            updatedAt: new Date(),
+          });
+        await db
+          .insert(chatParticipants)
+          .values({ id: await generateSnowflakeId(), chatId, userId: npcId });
       }
     }
 
-    const [existingInvite] = await db.select({ id: userGroupInvites.id }).from(userGroupInvites)
-      .where(and(
-        eq(userGroupInvites.groupId, chatId),
-        eq(userGroupInvites.invitedUserId, userId),
-        eq(userGroupInvites.status, 'pending')
-      )).limit(1);
+    const [existingInvite] = await db
+      .select({ id: userGroupInvites.id })
+      .from(userGroupInvites)
+      .where(
+        and(
+          eq(userGroupInvites.groupId, chatId),
+          eq(userGroupInvites.invitedUserId, userId),
+          eq(userGroupInvites.status, 'pending')
+        )
+      )
+      .limit(1);
 
     if (existingInvite) return { success: false };
 
@@ -244,45 +347,82 @@ export class GroupInviteOrchestrator {
     return { success: true, chatId };
   }
 
-  private static async checkUserLimits(userId: string): Promise<{ eligible: boolean; reason?: string }> {
+  private static async checkUserLimits(
+    userId: string
+  ): Promise<{ eligible: boolean; reason?: string }> {
     const [[countResult], [latest]] = await Promise.all([
-      db.select({ count: count() }).from(groupChatMemberships)
-        .where(and(eq(groupChatMemberships.userId, userId), eq(groupChatMemberships.isActive, true))),
-      db.select({ joinedAt: groupChatMemberships.joinedAt }).from(groupChatMemberships)
-        .where(and(eq(groupChatMemberships.userId, userId), eq(groupChatMemberships.isActive, true)))
-        .orderBy(desc(groupChatMemberships.joinedAt)).limit(1),
+      db
+        .select({ count: count() })
+        .from(groupChatMemberships)
+        .where(
+          and(
+            eq(groupChatMemberships.userId, userId),
+            eq(groupChatMemberships.isActive, true)
+          )
+        ),
+      db
+        .select({ joinedAt: groupChatMemberships.joinedAt })
+        .from(groupChatMemberships)
+        .where(
+          and(
+            eq(groupChatMemberships.userId, userId),
+            eq(groupChatMemberships.isActive, true)
+          )
+        )
+        .orderBy(desc(groupChatMemberships.joinedAt))
+        .limit(1),
     ]);
 
-    if ((countResult?.count ?? 0) >= MAX_ACTIVE_USER_GROUPS) {
+    if ((countResult?.count ?? 0) >= GroupInviteConfig.maxActiveUserGroups) {
       return { eligible: false, reason: 'At group limit' };
     }
 
-    if (latest && (Date.now() - latest.joinedAt.getTime()) / (1000 * 60 * 60) < INVITE_COOLDOWN_HOURS) {
+    if (
+      latest &&
+      (Date.now() - latest.joinedAt.getTime()) / (1000 * 60 * 60) <
+        GroupInviteConfig.inviteCooldownHours
+    ) {
       return { eligible: false, reason: 'In invite cooldown' };
     }
 
     return { eligible: true };
   }
 
-  private static async markCandidateProcessed(id: string, outcome: string): Promise<void> {
-    await db.update(pendingGroupInviteCandidates)
+  private static async markCandidateProcessed(
+    id: string,
+    outcome: string
+  ): Promise<void> {
+    await db
+      .update(pendingGroupInviteCandidates)
       .set({ processed: true, outcome, processedAt: new Date() })
       .where(eq(pendingGroupInviteCandidates.id, id));
   }
 
   static async cleanupProcessedCandidates(): Promise<number> {
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const deleted = await db.delete(pendingGroupInviteCandidates)
-      .where(and(eq(pendingGroupInviteCandidates.processed, true), lt(pendingGroupInviteCandidates.processedAt, cutoff)))
+    const deleted = await db
+      .delete(pendingGroupInviteCandidates)
+      .where(
+        and(
+          eq(pendingGroupInviteCandidates.processed, true),
+          lt(pendingGroupInviteCandidates.processedAt, cutoff)
+        )
+      )
       .returning({ id: pendingGroupInviteCandidates.id });
     return deleted.length;
   }
 
   static async expireOldInvites(): Promise<number> {
     const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    const updated = await db.update(userGroupInvites)
+    const updated = await db
+      .update(userGroupInvites)
       .set({ status: 'expired', respondedAt: new Date() })
-      .where(and(eq(userGroupInvites.status, 'pending'), lt(userGroupInvites.invitedAt, cutoff)))
+      .where(
+        and(
+          eq(userGroupInvites.status, 'pending'),
+          lt(userGroupInvites.invitedAt, cutoff)
+        )
+      )
       .returning({ id: userGroupInvites.id });
     return updated.length;
   }
@@ -295,10 +435,27 @@ export class GroupInviteOrchestrator {
   }> {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const [[candidates], [pending], [recent], [accepts]] = await Promise.all([
-      db.select({ count: count() }).from(pendingGroupInviteCandidates).where(eq(pendingGroupInviteCandidates.processed, false)),
-      db.select({ count: count() }).from(userGroupInvites).where(eq(userGroupInvites.status, 'pending')),
-      db.select({ count: count() }).from(userGroupInvites).where(gte(userGroupInvites.invitedAt, oneDayAgo)),
-      db.select({ count: count() }).from(userGroupInvites).where(and(eq(userGroupInvites.status, 'accepted'), gte(userGroupInvites.respondedAt, oneDayAgo))),
+      db
+        .select({ count: count() })
+        .from(pendingGroupInviteCandidates)
+        .where(eq(pendingGroupInviteCandidates.processed, false)),
+      db
+        .select({ count: count() })
+        .from(userGroupInvites)
+        .where(eq(userGroupInvites.status, 'pending')),
+      db
+        .select({ count: count() })
+        .from(userGroupInvites)
+        .where(gte(userGroupInvites.invitedAt, oneDayAgo)),
+      db
+        .select({ count: count() })
+        .from(userGroupInvites)
+        .where(
+          and(
+            eq(userGroupInvites.status, 'accepted'),
+            gte(userGroupInvites.respondedAt, oneDayAgo)
+          )
+        ),
     ]);
 
     return {
@@ -309,4 +466,3 @@ export class GroupInviteOrchestrator {
     };
   }
 }
-

@@ -43,6 +43,13 @@ export {
   SIMULATION_STRATEGIES,
   type SimulationStrategy,
 } from './config/simulation';
+export {
+  getGroupChatConfigSummary,
+  GroupChatServiceConfig,
+  GroupInviteConfig,
+  NPCGroupDynamicsConfig,
+  validateGroupChatConfig,
+} from './config/group-chat-config';
 // Data Exports
 export {
   getQuestionExamples,

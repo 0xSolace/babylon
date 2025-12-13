@@ -49,19 +49,17 @@ OPTIONS (generate):
   -v, --verbose    Enable detailed logging
 
 OPTIONS (simulate):
-  --outcome=YES|NO  Predetermined outcome (default: YES)
-  --count=N         Number of simulations (default: 1)
-  --fast            Skip detailed logging
-  --save=FILE       Save game data to file
-  --json            Output JSON only
+  --ticks=N         Number of invite processing ticks (default: 10)
+  --config          Show current group chat configuration
 
 EXAMPLES:
-  babylon game start              Start the game
-  babylon game pause              Pause the game
-  babylon game status             Check if game is running
-  babylon game generate           Generate new game content
-  babylon game simulate --count=10
-  babylon game validate           Validate actor affiliations
+  babylon game start                    Start the game
+  babylon game pause                    Pause the game
+  babylon game status                   Check if game is running
+  babylon game generate                 Generate new game content
+  babylon game simulate --ticks=100     Run 100 invite processing ticks
+  babylon game simulate --config        Show current configuration
+  babylon game validate                 Validate actor affiliations
 `);
 }
 
@@ -487,11 +485,83 @@ async function generateGame(args: ReturnType<typeof parseArgs>): Promise<void> {
 }
 
 async function runSimulation(
-  _args: ReturnType<typeof parseArgs>
+  args: ReturnType<typeof parseArgs>
 ): Promise<void> {
-  logger.header('Game Simulation');
-  logger.warn('Simulation feature is not yet implemented');
-  logger.info('Use "babylon game generate" to generate game content instead.');
+  const { getGroupChatConfigSummary, GroupInviteOrchestrator, validateGroupChatConfig } = await import('@babylon/engine');
+  
+  logger.header('Group Dynamics Simulation');
+  
+  const ticks = parseInt(getFlag(args, 'ticks') || '10', 10);
+  const showConfig = args.flags.includes('--config');
+  
+  // Show current configuration
+  if (showConfig) {
+    console.log('\nCurrent Configuration:');
+    const config = getGroupChatConfigSummary();
+    for (const [key, value] of Object.entries(config)) {
+      console.log(`  ${key}: ${value}`);
+    }
+    
+    const validation = validateGroupChatConfig();
+    if (!validation.valid) {
+      console.log('\nConfiguration Warnings:');
+      for (const warning of validation.warnings) {
+        console.log(`  ⚠️  ${warning}`);
+      }
+    }
+    console.log('');
+  }
+  
+  // Get initial stats
+  const initialStats = await GroupInviteOrchestrator.getInviteStats();
+  console.log('\nInitial State:');
+  console.log(`  Pending candidates: ${initialStats.pendingCandidates}`);
+  console.log(`  Pending invites: ${initialStats.pendingInvites}`);
+  console.log(`  Invites (24h): ${initialStats.invitesLast24h}`);
+  console.log(`  Accepts (24h): ${initialStats.acceptsLast24h}`);
+  
+  // Run simulation ticks
+  console.log(`\nRunning ${ticks} invite processing ticks...`);
+  
+  let totalInvitesSent = 0;
+  let totalProcessed = 0;
+  let totalExpired = 0;
+  let totalSkipped = 0;
+  
+  for (let i = 1; i <= ticks; i++) {
+    const result = await GroupInviteOrchestrator.processQueuedInvites();
+    totalInvitesSent += result.invitesSent;
+    totalProcessed += result.candidatesProcessed;
+    totalExpired += result.expired;
+    totalSkipped += result.skipped;
+    
+    if (result.invitesSent > 0) {
+      console.log(`  Tick ${i}: ${result.invitesSent} invite(s) sent`);
+    }
+  }
+  
+  // Get final stats
+  const finalStats = await GroupInviteOrchestrator.getInviteStats();
+  
+  console.log('\nSimulation Results:');
+  console.log(`  Ticks run: ${ticks}`);
+  console.log(`  Candidates processed: ${totalProcessed}`);
+  console.log(`  Invites sent: ${totalInvitesSent}`);
+  console.log(`  Expired: ${totalExpired}`);
+  console.log(`  Skipped: ${totalSkipped}`);
+  
+  console.log('\nFinal State:');
+  console.log(`  Pending candidates: ${finalStats.pendingCandidates}`);
+  console.log(`  Pending invites: ${finalStats.pendingInvites}`);
+  console.log(`  Invites (24h): ${finalStats.invitesLast24h}`);
+  console.log(`  Accepts (24h): ${finalStats.acceptsLast24h}`);
+  
+  if (finalStats.invitesLast24h > 0) {
+    const acceptRate = ((finalStats.acceptsLast24h / finalStats.invitesLast24h) * 100).toFixed(1);
+    console.log(`  Accept rate: ${acceptRate}%`);
+  }
+  
+  logger.success('Simulation complete');
 }
 
 /**
