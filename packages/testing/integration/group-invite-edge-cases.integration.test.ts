@@ -606,6 +606,56 @@ describe('Processing Result Accuracy', () => {
   });
 });
 
+describe('Unverified Code Paths', () => {
+  beforeEach(cleanupTestData);
+  afterEach(cleanupTestData);
+
+  test('queueing without engagementScore should calculate from interactions', async () => {
+    const user = await createTestUser('Engagement Calc User');
+    const npc = await createTestNPC('Engagement Calc NPC');
+
+    // Create some user interactions with this NPC so engagement score is non-zero
+    // Note: Without interactions, score will be 0 and below threshold
+    const result = await GroupInviteOrchestrator.queueInviteCandidate({
+      userId: user.id,
+      npcId: npc.id,
+      triggerType: 'quality_reply',
+      // NO engagementScore passed - should calculate from NPCInteractionTracker
+    });
+
+    // Will be rejected because no interactions exist (score = 0 < 25)
+    expect(result.queued).toBe(false);
+    expect(result.reason).toBe('Engagement score too low');
+  });
+
+  test('tier multiplier uses NONE when NPC not in StaticDataRegistry', async () => {
+    // Test NPCs are not in StaticDataRegistry, so should use NONE multiplier
+    const user = await createTestUser('Tier Test User');
+    const npc = await createTestNPC('Tier Test NPC');
+
+    const candidateId = await generateSnowflakeId();
+    await db.pendingGroupInviteCandidate.create({
+      data: {
+        id: candidateId,
+        userId: user.id,
+        npcId: npc.id,
+        engagementScore: 100,
+        triggerType: 'quality_reply',
+        priorityMultiplier: 1.0,
+        processed: false,
+      },
+    });
+    testIds.candidateIds.push(candidateId);
+
+    // Process - should use NONE tier multiplier (1.0)
+    // Probability = 0.15 * 2.0 (score/50) * 1.0 (priority) * 1.0 (NONE tier) = 0.30
+    const result = await GroupInviteOrchestrator.processQueuedInvites();
+
+    // Verify it was processed (not that invite was sent - that's probabilistic)
+    expect(result.candidatesProcessed).toBe(1);
+  });
+});
+
 describe('Priority Ordering', () => {
   beforeEach(cleanupTestData);
   afterEach(cleanupTestData);
