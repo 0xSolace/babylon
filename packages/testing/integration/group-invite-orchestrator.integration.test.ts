@@ -12,12 +12,24 @@ const testIds = {
   membershipIds: [] as string[],
 };
 
-async function createTestUser(options: { isAgent?: boolean; username?: string; displayName?: string }) {
+async function createTestUser(options: {
+  isAgent?: boolean;
+  username?: string;
+  displayName?: string;
+}) {
   const id = await generateSnowflakeId();
   const username = options.username || `test-user-${id.slice(-6)}`;
   const displayName = options.displayName || `Test User ${id.slice(-6)}`;
   await db.user.create({
-    data: { id, username, displayName, isActor: false, isAgent: options.isAgent || false, isTest: true, updatedAt: new Date() },
+    data: {
+      id,
+      username,
+      displayName,
+      isActor: false,
+      isAgent: options.isAgent || false,
+      isTest: true,
+      updatedAt: new Date(),
+    },
   });
   testIds.userIds.push(id);
   return { id, username, displayName, isAgent: options.isAgent || false };
@@ -25,9 +37,16 @@ async function createTestUser(options: { isAgent?: boolean; username?: string; d
 
 async function createTestActor(options: { name?: string }) {
   const id = await generateSnowflakeId();
-  const name = options.name || `Test NPC ${id.slice(-6)}`;
+  const name = options.name || `Test NPC`;
   await db.user.create({
-    data: { id, username: name.toLowerCase().replace(/\s+/g, '-'), displayName: name, isActor: true, isTest: true, updatedAt: new Date() },
+    data: {
+      id,
+      username: `test-npc-${id}`,
+      displayName: `${name} ${id.slice(-6)}`,
+      isActor: true,
+      isTest: true,
+      updatedAt: new Date(),
+    },
   });
   await db.actorState.create({ data: { id, updatedAt: new Date() } });
   testIds.actorIds.push(id);
@@ -35,31 +54,71 @@ async function createTestActor(options: { name?: string }) {
   return { id, name };
 }
 
-async function createTestGroupChat(options: { name?: string; npcAdminId: string }) {
+async function createTestGroupChat(options: {
+  name?: string;
+  npcAdminId: string;
+}) {
   const id = await generateSnowflakeId();
   const name = options.name || `Test Group ${id.slice(-6)}`;
-  await db.chat.create({ data: { id, name, isGroup: true, npcAdminId: options.npcAdminId, updatedAt: new Date() } });
-  await db.chatParticipant.create({ data: { id: await generateSnowflakeId(), chatId: id, userId: options.npcAdminId } });
+  await db.chat.create({
+    data: {
+      id,
+      name,
+      isGroup: true,
+      npcAdminId: options.npcAdminId,
+      updatedAt: new Date(),
+    },
+  });
+  await db.chatParticipant.create({
+    data: {
+      id: await generateSnowflakeId(),
+      chatId: id,
+      userId: options.npcAdminId,
+    },
+  });
   testIds.chatIds.push(id);
   return { id, name };
 }
 
 async function cleanupTestData() {
-  if (testIds.inviteIds.length > 0) await db.userGroupInvite.deleteMany({ where: { id: { in: testIds.inviteIds } } });
-  if (testIds.candidateIds.length > 0) await db.pendingGroupInviteCandidate.deleteMany({ where: { id: { in: testIds.candidateIds } } });
-  if (testIds.membershipIds.length > 0) await db.groupChatMembership.deleteMany({ where: { id: { in: testIds.membershipIds } } });
+  if (testIds.inviteIds.length > 0)
+    await db.userGroupInvite.deleteMany({
+      where: { id: { in: testIds.inviteIds } },
+    });
+  if (testIds.candidateIds.length > 0)
+    await db.pendingGroupInviteCandidate.deleteMany({
+      where: { id: { in: testIds.candidateIds } },
+    });
+  if (testIds.membershipIds.length > 0)
+    await db.groupChatMembership.deleteMany({
+      where: { id: { in: testIds.membershipIds } },
+    });
   if (testIds.chatIds.length > 0) {
-    await db.chatParticipant.deleteMany({ where: { chatId: { in: testIds.chatIds } } });
+    await db.chatParticipant.deleteMany({
+      where: { chatId: { in: testIds.chatIds } },
+    });
     await db.chat.deleteMany({ where: { id: { in: testIds.chatIds } } });
   }
-  if (testIds.userIds.length > 0) await db.user.deleteMany({ where: { id: { in: testIds.userIds } } });
-  if (testIds.actorIds.length > 0) await db.actorState.deleteMany({ where: { id: { in: testIds.actorIds } } });
+  if (testIds.userIds.length > 0)
+    await db.user.deleteMany({ where: { id: { in: testIds.userIds } } });
+  if (testIds.actorIds.length > 0)
+    await db.actorState.deleteMany({ where: { id: { in: testIds.actorIds } } });
 
   await db.pendingGroupInviteCandidate.deleteMany({
-    where: { OR: [{ userId: { in: testIds.userIds } }, { npcId: { in: testIds.actorIds } }] },
+    where: {
+      OR: [
+        { userId: { in: testIds.userIds } },
+        { npcId: { in: testIds.actorIds } },
+      ],
+    },
   });
   await db.userGroupInvite.deleteMany({
-    where: { OR: [{ invitedUserId: { in: testIds.userIds } }, { invitedBy: { in: testIds.actorIds } }] },
+    where: {
+      OR: [
+        { invitedUserId: { in: testIds.userIds } },
+        { invitedBy: { in: testIds.actorIds } },
+      ],
+    },
   });
 
   testIds.userIds = [];
@@ -336,7 +395,9 @@ describe('Group Invite Orchestrator Integration Tests', () => {
 
     test('should cleanup old processed candidates', async () => {
       const npc = await createTestActor({ name: 'Cleanup Candidate NPC' });
-      const user = await createTestUser({ displayName: 'Cleanup Candidate User' });
+      const user = await createTestUser({
+        displayName: 'Cleanup Candidate User',
+      });
 
       // Create an old processed candidate (10 days ago, beyond 7-day cleanup)
       const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
@@ -408,8 +469,8 @@ describe('Group Invite Orchestrator Integration Tests', () => {
       expect(allActors.length).toBeGreaterThan(0);
 
       // Find actors with different tiers
-      const sTierActor = allActors.find(a => a.tier === 'S_TIER');
-      const cTierActor = allActors.find(a => a.tier === 'C_TIER');
+      const sTierActor = allActors.find((a) => a.tier === 'S_TIER');
+      const cTierActor = allActors.find((a) => a.tier === 'C_TIER');
 
       expect(sTierActor).toBeDefined();
       expect(cTierActor).toBeDefined();
@@ -482,10 +543,20 @@ describe('Group Invite Orchestrator Integration Tests', () => {
       // Create 4 active memberships
       for (let i = 0; i < 4; i++) {
         const npc = await createTestActor({ name: `Near Limit NPC ${i}` });
-        const chat = await createTestGroupChat({ name: `Near Limit Group ${i}`, npcAdminId: npc.id });
+        const chat = await createTestGroupChat({
+          name: `Near Limit Group ${i}`,
+          npcAdminId: npc.id,
+        });
         const membershipId = await generateSnowflakeId();
         await db.groupChatMembership.create({
-          data: { id: membershipId, userId: user.id, chatId: chat.id, npcAdminId: npc.id, isActive: true, joinedAt: pastJoinedAt },
+          data: {
+            id: membershipId,
+            userId: user.id,
+            chatId: chat.id,
+            npcAdminId: npc.id,
+            isActive: true,
+            joinedAt: pastJoinedAt,
+          },
         });
         testIds.membershipIds.push(membershipId);
       }
@@ -504,7 +575,9 @@ describe('Group Invite Orchestrator Integration Tests', () => {
 
     test('should handle candidate queued at exactly expiry boundary', async () => {
       const npc = await createTestActor({ name: 'Expiry Boundary NPC' });
-      const user = await createTestUser({ displayName: 'Expiry Boundary User' });
+      const user = await createTestUser({
+        displayName: 'Expiry Boundary User',
+      });
 
       // Create candidate at exactly 48 hours ago (CANDIDATE_EXPIRY_HOURS)
       const exactlyExpiredDate = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -530,10 +603,15 @@ describe('Group Invite Orchestrator Integration Tests', () => {
     });
 
     test('should handle invite cooldown exactly at boundary', async () => {
-      const user = await createTestUser({ displayName: 'Cooldown Boundary User' });
+      const user = await createTestUser({
+        displayName: 'Cooldown Boundary User',
+      });
       const npc1 = await createTestActor({ name: 'Cooldown NPC 1' });
       const npc2 = await createTestActor({ name: 'Cooldown NPC 2' });
-      const chat = await createTestGroupChat({ name: 'Cooldown Group', npcAdminId: npc1.id });
+      const chat = await createTestGroupChat({
+        name: 'Cooldown Group',
+        npcAdminId: npc1.id,
+      });
 
       // Create membership from exactly 4 hours ago (INVITE_COOLDOWN_HOURS)
       const exactlyCooldownDate = new Date(Date.now() - 4 * 60 * 60 * 1000);
@@ -580,8 +658,13 @@ describe('Group Invite Orchestrator Integration Tests', () => {
 
     test('should handle inactive membership correctly', async () => {
       const npc = await createTestActor({ name: 'Inactive Membership NPC' });
-      const user = await createTestUser({ displayName: 'Inactive Membership User' });
-      const chat = await createTestGroupChat({ name: 'Inactive Group', npcAdminId: npc.id });
+      const user = await createTestUser({
+        displayName: 'Inactive Membership User',
+      });
+      const chat = await createTestGroupChat({
+        name: 'Inactive Group',
+        npcAdminId: npc.id,
+      });
 
       // Create INACTIVE membership
       const membershipId = await generateSnowflakeId();
@@ -681,7 +764,9 @@ describe('Group Invite Orchestrator Integration Tests', () => {
 
       // Create multiple candidates
       for (let i = 0; i < 5; i++) {
-        const user = await createTestUser({ displayName: `Concurrent Process User ${i}` });
+        const user = await createTestUser({
+          displayName: `Concurrent Process User ${i}`,
+        });
         await GroupInviteOrchestrator.queueInviteCandidate({
           userId: user.id,
           npcId: npc.id,
@@ -709,7 +794,10 @@ describe('Group Invite Orchestrator Integration Tests', () => {
     test('should store all candidate fields correctly', async () => {
       const npc = await createTestActor({ name: 'Data Verify NPC' });
       const user = await createTestUser({ displayName: 'Data Verify User' });
-      const chat = await createTestGroupChat({ name: 'Data Verify Group', npcAdminId: npc.id });
+      const chat = await createTestGroupChat({
+        name: 'Data Verify Group',
+        npcAdminId: npc.id,
+      });
 
       const beforeQueue = new Date();
       await GroupInviteOrchestrator.queueInviteCandidate({
@@ -739,8 +827,12 @@ describe('Group Invite Orchestrator Integration Tests', () => {
       expect(candidate?.processedAt).toBeNull();
 
       // Verify queuedAt is within expected range
-      expect(candidate?.queuedAt.getTime()).toBeGreaterThanOrEqual(beforeQueue.getTime());
-      expect(candidate?.queuedAt.getTime()).toBeLessThanOrEqual(afterQueue.getTime());
+      expect(candidate?.queuedAt.getTime()).toBeGreaterThanOrEqual(
+        beforeQueue.getTime()
+      );
+      expect(candidate?.queuedAt.getTime()).toBeLessThanOrEqual(
+        afterQueue.getTime()
+      );
     });
 
     test('should mark processed candidates with correct outcome and timestamp', async () => {
@@ -775,8 +867,12 @@ describe('Group Invite Orchestrator Integration Tests', () => {
       expect(candidate?.processed).toBe(true);
       expect(candidate?.outcome).toBe('expired');
       expect(candidate?.processedAt).toBeDefined();
-      expect(candidate?.processedAt!.getTime()).toBeGreaterThanOrEqual(beforeProcess.getTime());
-      expect(candidate?.processedAt!.getTime()).toBeLessThanOrEqual(afterProcess.getTime());
+      expect(candidate?.processedAt!.getTime()).toBeGreaterThanOrEqual(
+        beforeProcess.getTime()
+      );
+      expect(candidate?.processedAt!.getTime()).toBeLessThanOrEqual(
+        afterProcess.getTime()
+      );
     });
 
     test('should update invite status and respondedAt on expiration', async () => {
@@ -801,12 +897,18 @@ describe('Group Invite Orchestrator Integration Tests', () => {
       await GroupInviteOrchestrator.expireOldInvites();
       const afterExpire = new Date();
 
-      const invite = await db.userGroupInvite.findUnique({ where: { id: inviteId } });
+      const invite = await db.userGroupInvite.findUnique({
+        where: { id: inviteId },
+      });
 
       expect(invite?.status).toBe('expired');
       expect(invite?.respondedAt).toBeDefined();
-      expect(invite?.respondedAt!.getTime()).toBeGreaterThanOrEqual(beforeExpire.getTime());
-      expect(invite?.respondedAt!.getTime()).toBeLessThanOrEqual(afterExpire.getTime());
+      expect(invite?.respondedAt!.getTime()).toBeGreaterThanOrEqual(
+        beforeExpire.getTime()
+      );
+      expect(invite?.respondedAt!.getTime()).toBeLessThanOrEqual(
+        afterExpire.getTime()
+      );
     });
   });
 
@@ -820,7 +922,9 @@ describe('Group Invite Orchestrator Integration Tests', () => {
       'manual',
     ] as const)('should accept trigger type: %s', async (triggerType) => {
       const npc = await createTestActor({ name: `Trigger ${triggerType} NPC` });
-      const user = await createTestUser({ displayName: `Trigger ${triggerType} User` });
+      const user = await createTestUser({
+        displayName: `Trigger ${triggerType} User`,
+      });
 
       const result = await GroupInviteOrchestrator.queueInviteCandidate({
         userId: user.id,
@@ -879,15 +983,27 @@ describe('Agent Invite Parity', () => {
   });
 
   test('agents should have same limit behavior as regular users', async () => {
-    const agent = await createTestUser({ isAgent: true, displayName: 'Limited Agent' });
+    const agent = await createTestUser({
+      isAgent: true,
+      displayName: 'Limited Agent',
+    });
 
     // Create 5 active memberships (at limit)
     for (let i = 0; i < 5; i++) {
       const npc = await createTestActor({ name: `Agent Limit NPC ${i}` });
-      const chat = await createTestGroupChat({ name: `Agent Limit Group ${i}`, npcAdminId: npc.id });
+      const chat = await createTestGroupChat({
+        name: `Agent Limit Group ${i}`,
+        npcAdminId: npc.id,
+      });
       const membershipId = await generateSnowflakeId();
       await db.groupChatMembership.create({
-        data: { id: membershipId, userId: agent.id, chatId: chat.id, npcAdminId: npc.id, isActive: true },
+        data: {
+          id: membershipId,
+          userId: agent.id,
+          chatId: chat.id,
+          npcAdminId: npc.id,
+          isActive: true,
+        },
       });
       testIds.membershipIds.push(membershipId);
     }
@@ -906,8 +1022,14 @@ describe('Agent Invite Parity', () => {
 
   test('agents should be processed same as users in queue', async () => {
     const npc = await createTestActor({ name: 'Agent Process NPC' });
-    const user = await createTestUser({ isAgent: false, displayName: 'Process User' });
-    const agent = await createTestUser({ isAgent: true, displayName: 'Process Agent' });
+    const user = await createTestUser({
+      isAgent: false,
+      displayName: 'Process User',
+    });
+    const agent = await createTestUser({
+      isAgent: true,
+      displayName: 'Process Agent',
+    });
 
     // Queue both
     await GroupInviteOrchestrator.queueInviteCandidate({
@@ -929,7 +1051,9 @@ describe('Agent Invite Parity', () => {
     });
 
     expect(candidates.length).toBe(2);
-    expect(candidates.map((c) => c.userId).sort()).toEqual([user.id, agent.id].sort());
+    expect(candidates.map((c) => c.userId).sort()).toEqual(
+      [user.id, agent.id].sort()
+    );
   });
 });
 
@@ -995,7 +1119,9 @@ describe('Cleanup Edge Cases', () => {
     await GroupInviteOrchestrator.expireOldInvites();
 
     // Should still be pending
-    const invite = await db.userGroupInvite.findUnique({ where: { id: inviteId } });
+    const invite = await db.userGroupInvite.findUnique({
+      where: { id: inviteId },
+    });
     expect(invite?.status).toBe('pending');
   });
 
@@ -1021,13 +1147,17 @@ describe('Cleanup Edge Cases', () => {
     await GroupInviteOrchestrator.expireOldInvites();
 
     // Should still be accepted (not changed to expired)
-    const invite = await db.userGroupInvite.findUnique({ where: { id: inviteId } });
+    const invite = await db.userGroupInvite.findUnique({
+      where: { id: inviteId },
+    });
     expect(invite?.status).toBe('accepted');
   });
 
   test('should not affect unprocessed candidates in cleanup', async () => {
     const npc = await createTestActor({ name: 'Unprocessed Cleanup NPC' });
-    const user = await createTestUser({ displayName: 'Unprocessed Cleanup User' });
+    const user = await createTestUser({
+      displayName: 'Unprocessed Cleanup User',
+    });
 
     // Create old but unprocessed candidate
     const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
@@ -1070,7 +1200,10 @@ describe('Full Flow Integration', () => {
     // 1. Create user and NPC with group
     const npc = await createTestActor({ name: 'Flow Test NPC' });
     const user = await createTestUser({ displayName: 'Flow Test User' });
-    const chat = await createTestGroupChat({ name: 'Flow Test Group', npcAdminId: npc.id });
+    const chat = await createTestGroupChat({
+      name: 'Flow Test Group',
+      npcAdminId: npc.id,
+    });
 
     // 2. Queue the user via orchestrator (simulates trigger from reply/follow/share)
     const queueResult = await GroupInviteOrchestrator.queueInviteCandidate({
@@ -1121,7 +1254,12 @@ describe('Full Flow Integration', () => {
     });
     const membershipId = await generateSnowflakeId();
     await db.chatParticipant.create({
-      data: { id: await generateSnowflakeId(), chatId: chat.id, userId: user.id, invitedBy: npc.id },
+      data: {
+        id: await generateSnowflakeId(),
+        chatId: chat.id,
+        userId: user.id,
+        invitedBy: npc.id,
+      },
     });
     await db.groupChatMembership.create({
       data: {
@@ -1135,7 +1273,9 @@ describe('Full Flow Integration', () => {
     testIds.membershipIds.push(membershipId);
 
     // 8. Verify user is now a member
-    const membership = await db.groupChatMembership.findUnique({ where: { id: membershipId } });
+    const membership = await db.groupChatMembership.findUnique({
+      where: { id: membershipId },
+    });
     expect(membership?.isActive).toBe(true);
 
     // 9. Verify user can no longer be queued for same NPC (already a member)
@@ -1149,4 +1289,3 @@ describe('Full Flow Integration', () => {
     expect(reQueueResult.reason).toBe('Already a member');
   });
 });
-

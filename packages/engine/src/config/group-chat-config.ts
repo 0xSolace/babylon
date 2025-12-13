@@ -4,10 +4,50 @@
  * Centralizes all configurable parameters for the group chat invite system.
  * Values can be overridden via environment variables for testing and tuning.
  *
- * Environment Variable Format: GROUP_CHAT_{CONSTANT_NAME}
+ * ## Environment Variables
  *
- * @example Testing with high invite rates:
+ * ### Invite Orchestrator
+ * - `GROUP_CHAT_BASE_INVITE_PROBABILITY` (default: 0.15) - Base probability of sending invite
+ * - `GROUP_CHAT_CANDIDATE_EXPIRY_HOURS` (default: 48) - Hours before queued candidate expires
+ * - `GROUP_CHAT_MAX_CANDIDATES_PER_TICK` (default: 20) - Max candidates processed per tick
+ * - `GROUP_CHAT_MIN_ENGAGEMENT_SCORE` (default: 25) - Min score to queue as candidate (0-100)
+ * - `GROUP_CHAT_MAX_ACTIVE_USER_GROUPS` (default: 5) - Max groups a user can be in
+ * - `GROUP_CHAT_INVITE_COOLDOWN_HOURS` (default: 4) - Hours after joining before next invite
+ *
+ * ### Tier Multipliers (affect NPC selectivity)
+ * - `GROUP_CHAT_TIER_S_MULTIPLIER` (default: 0.3) - S_TIER NPCs are very selective
+ * - `GROUP_CHAT_TIER_A_MULTIPLIER` (default: 0.5)
+ * - `GROUP_CHAT_TIER_B_MULTIPLIER` (default: 0.7)
+ * - `GROUP_CHAT_TIER_C_MULTIPLIER` (default: 0.9)
+ * - `GROUP_CHAT_TIER_NONE_MULTIPLIER` (default: 1.0)
+ *
+ * ### NPC Group Dynamics
+ * - `GROUP_CHAT_FORM_NEW_GROUP_CHANCE` (default: 0.05) - 5% chance per NPC to form group
+ * - `GROUP_CHAT_JOIN_GROUP_CHANCE` (default: 0.1) - 10% chance to join if eligible
+ * - `GROUP_CHAT_LEAVE_GROUP_CHANCE` (default: 0.02) - 2% chance per membership to leave
+ * - `GROUP_CHAT_POST_MESSAGE_CHANCE` (default: 0.25) - 25% chance per group to post
+ * - `GROUP_CHAT_INVITE_USER_CHANCE` (default: 0.08) - 8% chance per group to check invites
+ * - `GROUP_CHAT_KICK_CHECK_CHANCE` (default: 0.15) - 15% chance to check for kicks
+ * - `GROUP_CHAT_MIN_GROUP_SIZE` (default: 3)
+ * - `GROUP_CHAT_MAX_GROUP_SIZE` (default: 12)
+ * - `GROUP_CHAT_IDEAL_GROUP_SIZE` (default: 7)
+ *
+ * ## Usage Examples
+ *
+ * Testing with high invite rates:
+ * ```bash
  * GROUP_CHAT_BASE_INVITE_PROBABILITY=0.9 bun run dev:web
+ * ```
+ *
+ * Disable all invites:
+ * ```bash
+ * GROUP_CHAT_BASE_INVITE_PROBABILITY=0 bun run dev:web
+ * ```
+ *
+ * Fast group formation for testing:
+ * ```bash
+ * GROUP_CHAT_FORM_NEW_GROUP_CHANCE=0.5 GROUP_CHAT_POST_MESSAGE_CHANCE=0.8 bun run dev:web
+ * ```
  */
 
 function parseFloat(value: string | undefined, defaultValue: number): number {
