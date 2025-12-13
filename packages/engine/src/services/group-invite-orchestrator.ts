@@ -377,11 +377,8 @@ export class GroupInviteOrchestrator {
       return { eligible: false, reason: 'At group limit' };
     }
 
-    if (
-      latest &&
-      (Date.now() - latest.joinedAt.getTime()) / (1000 * 60 * 60) <
-        GroupInviteConfig.inviteCooldownHours
-    ) {
+    const cooldownMs = GroupInviteConfig.inviteCooldownHours * 60 * 60 * 1000;
+    if (latest && Date.now() - latest.joinedAt.getTime() < cooldownMs) {
       return { eligible: false, reason: 'In invite cooldown' };
     }
 
@@ -399,30 +396,24 @@ export class GroupInviteOrchestrator {
   }
 
   static async cleanupProcessedCandidates(): Promise<number> {
-    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const deleted = await db
-      .delete(pendingGroupInviteCandidates)
-      .where(
-        and(
-          eq(pendingGroupInviteCandidates.processed, true),
-          lt(pendingGroupInviteCandidates.processedAt, cutoff)
-        )
-      )
+    const cutoff = new Date(Date.now() - GroupInviteConfig.cleanupDays * 24 * 60 * 60 * 1000);
+    const deleted = await db.delete(pendingGroupInviteCandidates)
+      .where(and(
+        eq(pendingGroupInviteCandidates.processed, true),
+        lt(pendingGroupInviteCandidates.processedAt, cutoff)
+      ))
       .returning({ id: pendingGroupInviteCandidates.id });
     return deleted.length;
   }
 
   static async expireOldInvites(): Promise<number> {
-    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    const updated = await db
-      .update(userGroupInvites)
+    const cutoff = new Date(Date.now() - GroupInviteConfig.inviteExpiryDays * 24 * 60 * 60 * 1000);
+    const updated = await db.update(userGroupInvites)
       .set({ status: 'expired', respondedAt: new Date() })
-      .where(
-        and(
-          eq(userGroupInvites.status, 'pending'),
-          lt(userGroupInvites.invitedAt, cutoff)
-        )
-      )
+      .where(and(
+        eq(userGroupInvites.status, 'pending'),
+        lt(userGroupInvites.invitedAt, cutoff)
+      ))
       .returning({ id: userGroupInvites.id });
     return updated.length;
   }

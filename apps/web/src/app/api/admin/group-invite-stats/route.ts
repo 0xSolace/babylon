@@ -33,11 +33,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     metadata: { action: 'view_stats' },
   });
 
-  const [stats, configSummary, configValidation] = await Promise.all([
-    GroupInviteOrchestrator.getInviteStats(),
-    Promise.resolve(getGroupChatConfigSummary()),
-    Promise.resolve(validateGroupChatConfig()),
-  ]);
+  const stats = await GroupInviteOrchestrator.getInviteStats();
+  const configSummary = getGroupChatConfigSummary();
+  const configValidation = validateGroupChatConfig();
 
   return NextResponse.json({
     stats: {
