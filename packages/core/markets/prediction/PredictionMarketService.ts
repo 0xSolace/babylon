@@ -43,6 +43,16 @@ export class PredictionMarketService {
     throw new Error('listUserPositions not implemented by db adapter');
   }
 
+  async getPriceHistory(
+    marketId: string,
+    limit = 200
+  ): Promise<PredictionPriceSnapshotRecord[]> {
+    if (this.db.listPriceHistory) {
+      return this.db.listPriceHistory(marketId, limit);
+    }
+    throw new Error('listPriceHistory not implemented by db adapter');
+  }
+
   async buy(input: PredictionBuyInput): Promise<PredictionTradeResult> {
     const { marketId, userId, amount, side } = input;
     if (amount < MIN_TRADE_AMOUNT) {

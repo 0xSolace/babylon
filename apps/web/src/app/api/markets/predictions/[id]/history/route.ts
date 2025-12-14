@@ -1,5 +1,8 @@
 import { successResponse, withErrorHandling } from '@babylon/api';
-import { PredictionMarketService } from '@babylon/engine';
+import {
+  PredictionDbAdapter,
+  PredictionMarketService,
+} from '@babylon/core/markets/prediction';
 import { PredictionMarketIdSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -25,7 +28,24 @@ export const GET = withErrorHandling(
     const { searchParams } = new URL(request.url);
     const { limit } = QuerySchema.parse({ limit: searchParams.get('limit') });
 
-    const history = await PredictionMarketService.getHistory(marketId, limit);
+    const service = new PredictionMarketService({
+      db: new PredictionDbAdapter(),
+      // Lecture uniquement: wallet/fees neutres
+      wallet: {
+        debit: async () => {},
+        credit: async () => {},
+        recordPnL: async () => {},
+        getBalance: async () => ({ balance: 0 }),
+      },
+      fees: {
+        tradingFeeRate: 0,
+        platformShare: 0,
+        referrerShare: 0,
+        minFeeAmount: 0,
+      },
+    });
+
+    const history = await service.getPriceHistory(marketId, limit);
 
     return successResponse({
       marketId,

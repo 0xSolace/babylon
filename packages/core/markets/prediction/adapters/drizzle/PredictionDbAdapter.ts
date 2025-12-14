@@ -7,7 +7,7 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import type { InferInsertModel } from 'drizzle-orm';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type {
   PredictionDbPort,
   PredictionMarketRecord,
@@ -292,6 +292,30 @@ export class PredictionDbAdapter implements PredictionDbPort {
       .from(positions)
       .where(eq(positions.marketId, marketId));
     return rows.map(mapPosition);
+  }
+
+  async listPriceHistory(
+    marketId: string,
+    limit = 200
+  ): Promise<PredictionPriceSnapshotRecord[]> {
+    const rows = await this.client
+      .select()
+      .from(predictionPriceHistories)
+      .where(eq(predictionPriceHistories.marketId, marketId))
+      .orderBy(desc(predictionPriceHistories.createdAt))
+      .limit(limit);
+
+    return rows.map((row) => ({
+      marketId: row.marketId,
+      yesPrice: Number(row.yesPrice),
+      noPrice: Number(row.noPrice),
+      yesShares: Number(row.yesShares),
+      noShares: Number(row.noShares),
+      liquidity: Number(row.liquidity),
+      eventType: row.eventType as PredictionPriceSnapshotRecord['eventType'],
+      source: row.source as PredictionPriceSnapshotRecord['source'],
+      createdAt: row.createdAt,
+    }));
   }
 
   async insertPriceSnapshot(

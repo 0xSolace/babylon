@@ -104,6 +104,13 @@ class InMemoryDb implements PredictionDbPort {
       .map((p) => ({ ...p }));
   }
 
+  async listPriceHistory(
+    marketId: string,
+    limit = 200
+  ): Promise<PredictionPriceSnapshotRecord[]> {
+    return this.snapshots.filter((s) => s.marketId === marketId).slice(-limit);
+  }
+
   async createMarketFromQuestion(): Promise<PredictionMarketRecord> {
     throw new Error('not used in tests');
   }

@@ -74,6 +74,10 @@ export interface PredictionDbPort {
   getMarketsByIds(ids: string[]): Promise<PredictionMarketRecord[]>;
   listMarkets?(): Promise<PredictionMarketRecord[]>;
   listUserPositions?(userId: string): Promise<PredictionPositionRecord[]>;
+  listPriceHistory?(
+    marketId: string,
+    limit?: number
+  ): Promise<PredictionPriceSnapshotRecord[]>;
   getQuestion?(idOrNumber: string): Promise<QuestionRecord | null>;
   createMarketFromQuestion(
     question: QuestionRecord,
