@@ -8,79 +8,73 @@ Get Babylon running on your local machine in minutes.
 |-------------|---------|-------|
 | **Bun** | 1.1+ | Recommended runtime ([install](https://bun.sh)) |
 | **Node.js** | 20.9+ | Alternative to Bun (required by Next.js 16) |
-| **PostgreSQL** | 15+ | Database |
 | **Git** | Latest | Version control |
+| **Jeju** | Latest | Decentralized infrastructure (see below) |
 
-**Tech Stack:** Next.js 16, React 19, TypeScript 5.9, Drizzle ORM, Privy Auth, Tailwind CSS 4, Viem/Wagmi
-
-<details>
-<summary>Install Bun & PostgreSQL</summary>
-
-**Bun:**
-```bash
-curl -fsSL https://bun.sh/install | bash
-```
-
-**PostgreSQL (macOS):**
-```bash
-brew install postgresql@15
-brew services start postgresql@15
-```
-
-**PostgreSQL (Linux):**
-```bash
-sudo apt update && sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql
-```
-
-**PostgreSQL (Windows):** [Download installer](https://www.postgresql.org/download/windows/)
-
-</details>
+**Tech Stack:** Next.js 16, React 19, TypeScript 5.9, Drizzle ORM, OAuth3 Auth, Tailwind CSS 4, Viem/Wagmi, CovenantSQL
 
 ## Quick Setup
 
-### 1. Clone and Install
+### 1. Start Jeju (Decentralized Infrastructure)
+
+Babylon runs on Jeju's decentralized stack. Start the devnet first:
 
 ```bash
-git clone https://github.com/elizaOS/babylon.git
-cd babylon
+# From the Jeju monorepo root
+bun run dev
+```
+
+This starts:
+- CovenantSQL (decentralized database)
+- Jeju Cache (decentralized cache)
+- Jeju Storage (IPFS-backed storage)
+- Jeju Compute (LLM inference marketplace)
+- OAuth3 (decentralized auth)
+- Local blockchain node
+
+### 2. Clone and Install
+
+```bash
+cd vendor/babylon
 bun install
 ```
 
-### 2. Configure Environment
+### 3. Configure Environment
 
 ```bash
 cp .env.example .env.local
 ```
 
-Edit `.env.local`:
+The default `.env.local` is pre-configured for local Jeju devnet:
 
 ```env
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/babylon"
+# Jeju Decentralized Services (pre-configured for devnet)
+CQL_BLOCK_PRODUCER_ENDPOINT="http://localhost:15151"
+JEJU_CACHE_SERVICE_URL="http://localhost:8080/cache"
+JEJU_STORAGE_SERVICE_URL="http://localhost:8080/storage"
+JEJU_COMPUTE_API_URL="http://localhost:8080/compute"
 
-# Privy Authentication (required)
-NEXT_PUBLIC_PRIVY_APP_ID="your_privy_app_id"
-PRIVY_APP_SECRET="your_privy_app_secret"
+# Blockchain (Anvil/Hardhat)
+RPC_URL="http://localhost:8545"
+CHAIN_ID="31337"
 
-# AI Provider (at least one required)
-GROQ_API_KEY="gsk_..."
+# OAuth3 Authentication
+OAUTH3_ISSUER_URL="http://localhost:8080/oauth3"
 ```
 
-**Get Privy credentials:** Sign up at [privy.io](https://privy.io), create an app, add `http://localhost:3000` to allowed domains.
+### 4. Setup Database
 
-### 3. Setup Database
+CovenantSQL is automatically provisioned when Jeju starts. Push the schema:
 
 ```bash
-createdb babylon
 bun run db:push
 bun run db:seed
 ```
 
-### 4. Start Development
+### 5. Start Development
 
 ```bash
-bun run dev
+bun run dev:web
 ```
 
 Visit `http://localhost:3000` - content generates automatically!
@@ -105,12 +99,21 @@ See **[Agent Examples](/agent-examples)** for working implementations:
 ## Troubleshooting
 
 <details>
-<summary>PostgreSQL Connection Error</summary>
+<summary>Jeju Devnet Not Starting</summary>
 
 ```bash
-pg_isready                              # Check status
-brew services start postgresql@15       # macOS
-sudo systemctl start postgresql         # Linux
+# From Jeju monorepo root
+bun run dev:clean   # Clean start
+```
+
+</details>
+
+<details>
+<summary>CQL Connection Error</summary>
+
+```bash
+curl http://localhost:15151/health   # Check CQL
+curl http://localhost:8080/health    # Check Jeju Gateway
 ```
 
 </details>

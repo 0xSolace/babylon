@@ -75,7 +75,7 @@ export function FollowButton({
       }
 
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
       if (!token) {
         setIsChecking(false);
         return;
@@ -132,7 +132,7 @@ export function FollowButton({
 
     setIsLoading(true);
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       toast.error('Authentication required');
       setIsLoading(false);

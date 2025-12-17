@@ -96,9 +96,11 @@ import {
   broadcastChatMessage,
   checkRateLimitAndDuplicates,
   DUPLICATE_DETECTION_CONFIGS,
+  isDecentralizedMessagingEnabled,
   notifyDMMessage,
   notifyGroupChatMessage,
   RATE_LIMIT_CONFIGS,
+  sendDecentralizedMessage,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -114,6 +116,7 @@ import {
   logger,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import type { Address } from 'viem';
 import { trackServerEvent } from '@/lib/posthog/server';
 
 /**
@@ -403,6 +406,56 @@ export const POST = withErrorHandling(
 
       message = result.message;
       membership = result.membership;
+    }
+
+    // 9.5. Send to decentralized storage (if enabled)
+    if (isDecentralizedMessagingEnabled() && message) {
+      // Get recipient address for DMs
+      let recipientAddress: Address | undefined;
+      if (isDMChat) {
+        const otherParticipant = chatParticipantsList.find(
+          (p) => p.userId !== user.userId
+        );
+        if (otherParticipant) {
+          // Look up recipient's wallet address from their user record
+          const recipientUser = await asUser(user, async (db) => {
+            return await db.user.findUnique({
+              where: { id: otherParticipant.userId },
+              select: { walletAddress: true },
+            });
+          });
+          if (recipientUser?.walletAddress) {
+            recipientAddress = recipientUser.walletAddress as Address;
+          }
+        }
+      }
+
+      // Get sender's wallet address
+      const senderUser = await asUser(user, async (db) => {
+        return await db.user.findUnique({
+          where: { id: user.userId },
+          select: { walletAddress: true },
+        });
+      });
+
+      if (senderUser?.walletAddress) {
+        const decentralizedResult = await sendDecentralizedMessage({
+          chatId,
+          senderId: user.userId,
+          senderAddress: senderUser.walletAddress as Address,
+          content: content.trim(),
+          messageType: isDMChat ? 'dm' : 'group',
+          recipientAddress,
+          centralizedMessageId: message.id,
+          encrypt: isDMChat, // Encrypt DMs by default
+        });
+
+        logger.debug('Decentralized message sent', {
+          chatId,
+          decentralizedId: decentralizedResult.decentralizedId,
+          encrypted: decentralizedResult.encrypted,
+        });
+      }
     }
 
     // 10. Broadcast message via SSE (await for reliability)

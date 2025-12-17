@@ -1,9 +1,8 @@
 'use client';
 
+import { useJejuAuth } from '@babylon/auth/client';
 import { logger } from '@babylon/shared';
 import { sdk } from '@farcaster/miniapp-sdk';
-import { usePrivy } from '@privy-io/react-auth';
-import { useLoginToMiniApp } from '@privy-io/react-auth/farcaster';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 /**
@@ -12,9 +11,8 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
  * Handles:
  * 1. Mini App detection
  * 2. SDK initialization (calling ready())
- * 3. Auto-authentication with Privy
- * 4. Wallet creation
- * 5. Share functionality
+ * 3. Auto-authentication with Jeju/OAuth3
+ * 4. Share functionality
  *
  * Works seamlessly in both Mini App and standalone modes.
  */
@@ -72,14 +70,13 @@ export function useFarcasterMiniApp() {
  * Farcaster Mini App provider component for Mini App integration.
  *
  * Detects Farcaster Mini App context, initializes SDK, handles auto-authentication
- * with Privy, creates wallets, and provides share functionality. Works in both
+ * with Jeju OAuth3, and provides share functionality. Works in both
  * Mini App and standalone browser modes.
  *
  * Features:
  * - Mini App detection
  * - SDK initialization (ready())
- * - Auto-authentication
- * - Wallet creation
+ * - Auto-authentication via SIWF
  * - Share functionality
  * - Context provider
  *
@@ -94,7 +91,6 @@ export function FarcasterMiniAppProvider({
   const [isMiniApp, setIsMiniApp] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>();
-  const [isCreatingWallet, setIsCreatingWallet] = useState(false);
   const [fid, setFid] = useState<number>();
   const [username, setUsername] = useState<string>();
   const [miniAppContext, setMiniAppContext] = useState<MiniAppContext | null>(
@@ -103,8 +99,7 @@ export function FarcasterMiniAppProvider({
   const hasCalledReady = useRef(false);
   const hasAttemptedLogin = useRef(false);
 
-  const { ready, authenticated, user, createWallet } = usePrivy();
-  const { initLoginToMiniApp, loginToMiniApp } = useLoginToMiniApp();
+  const { ready, authenticated, loginWithFarcaster } = useJejuAuth();
 
   // Detect Mini App context and call sdk.actions.ready()
   useEffect(() => {
@@ -159,21 +154,6 @@ export function FarcasterMiniAppProvider({
     initializeMiniApp();
   }, []);
 
-  const hasEmbeddedWallet =
-    user?.wallet?.walletClientType === 'privy' ||
-    user?.wallet?.walletClientType === 'privy-v2' ||
-    (user?.linkedAccounts?.some((account) => {
-      if (account.type !== 'wallet') {
-        return false;
-      }
-
-      return (
-        account.walletClientType === 'privy' ||
-        account.walletClientType === 'privy-v2'
-      );
-    }) ??
-      false);
-
   // Auto-login with Farcaster Mini App when detected
   useEffect(() => {
     if (!ready || !isMiniApp || authenticated || isLoading) {
@@ -188,69 +168,37 @@ export function FarcasterMiniAppProvider({
 
     const attemptMiniAppLogin = async () => {
       logger.info(
-        'Attempting Farcaster Mini App auto-login',
+        'Attempting Farcaster Mini App auto-login via SIWF',
         { fid, username },
         'FarcasterMiniApp'
       );
 
-      // Initialize a new login attempt to get a nonce for the Farcaster wallet to sign
-      const { nonce } = await initLoginToMiniApp();
-
-      logger.debug(
-        'Requesting signature from Farcaster',
-        { nonce },
-        'FarcasterMiniApp'
-      );
-
-      // Request a signature from Farcaster using Mini App SDK
-      const result = await sdk.actions.signIn({ nonce });
-
-      logger.debug(
-        'Received signature, authenticating with Privy',
-        {},
-        'FarcasterMiniApp'
-      );
-
-      // Extract only serializable data (avoid passing functions in postMessage)
-      const message =
-        typeof result.message === 'string'
-          ? result.message
-          : String(result.message || '');
-      const signature =
-        typeof result.signature === 'string'
-          ? result.signature
-          : String(result.signature || '');
-
-      // Send the received signature from Farcaster to Privy for authentication
-      await loginToMiniApp({
-        message,
-        signature,
-      });
+      // Use Jeju's loginWithFarcaster which handles SIWF
+      await loginWithFarcaster();
 
       logger.info(
         'Farcaster Mini App auto-login successful',
         {
           fid,
           username,
-          userId: user?.id,
         },
         'FarcasterMiniApp'
       );
     };
 
-    attemptMiniAppLogin().catch((error: Error) => {
+    attemptMiniAppLogin().catch((loginError: Error) => {
       // Allow retry on error
       hasAttemptedLogin.current = false;
       logger.error(
         'Farcaster Mini App auto-login failed',
         {
-          error: error.message,
+          error: loginError.message,
           fid,
           username,
         },
         'FarcasterMiniApp'
       );
-      setError(error.message);
+      setError(loginError.message);
     });
   }, [
     ready,
@@ -259,66 +207,7 @@ export function FarcasterMiniAppProvider({
     isLoading,
     fid,
     username,
-    initLoginToMiniApp,
-    loginToMiniApp,
-    user?.id,
-  ]);
-
-  // Ensure embedded wallets are created for non-Mini App sessions
-  useEffect(() => {
-    if (
-      !ready ||
-      !authenticated ||
-      !user ||
-      isMiniApp ||
-      hasEmbeddedWallet ||
-      isCreatingWallet
-    ) {
-      return;
-    }
-
-    if (!createWallet) {
-      logger.warn(
-        'Privy createWallet helper unavailable, skipping embedded wallet creation',
-        { userId: user.id },
-        'FarcasterMiniApp'
-      );
-      return;
-    }
-
-    setIsCreatingWallet(true);
-
-    createWallet()
-      .then(() => {
-        logger.info(
-          'Embedded wallet created for user',
-          {
-            userId: user.id,
-          },
-          'FarcasterMiniApp'
-        );
-      })
-      .catch((creationError: Error) => {
-        logger.error(
-          'Failed to create embedded wallet automatically',
-          {
-            error: creationError.message,
-            userId: user.id,
-          },
-          'FarcasterMiniApp'
-        );
-      })
-      .finally(() => {
-        setIsCreatingWallet(false);
-      });
-  }, [
-    authenticated,
-    createWallet,
-    hasEmbeddedWallet,
-    isCreatingWallet,
-    isMiniApp,
-    ready,
-    user,
+    loginWithFarcaster,
   ]);
 
   // Share functionality using Mini App SDK

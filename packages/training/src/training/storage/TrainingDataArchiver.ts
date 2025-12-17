@@ -1,20 +1,60 @@
 /**
- * Training Data Archiver (Vercel Blob)
+ * Training Data Archiver
  *
- * Archives training data (exported trajectories, RULER scores) to Vercel Blob
- * for long-term storage and reproducibility.
+ * Archives training data (exported trajectories, RULER scores) using
+ * Jeju's decentralized storage (IPFS/Arweave).
+ * NO FALLBACKS - Jeju Storage is required.
+ *
+ * Training data is stored permanently on Arweave for reproducibility and auditability.
  */
 
 import type { JsonValue } from '@babylon/shared';
-import { del, list, put } from '@vercel/blob';
 import fs from 'fs/promises';
-import path from 'path';
 import { logger } from '../../utils/logger';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+interface StorageClient {
+  upload: (
+    key: string,
+    data: Buffer | string,
+    options?: {
+      contentType?: string;
+      metadata?: Record<string, string>;
+      permanent?: boolean;
+    }
+  ) => Promise<{ url: string; cid: string; size: number }>;
+  uploadJson: <T>(
+    key: string,
+    data: T,
+    options?: { permanent?: boolean }
+  ) => Promise<{ url: string; cid: string; size: number }>;
+  download: (cid: string) => Promise<Buffer>;
+  downloadJson: <T>(cid: string) => Promise<T>;
+  delete: (key: string) => Promise<void>;
+  list: (prefix?: string) => Promise<
+    Array<{
+      key: string;
+      cid: string;
+      size: number;
+      permanent?: boolean;
+    }>
+  >;
+  isInitialized: () => boolean;
+}
 
 export interface ArchivedWindow {
   windowId: string;
   trajectoryCount: number;
-  blobUrls: {
+  urls: {
+    trajectories: string;
+    groups?: string;
+    rulerScores?: string;
+    metadata: string;
+  };
+  cids: {
     trajectories: string;
     groups?: string;
     rulerScores?: string;
@@ -22,10 +62,36 @@ export interface ArchivedWindow {
   };
   archivedAt: Date;
   size: number;
+  permanent: boolean;
 }
 
+// ============================================================================
+// Storage Access
+// ============================================================================
+
+let storageClient: StorageClient | null = null;
+
+async function getStorage(): Promise<StorageClient> {
+  if (storageClient?.isInitialized()) return storageClient;
+
+  const { getStorage: getStorageFromApi, initializeStorage } = await import(
+    '@babylon/api'
+  );
+  const storage = getStorageFromApi();
+  if (!storage.isInitialized()) {
+    await initializeStorage();
+  }
+  // Cast through unknown since API client has compatible methods
+  storageClient = storage as unknown as StorageClient;
+  return storageClient;
+}
+
+// ============================================================================
+// Training Data Archiver
+// ============================================================================
+
 export class TrainingDataArchiver {
-  private readonly blobPrefix = 'training-data/';
+  private readonly prefix = 'training-data/';
 
   /**
    * Archive training data for a window
@@ -36,73 +102,99 @@ export class TrainingDataArchiver {
     groupsPath?: string;
     rulerScoresPath?: string;
     metadata?: Record<string, unknown>;
+    permanent?: boolean;
   }): Promise<ArchivedWindow> {
-    logger.info('Archiving training data', { windowId: options.windowId });
+    const storage = await getStorage();
+    const folder = `${this.prefix}${options.windowId}`;
+    const permanent = options.permanent ?? true;
 
-    const prefix = `${this.blobPrefix}${options.windowId}/`;
-    interface BlobUrls {
-      trajectories: string;
-      groups?: string;
-      rulerScores?: string;
-      metadata: string;
-    }
-    const urls: BlobUrls = {
-      trajectories: '',
-      metadata: '',
-    };
+    logger.info('Archiving training data to Jeju Storage', {
+      windowId: options.windowId,
+      permanent,
+    });
+
+    const urls: ArchivedWindow['urls'] = { trajectories: '', metadata: '' };
+    const cids: ArchivedWindow['cids'] = { trajectories: '', metadata: '' };
     let totalSize = 0;
 
     // Upload trajectories
     const trajData = await fs.readFile(options.trajectoriesPath);
-    const trajBlob = await put(`${prefix}trajectories.jsonl`, trajData, {
-      access: 'public',
-      addRandomSuffix: false,
-    });
-    urls.trajectories = trajBlob.url;
+    const trajResult = await storage.upload(
+      `${folder}/trajectories.jsonl`,
+      trajData.toString('utf-8'),
+      {
+        contentType: 'application/jsonl',
+        permanent,
+        metadata: { type: 'trajectories', windowId: options.windowId },
+      }
+    );
+    urls.trajectories = trajResult.url;
+    cids.trajectories = trajResult.cid;
     totalSize += trajData.length;
 
     // Upload groups if provided
     if (options.groupsPath) {
       const groupsData = await fs.readFile(options.groupsPath);
-      const groupsBlob = await put(`${prefix}groups.jsonl`, groupsData, {
-        access: 'public',
-        addRandomSuffix: false,
-      });
-      urls.groups = groupsBlob.url;
+      const groupsResult = await storage.upload(
+        `${folder}/groups.jsonl`,
+        groupsData.toString('utf-8'),
+        {
+          contentType: 'application/jsonl',
+          permanent,
+          metadata: { type: 'groups', windowId: options.windowId },
+        }
+      );
+      urls.groups = groupsResult.url;
+      cids.groups = groupsResult.cid;
       totalSize += groupsData.length;
     }
 
     // Upload RULER scores if provided
     if (options.rulerScoresPath) {
       const scoresData = await fs.readFile(options.rulerScoresPath);
-      const scoresBlob = await put(`${prefix}ruler_scores.json`, scoresData, {
-        access: 'public',
-        addRandomSuffix: false,
-      });
-      urls.rulerScores = scoresBlob.url;
+      const scoresResult = await storage.upload(
+        `${folder}/ruler_scores.json`,
+        scoresData.toString('utf-8'),
+        {
+          contentType: 'application/json',
+          permanent,
+          metadata: { type: 'ruler_scores', windowId: options.windowId },
+        }
+      );
+      urls.rulerScores = scoresResult.url;
+      cids.rulerScores = scoresResult.cid;
       totalSize += scoresData.length;
     }
 
     // Upload metadata
-    const metadataJson = JSON.stringify(options.metadata || {}, null, 2);
-    const metadataBlob = await put(`${prefix}metadata.json`, metadataJson, {
-      access: 'public',
-      addRandomSuffix: false,
-    });
-    urls.metadata = metadataBlob.url;
-    totalSize += Buffer.byteLength(metadataJson, 'utf8');
+    const metadataResult = await storage.uploadJson(
+      `${folder}/metadata.json`,
+      {
+        ...options.metadata,
+        archivedAt: new Date().toISOString(),
+        permanent,
+      },
+      { permanent }
+    );
+    urls.metadata = metadataResult.url;
+    cids.metadata = metadataResult.cid;
+    totalSize += metadataResult.size;
 
-    logger.info('Training data archived', {
+    logger.info('Training data archived to Jeju Storage', {
       windowId: options.windowId,
       size: totalSize,
+      permanent,
+      cids,
     });
 
     return {
       windowId: options.windowId,
-      trajectoryCount: (options.metadata?.trajectoryCount as number) || 0,
-      blobUrls: urls,
+      trajectoryCount: (options.metadata?.trajectoryCount as number) ?? 0,
+      urls,
+      cids,
       archivedAt: new Date(),
       size: totalSize,
+      permanent,
     };
   }
 
@@ -115,40 +207,37 @@ export class TrainingDataArchiver {
     rulerScores?: Record<string, JsonValue>;
     metadata: Record<string, JsonValue>;
   } | null> {
-    const prefix = `${this.blobPrefix}${windowId}/`;
-    const { blobs } = await list({ prefix });
+    const storage = await getStorage();
+    const folder = `${this.prefix}${windowId}`;
 
-    if (blobs.length === 0) {
+    const files = await storage.list(folder);
+    if (files.length === 0) {
       return null;
     }
 
-    interface WindowDataResult {
+    interface WindowData {
       trajectories?: string;
       groups?: string;
       rulerScores?: Record<string, JsonValue>;
       metadata?: Record<string, JsonValue>;
     }
-    const result: WindowDataResult = {};
+    const result: WindowData = {};
 
-    for (const blob of blobs) {
-      const response = await fetch(blob.url);
-      const filename = path.basename(blob.pathname);
-
+    for (const file of files) {
+      const filename = file.key.split('/').pop();
       if (filename === 'trajectories.jsonl') {
-        result.trajectories = await response.text();
+        const data = await storage.download(file.cid);
+        result.trajectories = data.toString('utf-8');
       } else if (filename === 'groups.jsonl') {
-        result.groups = await response.text();
+        const data = await storage.download(file.cid);
+        result.groups = data.toString('utf-8');
       } else if (filename === 'ruler_scores.json') {
-        result.rulerScores = (await response.json()) as Record<
-          string,
-          JsonValue
-        >;
+        result.rulerScores = await storage.downloadJson(file.cid);
       } else if (filename === 'metadata.json') {
-        result.metadata = (await response.json()) as Record<string, JsonValue>;
+        result.metadata = await storage.downloadJson(file.cid);
       }
     }
 
-    // Ensure required fields are present
     if (!result.trajectories || !result.metadata) {
       return null;
     }
@@ -165,13 +254,14 @@ export class TrainingDataArchiver {
    * List all archived windows
    */
   async listWindows(): Promise<string[]> {
-    const { blobs } = await list({ prefix: this.blobPrefix });
+    const storage = await getStorage();
+    const files = await storage.list(this.prefix);
 
     const windows = new Set<string>();
-    for (const blob of blobs) {
-      const parts = blob.pathname.split('/');
-      if (parts[1]) {
-        windows.add(parts[1]);
+    for (const file of files) {
+      const match = file.key.match(/training-data\/([^/]+)/);
+      if (match?.[1]) {
+        windows.add(match[1]);
       }
     }
 
@@ -180,16 +270,20 @@ export class TrainingDataArchiver {
 
   /**
    * Delete archived window
+   * Note: Arweave content is permanent and cannot be deleted (only IPFS can be unpinned)
    */
   async deleteWindow(windowId: string): Promise<void> {
-    const prefix = `${this.blobPrefix}${windowId}/`;
-    const { blobs } = await list({ prefix });
+    const storage = await getStorage();
+    const folder = `${this.prefix}${windowId}`;
 
-    for (const blob of blobs) {
-      await del(blob.url);
+    const files = await storage.list(folder);
+    for (const file of files) {
+      if (!file.permanent) {
+        await storage.delete(file.cid);
+      }
     }
 
-    logger.info('Deleted archived window', { windowId });
+    logger.info('Training data archived window deleted/unpinned', { windowId });
   }
 }
 

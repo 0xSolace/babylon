@@ -6,7 +6,6 @@
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import type { JsonValue } from '@babylon/db';
 import {
   agentLogs,
   and,
@@ -16,14 +15,15 @@ import {
   getDbInstance,
   inArray,
   isNull,
+  type JsonValue,
   perpPositions,
   positions,
+  sql,
   users,
 } from '@babylon/db';
 import { StaticDataRegistry, type StaticOrganization } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
-import { sql } from 'drizzle-orm';
-import { callGroqDirect } from '../llm/direct-groq';
+import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -37,6 +37,11 @@ import { autonomousCommentingService } from './AutonomousCommentingService';
 import { autonomousDMService } from './AutonomousDMService';
 import { autonomousPostingService } from './AutonomousPostingService';
 import { autonomousTradingService } from './AutonomousTradingService';
+import { getDecentralizedDMService } from './DecentralizedDMService';
+
+// Flag to enable decentralized messaging (CovenantSQL + Farcaster)
+const USE_DECENTRALIZED_MESSAGING =
+  process.env.USE_DECENTRALIZED_MESSAGING === 'true';
 
 /**
  * Agent interface for planning
@@ -245,7 +250,7 @@ export class AutonomousPlanningCoordinator {
     }
 
     // Use LARGE model (trained W&B model if available, else qwen3-32b) for complex planning
-    const planResponse = await callGroqDirect({
+    const planResponse = await callJejuDirect({
       prompt: finalPrompt,
       system: planningAgent.agentSystem ?? undefined,
       modelSize: 'large', // Uses trained W&B model if available
@@ -845,10 +850,23 @@ Your action plan (JSON only):`;
       }
 
       case 'message': {
-        const dmResponses = await autonomousDMService.respondToDMs(
-          agentUserId,
-          runtime
-        );
+        let dmResponses: number;
+
+        if (USE_DECENTRALIZED_MESSAGING) {
+          // Use decentralized messaging (CovenantSQL + encrypted DMs)
+          const decentralizedService = getDecentralizedDMService();
+          dmResponses = await decentralizedService.respondToDecentralizedDMs(
+            agentUserId,
+            runtime
+          );
+        } else {
+          // Use centralized messaging (legacy)
+          dmResponses = await autonomousDMService.respondToDMs(
+            agentUserId,
+            runtime
+          );
+        }
+
         return { success: dmResponses > 0, data: { responses: dmResponses } };
       }
 

@@ -513,7 +513,7 @@ export function OnboardingModal({
               Username
             </label>
             <div className="relative">
-              <span className="-translate-y-1/2 absolute top-1/2 left-3 text-muted-foreground">
+              <span className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">
                 @
               </span>
               <input
@@ -526,13 +526,13 @@ export function OnboardingModal({
                 maxLength={20}
               />
               {isCheckingUsername && (
-                <RefreshCw className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 animate-spin text-muted-foreground" />
+                <RefreshCw className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
               )}
               {usernameStatus === 'available' && !isCheckingUsername && (
-                <Check className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 text-green-500" />
+                <Check className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-green-500" />
               )}
               {usernameStatus === 'taken' && !isCheckingUsername && (
-                <AlertCircle className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 text-red-500" />
+                <AlertCircle className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-red-500" />
               )}
             </div>
             {usernameStatus === 'taken' && usernameSuggestion && (

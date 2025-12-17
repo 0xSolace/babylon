@@ -8,7 +8,7 @@
 
 import { and, db, desc, eq, gte, messages, users } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
-import { callGroqDirect } from '../llm/direct-groq';
+import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -109,7 +109,7 @@ Only respond if you have something valuable to add.
 Generate ONLY the message text, or "SKIP" if you shouldn't respond.`;
 
       // Use large model (qwen3-32b) for quality group chat content
-      const responseContent = await callGroqDirect({
+      const responseContent = await callJejuDirect({
         prompt,
         system: config?.systemPrompt ?? undefined,
         modelSize: 'large', // Important social content

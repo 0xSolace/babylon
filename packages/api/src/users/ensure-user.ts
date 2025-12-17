@@ -23,7 +23,7 @@ export interface EnsureUserOptions {
 export type CanonicalUser = Pick<
   User,
   | 'id'
-  | 'privyId'
+  | 'oauth3Id'
   | 'username'
   | 'displayName'
   | 'walletAddress'
@@ -54,13 +54,13 @@ export async function ensureUserForAuth(
   user: AuthenticatedUser,
   options: EnsureUserOptions = {}
 ): Promise<{ user: CanonicalUser }> {
-  const privyId = user.privyId ?? user.userId;
+  const oauth3Id = user.oauth3Id ?? user.userId;
 
   // Check if user exists
   const existing = await db
     .select({
       id: users.id,
-      privyId: users.privyId,
+      oauth3Id: users.oauth3Id,
       username: users.username,
       displayName: users.displayName,
       walletAddress: users.walletAddress,
@@ -68,7 +68,7 @@ export async function ensureUserForAuth(
       profileImageUrl: users.profileImageUrl,
     })
     .from(users)
-    .where(eq(users.privyId, privyId))
+    .where(eq(users.oauth3Id, oauth3Id))
     .limit(1);
 
   if (existing.length > 0 && existing[0]) {
@@ -105,7 +105,7 @@ export async function ensureUserForAuth(
         .where(eq(users.id, existingUser.id))
         .returning({
           id: users.id,
-          privyId: users.privyId,
+          oauth3Id: users.oauth3Id,
           username: users.username,
           displayName: users.displayName,
           walletAddress: users.walletAddress,
@@ -125,7 +125,7 @@ export async function ensureUserForAuth(
   // Create new user
   const createData: typeof users.$inferInsert = {
     id: user.dbUserId ?? user.userId,
-    privyId,
+    oauth3Id,
     isActor: options.isActor ?? false,
     updatedAt: new Date(),
   };
@@ -142,7 +142,7 @@ export async function ensureUserForAuth(
 
   const created = await db.insert(users).values(createData).returning({
     id: users.id,
-    privyId: users.privyId,
+    oauth3Id: users.oauth3Id,
     username: users.username,
     displayName: users.displayName,
     walletAddress: users.walletAddress,

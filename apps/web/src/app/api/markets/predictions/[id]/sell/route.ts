@@ -91,6 +91,8 @@
 import {
   authenticate,
   BusinessLogicError,
+  BuybackService,
+  EngagementService,
   NotFoundError,
   successResponse,
   withErrorHandling,
@@ -376,6 +378,21 @@ export const POST = withErrorHandling(
       'POST /api/markets/predictions/[id]/sell'
     );
 
+    // Record fee contribution for buyback (platform share goes to buyback)
+    if (feeResult.platformReceived > 0 && positionId) {
+      void BuybackService.recordFeeContribution(
+        positionId,
+        user.userId,
+        BigInt(Math.floor(feeResult.platformReceived * 1e18)),
+        'pred_sell',
+        marketId
+      ).then(({ thresholdMet }) => {
+        if (thresholdMet) {
+          void BuybackService.triggerBuyback();
+        }
+      });
+    }
+
     // Track prediction sell event
     trackServerEvent(user.userId, 'prediction_sold', {
       marketId,
@@ -415,6 +432,15 @@ export const POST = withErrorHandling(
         { error, marketId },
         'POST /api/markets/predictions/[id]/sell'
       );
+    });
+
+    // Record engagement for airdrop qualification
+    await EngagementService.recordTrade(
+      user.userId,
+      positionId ?? marketId,
+      'prediction'
+    ).catch((error) => {
+      logger.warn('Failed to record trade engagement', { error });
     });
 
     PredictionMarketService.emitTradeUpdate({

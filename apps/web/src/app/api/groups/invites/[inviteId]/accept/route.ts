@@ -133,7 +133,11 @@ export const POST = withErrorHandling(
           data: { read: true },
         });
 
-        return { groupId: invite.groupId, chatId: npcChat.id, isNpcGroup: true };
+        return {
+          groupId: invite.groupId,
+          chatId: npcChat.id,
+          isNpcGroup: true,
+        };
       }
 
       // User group flow (existing logic)

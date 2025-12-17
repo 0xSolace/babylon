@@ -20,7 +20,9 @@ import { useGameStore } from '@/stores/gameStore';
  */
 export function GamePlaybackManager() {
   const { isPlaying, speed, totalDurationMs, advanceTime } = useGameStore();
-  const intervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(
+    undefined
+  );
 
   useEffect(() => {
     if (isPlaying && totalDurationMs > 0) {

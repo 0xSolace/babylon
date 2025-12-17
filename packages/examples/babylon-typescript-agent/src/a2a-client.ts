@@ -8,6 +8,29 @@
 
 import type { AgentCard, DataPart, Message, Task, TextPart } from '@a2a-js/sdk';
 import { A2AClient } from '@a2a-js/sdk/client';
+
+/** Type guard for JSON-RPC error responses */
+function isErrorResponse(response: unknown): response is {
+  error: { code: number; message: string };
+} {
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    'error' in response &&
+    (response as { error: unknown }).error !== undefined
+  );
+}
+
+/** Type guard for successful responses with result */
+function isSuccessResponse(response: unknown): response is { result: unknown } {
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    'result' in response &&
+    (response as { result: unknown }).result !== undefined
+  );
+}
+
 import type {
   A2AChat,
   A2AFeedPost,
@@ -161,21 +184,25 @@ export class BabylonA2AClient {
     const client = await this.getClient();
     const response = await client.sendMessage({ message });
 
-    if (client.isErrorResponse(response)) {
+    if (isErrorResponse(response)) {
       throw new Error(
         `A2A Error [${response.error.code}]: ${response.error.message}`
       );
     }
 
-    // Response can be either a Message or Task
-    if ('task' in response.result && response.result.task) {
-      return response.result.task as Task;
+    if (!isSuccessResponse(response)) {
+      throw new Error('Unexpected response format - no result');
     }
-    if ('message' in response.result && response.result.message) {
-      return response.result.message as Message;
+
+    const result = response.result as unknown as Record<string, unknown>;
+    // Response can be either a Message or Task
+    if ('task' in result && result.task) {
+      return result.task as unknown as Task;
+    }
+    if ('message' in result && result.message) {
+      return result.message as unknown as Message;
     }
     // Fallback - check if result itself is a Task or Message
-    const result = response.result;
     if (result && typeof result === 'object') {
       // Check if it's a Task (has 'status' property)
       if (
@@ -183,14 +210,14 @@ export class BabylonA2AClient {
         'id' in result &&
         typeof result.id === 'string'
       ) {
-        return result as Task;
+        return result as unknown as Task;
       }
       // Check if it's a Message (has 'kind' === 'message' or 'parts' property)
       if (
         ('kind' in result && result.kind === 'message') ||
         ('parts' in result && Array.isArray(result.parts))
       ) {
-        return result as Message;
+        return result as unknown as Message;
       }
       // Check if it's wrapped in a result object
       if (
@@ -199,7 +226,7 @@ export class BabylonA2AClient {
         typeof result.task === 'object' &&
         'id' in result.task
       ) {
-        return result.task as Task;
+        return result.task as unknown as Task;
       }
       if (
         'message' in result &&
@@ -207,7 +234,7 @@ export class BabylonA2AClient {
         typeof result.message === 'object' &&
         'parts' in result.message
       ) {
-        return result.message as Message;
+        return result.message as unknown as Message;
       }
     }
     throw new Error('Unexpected response format');
@@ -224,14 +251,19 @@ export class BabylonA2AClient {
     // Using object format for type safety
     const response = await client.getTask({ id: taskId });
 
-    if (client.isErrorResponse(response)) {
+    if (isErrorResponse(response)) {
       throw new Error(
         `A2A Error [${response.error.code}]: ${response.error.message}`
       );
     }
 
-    if ('task' in response.result && response.result.task) {
-      return response.result.task as Task;
+    if (!isSuccessResponse(response)) {
+      throw new Error('Unexpected response format - no result');
+    }
+
+    const result = response.result as unknown as Record<string, unknown>;
+    if ('task' in result && result.task) {
+      return result.task as unknown as Task;
     }
     throw new Error(`Task ${taskId} not found`);
   }

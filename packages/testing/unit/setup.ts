@@ -13,10 +13,13 @@ import type {
 
 // Mock database client for all unit tests
 beforeAll(() => {
-  // Set test environment variables
+  // Set test environment variables for decentralized services
   process.env.NODE_ENV = 'test';
-  process.env.DATABASE_URL = 'postgresql://mock:mock@localhost:5432/mock_test';
-  process.env.REDIS_URL = 'redis://localhost:6379';
+  process.env.CQL_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661';
+  process.env.CQL_DATABASE_ID = 'babylon_test';
+  process.env.JEJU_CACHE_SERVICE_URL = 'http://localhost:4662';
+  process.env.JEJU_STORAGE_SERVICE_URL = 'http://localhost:4663';
+  process.env.JEJU_OAUTH3_SERVICE_URL = 'http://localhost:4664';
 
   // Mock the database module entirely
   mock.module('@babylon/db', () => {
@@ -27,45 +30,40 @@ beforeAll(() => {
     };
   });
 
-  // Mock Redis as well
-  mock.module('ioredis', () => {
+  // Mock decentralized cache
+  mock.module('@babylon/api/cache', () => {
+    const mockCache = {
+      get: mock(() => Promise.resolve(null)),
+      set: mock(() => Promise.resolve()),
+      delete: mock(() => Promise.resolve(true)),
+      exists: mock(() => Promise.resolve(false)),
+      ttl: mock(() => Promise.resolve(-1)),
+      expire: mock(() => Promise.resolve(true)),
+      keys: mock(() => Promise.resolve([])),
+      flush: mock(() => Promise.resolve()),
+      healthCheck: mock(() => Promise.resolve(true)),
+      incr: mock(() => Promise.resolve(1)),
+      decr: mock(() => Promise.resolve(0)),
+    };
     return {
-      default: class MockRedis {
+      getCache: mock(() => mockCache),
+      initializeCache: mock(() => Promise.resolve(mockCache)),
+      isCacheServiceReachable: mock(() => Promise.resolve(true)),
+      CacheClient: class MockCacheClient {
         constructor() {}
-        on() {
-          return this;
+        async initialize() {}
+        async get() {
+          return null;
         }
-        connect() {
-          return Promise.resolve();
+        async set() {}
+        async delete() {
+          return true;
         }
-        disconnect() {
-          return Promise.resolve();
+        async exists() {
+          return false;
         }
-        get() {
-          return Promise.resolve(null);
-        }
-        set() {
-          return Promise.resolve('OK');
-        }
-        del() {
-          return Promise.resolve(1);
-        }
-        expire() {
-          return Promise.resolve(1);
-        }
-        ttl() {
-          return Promise.resolve(-1);
-        }
-        keys() {
-          return Promise.resolve([]);
-        }
-        flushall() {
-          return Promise.resolve('OK');
-        }
-        pipeline() {
-          return {
-            exec: () => Promise.resolve([]),
-          };
+        async healthCheck() {
+          return true;
         }
       },
     };

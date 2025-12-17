@@ -1,23 +1,28 @@
 /**
  * User Lookup Utilities
  *
- * @description Utilities for finding users by various identifiers (ID, privyId, username).
+ * @description Utilities for finding users by various identifiers (ID, oauth3Id, username).
  */
 
-import { db, eq, or, users } from '@babylon/db';
-import type { InferSelectModel } from 'drizzle-orm';
-import type { SelectedFields } from 'drizzle-orm/pg-core';
+import {
+  db,
+  eq,
+  type InferSelectModel,
+  or,
+  type SelectedFields,
+  users,
+} from '@babylon/db';
 import { NotFoundError } from '../errors';
 
 type User = InferSelectModel<typeof users>;
 
 /**
- * Find user by identifier (ID, privyId, or username)
+ * Find user by identifier (ID, oauth3Id, or username)
  *
- * @description Searches for a user by their ID, privyId, or username.
+ * @description Searches for a user by their ID, oauth3Id, or username.
  * Returns null if no user is found.
  *
- * @param {string} identifier - The user ID, privyId, or username
+ * @param {string} identifier - The user ID, oauth3Id, or username
  * @param {Record<string, boolean>} [_select] - Optional select fields (for compatibility, currently ignored)
  * @returns {Promise<User | null>} User object or null if not found
  *
@@ -33,14 +38,14 @@ export async function findUserByIdentifier(
   identifier: string,
   _select?: Record<string, boolean>
 ): Promise<User | null> {
-  // Try to find by ID, privyId, or username
+  // Try to find by ID, oauth3Id, or username
   const [user] = await db
     .select()
     .from(users)
     .where(
       or(
         eq(users.id, identifier),
-        eq(users.privyId, identifier),
+        eq(users.oauth3Id, identifier),
         eq(users.username, identifier)
       )
     )
@@ -54,7 +59,7 @@ export async function findUserByIdentifier(
  *
  * @description Searches for a user with a custom selection of fields.
  *
- * @param {string} identifier - The user ID, privyId, or username
+ * @param {string} identifier - The user ID, oauth3Id, or username
  * @param {T} select - Fields to select
  * @returns {Promise<T | null>} Selected fields or null if not found
  *
@@ -76,7 +81,7 @@ export async function findUserByIdentifierWithSelect<
     .where(
       or(
         eq(users.id, identifier),
-        eq(users.privyId, identifier),
+        eq(users.oauth3Id, identifier),
         eq(users.username, identifier)
       )
     )
@@ -91,7 +96,7 @@ export async function findUserByIdentifierWithSelect<
  *
  * @description Searches for a user and throws NotFoundError if not found.
  *
- * @param {string} identifier - The user ID, privyId, or username
+ * @param {string} identifier - The user ID, oauth3Id, or username
  * @param {Record<string, boolean>} [_select] - Optional select fields (for compatibility)
  * @returns {Promise<User>} User object
  * @throws {NotFoundError} If user is not found

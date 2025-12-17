@@ -23,3 +23,8 @@ export {
 } from './AutonomousPlanningCoordinator';
 export { autonomousPostingService } from './AutonomousPostingService';
 export { autonomousTradingService } from './AutonomousTradingService';
+export {
+  DecentralizedDMService,
+  getDecentralizedDMService,
+  resetDecentralizedDMService,
+} from './DecentralizedDMService';

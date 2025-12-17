@@ -102,7 +102,7 @@ export class NPCGroupDynamicsService {
       result.messagesPosted = messages;
     }
 
-    // 5. Invite users to groups (via unified orchestrator)
+    // 5. Invite users to groups (via group invite orchestrator)
     const inviteResult = await GroupInviteOrchestrator.processQueuedInvites();
     result.usersInvited = inviteResult.invitesSent;
 
@@ -979,10 +979,7 @@ Return your response as XML:
    * 2. On each tick, processQueuedInvites() processes the queue with probability
    * 3. NPC tier affects selectivity (legendary NPCs are more selective)
    */
-  private static async inviteUsersToGroups(): Promise<number> {
-    // Delegated to GroupInviteOrchestrator in processTickDynamics
-    return 0;
-  }
+  // Removed: inviteUsersToGroups - now delegated to GroupInviteOrchestrator.processQueuedInvites()
 
   /**
    * Calculate kick probability with exponential scaling for over-posting

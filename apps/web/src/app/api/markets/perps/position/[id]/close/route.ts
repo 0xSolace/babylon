@@ -8,7 +8,12 @@
  * and updates user balance. Tracks trade events.
  */
 
-import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
+import {
+  authenticate,
+  EngagementService,
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
 import { ClosePerpPositionSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -68,6 +73,9 @@ export const POST = withErrorHandling(
       wasLiquidated: false,
       positionId,
     });
+
+    // Record engagement for airdrop qualification
+    void EngagementService.recordTrade(user.userId, positionId, 'perp');
 
     return successResponse({
       position: result,

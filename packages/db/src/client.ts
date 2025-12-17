@@ -68,6 +68,17 @@ export type SchemaDatabase = PostgresJsDatabase<DrizzleSchema>;
 export type SchemaTables = ExtractTablesWithRelations<DrizzleSchema>;
 export type RelationalQueryAPI = SchemaDatabase['query'];
 
+// Database and Transaction types for compatibility
+// Transaction is typed loosely to allow both SchemaDatabase and PgTransaction
+export type Database = SchemaDatabase;
+export type Transaction = {
+  select: SchemaDatabase['select'];
+  insert: SchemaDatabase['insert'];
+  update: SchemaDatabase['update'];
+  delete: SchemaDatabase['delete'];
+  query: SchemaDatabase['query'];
+};
+
 // JSON value type for nested structures (avoids circular reference)
 // This matches the JSON specification: all valid JSON value types
 export type JsonValue =
@@ -1395,6 +1406,11 @@ export interface DrizzleClient {
     InferSelect<typeof schema.userMutes>,
     InferInsert<typeof schema.userMutes>
   >;
+  userMessagingKey: TableRepository<
+    typeof schema.userMessagingKeys,
+    InferSelect<typeof schema.userMessagingKeys>,
+    InferInsert<typeof schema.userMessagingKeys>
+  >;
   report: TableRepository<
     typeof schema.reports,
     InferSelect<typeof schema.reports>,
@@ -1825,6 +1841,11 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
     ),
     userBlock: new TableRepository(drizzle, schema.userBlocks, 'userBlocks'),
     userMute: new TableRepository(drizzle, schema.userMutes, 'userMutes'),
+    userMessagingKey: new TableRepository(
+      drizzle,
+      schema.userMessagingKeys,
+      'userMessagingKeys'
+    ),
     report: new TableRepository(drizzle, schema.reports, 'reports'),
     twitterOAuthToken: new TableRepository(
       drizzle,

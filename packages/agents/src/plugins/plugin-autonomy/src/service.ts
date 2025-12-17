@@ -1,7 +1,6 @@
 import {
   asUUID,
   type Content,
-  EventType,
   type IAgentRuntime,
   type Memory,
   Service,
@@ -20,7 +19,7 @@ export class AutonomyService extends Service {
   static serviceName = 'Autonomy';
 
   private isRunning = false;
-  private loopInterval?: NodeJS.Timeout;
+  private loopInterval?: ReturnType<typeof setInterval>;
   private intervalMs = 1000; // Default 1 second for continuous operation
   private autonomousRoomId: UUID; // Dedicated room for autonomous thoughts
   private autonomousWorldId: UUID; // World ID for autonomous context
@@ -313,14 +312,24 @@ export class AutonomyService extends Service {
     // 3. Execute any actions the agent decides to take
     // 4. Run evaluators on the result
     // 5. Store memories appropriately
-    await this.runtime.emitEvent(EventType.MESSAGE_RECEIVED, {
+    // Use typed event emitter for custom autonomous event
+    await (
+      this.runtime as {
+        emitEvent: (
+          event: string,
+          payload: Record<string, unknown>
+        ) => Promise<void>;
+      }
+    ).emitEvent('AUTONOMOUS_MESSAGE', {
       runtime: this.runtime,
       message: autonomousMessage,
-      callback: async (content: Content) => {
+      callback: async (content: Content): Promise<Memory[]> => {
         console.log(
           '[Autonomy] Response generated:',
           `${content.text?.substring(0, 100)}...`
         );
+
+        const memories: Memory[] = [];
 
         // Store the response with autonomous metadata
         if (content.text) {
@@ -328,7 +337,7 @@ export class AutonomyService extends Service {
             id: asUUID(uuidv4()),
             entityId: agentEntity.id
               ? asUUID(agentEntity.id)
-              : this.runtime.agentId, // Use the agent's entity ID from above or fallback to agentId
+              : this.runtime.agentId,
             agentId: this.runtime.agentId,
             content: {
               text: content.text,
@@ -355,13 +364,16 @@ export class AutonomyService extends Service {
 
           // Save the autonomous thought
           await this.runtime.createMemory(responseMemory, 'messages');
+          memories.push(responseMemory);
 
           // Broadcast the thought to WebSocket clients
           await this.broadcastThoughtToMonologue(
-            content.text!,
+            content.text,
             responseMemory.id || asUUID(uuidv4())
           );
         }
+
+        return memories;
       },
       onComplete: async () => {
         console.log('[Autonomy] ✅ Autonomous message processing completed');

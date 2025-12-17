@@ -8,7 +8,12 @@
  * size, and leverage. Calculates margin requirements, fees, and entry price.
  */
 
-import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
+import {
+  authenticate,
+  EngagementService,
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
 import { PerpOpenPositionSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -55,6 +60,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     feeCharged: result.feePaid,
     positionId: result.positionId,
   });
+
+  // Record engagement for airdrop qualification
+  void EngagementService.recordTrade(user.userId, result.positionId, 'perp');
 
   return successResponse(
     {

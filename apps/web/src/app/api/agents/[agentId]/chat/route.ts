@@ -346,7 +346,9 @@ Generate ${agent.displayName}'s response. Stay in character.
           agentUserId: agentId,
           role: 'assistant',
           content: response,
-          modelUsed: usePro ? 'groq-70b' : 'groq-8b',
+          modelUsed: usePro
+            ? 'llama-3.1-70b-versatile'
+            : 'llama-3.1-8b-instant',
           pointsCost,
           createdAt: assistantMessageTime,
           metadata: {},
@@ -372,7 +374,9 @@ Generate ${agent.displayName}'s response. Stay in character.
         metadata: {
           usePro,
           pointsCost,
-          modelUsed: usePro ? 'groq-70b' : 'groq-8b',
+          modelUsed: usePro
+            ? 'llama-3.1-70b-versatile'
+            : 'llama-3.1-8b-instant',
         },
       },
     });
@@ -384,7 +388,7 @@ Generate ${agent.displayName}'s response. Stay in character.
       messageId: assistantMessageId,
       response,
       pointsCost,
-      modelUsed: usePro ? 'groq-70b' : 'groq-8b',
+      modelUsed: usePro ? 'llama-3.1-70b-versatile' : 'llama-3.1-8b-instant',
       balanceAfter: newBalance,
     });
   }

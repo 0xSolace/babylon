@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 
 // Dynamically import SwaggerUI to avoid SSR issues
+// @ts-expect-error swagger-ui-react type definitions may conflict with Next.js dynamic import
 const SwaggerUIBundle = dynamic(() => import('swagger-ui-react'), {
   ssr: false,
   loading: () => (

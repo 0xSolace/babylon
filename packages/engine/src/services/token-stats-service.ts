@@ -123,7 +123,7 @@ class TickUsageCollector implements TokenUsageCollector {
     const modelMap = new Map<
       string,
       {
-        provider: 'groq' | 'claude' | 'openai';
+        provider: 'jeju' | 'groq' | 'claude' | 'openai';
         calls: LLMCallTokenUsage[];
         totalInput: number;
         totalOutput: number;

@@ -77,6 +77,7 @@ import {
   BusinessLogicError,
   checkRateLimitAndDuplicates,
   DUPLICATE_DETECTION_CONFIGS,
+  EngagementService,
   ensureUserForAuth,
   getCanonicalUserId,
   NotFoundError,
@@ -633,6 +634,15 @@ export const POST = withErrorHandling(
       },
       'POST /api/posts/[id]/comments'
     );
+
+    // Record engagement for airdrop qualification
+    await EngagementService.recordComment(
+      canonicalUserId,
+      postId,
+      newComment.id
+    ).catch((error) => {
+      logger.warn('Failed to record comment engagement', { error });
+    });
 
     logger.info(
       'Comment created successfully',

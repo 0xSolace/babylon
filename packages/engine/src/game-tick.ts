@@ -45,6 +45,7 @@ import {
   REPUTATION_SYSTEM_BASE_SEPOLIA,
 } from '@babylon/shared';
 import { ArticleGenerator } from './ArticleGenerator';
+import { getDeployerPrivateKey, hasDeployerKey } from './config/dev-keys';
 import { BabylonLLMClient } from './llm/openai-client';
 import { MarketDecisionEngine } from './MarketDecisionEngine';
 import { NPCInvestmentManager } from './npc/npc-investment-manager';
@@ -52,11 +53,11 @@ import { PredictionPricing } from './prediction-pricing';
 import { generateWorldContext } from './prompts';
 import { QuestionManager } from './QuestionManager';
 import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
-import { GroupInviteOrchestrator } from './services/group-invite-orchestrator';
 import { characterMappingService } from './services/character-mapping-service';
 // Content generation helpers
 import { generateEvents } from './services/event-generation-helpers';
 import { bootstrapGameIfNeeded } from './services/game-bootstrap-service';
+import { GroupInviteOrchestrator } from './services/group-invite-orchestrator';
 import { MarketContextService } from './services/market-context-service';
 import { NPCGroupDynamicsService } from './services/npc-group-dynamics-service';
 import { getOracleService } from './services/oracle/oracle-service';
@@ -2654,14 +2655,14 @@ export async function resolveQuestionPayouts(
   }
 
   // Check if on-chain reputation updates are configured (requires deployer key)
-  if (process.env.DEPLOYER_PRIVATE_KEY && REPUTATION_SYSTEM_BASE_SEPOLIA) {
+  if (hasDeployerKey() && REPUTATION_SYSTEM_BASE_SEPOLIA) {
     await ReputationService.updateReputationForResolvedMarket({
       marketId: marketId,
       outcome: winningSide,
     });
   } else {
     logger.debug(
-      'Skipping reputation update - DEPLOYER_PRIVATE_KEY not configured',
+      'Skipping reputation update - deployer key not available',
       { marketId: marketId },
       'GameTick'
     );
@@ -2774,14 +2775,13 @@ async function resolveMarketOnChain(
   onChainMarketId: string,
   winningOutcome: number
 ): Promise<string> {
-  const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`;
   const rpcUrl = getCurrentRpcUrl();
 
-  if (!DIAMOND_ADDRESS || !deployerPrivateKey) {
-    throw new Error(
-      'Missing blockchain configuration - DEPLOYER_PRIVATE_KEY required'
-    );
+  if (!DIAMOND_ADDRESS || !hasDeployerKey()) {
+    throw new Error('Missing blockchain configuration - deployer key required');
   }
+
+  const deployerPrivateKey = getDeployerPrivateKey();
 
   const { createPublicClient, createWalletClient, http, parseAbi } =
     await import('viem');

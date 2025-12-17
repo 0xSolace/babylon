@@ -163,7 +163,9 @@ export function AssetTradesFeed({
   const [error, setError] = useState<string | null>(null);
 
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
 
   // Build API endpoint based on market type
   const apiEndpoint = useMemo(() => {

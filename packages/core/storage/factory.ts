@@ -5,7 +5,7 @@
  */
 
 import { JsonStorageProvider } from './adapters/json';
-import { PostgresStorageProvider } from './adapters/postgres';
+import { PostgresStorageProvider } from './adapters/postgres/postgres-storage-provider';
 import type {
   IStorageProvider,
   StorageProviderConfig,
@@ -23,8 +23,8 @@ import { setStorageProvider } from './ports/storage-provider';
  *   jsonBasePath: './simulation-data',
  * });
  *
- * // For production (PostgreSQL)
- * const provider = await createStorageProvider({ mode: 'postgres' });
+ * // For production (CQL - decentralized)
+ * const provider = await createStorageProvider({ mode: 'cql' });
  * ```
  */
 export async function createStorageProvider(
@@ -43,11 +43,15 @@ export async function createStorageProvider(
         persistOnChange: false,
       });
       break;
+    case 'cql':
+      // CQL not yet implemented - use Postgres as fallback
+      provider = new PostgresStorageProvider();
+      break;
     case 'postgres':
       provider = new PostgresStorageProvider();
       break;
     default:
-      throw new Error(`Unknown storage mode: ${config.mode}`);
+      throw new Error(`Unknown storage mode: ${config.mode as string}`);
   }
 
   // Initialize and set as global provider

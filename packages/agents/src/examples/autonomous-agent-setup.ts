@@ -10,7 +10,7 @@ import type { Character } from '@elizaos/core';
 import { AgentRuntime, ModelType } from '@elizaos/core';
 import { autonomousCoordinator } from '../autonomous';
 import { babylonPlugin } from '../plugins/babylon';
-import { groqPlugin } from '../plugins/groq';
+import { jejuComputePlugin } from '../plugins/jeju-compute';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 
@@ -117,8 +117,8 @@ export async function setupBasicAutonomousAgent(agentUserId: string): Promise<{
   }
 
   // Register plugins manually
-  logger.info(`Registering groqPlugin...`, undefined, 'AgentSetup');
-  await runtime.registerPlugin(groqPlugin);
+  logger.info(`Registering jejuComputePlugin...`, undefined, 'AgentSetup');
+  await runtime.registerPlugin(jejuComputePlugin);
 
   logger.info(`Registering babylonPlugin...`, undefined, 'AgentSetup');
   await runtime.registerPlugin(babylonPlugin);

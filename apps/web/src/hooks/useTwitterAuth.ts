@@ -70,7 +70,7 @@ export function useTwitterAuth(): UseTwitterAuthReturn {
     }
 
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       setLoading(false);
       return;
@@ -131,7 +131,7 @@ export function useTwitterAuth(): UseTwitterAuthReturn {
     if (!user?.id) return;
 
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) return;
 
     const response = await fetch('/api/twitter/disconnect', {

@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-12-11T22:18:28.218Z",
+  "duration": 19,
+  "config": {
+    "ticks": 120,
+    "markets": 8,
+    "agents": 4
+  },
+  "results": [
+    {
+      "archetype": "trader",
+      "totalActions": 56,
+      "accuracy": "70.0%",
+      "avgResponseTime": "51.75ms",
+      "profitableTrades": 28
+    },
+    {
+      "archetype": "researcher",
+      "totalActions": 31,
+      "accuracy": "69.2%",
+      "avgResponseTime": "33.42ms",
+      "profitableTrades": 9
+    },
+    {
+      "archetype": "degenerate",
+      "totalActions": 66,
+      "accuracy": "48.3%",
+      "avgResponseTime": "64.81ms",
+      "profitableTrades": 28
+    },
+    {
+      "archetype": "conservative",
+      "totalActions": 19,
+      "accuracy": "33.3%",
+      "avgResponseTime": "33.49ms",
+      "profitableTrades": 2
+    }
+  ],
+  "rankings": [
+    "1. trader (28 correct)",
+    "2. degenerate (28 correct)",
+    "3. researcher (9 correct)",
+    "4. conservative (2 correct)"
+  ]
+}

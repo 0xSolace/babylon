@@ -1,6 +1,6 @@
 'use client';
 
-import { usePrivy } from '@privy-io/react-auth';
+import { useJejuAuth } from '@babylon/auth/client';
 
 interface JoinWaitlistButtonProps {
   className?: string;
@@ -11,10 +11,10 @@ export function JoinWaitlistButton({
   className,
   children,
 }: JoinWaitlistButtonProps) {
-  const { login } = usePrivy();
+  const { loginWithWallet } = useJejuAuth();
 
   const handleClick = () => {
-    login();
+    loginWithWallet();
   };
 
   return (

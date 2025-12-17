@@ -23,7 +23,7 @@
       "@babylon/contracts/*": ["../../contracts/src/*"]
     }
   },
-  "include": ["src/**/*", "tests/**/*"],
+  "include": ["src/**/*", "tests/**/*", "types/**/*"],
   "exclude": [
     "node_modules",
     "../../api/**/*",

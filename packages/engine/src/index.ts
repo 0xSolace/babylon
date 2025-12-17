@@ -29,10 +29,27 @@ export {
 export { DbStateStore, InMemoryStateStore } from './adapters';
 // Configuration
 export {
+  getDeployerPrivateKey,
+  getNPCMasterKey,
+  getOraclePrivateKey,
+  HARDHAT_DEV_ADDRESS,
+  HARDHAT_DEV_PRIVATE_KEY,
+  hasDeployerKey,
+  hasOracleKey,
+  isDevMode,
+} from './config/dev-keys';
+export {
   FEE_CONFIG,
   type FeeTransactionType,
   type FeeType,
 } from './config/fees';
+export {
+  GroupChatServiceConfig,
+  GroupInviteConfig,
+  getGroupChatConfigSummary,
+  NPCGroupDynamicsConfig,
+  validateGroupChatConfig,
+} from './config/group-chat-config';
 export {
   DEFAULT_SIMULATION_CONFIG,
   PREDICTION_TEMPLATES,
@@ -43,13 +60,6 @@ export {
   SIMULATION_STRATEGIES,
   type SimulationStrategy,
 } from './config/simulation';
-export {
-  getGroupChatConfigSummary,
-  GroupChatServiceConfig,
-  GroupInviteConfig,
-  NPCGroupDynamicsConfig,
-  validateGroupChatConfig,
-} from './config/group-chat-config';
 // Data Exports
 export {
   getQuestionExamples,

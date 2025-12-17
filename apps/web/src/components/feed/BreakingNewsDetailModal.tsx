@@ -127,7 +127,7 @@ export function BreakingNewsDetailModal({
       />
 
       {/* Modal */}
-      <div className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-full max-w-2xl">
+      <div className="fixed top-1/2 left-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2">
         <div className="fade-in zoom-in-95 m-4 max-h-[90vh] animate-in overflow-y-auto rounded-lg border border-white/10 bg-[#1e1e1e] p-6 shadow-2xl duration-200">
           {/* Header */}
           <div className="mb-6 flex items-start justify-between">

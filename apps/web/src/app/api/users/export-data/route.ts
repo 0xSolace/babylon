@@ -113,7 +113,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     db
       .select({
         id: users.id,
-        privyId: users.privyId,
+        oauth3Id: users.oauth3Id,
         walletAddress: users.walletAddress,
         username: users.username,
         displayName: users.displayName,

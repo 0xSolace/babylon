@@ -23,6 +23,12 @@ export interface PromptLogEntry {
     temperature?: number;
     maxTokens?: number;
     format?: string;
+    latencyMs?: number;
+    settlement?: {
+      provider: string;
+      requestHash: string;
+      signature: string;
+    };
   };
 }
 

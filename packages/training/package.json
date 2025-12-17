@@ -14,24 +14,24 @@
   },
   "scripts": {
     "lint": "biome lint src/",
-    "typecheck": "tsc -b .",
+    "typecheck": "tsc --noEmit",
     "train": "bun run scripts/train-and-test.ts",
     "test": "bun run scripts/train-and-test.ts --skip-training --ticks 100",
     "benchmark": "bun run scripts/train-and-test.ts --skip-training --ticks 500"
   },
   "dependencies": {
+    "@babylon/api": "workspace:*",
+    "@babylon/db": "workspace:*",
     "@huggingface/hub": "^2.6.12",
-    "@vercel/blob": "^0.27.1",
+    "@jejunetwork/kms": "workspace:*",
     "ethers": "^6.16.0",
     "uuid": "^11.1.0"
   },
   "peerDependencies": {
     "@babylon/core": "workspace:*",
-    "@babylon/db": "workspace:*",
     "@babylon/engine": "workspace:*",
     "@babylon/shared": "workspace:*",
-    "@elizaos/core": "^1.6.4",
-    "drizzle-orm": "^0.44.7"
+    "@elizaos/core": "^1.6.4"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

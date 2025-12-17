@@ -78,7 +78,7 @@ export function ExternalShareButton({
       if (!authenticated || !user) return;
 
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
       if (!token) return;
 
       const response = await fetch(

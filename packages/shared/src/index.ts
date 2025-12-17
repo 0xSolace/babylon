@@ -116,6 +116,12 @@ export * from './share';
 export * from './config';
 
 // =============================================================================
+// Jeju Network Integration Configuration
+// =============================================================================
+
+export * from './jeju-config';
+
+// =============================================================================
 // NOT EXPORTED (Server-only modules - import from @babylon/api):
 // =============================================================================
 // - Token counting: import { countTokens, countTokensSync } from '@babylon/api'

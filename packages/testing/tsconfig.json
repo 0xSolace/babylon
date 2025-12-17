@@ -39,6 +39,9 @@
       "@babylon/contracts/*": ["../contracts/src/*"],
       "@babylon/training": ["../training/src/index.ts"],
       "@babylon/training/*": ["../training/src/*"],
+      "@babylon/messaging": ["../messaging/src/index.ts"],
+      "@babylon/messaging/*": ["../messaging/src/*"],
+      "@babylon/auth/server": ["../shared/src/auth/server-auth.ts"],
       "@babylon/testing": ["./src/index.ts"],
       "@babylon/testing/*": ["./*"]
     }
@@ -62,17 +65,15 @@
     "dist",
     "verification/**/*",
     "integration/admin-agents-reputation.integration.test.ts",
-    "integration/agent-autonomous-tick.integration.test.ts"
+    "integration/agent-autonomous-tick.integration.test.ts",
+    "integration/decentralized-stack.integration.test.ts",
+    "unit/cron/agent-tick-db.test.ts",
+    "integration/game-feedback-reputation.integration.test.ts"
   ],
   "references": [
     { "path": "../shared" },
     { "path": "../db" },
-    { "path": "../engine" },
-    { "path": "../api" },
-    { "path": "../agents" },
     { "path": "../a2a" },
-    { "path": "../mcp" },
-    { "path": "../contracts" },
-    { "path": "../training" }
+    { "path": "../contracts" }
   ]
 }

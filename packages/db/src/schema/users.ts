@@ -142,7 +142,12 @@ export const users = pgTable(
     appealSubmittedAt: timestamp('appealSubmittedAt', { mode: 'date' }),
     appealReviewedAt: timestamp('appealReviewedAt', { mode: 'date' }),
     falsePositiveHistory: json('falsePositiveHistory').$type<JsonValue>(),
+    /** @deprecated Use oauth3Id instead - privyId retained for migration compatibility */
     privyId: text('privyId').unique(),
+    /** OAuth3 decentralized identity ID (replaces privyId) */
+    oauth3Id: text('oauth3Id').unique(),
+    /** Jeju KMS key ID for decentralized key management */
+    kmsKeyId: text('kmsKeyId').unique(),
     registrationBlockNumber: bigint('registrationBlockNumber', {
       mode: 'bigint',
     }),

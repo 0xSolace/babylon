@@ -107,7 +107,7 @@ export function RewardsWidget({ userId }: RewardsWidgetProps) {
       setLoading(true);
 
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
       if (!token) {
         setLoading(false);
         rewardsWidgetFetchInFlight = false;

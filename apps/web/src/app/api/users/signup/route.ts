@@ -92,7 +92,6 @@ import {
   ConflictError,
   getHashedClientIp,
   getOrCreateReferralCode,
-  getPrivyClient,
   InternalServerError,
   notifyNewAccount,
   PointsService,
@@ -118,7 +117,6 @@ import {
   OnboardingProfileSchema,
   POINTS,
 } from '@babylon/shared';
-import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { trackServerEvent } from '@/lib/posthog/server';
@@ -134,72 +132,6 @@ interface SignupRequestBody {
   isWaitlist?: boolean; // Mark user as waitlist during signup
   tosAccepted?: boolean;
   privacyPolicyAccepted?: boolean;
-}
-
-type PrivyWalletLite = {
-  id?: string | null;
-  address?: string;
-  chainType?: string;
-  walletClientType?: string | null;
-};
-
-type PrivyUserWithSmartWallet = PrivyUser & {
-  smartWallet?: { address?: string | null };
-  wallet?: PrivyWalletLite;
-  linkedAccounts?: Array<
-    PrivyWalletLite & {
-      type?: string;
-    }
-  >;
-};
-
-function pickEmbeddedEvmWallet(
-  user: PrivyUserWithSmartWallet
-): PrivyWalletLite | null {
-  const candidates: PrivyWalletLite[] = [];
-  if (user.wallet) candidates.push(user.wallet);
-  if (Array.isArray(user.linkedAccounts)) {
-    for (const acc of user.linkedAccounts) {
-      if (acc?.type === 'wallet') candidates.push(acc);
-    }
-  }
-  return (
-    candidates.find(
-      (w) =>
-        (w.walletClientType === 'privy' || Boolean(w.id)) &&
-        (!w.chainType || w.chainType === 'ethereum') &&
-        typeof w.address === 'string'
-    ) ?? null
-  );
-}
-
-async function ensureSmartWalletAddress(
-  privyClient: ReturnType<typeof getPrivyClient>,
-  privyId: string
-): Promise<{
-  smartWalletAddress: string | null;
-  embeddedWalletAddress: string | null;
-}> {
-  const user = (await privyClient.getUser(privyId)) as PrivyUserWithSmartWallet;
-  let smartWalletAddress = user.smartWallet?.address?.toLowerCase() ?? null;
-  let embeddedWallet = pickEmbeddedEvmWallet(user);
-
-  if (!smartWalletAddress) {
-    const updated = (await privyClient.createWallets({
-      userId: privyId,
-      createEthereumSmartWallet: true,
-      // Only create a new embedded wallet if none exists
-      createEthereumWallet: !embeddedWallet,
-    })) as PrivyUserWithSmartWallet;
-
-    smartWalletAddress = updated.smartWallet?.address?.toLowerCase() ?? null;
-    embeddedWallet = embeddedWallet ?? pickEmbeddedEvmWallet(updated);
-  }
-
-  return {
-    smartWalletAddress,
-    embeddedWalletAddress: embeddedWallet?.address?.toLowerCase() ?? null,
-  };
 }
 
 const SignupSchema = OnboardingProfileSchema.extend({
@@ -219,7 +151,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const parsedBody = SignupSchema.parse(body);
   const {
-    identityToken,
+    identityToken: _identityToken, // Kept for backwards compatibility but no longer used
     referralCode: rawReferralCode,
     isWaitlist,
     ...profileData
@@ -228,45 +160,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const referralCode = rawReferralCode?.trim() || null;
 
   const canonicalUserId = authUser.dbUserId ?? authUser.userId;
-  const privyId = authUser.privyId ?? authUser.userId;
-  // Prefer Privy smart wallet (AA) address over legacy/linked wallets
-  let walletAddress = authUser.walletAddress?.toLowerCase() ?? null;
+  const oauth3Id = authUser.oauth3Id ?? authUser.userId;
+  // Wallet address comes from OAuth3 session
+  const walletAddress = authUser.walletAddress?.toLowerCase() ?? null;
 
   // Capture and hash IP address for self-referral detection
   const registrationIpHash = getHashedClientIp(request.headers);
 
-  // Fetch identity data from Privy if token provided
-  let identityFarcasterUsername: string | undefined;
-  let identityTwitterUsername: string | undefined;
-
-  if (identityToken) {
-    const privyClient = getPrivyClient();
-    const identityUser: PrivyUser =
-      await privyClient.getUserFromIdToken(identityToken);
-
-    identityFarcasterUsername = identityUser.farcaster?.username ?? undefined;
-    identityTwitterUsername = identityUser.twitter?.username ?? undefined;
-  } else {
-    logger.info(
-      'Signup received no identity token; proceeding with provided payload only',
-      undefined,
-      'POST /api/users/signup'
-    );
-  }
+  // Social account data comes from the profile payload now (from onboarding flow)
+  // The identityToken is deprecated with OAuth3 - social accounts are linked via OAuth3
+  const identityFarcasterUsername = parsedProfile.farcasterUsername;
+  const identityTwitterUsername = parsedProfile.twitterUsername;
 
   // Check for imported social data from onboarding flow
   const importedTwitter = parsedProfile.importedFrom === 'twitter';
   const importedFarcaster = parsedProfile.importedFrom === 'farcaster';
-
-  // Ensure smart wallet exists and prefer its address for DB persistence
-  const privyClient = getPrivyClient();
-  const { smartWalletAddress, embeddedWalletAddress } =
-    await ensureSmartWalletAddress(privyClient, privyId);
-  walletAddress =
-    smartWalletAddress ??
-    embeddedWalletAddress ??
-    authUser.walletAddress?.toLowerCase() ??
-    null;
 
   // Wrap transaction with retry logic for connection errors
   const result = await withRetry(
@@ -434,7 +342,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
             .insert(users)
             .values({
               id: canonicalUserId,
-              privyId,
+              oauth3Id,
+              privyId: oauth3Id, // Keep for legacy compatibility
               ...baseUserData,
               referredBy: resolvedReferrerId,
               updatedAt: new Date(),
@@ -715,7 +624,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   return successResponse({
     user: {
       id: result.user.id,
-      privyId: result.user.privyId,
+      oauth3Id: result.user.oauth3Id,
       username: result.user.username,
       displayName: result.user.displayName,
       bio: result.user.bio,

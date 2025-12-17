@@ -21,10 +21,13 @@ import { runAdminCommand } from './commands/admin.js';
 import { runAgentCommand } from './commands/agent.js';
 import { runDbCommand } from './commands/db.js';
 import { runDeployCommand } from './commands/deploy.js';
+import { runDevCommand } from './commands/dev.js';
 import { runGameCommand } from './commands/game.js';
+import { runICOCommand } from './commands/ico.js';
 import { runModelCommand } from './commands/model.js';
 import { runStatusCommand } from './commands/status.js';
 import { runTestCommand } from './commands/test.js';
+import tokenCommand from './commands/token.js';
 import { runTrainCommand } from './commands/train.js';
 
 const VERSION = '0.2.0';
@@ -42,6 +45,7 @@ USAGE:
   babylon <domain> <command> [options]
 
 DOMAINS:
+  dev       Start development environment (chain, contracts, web app)
   db        Database management (start, stop, status, migrate, reset)
   admin     Admin user management (check, grant, revoke, list)
   status    System status (game, wallet, agent0, all)
@@ -50,9 +54,14 @@ DOMAINS:
   game      Game control (start, pause, status, generate, simulate, validate)
   agent     Agent management (spawn, list, enable, disable)
   deploy    Contract deployment (local, testnet, mainnet, setup)
+  ico       ICO management (deploy, start, pause, finalize, status, stats)
   test      Load & stress testing (load, a2a)
+  token     BBLN token & NPC funding (fund-npcs, balances, airdrop, risk)
 
 EXAMPLES:
+  babylon dev                      Start full dev environment (chain + app)
+  babylon dev --minimal            Start chain only
+  babylon dev --stop               Stop all services
   babylon db start                 Start PostgreSQL container
   babylon db migrate               Run database migrations
   babylon admin grant alice        Grant admin to user 'alice'
@@ -104,6 +113,10 @@ async function main(): Promise<void> {
   }
 
   switch (domain) {
+    case 'dev':
+      await runDevCommand(commandArgs);
+      break;
+
     case 'db':
       await runDbCommand(commandArgs);
       break;
@@ -136,8 +149,16 @@ async function main(): Promise<void> {
       await runDeployCommand(commandArgs);
       break;
 
+    case 'ico':
+      await runICOCommand(commandArgs);
+      break;
+
     case 'test':
       await runTestCommand(commandArgs);
+      break;
+
+    case 'token':
+      await tokenCommand.parseAsync(['node', 'babylon', ...commandArgs]);
       break;
 
     default:

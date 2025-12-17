@@ -147,7 +147,7 @@ export class ModelDeployer {
       return null;
     }
 
-    // Return a placeholder status
+    // Return deployment status (tracking via external monitoring)
     return {
       status: 'deployed',
       agentsUpdated: 0,

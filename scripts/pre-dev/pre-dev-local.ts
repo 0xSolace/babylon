@@ -347,7 +347,22 @@ if (needsSeed || actorCount === 0) {
   console.info('✅ Database seeded');
 }
 
-// 10. Validate environment
+// 10. Initialize Jeju decentralized services
+console.info('');
+console.info('Initializing Jeju decentralized services...');
+try {
+  await $`bun run scripts/init-decentralized-services.ts`.quiet();
+  console.info('✅ Decentralized services initialized');
+} catch (_initError) {
+  console.warn(
+    '⚠️  Decentralized services initialization skipped (services may not be running)'
+  );
+  console.info(
+    '   Start Jeju for full decentralized operation: cd /path/to/jeju && bun run dev'
+  );
+}
+
+// 11. Validate environment
 console.info('');
 const validation = validateEnvironment(detectedEnv);
 printValidationResult(validation);
@@ -358,7 +373,7 @@ console.info(
   `✅ ${detectedEnv === 'localnet' ? 'Localnet' : detectedEnv === 'testnet' ? 'Testnet' : 'Mainnet'} environment ready!`
 );
 console.info('');
-console.info('Services:');
+console.info('Core Services:');
 if (isLocalnet) {
   console.info(
     '  Hardhat:    http://localhost:8545 (will be started automatically)'
@@ -367,6 +382,11 @@ if (isLocalnet) {
 console.info('  PostgreSQL: localhost:5433');
 console.info('  Redis:      localhost:6380');
 console.info('  MinIO:      http://localhost:9000 (console: :9001)');
+console.info('');
+console.info('Jeju Services (if available):');
+console.info('  CQL:        http://localhost:4300');
+console.info('  Cache:      http://localhost:4015');
+console.info('  Storage:    http://localhost:5001');
 console.info('');
 console.info('App Routes:');
 console.info('  Main:       http://localhost:5007');

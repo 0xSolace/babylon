@@ -5,9 +5,9 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
-  getGroupChatConfigSummary,
   GroupChatServiceConfig,
   GroupInviteConfig,
+  getGroupChatConfigSummary,
   NPCGroupDynamicsConfig,
   validateGroupChatConfig,
 } from '@babylon/engine';
@@ -36,18 +36,12 @@ describe('Group Chat Configuration', () => {
     });
 
     test('tier multipliers are ordered correctly (S_TIER most selective)', () => {
-      expect(GroupInviteConfig.tierMultipliers.S_TIER).toBeLessThan(
-        GroupInviteConfig.tierMultipliers.A_TIER
-      );
-      expect(GroupInviteConfig.tierMultipliers.A_TIER).toBeLessThan(
-        GroupInviteConfig.tierMultipliers.B_TIER
-      );
-      expect(GroupInviteConfig.tierMultipliers.B_TIER).toBeLessThan(
-        GroupInviteConfig.tierMultipliers.C_TIER
-      );
-      expect(GroupInviteConfig.tierMultipliers.C_TIER).toBeLessThanOrEqual(
-        GroupInviteConfig.tierMultipliers.NONE
-      );
+      const { S_TIER, A_TIER, B_TIER, C_TIER, NONE } =
+        GroupInviteConfig.tierMultipliers;
+      expect(S_TIER!).toBeLessThan(A_TIER!);
+      expect(A_TIER!).toBeLessThan(B_TIER!);
+      expect(B_TIER!).toBeLessThan(C_TIER!);
+      expect(C_TIER!).toBeLessThanOrEqual(NONE!);
     });
   });
 
@@ -88,14 +82,18 @@ describe('Group Chat Configuration', () => {
     });
 
     test('has valid inactivity defaults', () => {
-      expect(GroupChatServiceConfig.inactivityGracePeriodTicks).toBeGreaterThan(0);
+      expect(GroupChatServiceConfig.inactivityGracePeriodTicks).toBeGreaterThan(
+        0
+      );
       expect(GroupChatServiceConfig.inactivityMaxTicks).toBeGreaterThan(
         GroupChatServiceConfig.inactivityGracePeriodTicks
       );
     });
 
     test('has valid activity sweet spot defaults', () => {
-      expect(GroupChatServiceConfig.activitySweetSpotMin).toBeGreaterThanOrEqual(0);
+      expect(
+        GroupChatServiceConfig.activitySweetSpotMin
+      ).toBeGreaterThanOrEqual(0);
       expect(GroupChatServiceConfig.activitySweetSpotMax).toBeGreaterThan(
         GroupChatServiceConfig.activitySweetSpotMin
       );
@@ -108,7 +106,7 @@ describe('Group Chat Configuration', () => {
   describe('getGroupChatConfigSummary', () => {
     test('returns all expected keys', () => {
       const summary = getGroupChatConfigSummary();
-      
+
       expect(summary['invite.baseInviteProbability']).toBeDefined();
       expect(summary['invite.candidateExpiryHours']).toBeDefined();
       expect(summary['invite.maxCandidatesPerTick']).toBeDefined();
@@ -150,7 +148,7 @@ describe('Configuration Expected Behavior', () => {
     const prob = GroupInviteConfig.baseInviteProbability;
     const ticksPerHour = 60;
     const expectedInvitesPerHour = prob * ticksPerHour * 20; // Assuming 20 candidates processed per tick max
-    
+
     // Should invite somewhere between 1 and 100 users per hour with defaults
     expect(expectedInvitesPerHour).toBeGreaterThan(0);
     expect(expectedInvitesPerHour).toBeLessThan(200);
@@ -160,9 +158,10 @@ describe('Configuration Expected Behavior', () => {
     const expiryHours = GroupInviteConfig.candidateExpiryHours;
     const ticksPerHour = 60;
     const candidatesPerTick = GroupInviteConfig.maxCandidatesPerTick;
-    
+
     // Should be able to process many candidates before expiry
-    const totalProcessableBeforeExpiry = expiryHours * ticksPerHour * candidatesPerTick;
+    const totalProcessableBeforeExpiry =
+      expiryHours * ticksPerHour * candidatesPerTick;
     expect(totalProcessableBeforeExpiry).toBeGreaterThan(1000);
   });
 
@@ -170,7 +169,7 @@ describe('Configuration Expected Behavior', () => {
     const min = NPCGroupDynamicsConfig.minGroupSize;
     const max = NPCGroupDynamicsConfig.maxGroupSize;
     const ideal = NPCGroupDynamicsConfig.idealGroupSize;
-    
+
     // Min should be at least 2 (not a group otherwise)
     expect(min).toBeGreaterThanOrEqual(2);
     // Max shouldn't be too large
@@ -180,4 +179,3 @@ describe('Configuration Expected Behavior', () => {
     expect(ideal).toBeLessThanOrEqual(max);
   });
 });
-

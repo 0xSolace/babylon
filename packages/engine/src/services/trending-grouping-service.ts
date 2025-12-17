@@ -5,43 +5,84 @@
  * For example, "OpenAGI", "Sam AIltman", and "SMH-9000" become a single grouped trend.
  * Generates summaries for grouped trends and handles fallback logic when LLM
  * is unavailable.
+ *
+ * ALL LLM calls route through Jeju Compute - NO direct vendor API calls.
  */
 
 import { isPromptLoggingEnabled, logPrompt } from '@babylon/engine';
 import { logger } from '@babylon/shared';
-import OpenAI from 'openai';
 
 // Configuration
 const LLM_TIMEOUT_MS = 15000; // 15 seconds
 const LLM_MAX_RETRIES = 2;
-const GROUPING_MODEL =
-  process.env.TRENDING_GROUPING_MODEL ||
-  (process.env.GROQ_API_KEY ? 'llama-3.1-8b-instant' : 'gpt-5-nano');
-const SUMMARY_MODEL =
-  process.env.TRENDING_SUMMARY_MODEL ||
-  (process.env.GROQ_API_KEY ? 'llama-3.1-8b-instant' : 'gpt-5-nano');
+const GROUPING_MODEL = 'llama-3.1-8b-instant';
+const SUMMARY_MODEL = 'llama-3.1-8b-instant';
 
-// Check if LLM is available
-const hasApiKey = !!(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
-const useGroq = !!process.env.GROQ_API_KEY;
+// Jeju Compute endpoint
+const JEJU_COMPUTE_ENDPOINT =
+  process.env.JEJU_COMPUTE_ENDPOINT ||
+  process.env.JEJU_DWS_ENDPOINT ||
+  'http://localhost:4100';
 
-// Only initialize OpenAI client if we have an API key
-let openai: OpenAI | null = null;
-if (hasApiKey) {
-  openai = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY,
-    baseURL: useGroq
-      ? 'https://api.groq.com/openai/v1'
-      : 'https://api.openai.com/v1',
-    timeout: LLM_TIMEOUT_MS,
-  });
-} else {
-  logger.warn(
-    'No LLM API key configured (GROQ_API_KEY or OPENAI_API_KEY) - trending grouping will use fallback logic',
-    undefined,
-    'TrendingGroupingService'
-  );
+interface JejuClient {
+  chat: {
+    completions: {
+      create: (params: {
+        model: string;
+        messages: Array<{ role: string; content: string }>;
+        max_tokens?: number;
+        temperature?: number;
+      }) => Promise<{
+        choices: Array<{ message: { content: string } }>;
+        usage?: {
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+        };
+      }>;
+    };
+  };
 }
+
+// Jeju inference client
+const jejuClient: JejuClient = {
+  chat: {
+    completions: {
+      create: async (params) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
+        try {
+          const response = await fetch(
+            `${JEJU_COMPUTE_ENDPOINT}/v1/chat/completions`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: params.model,
+                messages: params.messages,
+                max_tokens: params.max_tokens || 1024,
+                temperature: params.temperature ?? 0.3,
+              }),
+              signal: controller.signal,
+            }
+          );
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            throw new Error(`Jeju Compute error: ${response.status}`);
+          }
+
+          return response.json();
+        } catch (error) {
+          clearTimeout(timeoutId);
+          throw error;
+        }
+      },
+    },
+  },
+};
 
 /**
  * Trending tag information
@@ -218,10 +259,7 @@ async function analyzeAndSummarizeTags(
     return emptyResult;
   }
 
-  // If no LLM available, use fallback logic
-  if (!openai) {
-    return { tagToGroup: fallbackGrouping(tags), groupSummaries: new Map() };
-  }
+  // Jeju Compute client is always available (routes through marketplace)
 
   const tagList = tags
     .map(
@@ -309,7 +347,7 @@ Return ONLY valid XML. No markdown, no explanations.`;
 
   const response = await withRetry(
     async () =>
-      await openai!.chat.completions.create({
+      await jejuClient.chat.completions.create({
         model: GROUPING_MODEL,
         messages: [
           {
@@ -351,7 +389,7 @@ Return ONLY valid XML. No markdown, no explanations.`;
       input: `System: You are an XML-only assistant that analyzes trending topics. Respond ONLY with valid XML matching the exact format shown. No markdown, no JSON, no explanations.\n\nUser: ${prompt}`,
       output: content,
       metadata: {
-        provider: useGroq ? 'groq' : 'openai',
+        provider: 'jeju-compute',
         model: GROUPING_MODEL,
         temperature: 0.3,
         maxTokens: 2000,
@@ -441,9 +479,7 @@ export async function generateTrendingSummary(
     return `Trending topic in ${category || 'general'} discussions`;
   }
 
-  if (!openai) {
-    return `Trending topic in ${category || 'general'} discussions`;
-  }
+  // Jeju Compute client is always available
 
   const prompt = `Generate a ONE SENTENCE summary for the trending topic "${tagDisplayName}" (Category: ${category || 'General'}).
 
@@ -468,7 +504,7 @@ One sentence summary:`;
 
   const response = await withRetry(
     async () =>
-      await openai!.chat.completions.create({
+      await jejuClient.chat.completions.create({
         model: SUMMARY_MODEL,
         messages: [
           {
@@ -516,7 +552,7 @@ One sentence summary:`;
       input: `System: You are a trending topics summarization expert. Generate concise, engaging one-sentence summaries.\n\nUser: ${prompt}`,
       output: response.choices[0]?.message?.content || '',
       metadata: {
-        provider: useGroq ? 'groq' : 'openai',
+        provider: 'jeju-compute',
         model: SUMMARY_MODEL,
         temperature: 0.7,
         maxTokens: 50,

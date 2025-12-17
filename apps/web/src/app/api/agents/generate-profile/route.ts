@@ -86,7 +86,7 @@
  * ```
  */
 
-import { callGroqDirect } from '@babylon/agents';
+import { createJejuInference } from '@babylon/agents';
 import {
   authenticateUser,
   checkRateLimitAndDuplicates,
@@ -95,6 +95,7 @@ import {
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import type { Address } from 'viem';
 
 export const maxDuration = 30;
 
@@ -190,13 +191,23 @@ The agent should have a distinct personality that shines through in every field.
 
 Respond ONLY with valid JSON, no markdown formatting.`;
 
-  const response = await callGroqDirect({
-    prompt,
-    modelSize: 'large',
+  // Use Jeju decentralized inference
+  const network = (process.env.JEJU_NETWORK ?? 'localnet') as
+    | 'localnet'
+    | 'testnet'
+    | 'mainnet';
+  const userAddress = (user.walletAddress ??
+    process.env.JEJU_WALLET_ADDRESS ??
+    '0x0') as Address;
+  const inference = createJejuInference({ userAddress, network });
+
+  const result = await inference.inference({
+    model: 'llama-3.1-70b-versatile',
+    messages: [{ role: 'user', content: prompt }],
     temperature: 0.9,
     maxTokens: 2000,
-    actionType: 'generate_agent_profile',
   });
+  const response = result.content;
 
   // Parse the AI response
   // Extract JSON from markdown code blocks if present

@@ -52,7 +52,7 @@ export function AIModelsTab() {
 
   const fetchData = useCallback(async () => {
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       toast.error('Not authenticated');
       setLoading(false);
@@ -84,7 +84,7 @@ export function AIModelsTab() {
     setTesting(true);
     setTestResult(null);
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       toast.error('Not authenticated');
       setTesting(false);

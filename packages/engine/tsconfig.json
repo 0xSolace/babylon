@@ -1,9 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
     "types": ["bun-types"],
     // Disable unused locals check - engine has some batch methods reserved for future optimization
     "noUnusedLocals": false,
@@ -16,15 +16,15 @@
       "@babylon/contracts": ["../contracts/src/index.ts"],
       "@babylon/contracts/*": ["../contracts/src/*"],
       "@babylon/core": ["../core/markets/index.ts"],
-      "@babylon/core/*": ["../core/*"]
+      "@babylon/core/*": ["../core/*"],
+      "@babylon/agents": ["../agents/src/index.ts"],
+      "@babylon/agents/*": ["../agents/src/*"],
+      "@babylon/api": ["../api/src/index.ts"],
+      "@babylon/api/*": ["../api/src/*"],
+      "@babylon/training": ["../training/src/index.ts"],
+      "@babylon/training/*": ["../training/src/*"]
     }
   },
   "include": ["src/**/*", "src/**/*.json"],
-  "exclude": ["node_modules", "dist", "**/__tests__/**/*"],
-  "references": [
-    { "path": "../shared" },
-    { "path": "../db" },
-    { "path": "../contracts" },
-    { "path": "../core" }
-  ]
+  "exclude": ["node_modules", "dist", "**/__tests__/**/*"]
 }

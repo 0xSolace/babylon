@@ -1,5 +1,6 @@
 'use client';
 
+import { useJejuAuth } from '@babylon/auth/client';
 import type { OnboardingProfilePayload } from '@babylon/shared';
 import {
   CHAIN,
@@ -8,7 +9,6 @@ import {
   POINTS,
   WALLET_ERROR_MESSAGES,
 } from '@babylon/shared';
-import { useIdentityToken, usePrivy } from '@privy-io/react-auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type ImportedProfileData,
@@ -41,7 +41,7 @@ type OnboardingStage = 'PROFILE' | 'ONCHAIN' | 'COMPLETED';
  * Manages the complete onboarding process including profile creation,
  * on-chain registration, and social account linking. Handles modal display,
  * form submission, error handling, and progress tracking. Integrates with
- * Privy authentication and smart wallet registration.
+ * OAuth3 authentication and smart wallet registration.
  *
  * Features:
  * - Multi-stage onboarding (PROFILE, ONCHAIN, COMPLETED)
@@ -70,10 +70,10 @@ export function OnboardingProvider({
     logout,
   } = useAuth();
 
-  const { user: privyUser } = usePrivy();
+  // Use Jeju OAuth3 for user data (replaces Privy)
+  const { linkedAccounts, getAccessToken } = useJejuAuth();
 
   const { setUser, setNeedsOnboarding, setNeedsOnchain } = useAuthStore();
-  const { identityToken } = useIdentityToken();
   const { registerAgent, smartWalletAddress, smartWalletReady } =
     useRegisterAgentTx();
 
@@ -241,61 +241,30 @@ export function OnboardingProvider({
     stage,
   ]);
 
-  // Automatically extract social profile data from Privy user when authenticating
+  // Automatically extract social profile data from linked accounts when authenticating
   useEffect(() => {
-    if (!authenticated || !privyUser || !needsOnboarding) return;
+    if (!authenticated || !needsOnboarding) return;
     if (importedProfileData) return; // Already have imported data
     if (loadingProfile) return; // Wait for profile to load
 
-    const userWithFarcaster = privyUser as typeof privyUser & {
-      farcaster?: {
-        username?: string;
-        displayName?: string;
-        bio?: string;
-        pfp?: string;
-        pfpUrl?: string;
-        fid?: number;
-        url?: string;
-        ownerAddress?: string;
-        verifications?: string[];
-      };
-    };
-    const userWithTwitter = privyUser as typeof privyUser & {
-      twitter?: {
-        username?: string;
-        name?: string;
-        profilePictureUrl?: string;
-        subject?: string; // Twitter user ID
-      };
-    };
-
-    // Check if user authenticated with Farcaster
-    if (userWithFarcaster.farcaster) {
-      const fc = userWithFarcaster.farcaster;
-
-      // Use pfpUrl or pfp, whichever is available
-      const profileImage = fc.pfpUrl || fc.pfp || null;
-
+    // Check for Farcaster account in linked accounts
+    const farcasterAccount = linkedAccounts.find((a) => a.type === 'farcaster');
+    if (farcasterAccount) {
       const profileData: ImportedProfileData = {
         platform: 'farcaster',
-        username:
-          fc.username ||
-          fc.displayName?.toLowerCase().replace(/\s+/g, '_') ||
-          'farcaster_user',
-        displayName: fc.displayName || fc.username || 'Farcaster User',
-        bio: fc.bio || undefined,
-        profileImageUrl: profileImage,
-        farcasterFid: fc.fid?.toString(),
+        username: farcasterAccount.identifier || 'farcaster_user',
+        displayName: farcasterAccount.identifier || 'Farcaster User',
+        bio: undefined,
+        profileImageUrl: null,
+        farcasterFid: farcasterAccount.identifier,
       };
 
       logger.info(
-        'Auto-imported Farcaster profile from Privy - will award points on signup',
+        'Auto-imported Farcaster profile from OAuth3 - will award points on signup',
         {
           username: profileData.username,
           displayName: profileData.displayName,
-          fid: fc.fid,
-          hasBio: !!profileData.bio,
-          hasProfileImage: !!profileImage,
+          fid: farcasterAccount.identifier,
           rewardEligible: true,
           expectedPoints: POINTS.FARCASTER_LINK,
         },
@@ -307,32 +276,24 @@ export function OnboardingProvider({
       return;
     }
 
-    // Check if user authenticated with Twitter
-    if (userWithTwitter.twitter) {
-      const tw = userWithTwitter.twitter;
-
-      // Upgrade Twitter profile image to higher resolution if available
-      let profileImageUrl = tw.profilePictureUrl;
-      if (profileImageUrl && profileImageUrl.includes('_normal')) {
-        profileImageUrl = profileImageUrl.replace('_normal', '_400x400');
-      }
-
+    // Check for Twitter account in linked accounts
+    const twitterAccount = linkedAccounts.find((a) => a.type === 'twitter');
+    if (twitterAccount) {
       const profileData: ImportedProfileData = {
         platform: 'twitter',
-        username: tw.username || 'twitter_user',
-        displayName: tw.name || tw.username || 'Twitter User',
-        bio: undefined, // Twitter bio not directly available from Privy, would need separate API call
-        profileImageUrl: profileImageUrl || null,
-        twitterId: tw.subject || tw.username, // Use subject (Twitter user ID) if available
+        username: twitterAccount.identifier || 'twitter_user',
+        displayName: twitterAccount.identifier || 'Twitter User',
+        bio: undefined,
+        profileImageUrl: null,
+        twitterId: twitterAccount.identifier,
       };
 
       logger.info(
-        'Auto-imported Twitter profile from Privy - will award points on signup',
+        'Auto-imported Twitter profile from OAuth3 - will award points on signup',
         {
           username: profileData.username,
           displayName: profileData.displayName,
           twitterId: profileData.twitterId,
-          hasProfileImage: !!profileImageUrl,
           rewardEligible: true,
           expectedPoints: POINTS.TWITTER_LINK,
         },
@@ -347,12 +308,12 @@ export function OnboardingProvider({
     // For wallet-only logins, don't set imported data - let the generated profile flow handle it
     logger.info(
       'User authenticated with wallet only - will use generated profile',
-      { userId: privyUser.id },
+      undefined,
       'OnboardingProvider'
     );
   }, [
     authenticated,
-    privyUser,
+    linkedAccounts,
     needsOnboarding,
     importedProfileData,
     loadingProfile,
@@ -600,13 +561,13 @@ export function OnboardingProvider({
 
       const referralCode = getReferralCode();
 
+      // Get OAuth3 access token for signup
+      const accessToken = await getAccessToken();
       logger.info(
-        'Identity token state during signup',
+        'OAuth3 token state during signup',
         {
-          present: Boolean(identityToken),
-          tokenPreview: identityToken
-            ? `${identityToken.slice(0, 12)}...`
-            : null,
+          present: Boolean(accessToken),
+          tokenPreview: accessToken ? `${accessToken.slice(0, 12)}...` : null,
         },
         'OnboardingProvider'
       );
@@ -617,7 +578,6 @@ export function OnboardingProvider({
         body: JSON.stringify({
           ...payload,
           referralCode: referralCode ?? undefined,
-          identityToken: identityToken ?? undefined,
         }),
       });
 
@@ -672,7 +632,7 @@ export function OnboardingProvider({
       setUser,
       setNeedsOnboarding,
       setNeedsOnchain,
-      identityToken,
+      getAccessToken,
       smartWalletAddress,
     ]
   );
@@ -751,7 +711,7 @@ export function OnboardingProvider({
           onLogout={logout}
           user={user}
           importedData={importedProfileData}
-          initialEmail={privyUser?.email?.address || null}
+          initialEmail={user?.email ?? null}
         />
       )}
     </>

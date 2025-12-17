@@ -17,6 +17,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { AirdropStatusWidget } from '@/components/airdrop';
 import { Avatar } from '@/components/shared/Avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
@@ -100,7 +101,7 @@ function MobileHeaderContent() {
       }
 
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
       if (!token) {
         // No token available yet, skip fetching protected data
         return;
@@ -163,7 +164,7 @@ function MobileHeaderContent() {
 
     const fetchUnreadCount = async () => {
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
       if (!token) {
         return;
@@ -277,7 +278,7 @@ function MobileHeaderContent() {
           </div>
 
           {/* Center: Logo */}
-          <div className="-translate-x-1/2 absolute left-1/2 transform">
+          <div className="absolute left-1/2 -translate-x-1/2 transform">
             <Link
               href="/feed"
               className="transition-transform duration-300 hover:scale-105"
@@ -374,6 +375,11 @@ function MobileHeaderContent() {
               </div>
             </div>
 
+            {/* Airdrop Status Widget */}
+            <div className="shrink-0 px-4 py-3">
+              <AirdropStatusWidget />
+            </div>
+
             {/* Menu Items - Scrollable */}
             <nav className="min-h-0 flex-1 overflow-y-auto">
               {menuItems.map((item) => {
@@ -395,7 +401,7 @@ function MobileHeaderContent() {
                     <div className="relative">
                       <Icon className="h-5 w-5" />
                       {hasNotifications && (
-                        <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
                       )}
                     </div>
                     <span className="text-base">{item.name}</span>

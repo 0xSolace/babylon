@@ -14,10 +14,15 @@
  * Use this endpoint to monitor the health of the invite system and debug issues.
  */
 
-import { getClientIp, logAdminView, requireAdmin, withErrorHandling } from '@babylon/api';
 import {
-  getGroupChatConfigSummary,
+  getClientIp,
+  logAdminView,
+  requireAdmin,
+  withErrorHandling,
+} from '@babylon/api';
+import {
   GroupInviteOrchestrator,
+  getGroupChatConfigSummary,
   validateGroupChatConfig,
 } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
@@ -43,9 +48,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       pendingInvites: stats.pendingInvites,
       invitesLast24h: stats.invitesLast24h,
       acceptsLast24h: stats.acceptsLast24h,
-      acceptRate: stats.invitesLast24h > 0
-        ? ((stats.acceptsLast24h / stats.invitesLast24h) * 100).toFixed(1) + '%'
-        : 'N/A',
+      acceptRate:
+        stats.invitesLast24h > 0
+          ? ((stats.acceptsLast24h / stats.invitesLast24h) * 100).toFixed(1) +
+            '%'
+          : 'N/A',
     },
     config: configSummary,
     configValid: configValidation.valid,
@@ -53,4 +60,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     timestamp: new Date().toISOString(),
   });
 });
-

@@ -5,51 +5,30 @@ Environment variables for Babylon.
 ## Required Variables
 
 ```env
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/babylon"
+# Jeju Decentralized Services
+CQL_BLOCK_PRODUCER_ENDPOINT="http://localhost:15151"
+JEJU_CACHE_SERVICE_URL="http://localhost:8080/cache"
+JEJU_STORAGE_SERVICE_URL="http://localhost:8080/storage"
+JEJU_COMPUTE_API_URL="http://localhost:8080/compute"
 
-# Privy Authentication
-NEXT_PUBLIC_PRIVY_APP_ID="your_privy_app_id"
-PRIVY_APP_SECRET="your_privy_app_secret"
+# Blockchain
+RPC_URL="http://localhost:8545"
+CHAIN_ID="31337"
 
-# AI Provider (at least one - fallback: groq → claude → openai)
-GROQ_API_KEY="gsk_..."
+# OAuth3 Authentication (Jeju's decentralized auth)
+OAUTH3_ISSUER_URL="http://localhost:8080/oauth3"
 ```
 
-## Privy Setup
+## OAuth3 Setup
 
-1. Sign up at [privy.io](https://privy.io)
-2. Create app, add `http://localhost:3000` to allowed domains
-3. Copy App ID and App Secret
+OAuth3 is Jeju's decentralized authentication system. It provides:
+- Wallet-based authentication
+- TEE-backed key management
+- ERC-4337 smart accounts
+
+Authentication is automatic when connecting via MetaMask or other EIP-1193 providers.
 
 ## Optional Variables
-
-### Redis (Production)
-
-```env
-UPSTASH_REDIS_REST_URL="https://your-redis.upstash.io"
-UPSTASH_REDIS_REST_TOKEN="your_token"
-```
-
-### Blockchain
-
-```env
-AGENT0_ENABLED="true"
-BASE_SEPOLIA_RPC_URL="https://sepolia.base.org"
-BABYLON_GAME_PRIVATE_KEY="0x..."
-```
-
-### Storage
-
-```env
-# AWS S3
-AWS_ACCESS_KEY_ID="..."
-AWS_SECRET_ACCESS_KEY="..."
-AWS_S3_BUCKET="babylon-uploads"
-
-# OR Vercel Blob
-BLOB_READ_WRITE_TOKEN="..."
-```
 
 ### Agent Configuration
 
@@ -60,18 +39,32 @@ BABYLON_MAX_TRADE_SIZE="100"
 BABYLON_MIN_CONFIDENCE="0.6"
 ```
 
-### Error Tracking
+### Jeju KMS (Key Management)
 
 ```env
-SENTRY_DSN="https://your-dsn@sentry.io/project-id"
+JEJU_KMS_URL="http://localhost:8080/kms"
 ```
 
-## AI Providers
+### Jeju Paymaster (Gas Sponsorship)
 
-Automatic fallback chain:
-1. **Groq** - Fast inference ([console.groq.com](https://console.groq.com))
-2. **Claude** - Best reasoning ([console.anthropic.com](https://console.anthropic.com))
-3. **OpenAI** - Reliable ([platform.openai.com](https://platform.openai.com))
+```env
+JEJU_PAYMASTER_URL="http://localhost:4337"
+JEJU_PAYMASTER_POLICY_ID="default"
+```
+
+## LLM Inference
+
+All LLM inference is routed through Jeju Compute Marketplace. Configure the compute endpoint:
+
+```env
+JEJU_COMPUTE_API_URL="http://localhost:8080/compute"
+JEJU_USER_ADDRESS="0x..."  # Your wallet address for billing
+```
+
+Available models through Jeju Compute:
+- `llama-3.1-8b-instant` - Fast, small model
+- `llama-3.1-70b-versatile` - Larger, more capable
+- Additional models available through marketplace
 
 ## Environments
 
@@ -79,33 +72,34 @@ Automatic fallback chain:
 ```env
 NODE_ENV="development"
 NEXT_PUBLIC_API_URL="http://localhost:3000"
+JEJU_NETWORK="localnet"
 ```
 
 ### Production
 ```env
 NODE_ENV="production"
 NEXT_PUBLIC_API_URL="https://babylon.market"
+JEJU_NETWORK="mainnet"
 ```
 
 ## Security
 
 - Never commit secrets (add `.env.local` to `.gitignore`)
-- Rotate keys regularly
-- Use separate keys for dev/production
+- Use Jeju KMS for production key management
+- All sensitive operations run in TEE
 
 ## Troubleshooting
 
-**Database Connection**
-```env
-DATABASE_URL="postgresql://user:pass@localhost:5432/babylon"
+**CQL Connection**
+```bash
+curl http://localhost:15151/health
 ```
 
-**Privy Auth Fails**
-- Check App ID starts with `clp`
-- Verify domains are whitelisted
+**Jeju Gateway Not Available**
+- Ensure Jeju devnet is running: `cd ../.. && bun run dev`
+- Check gateway health: `curl http://localhost:8080/health`
 
 ## Next Steps
 
 - [Run Locally](/getting-started/local-development)
-- [Deploy to Vercel](/deployment/vercel)
-
+- [Deploy](/deployment)

@@ -6,7 +6,7 @@
 
 import { and, db, desc, eq, gte, messages, ne, users } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
-import { callGroqDirect } from '../llm/direct-groq';
+import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -101,7 +101,7 @@ Keep it under 200 characters.
 Generate ONLY the response text, nothing else.`;
 
       // Use small model (llama-3.1-8b-instant) for fast DM responses
-      const responseContent = await callGroqDirect({
+      const responseContent = await callJejuDirect({
         prompt,
         system: config?.systemPrompt ?? undefined,
         modelSize: 'small', // Free tier: Frequent operation, use fast model

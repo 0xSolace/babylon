@@ -1,7 +1,7 @@
 'use client';
 
+import { useJejuAuth } from '@babylon/auth/client';
 import { CHAIN, cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared';
-import { useFundWallet, usePrivy } from '@privy-io/react-auth';
 import {
   AlertCircle,
   CheckCircle2,
@@ -83,8 +83,7 @@ export function AdminSendMoneyModal({
   recipientWalletAddress,
   onSuccess,
 }: AdminSendMoneyModalProps) {
-  const { getAccessToken } = usePrivy();
-  const { fundWallet } = useFundWallet();
+  const { getAccessToken } = useJejuAuth();
   const { sendSmartWalletTransaction, smartWalletAddress, smartWalletReady } =
     useSmartWallet();
   const { balance, refreshBalance } = useSmartWalletBalance();
@@ -114,40 +113,16 @@ export function AdminSendMoneyModal({
           ? requiredAmountWei - (currentBalance ?? 0n)
           : requiredAmountWei;
 
-      await fundWallet({
-        address: smartWalletAddress as Address,
-        options: {
-          chain: CHAIN,
-          amount: formatEther(deficit),
-          asset: 'native-currency',
-        },
-      });
-
-      // Poll for balance updates
-      const maxAttempts = 30;
-      const pollInterval = 1000;
-
-      toast.info('Waiting for deposit to settle...');
-
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const updatedBalance = await refreshBalance();
-
-        if (updatedBalance && updatedBalance >= requiredAmountWei) {
-          toast.success('Funds received!');
-          return true;
-        }
-
-        if (attempt < maxAttempts - 1) {
-          await new Promise((resolve) => setTimeout(resolve, pollInterval));
-        }
-      }
-
-      toast.error('Deposit is taking longer than expected');
+      // Show user they need to fund their wallet manually
+      const deficitETH = formatEther(deficit);
+      toast.error(
+        `Insufficient balance. Please add at least ${deficitETH} ETH to your wallet.`
+      );
       throw new Error(
-        'Funds are still settling. Please try again in a moment.'
+        `Insufficient funds. Please deposit at least ${deficitETH} ETH to continue.`
       );
     },
-    [balance, fundWallet, refreshBalance, smartWalletAddress]
+    [balance, refreshBalance, smartWalletAddress]
   );
 
   // Reset state when modal closes
@@ -429,7 +404,7 @@ export function AdminSendMoneyModal({
                   Amount (USD)
                 </label>
                 <div className="relative">
-                  <DollarSign className="-translate-y-1/2 absolute top-1/2 left-3 h-5 w-5 text-muted-foreground" />
+                  <DollarSign className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="number"
                     min="0.01"

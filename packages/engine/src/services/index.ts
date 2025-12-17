@@ -21,12 +21,12 @@ export {
   type InviteChance,
   type SweepDecision,
 } from './group-chat-service';
-// Group Invite Orchestrator (unified invite system)
+// Group Invite Orchestrator (decentralized invite system)
 export {
   GroupInviteOrchestrator,
+  type InviteProcessingResult,
   type InviteTriggerType,
   type QueueInviteParams,
-  type InviteProcessingResult,
 } from './group-invite-orchestrator';
 export * from './InteractionTracker';
 export * from './initial-investment-service';
@@ -101,6 +101,8 @@ export {
 } from './game-bootstrap-service';
 export * from './market-context-service';
 export * from './market-impact-service';
+export * from './npc-onchain-trading-service';
+export * from './npc-risk-management-service';
 export * from './npc-wallet-adapter';
 export * from './rss-feed-service';
 export * from './static-data-registry';

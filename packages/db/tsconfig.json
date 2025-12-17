@@ -4,6 +4,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "composite": true,
     "baseUrl": ".",
     "paths": {
       "@babylon/shared": ["../shared/src/index.ts"],

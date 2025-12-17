@@ -112,7 +112,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         return 0;
       })
     );
-    const memberCountMap = new Map(groupIds.map((gid, i) => [gid, memberCounts[i] ?? 0]));
+    const memberCountMap = new Map(
+      groupIds.map((gid, i) => [gid, memberCounts[i] ?? 0])
+    );
 
     return pendingInvites.map((invite) => {
       const userGroup = userGroupMap.get(invite.groupId);

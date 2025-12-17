@@ -22,7 +22,7 @@
  *     summary: Get current user profile
  *     description: Returns the authenticated user complete profile including onboarding status, social connections, and reputation.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: User profile
@@ -40,192 +40,31 @@
  *                 user:
  *                   type: object
  *                   nullable: true
- *                   properties:
- *                     id:
- *                       type: string
- *                     username:
- *                       type: string
- *                     displayName:
- *                       type: string
- *                     bio:
- *                       type: string
- *                     profileImageUrl:
- *                       type: string
- *                     walletAddress:
- *                       type: string
- *                     reputationPoints:
- *                       type: number
- *                     isAdmin:
- *                       type: boolean
- *                     stats:
- *                       type: object
  *       401:
  *         description: Unauthorized
- *
- * **Profile Data Includes:**
- * - **Identity:** username, display name, bio, avatar, cover image
- * - **Onboarding Status:** profile completion, on-chain registration
- * - **Social Links:** Farcaster, Twitter connections and visibility settings
- * - **Blockchain:** wallet address, NFT token ID, on-chain status
- * - **Reputation:** reputation points, referral code, referral source
- * - **Stats:** cached profile statistics (posts, followers, following)
- * - **Permissions:** admin status, actor/agent flag
- *
- * **Onboarding States:**
- * - `needsOnboarding: true` - User exists in DB but hasn't completed profile setup
- * - `needsOnchain: true` - Profile complete but not registered on-chain
- * - Both false - Fully onboarded user
- *
- * **Profile Completeness:**
- * A profile is considered complete when user has:
- * - Set a username
- * - Added a bio
- * - Uploaded a profile image
- *
- * **Caching:**
- * Profile stats (posts, followers, etc.) are cached for performance.
- * Cache is invalidated on relevant user actions.
- *
- * @returns {object} User profile response
- * @property {boolean} authenticated - Always true (auth required)
- * @property {boolean} needsOnboarding - Whether user needs profile setup
- * @property {boolean} needsOnchain - Whether user needs on-chain registration
- * @property {object} user - User profile object (minimal record until profile completed)
- * @property {object} user.stats - Cached profile statistics
- *
- * **User Object Fields:**
- * @property {string} user.id - User ID
- * @property {string} user.privyId - Privy authentication ID
- * @property {string} user.username - Unique username
- * @property {string} user.displayName - Display name
- * @property {string} user.bio - User biography
- * @property {string} user.profileImageUrl - Profile image URL
- * @property {string} user.coverImageUrl - Cover image URL
- * @property {string} user.walletAddress - Blockchain wallet address
- * @property {boolean} user.onChainRegistered - On-chain registration status
- * @property {string} user.nftTokenId - Associated NFT token ID
- * @property {string} user.referralCode - User's referral code
- * @property {string} user.referredBy - Referrer's code (if referred)
- * @property {number} user.reputationPoints - Reputation score
- * @property {boolean} user.hasFarcaster - Farcaster connected
- * @property {boolean} user.hasTwitter - Twitter connected
- * @property {boolean} user.isAdmin - Admin privileges
- * @property {boolean} user.isActor - Agent/actor flag
- *
- * @throws {401} Unauthorized - authentication required
- * @throws {500} Internal server error
- *
- * @example
- * ```typescript
- * // Get current user profile
- * const response = await fetch('/api/users/me', {
- *   headers: { 'Authorization': `Bearer ${token}` }
- * });
- * const { user, needsOnboarding, needsOnchain } = await response.json();
- *
- * if (needsOnboarding) {
- *   // Redirect to onboarding flow
- *   router.push('/onboarding');
- * } else if (needsOnchain) {
- *   // Prompt for on-chain registration
- *   showOnchainModal();
- * } else {
- *   // User fully onboarded
- *   console.log(`Welcome, ${user.displayName}!`);
- * }
- * ```
- *
- * @see {@link /lib/cached-database-service} Profile stats caching
- * @see {@link /lib/api/auth-middleware} Authentication
- * @see {@link /src/app/onboarding/page.tsx} Onboarding flow
- * @see {@link /src/contexts/AuthContext.tsx} Auth context consumer
  */
 
 import {
   authenticate,
   cachedDb,
-  getPrivyClient,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
 import { db, eq, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
-import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
-
-type PrivyWalletLite = {
-  id?: string | null;
-  address?: string;
-  chainType?: string;
-  walletClientType?: string | null;
-};
-
-type PrivyUserWithSmartWallet = PrivyUser & {
-  smartWallet?: { address?: string | null };
-  wallet?: PrivyWalletLite;
-  linkedAccounts?: Array<
-    PrivyWalletLite & {
-      type?: string;
-    }
-  >;
-};
-
-function pickEmbeddedEvmWallet(
-  user: PrivyUserWithSmartWallet
-): PrivyWalletLite | null {
-  const candidates: PrivyWalletLite[] = [];
-  if (user.wallet) candidates.push(user.wallet);
-  if (Array.isArray(user.linkedAccounts)) {
-    for (const acc of user.linkedAccounts) {
-      if (acc?.type === 'wallet') candidates.push(acc);
-    }
-  }
-  return (
-    candidates.find(
-      (w) =>
-        (w.walletClientType === 'privy' || Boolean(w.id)) &&
-        (!w.chainType || w.chainType === 'ethereum') &&
-        typeof w.address === 'string'
-    ) ?? null
-  );
-}
-
-async function ensureSmartWalletAddress(privyId: string): Promise<{
-  smartWalletAddress: string | null;
-  embeddedWalletAddress: string | null;
-}> {
-  const privyClient = getPrivyClient();
-  const user = (await privyClient.getUser(privyId)) as PrivyUserWithSmartWallet;
-  let smartWalletAddress = user.smartWallet?.address?.toLowerCase() ?? null;
-  let embeddedWallet = pickEmbeddedEvmWallet(user);
-
-  if (!smartWalletAddress) {
-    const updated = (await privyClient.createWallets({
-      userId: privyId,
-      createEthereumSmartWallet: true,
-      createEthereumWallet: !embeddedWallet,
-    })) as PrivyUserWithSmartWallet;
-
-    smartWalletAddress = updated.smartWallet?.address?.toLowerCase() ?? null;
-    embeddedWallet = embeddedWallet ?? pickEmbeddedEvmWallet(updated);
-  }
-
-  return {
-    smartWalletAddress,
-    embeddedWalletAddress: embeddedWallet?.address?.toLowerCase() ?? null,
-  };
-}
 
 const userSelectFields = {
   id: users.id,
   privyId: users.privyId,
+  oauth3Id: users.oauth3Id,
   username: users.username,
   displayName: users.displayName,
   bio: users.bio,
   profileImageUrl: users.profileImageUrl,
   coverImageUrl: users.coverImageUrl,
   walletAddress: users.walletAddress,
-  email: users.email, // For displaying pending referrals
+  email: users.email,
   profileComplete: users.profileComplete,
   hasUsername: users.hasUsername,
   hasBio: users.hasBio,
@@ -256,8 +95,10 @@ const userSelectFields = {
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
-  const privyId = authUser.privyId ?? authUser.userId;
+  // oauth3Id is the primary identifier
+  const oauth3Id = authUser.oauth3Id ?? authUser.userId;
   const canonicalUserId = authUser.dbUserId ?? authUser.userId;
+  const walletAddress = authUser.walletAddress?.toLowerCase() ?? null;
 
   // Extract referralCode from query params (passed from frontend)
   const { searchParams } = new URL(request.url);
@@ -265,66 +106,27 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   logger.info(
     'Fetching user profile',
-    { privyId, dbUserId: authUser.dbUserId, hasReferralCode: !!referralCode },
+    { oauth3Id, dbUserId: authUser.dbUserId, hasReferralCode: !!referralCode },
     'GET /api/users/me'
   );
 
+  // Try to find user by oauth3Id first, then by privyId for legacy users
   let [dbUser] = await db
     .select(userSelectFields)
     .from(users)
-    .where(eq(users.privyId, privyId))
+    .where(eq(users.oauth3Id, oauth3Id))
     .limit(1);
+
+  if (!dbUser) {
+    [dbUser] = await db
+      .select(userSelectFields)
+      .from(users)
+      .where(eq(users.privyId, oauth3Id))
+      .limit(1);
+  }
 
   // Create minimal user record on first authentication
   if (!dbUser) {
-    // Fetch user data from Privy to get email and social accounts
-    let email: string | null = null;
-    let farcasterUsername: string | null = null;
-    let farcasterFid: string | null = null;
-    let twitterUsername: string | null = null;
-    let twitterId: string | null = null;
-    let smartWalletAddress: string | null = null;
-
-    const privyClient = getPrivyClient();
-    const privyUser = await privyClient.getUser(privyId);
-
-    // Extract email from linked accounts
-    if (privyUser.email?.address) {
-      email = privyUser.email.address;
-    }
-
-    // Extract Farcaster info
-    if (privyUser.farcaster) {
-      farcasterUsername = privyUser.farcaster.username ?? null;
-      farcasterFid = privyUser.farcaster.fid
-        ? String(privyUser.farcaster.fid)
-        : null;
-    }
-
-    // Extract Twitter info
-    if (privyUser.twitter) {
-      twitterUsername = privyUser.twitter.username ?? null;
-      twitterId = privyUser.twitter.subject ?? null;
-    }
-
-    // Prefer Privy smart wallet over linked/embedded wallet for DB storage
-    smartWalletAddress = privyUser.smartWallet?.address?.toLowerCase() ?? null;
-    if (smartWalletAddress) {
-      authUser.walletAddress = smartWalletAddress;
-    }
-
-    logger.info(
-      'Fetched Privy user data for new user',
-      {
-        privyId,
-        hasEmail: !!email,
-        hasFarcaster: !!farcasterUsername,
-        hasTwitter: !!twitterUsername,
-        hasSmartWallet: !!smartWalletAddress,
-      },
-      'GET /api/users/me'
-    );
-
     // Resolve referrer if referralCode provided
     let resolvedReferrerId: string | null = null;
     if (referralCode) {
@@ -396,39 +198,22 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     logger.info(
       'Creating minimal user record on first authentication',
       {
-        privyId,
+        oauth3Id,
         userId: canonicalUserId,
-        walletAddress: authUser.walletAddress,
+        walletAddress,
         referredBy: resolvedReferrerId,
-        email,
-        farcasterUsername,
-        twitterUsername,
       },
       'GET /api/users/me'
     );
-
-    const { smartWalletAddress: ensuredSmart, embeddedWalletAddress } =
-      await ensureSmartWalletAddress(privyId);
-    const dbWalletAddress =
-      ensuredSmart ??
-      embeddedWalletAddress ??
-      authUser.walletAddress?.toLowerCase() ??
-      null;
 
     const [newUser] = await db
       .insert(users)
       .values({
         id: canonicalUserId,
-        privyId,
-        walletAddress: dbWalletAddress,
+        oauth3Id,
+        privyId: oauth3Id, // Keep for legacy compatibility
+        walletAddress,
         referredBy: resolvedReferrerId,
-        email,
-        farcasterUsername,
-        farcasterFid,
-        twitterUsername,
-        twitterId,
-        hasFarcaster: !!farcasterUsername,
-        hasTwitter: !!twitterUsername,
         profileComplete: false,
         hasUsername: false,
         hasBio: false,
@@ -446,15 +231,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       'Minimal user record created',
       {
         userId: dbUser.id,
-        privyId,
+        oauth3Id,
         referredBy: dbUser.referredBy,
-        email: dbUser.email,
       },
       'GET /api/users/me'
     );
   } else if (referralCode && dbUser && !dbUser.profileComplete) {
     // User exists BUT profile not complete - update referredBy with latest referral code (latest wins!)
-    // ⚠️ IMPORTANT: Only allow referral changes BEFORE profile completion to prevent gaming
     const normalizedCode = referralCode.trim();
 
     // First, try to find referrer by username (legacy system)
@@ -537,7 +320,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const responseUser = {
     id: dbUser.id,
-    privyId: dbUser.privyId,
+    privyId: dbUser.privyId, // Keep for legacy compatibility
+    oauth3Id: dbUser.oauth3Id,
     username: dbUser.username,
     displayName: dbUser.displayName,
     bio: dbUser.bio,

@@ -1,5 +1,5 @@
+import { useJejuAuth } from '@babylon/auth/client';
 import { logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
@@ -506,7 +506,7 @@ export function useSSE(options: SSEHookOptions = {}): SSEHookReturn {
     maxReconnectAttempts = 5,
   } = options;
 
-  const { getAccessToken, authenticated } = usePrivy();
+  const { getAccessToken, authenticated } = useJejuAuth();
   // Always initialize to false to avoid SSR/hydration mismatches.
   // The connection listener will update this once the connection is established.
   const [isConnected, setIsConnected] = useState(false);

@@ -34,11 +34,16 @@ export interface TrajectoryStep {
 }
 
 export interface EnvironmentState {
-  agentBalance: number;
-  agentPnL: number;
-  openPositions: number;
+  agentBalance?: number;
+  accountBalance?: number;
+  agentPnL?: number;
+  openPositions?: number;
   activeMarkets?: number;
-  [key: string]: number | string | boolean | null | undefined;
+  positions?: JsonValue[];
+  marketPrices?: Record<string, JsonValue>;
+  news?: JsonValue[];
+  socialFeed?: JsonValue[];
+  [key: string]: JsonValue | undefined;
 }
 
 export interface ProviderAccess {
@@ -68,6 +73,7 @@ export interface Action {
   result?: Record<string, JsonValue>;
   error?: string;
   reasoning?: string;
+  timestamp?: number;
   // Correctness tracking (for RL training)
   correctness?: {
     // Prediction market correctness

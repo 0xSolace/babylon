@@ -95,7 +95,7 @@ export function CreatePostModal({
     setIsSubmitting(true);
     // Get auth token from window (set by useAuth hook)
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
     if (!token) {
       toast.error('Please wait for authentication to complete.');

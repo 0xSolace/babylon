@@ -61,7 +61,9 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
   const [error, setError] = useState<string | null>(null);
 
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
 
   // Fetch trades from API
   const fetchTrades = useCallback(

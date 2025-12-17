@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/shared/Skeleton';
  * Get authentication token from window if available.
  *
  * Note: Admin API routes use cookie-based authentication via requireAdmin middleware.
- * The privy-token cookie is automatically sent with requests, so explicit Authorization
+ * The oauth3-token cookie is automatically sent with requests, so explicit Authorization
  * header is optional. However, we can include it if available for consistency with
  * other admin components.
  *
@@ -29,7 +29,9 @@ import { Skeleton } from '@/components/shared/Skeleton';
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
   // Try to get token from window if available (some admin components use this)
-  return (window as { __privyAccessToken?: string }).__privyAccessToken || null;
+  return (
+    (window as { __oauth3AccessToken?: string }).__oauth3AccessToken || null
+  );
 }
 
 /**

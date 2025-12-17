@@ -2,94 +2,51 @@
  * Agent Wallet Service
  *
  * Handles agent wallet creation and on-chain registration with zero user interaction.
- * Creates Privy embedded wallets, signs transactions server-side, handles gas fees
- * automatically, and registers agents on ERC-8004 identity registry.
+ * Uses Jeju KMS for key management (MPC/TEE-backed) and OAuth3 for identity.
+ * NO FALLBACKS to Privy or centralized key management.
  *
  * @packageDocumentation
  */
 
 import { agentLogs, db, eq, type JsonValue, users } from '@babylon/db';
-import { PrivyClient } from '@privy-io/server-auth';
-import { ethers } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
+import { getAddress, keccak256 } from 'viem';
 import { getAgent0Client } from '../agent0/Agent0Client';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 
-/**
- * Privy wallet structure
- * @internal
- */
-interface PrivyWallet {
-  address: string;
-  id: string;
+// ============================================================================
+// KMS Client Types
+// ============================================================================
+
+import type { KMSClient } from '@babylon/api';
+
+let kmsClient: KMSClient | null = null;
+
+async function getKMS(): Promise<KMSClient> {
+  if (kmsClient?.isInitialized()) return kmsClient;
+
+  const { getKMSClient, initializeKMS } = await import('@babylon/api');
+  const kms = getKMSClient();
+  if (!kms.isInitialized()) {
+    await initializeKMS();
+  }
+  kmsClient = kms;
+  return kmsClient;
 }
 
-/**
- * Privy user structure
- * @internal
- */
-interface PrivyUser {
-  id: string;
-  wallet?: PrivyWallet;
-}
-
-/**
- * Privy create user parameters
- * @internal
- */
-interface PrivyCreateUserParams {
-  create_embedded_wallet: boolean;
-  linked_accounts: Array<Record<string, unknown>>;
-}
-
-/**
- * Privy sign transaction parameters
- * @internal
- */
-interface PrivySignTransactionParams {
-  wallet_id: string;
-  transaction: {
-    to: string;
-    value: string;
-    data: string;
-  };
-}
-
-/**
- * Privy signed transaction response
- * @internal
- */
-interface PrivySignedTransaction {
-  signed_transaction: string;
-}
-
-/**
- * Extended Privy client with additional methods
- * @internal
- */
-interface ExtendedPrivyClient extends PrivyClient {
-  createUser(params: PrivyCreateUserParams): Promise<PrivyUser>;
-  signTransaction(
-    params: PrivySignTransactionParams
-  ): Promise<PrivySignedTransaction>;
-}
-
-// Initialize Privy server client
-const privy = new PrivyClient(
-  process.env.NEXT_PUBLIC_PRIVY_APP_ID!,
-  process.env.PRIVY_APP_SECRET!
-) as ExtendedPrivyClient;
+// ============================================================================
+// Agent Wallet Service
+// ============================================================================
 
 export class AgentWalletService {
   /**
-   * Create embedded wallet for agent via Privy (server-side, no user interaction)
-   * Falls back to dev wallet in development if Privy is not configured.
+   * Create embedded wallet for agent via Jeju KMS (decentralized key management)
+   * Keys are managed via MPC/TEE - no single party has full key access.
    */
   async createAgentEmbeddedWallet(agentUserId: string): Promise<{
     walletAddress: string;
-    privyUserId: string;
-    privyWalletId: string;
+    kmsKeyId: string;
   }> {
     const [agent] = await db
       .select()
@@ -114,85 +71,33 @@ export class AgentWalletService {
 
       return {
         walletAddress: agent.walletAddress,
-        privyUserId: agent.privyId || `dev_${agentUserId}`,
-        privyWalletId: `dev_wallet_${agentUserId}`,
+        kmsKeyId: agent.kmsKeyId ?? `agent_${agentUserId}`,
       };
     }
 
-    // Check if Privy is configured and if createUser method exists
-    const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-    const privyAppSecret = process.env.PRIVY_APP_SECRET;
-    const hasPrivyConfig = !!(privyAppId && privyAppSecret);
-
-    // Check if createUser method exists (it may not in newer Privy SDK versions)
-    // PrivyClient may have createUser method that's not in the type definition
-    interface PrivyClientWithCreateUser {
-      createUser?: (params: PrivyCreateUserParams) => Promise<PrivyUser>;
-    }
-    const privyWithCreateUser = privy as PrivyClientWithCreateUser;
-    const hasCreateUserMethod =
-      typeof privyWithCreateUser.createUser === 'function';
-
-    // If Privy is not available, skip directly to dev wallet (no error)
-    if (!hasPrivyConfig || !hasCreateUserMethod) {
-      logger.info(
-        'Privy not available, using development wallet',
-        {
-          agentUserId,
-          hasPrivyConfig,
-          hasCreateUserMethod,
-        },
-        'AgentWalletService'
-      );
-
-      // Create dev wallet directly
-      const devWallet = ethers.Wallet.createRandom();
-      const walletAddress = devWallet.address;
-      const privyUserId = `dev_${agentUserId}`;
-      const privyWalletId = `dev_wallet_${agentUserId}`;
-
-      await db
-        .update(users)
-        .set({
-          walletAddress,
-          privyId: privyUserId,
-        })
-        .where(eq(users.id, agentUserId));
-
-      return { walletAddress, privyUserId, privyWalletId };
-    }
-
-    // Try Privy wallet creation
     logger.info(
-      `Creating Privy embedded wallet for agent ${agentUserId}`,
+      `Creating KMS-backed wallet for agent ${agentUserId}`,
       undefined,
       'AgentWalletService'
     );
 
-    // Step 1: Create Privy user for the agent (server-side)
-    // Privy allows server-side user creation without user interaction
-    if (!privyWithCreateUser.createUser) {
-      throw new Error('Privy createUser method not available');
-    }
-    const privyUser = await privyWithCreateUser.createUser({
-      create_embedded_wallet: true,
-      linked_accounts: [],
-    });
+    // Step 1: Generate key via Jeju KMS (MPC/TEE-backed)
+    const kms = await getKMS();
+    const keyName = `agent_${agentUserId}_${Date.now()}`;
+    const { keyId: kmsKeyId, publicKey } = await kms.generateKey(keyName);
 
-    if (!privyUser.wallet) {
-      throw new Error('Failed to create embedded wallet');
-    }
-
-    const walletAddress = privyUser.wallet.address;
-    const privyUserId = privyUser.id;
-    const privyWalletId = privyUser.wallet.id;
+    // Derive wallet address from public key (Ethereum: keccak256 of uncompressed pubkey, take last 20 bytes)
+    const addressHash = keccak256(publicKey);
+    const walletAddress = getAddress(`0x${addressHash.slice(-40)}`);
 
     // Step 2: Update agent user with wallet info
     await db
       .update(users)
       .set({
         walletAddress,
-        privyId: privyUserId,
+        kmsKeyId,
+        // Legacy field for compatibility
+        privyId: `kms:${kmsKeyId}`,
       })
       .where(eq(users.id, agentUserId));
 
@@ -202,21 +107,21 @@ export class AgentWalletService {
       agentUserId,
       type: 'system',
       level: 'info',
-      message: `Privy embedded wallet created: ${walletAddress}`,
+      message: `KMS wallet created: ${walletAddress}`,
       metadata: {
-        privyUserId,
-        privyWalletId,
+        kmsKeyId,
         walletAddress,
+        provider: 'jeju-kms',
       },
     });
 
     logger.info(
-      `Privy wallet created for agent ${agentUserId}: ${walletAddress}`,
+      `KMS wallet created for agent ${agentUserId}: ${walletAddress}`,
       undefined,
       'AgentWalletService'
     );
 
-    return { walletAddress, privyUserId, privyWalletId };
+    return { walletAddress, kmsKeyId };
   }
 
   /**
@@ -279,14 +184,14 @@ export class AgentWalletService {
     // Step 2: Register via Agent0Client (handles signing and gas server-side)
     const agent0Client = getAgent0Client();
 
-    // Use individual agent's A2A endpoint, not the game's endpoint
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5007';
+    // Use individual agent's A2A endpoint
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5007';
     const individualAgentA2AEndpoint = `${baseUrl}/api/agents/${agentUserId}/a2a`;
 
     const registration = await agent0Client.registerAgent({
-      name: agent.displayName || agent.username || 'Agent',
-      description: agent.bio || 'Autonomous AI agent in Babylon',
-      imageUrl: agent.profileImageUrl || undefined,
+      name: agent.displayName ?? agent.username ?? 'Agent',
+      description: agent.bio ?? 'Autonomous AI agent in Babylon',
+      imageUrl: agent.profileImageUrl ?? undefined,
       walletAddress: agent.walletAddress,
       a2aEndpoint: individualAgentA2AEndpoint,
       capabilities,
@@ -332,7 +237,6 @@ export class AgentWalletService {
 
   /**
    * Complete setup: Create wallet + register on-chain (fully automated)
-   * Wallet creation is required, on-chain registration is optional.
    */
   async setupAgentIdentity(agentUserId: string): Promise<{
     walletAddress: string;
@@ -345,10 +249,10 @@ export class AgentWalletService {
       'AgentWalletService'
     );
 
-    // Step 1: Create Privy embedded wallet (server-side, no user interaction)
+    // Step 1: Create KMS-backed wallet
     const wallet = await this.createAgentEmbeddedWallet(agentUserId);
 
-    // Step 2: Register on-chain (server signs and pays gas)
+    // Step 2: Register on-chain
     const registration = await this.registerAgentOnChain(agentUserId);
 
     return {
@@ -359,7 +263,7 @@ export class AgentWalletService {
   }
 
   /**
-   * Sign transaction for agent (server-side, no user interaction)
+   * Sign transaction for agent (via Jeju KMS)
    */
   async signTransaction(
     agentUserId: string,
@@ -373,7 +277,8 @@ export class AgentWalletService {
       .select({
         id: users.id,
         isAgent: users.isAgent,
-        privyId: users.privyId,
+        kmsKeyId: users.kmsKeyId,
+        oauth3Id: users.oauth3Id,
       })
       .from(users)
       .where(eq(users.id, agentUserId))
@@ -383,15 +288,27 @@ export class AgentWalletService {
       throw new Error('Agent not found');
     }
 
-    if (!agent.privyId) {
-      throw new Error('Agent does not have Privy wallet');
+    // Get KMS key ID from kmsKeyId field or oauth3Id (for backwards compatibility)
+    let keyId = agent.kmsKeyId;
+    if (!keyId && agent.oauth3Id?.startsWith('kms:')) {
+      keyId = agent.oauth3Id.replace('kms:', '');
     }
 
-    // Use Privy server client to sign transaction (no user interaction needed)
-    // Privy handles the private key management and signing server-side
-    const signedTx = await privy.signTransaction({
-      wallet_id: agent.privyId,
-      transaction: transactionData,
+    if (!keyId) {
+      throw new Error('Agent does not have KMS wallet');
+    }
+
+    // Sign via Jeju KMS
+    const kms = await getKMS();
+    const messageToSign = JSON.stringify(transactionData);
+    // Convert string to hex bytes
+    const messageBytes = new TextEncoder().encode(messageToSign);
+    const messageHex = `0x${Array.from(messageBytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')}` as `0x${string}`;
+    const result = await kms.sign({
+      message: messageHex,
+      keyId,
     });
 
     logger.info(
@@ -400,12 +317,11 @@ export class AgentWalletService {
       'AgentWalletService'
     );
 
-    return signedTx.signed_transaction;
+    return result.signature;
   }
 
   /**
    * Verify agent has valid on-chain identity
-   * Returns false on failure instead of throwing.
    */
   async verifyOnChainIdentity(agentUserId: string): Promise<boolean> {
     const [agent] = await db

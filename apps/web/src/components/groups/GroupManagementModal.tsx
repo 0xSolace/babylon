@@ -1,7 +1,7 @@
 'use client';
 
+import { useJejuAuth } from '@babylon/auth/client';
 import { cn } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import {
   Crown,
   Loader2,
@@ -100,7 +100,7 @@ export function GroupManagementModal({
   groupId,
   onGroupUpdated,
 }: GroupManagementModalProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useJejuAuth();
   const { user } = useAuthStore();
   const [groupDetails, setGroupDetails] = useState<GroupDetails | null>(null);
   const [loading, setLoading] = useState(false);
@@ -512,7 +512,7 @@ export function GroupManagementModal({
                   {showAddMember && groupDetails.isAdmin && (
                     <div className="space-y-2 rounded-lg border border-border bg-sidebar p-3">
                       <div className="relative">
-                        <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
+                        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <input
                           type="text"
                           placeholder="Search users..."
@@ -521,7 +521,7 @@ export function GroupManagementModal({
                           className="w-full rounded-lg border border-border bg-background py-2.5 pr-10 pl-9 transition-colors focus:border-primary focus:outline-none"
                         />
                         {searching && (
-                          <Loader2 className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 animate-spin text-primary" />
+                          <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />
                         )}
                       </div>
 

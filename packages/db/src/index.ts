@@ -1,42 +1,57 @@
 /**
- * Drizzle ORM Database Client
+ * Babylon Database Layer
  *
- * @description Complete database abstraction layer using Drizzle ORM.
- * Pure TypeScript solution that works on all platforms including Apple Silicon.
+ * Provides the database abstraction layer for Babylon.
  *
- * Features:
- * - Connection pooling optimized for serverless
- * - Automatic retry with exponential backoff
- * - Row Level Security (RLS) context support
- * - Query monitoring and performance tracking
- * - Lazy initialization for Edge Runtime compatibility
- * - Familiar ORM-style API for findUnique, findMany, create, update, delete
+ * MIGRATION STATUS:
+ * - Primary: CQL (CovenantSQL) for new code
+ * - Legacy: Drizzle ORM (PostgreSQL) for transactions and existing code
+ *
+ * The Drizzle-based transaction handling is maintained for compatibility
+ * with existing services (fee-service, wallet-service, etc.) that rely on
+ * raw Drizzle transaction methods.
  */
 
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import {
-  createDrizzleClient,
-  type DrizzleClient,
-  type SQLValue,
-} from './client';
-import { logger } from './logger';
+import { createDrizzleClient, type DrizzleClient } from './client';
 import * as schema from './schema';
 
-// Re-export everything from schema
+// ============================================================================
+// CQL Client (Decentralized Database)
+// ============================================================================
+
+export {
+  type CQLClient,
+  createCQLClient,
+  getCQLClient,
+  resetCQLClient,
+} from './cql-client';
+
+export {
+  CQLTableRepository,
+  type DecentralizedDB,
+  getDB,
+  initializeDB,
+  resetDB,
+} from './cql-repository';
+
+// Import CQL db for runtime
+import { db as cqlDatabase } from './cql-client';
+export { cqlDatabase as cqlDb };
+
+// ============================================================================
+// Re-exports
+// ============================================================================
+
 export * from './schema';
 export { schema };
 
-// Re-export client types
 export type { DrizzleClient, JsonValue, SQLValue } from './client';
 export { TableRepository } from './client';
-/**
- * Re-export unique relation types from model-types.
- *
- * Base types (User, Actor, etc.) are already exported from schema.
- */
+
 export type {
   ActorRef,
   ActorStateRow,
@@ -55,8 +70,9 @@ export type {
   UserWithAgentRelations,
   UserWithMetrics,
 } from './model-types';
-// Re-export types
+export type { DatabaseErrorType } from './types';
 export * from './types';
+export { isUniqueConstraintError, toDatabaseErrorType } from './types';
 
 // ============================================================================
 // Types
@@ -69,8 +85,6 @@ export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 // Connection Management
 // ============================================================================
 
-// Global state for database connections (serverless-safe)
-// Using a type assertion here is safe because we're extending globalThis
 const globalForDb = globalThis as typeof globalThis & {
   postgresClient: ReturnType<typeof postgres> | undefined;
   drizzleDb: Database | undefined;
@@ -88,6 +102,9 @@ function isTestEnvironment(): boolean {
 }
 
 function getConnectionUrl(): string {
+  // Support both PostgreSQL and CQL endpoints
+  // DATABASE_URL for PostgreSQL (legacy, for transactions)
+  // CQL_BLOCK_PRODUCER_ENDPOINT for CQL (new, for decentralized ops)
   return process.env.DATABASE_URL || 'postgresql://localhost:5432/babylon';
 }
 
@@ -95,15 +112,9 @@ function createPostgresClient(): ReturnType<typeof postgres> {
   const url = getConnectionUrl();
   const isTest = isTestEnvironment();
   const isProd = process.env.NODE_ENV === 'production';
-
-  // Determine if this is a local database connection
   const isLocalhost = url.includes('localhost') || url.includes('127.0.0.1');
-
-  // Check if SSL is already specified in the URL (sslmode=require or ssl=true)
   const hasExplicitSSL =
     url.includes('sslmode=require') || url.includes('ssl=true');
-
-  // Check for cloud database providers that require SSL (Neon, Supabase, etc.)
   const isCloudProvider =
     url.includes('neon.tech') ||
     url.includes('supabase.co') ||
@@ -112,23 +123,10 @@ function createPostgresClient(): ReturnType<typeof postgres> {
     url.includes('.postgres.database.azure.com') ||
     url.includes('.rds.amazonaws.com');
 
-  // SSL is required for:
-  // - URL explicitly specifies sslmode=require
-  // - Production with non-localhost connections
-  // - Any cloud database provider (even in development)
   const sslMode: 'require' | false =
     hasExplicitSSL || (!isLocalhost && (isProd || isCloudProvider))
       ? 'require'
       : false;
-
-  logger.debug('[Drizzle] Creating postgres client', {
-    isProd,
-    isLocalhost,
-    isCloudProvider,
-    hasExplicitSSL,
-    sslMode,
-    urlHost: url.split('@')[1]?.split('/')[0] || 'unknown',
-  });
 
   return postgres(url, {
     max: isProd ? 50 : isTest ? 5 : 10,
@@ -155,7 +153,6 @@ function getPostgresClient(): ReturnType<typeof postgres> | null {
     }
 
     globalForDb.postgresClient = createPostgresClient();
-    logger.info('[Drizzle] Database connection created');
   }
 
   return globalForDb.postgresClient;
@@ -187,143 +184,12 @@ function getDbClient(): DrizzleClient | null {
 }
 
 // ============================================================================
-// Retry Logic
+// Database Export
 // ============================================================================
 
-interface RetryConfig {
-  maxRetries: number;
-  initialDelayMs: number;
-  maxDelayMs: number;
-  jitter: boolean;
-}
-
-const defaultRetryConfig: RetryConfig = isTestEnvironment()
-  ? { maxRetries: 2, initialDelayMs: 50, maxDelayMs: 500, jitter: false }
-  : { maxRetries: 5, initialDelayMs: 100, maxDelayMs: 5000, jitter: true };
-
-async function withRetryInternal<T>(
-  operation: () => Promise<T>,
-  config: RetryConfig = defaultRetryConfig
-): Promise<T> {
-  let lastError: Error | undefined;
-  let delay = config.initialDelayMs;
-
-  for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-
-      const isRetryable =
-        lastError.message.includes('connection') ||
-        lastError.message.includes('timeout') ||
-        lastError.message.includes('deadlock') ||
-        lastError.message.includes('ECONNREFUSED');
-
-      if (!isRetryable || attempt === config.maxRetries) {
-        throw lastError;
-      }
-
-      logger.warn(`[Drizzle] Retry ${attempt + 1}/${config.maxRetries}`, {
-        error: lastError.message,
-      });
-
-      await new Promise((r) => setTimeout(r, delay));
-      delay = Math.min(delay * 2, config.maxDelayMs);
-      if (config.jitter) delay += Math.random() * delay * 0.1;
-    }
-  }
-
-  throw lastError;
-}
-
-// ============================================================================
-// Storage Mode Management
-// ============================================================================
-
-import { createJsonClient } from './json-client';
-import {
-  clearJsonStorage,
-  exportJsonState,
-  getJsonState,
-  initJsonStorage,
-  loadJsonSnapshot,
-  saveJsonSnapshot,
-} from './json-storage';
-
-export type StorageMode = 'postgres' | 'json' | 'memory';
-
-// Global storage mode
-let currentStorageMode: StorageMode = 'postgres';
-let jsonClient: DrizzleClient | null = null;
-
-/**
- * Initialize JSON storage mode.
- * All database operations will use JSON file storage instead of PostgreSQL.
- *
- * @param basePath - Directory to store JSON files
- * @param options - Configuration options
- */
-export async function initializeJsonMode(
-  basePath: string,
-  options: { autoSave?: boolean } = {}
-): Promise<void> {
-  await initJsonStorage(basePath, options);
-  currentStorageMode = 'json';
-  jsonClient = createJsonClient();
-  logger.info('[DB] Initialized JSON storage mode', { basePath });
-}
-
-/**
- * Initialize memory storage mode (JSON without persistence).
- * Useful for testing.
- */
-export async function initializeMemoryMode(): Promise<void> {
-  await initJsonStorage('/tmp/babylon-memory', { autoSave: false });
-  currentStorageMode = 'memory';
-  jsonClient = createJsonClient();
-  logger.info('[DB] Initialized memory storage mode');
-}
-
-/**
- * Reset to PostgreSQL mode.
- */
-export function resetToPostgresMode(): void {
-  currentStorageMode = 'postgres';
-  jsonClient = null;
-  clearJsonStorage();
-  logger.info('[DB] Reset to PostgreSQL mode');
-}
-
-/** Get current storage mode */
-export function getStorageMode(): StorageMode {
-  return currentStorageMode;
-}
-
-/** Check if using JSON/memory mode */
-export function isSimulationMode(): boolean {
-  return currentStorageMode === 'json' || currentStorageMode === 'memory';
-}
-
-// Re-export JSON storage utilities
-export { exportJsonState, getJsonState, loadJsonSnapshot, saveJsonSnapshot };
-
-// ============================================================================
-// Main Exports
-// ============================================================================
-
-/**
- * Create a lazy proxy that switches between PostgreSQL and JSON mode.
- */
 function createModeAwareDbProxy(): DrizzleClient {
   const handler: ProxyHandler<DrizzleClient> = {
     get(_target, prop: string | symbol) {
-      // In JSON/memory mode, use the JSON client
-      if (currentStorageMode !== 'postgres' && jsonClient) {
-        return jsonClient[prop as keyof DrizzleClient];
-      }
-
-      // In PostgreSQL mode, use the Drizzle client
       const client = getDbClient();
       if (!client) {
         if (isBuildTime) {
@@ -337,7 +203,7 @@ function createModeAwareDbProxy(): DrizzleClient {
           );
         }
         throw new Error(
-          'Database not initialized. Check DATABASE_URL or use initializeJsonMode().'
+          'Database not initialized. Set DATABASE_URL environment variable.'
         );
       }
       return client[prop as keyof DrizzleClient];
@@ -348,176 +214,21 @@ function createModeAwareDbProxy(): DrizzleClient {
   return new Proxy(proxyTarget, handler) as DrizzleClient;
 }
 
-/** Main database instance - works with both PostgreSQL and JSON modes */
+/** Main database instance */
 export const db: DrizzleClient = createModeAwareDbProxy();
 
-/** Raw Drizzle instance for advanced queries (PostgreSQL only) */
+/** Get raw Drizzle instance for advanced operations (e.g., transactions) */
 export function getRawDrizzle(): Database {
-  if (currentStorageMode !== 'postgres') {
-    throw new Error('getRawDrizzle() is only available in PostgreSQL mode');
-  }
   const instance = getDrizzleInstance();
   if (!instance) throw new Error('Database not initialized');
   return instance;
 }
 
-/** Execute within a transaction */
-export async function withTransaction<T>(
-  fn: (tx: Transaction) => Promise<T>
-): Promise<T> {
-  const instance = getDrizzleInstance();
-  if (!instance) throw new Error('Database not initialized');
-  return withRetryInternal(() => instance.transaction(fn));
-}
-
 // ============================================================================
-// RLS Context Support
+// SQL Query Helpers
 // ============================================================================
 
-/** User identifier - can be a string ID or an object with userId property */
-export type UserIdOrUser = string | { userId: string };
-
-/**
- * Execute as a specific user (with RLS)
- * @param userIdOrUser - A string userId or an object with userId property (e.g., AuthenticatedUser)
- * @param operation - The database operation to execute
- */
-export async function asUser<T>(
-  userIdOrUser: UserIdOrUser,
-  operation: (database: DrizzleClient) => Promise<T>
-): Promise<T> {
-  // Extract userId from string or object
-  const userId =
-    typeof userIdOrUser === 'string' ? userIdOrUser : userIdOrUser.userId;
-
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const privyDidRegex = /^did:privy:[a-z0-9]+$/i;
-  const snowflakeRegex = /^\d{15,20}$/;
-
-  if (
-    !uuidRegex.test(userId) &&
-    !privyDidRegex.test(userId) &&
-    !snowflakeRegex.test(userId)
-  ) {
-    throw new Error(`Invalid userId format: ${userId}`);
-  }
-
-  const instance = getDrizzleInstance();
-  if (!instance) throw new Error('Database not initialized');
-
-  return withRetryInternal(() =>
-    instance.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT set_config('app.current_user_id', ${userId}, true)`
-      );
-      // Create a client wrapper for the transaction
-      // Transaction type from Drizzle is compatible with Database
-      const txClient = createDrizzleClient(tx);
-      return operation(txClient);
-    })
-  );
-}
-
-/**
- * Execute as system (bypass RLS)
- */
-export async function asSystem<T>(
-  operation: (database: DrizzleClient) => Promise<T>,
-  operationName?: string
-): Promise<T> {
-  const startTime = Date.now();
-  if (operationName) {
-    logger.debug('[Drizzle] System operation', { operation: operationName });
-  }
-
-  const instance = getDrizzleInstance();
-  if (!instance) throw new Error('Database not initialized');
-
-  const result = await withRetryInternal(() =>
-    instance.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT set_config('app.current_user_id', 'system', true)`
-      );
-      // Transaction type is compatible with Database for our use case
-      const txClient = createDrizzleClient(tx as Database);
-      return operation(txClient);
-    })
-  );
-
-  if (operationName) {
-    logger.debug('[Drizzle] System operation completed', {
-      operation: operationName,
-      duration: `${Date.now() - startTime}ms`,
-    });
-  }
-
-  return result;
-}
-
-/**
- * Execute as public (unauthenticated)
- */
-export async function asPublic<T>(
-  operation: (database: DrizzleClient) => Promise<T>
-): Promise<T> {
-  const instance = getDrizzleInstance();
-  if (!instance) throw new Error('Database not initialized');
-
-  return withRetryInternal(() =>
-    instance.transaction(async (tx) => {
-      await tx.execute(sql`SELECT set_config('app.current_user_id', '', true)`);
-      // Transaction type is compatible with Database for our use case
-      const txClient = createDrizzleClient(tx as Database);
-      return operation(txClient);
-    })
-  );
-}
-
-// ============================================================================
-// Utilities
-// ============================================================================
-
-/** Health check */
-export async function checkDatabaseHealth(): Promise<boolean> {
-  const instance = getDrizzleInstance();
-  if (!instance) return false;
-  await instance.execute(sql`SELECT 1`);
-  return true;
-}
-
-/** Graceful shutdown */
-export async function closeDatabase(): Promise<void> {
-  if (globalForDb.postgresClient) {
-    await globalForDb.postgresClient.end();
-    globalForDb.postgresClient = undefined;
-    globalForDb.drizzleDb = undefined;
-    globalForDb.db = undefined;
-    logger.info('[Drizzle] Database connections closed');
-  }
-}
-
-/** Execute raw SQL */
-export async function executeRaw<
-  T extends Record<string, SQLValue> = Record<string, SQLValue>,
->(query: ReturnType<typeof sql>): Promise<T[]> {
-  const instance = getDrizzleInstance();
-  if (!instance) throw new Error('Database not initialized');
-  return withRetryInternal(() => instance.execute(query)) as Promise<T[]>;
-}
-
-// ============================================================================
-// Drizzle Query Operators
-// ============================================================================
-
-// Re-export snowflake utilities from @babylon/shared
-export {
-  generateSnowflakeId,
-  isValidSnowflakeId,
-  parseSnowflakeId,
-  SnowflakeGenerator,
-} from '@babylon/shared';
-export type { SQL } from 'drizzle-orm';
+export type { InferInsertModel, InferSelectModel, SQL } from 'drizzle-orm';
 export {
   and,
   asc,
@@ -546,13 +257,189 @@ export {
   sql,
   sum,
 } from 'drizzle-orm';
-// Re-export database service
+export type { SelectedFields } from 'drizzle-orm/pg-core';
+
+// ============================================================================
+// Transaction Support
+// ============================================================================
+
+/** Execute within a database transaction */
+export async function withTransaction<T>(
+  fn: (tx: Transaction) => Promise<T>
+): Promise<T> {
+  const drizzleInstance = getDrizzleInstance();
+  if (!drizzleInstance) throw new Error('Database not initialized');
+  return drizzleInstance.transaction(fn);
+}
+
+/** User identifier - can be a string ID or an object with userId property */
+export type UserIdOrUser = string | { userId: string };
+
+/**
+ * Execute as a specific user (with RLS)
+ */
+export async function asUser<T>(
+  userIdOrUser: UserIdOrUser,
+  operation: (database: DrizzleClient) => Promise<T>
+): Promise<T> {
+  const userId =
+    typeof userIdOrUser === 'string' ? userIdOrUser : userIdOrUser.userId;
+
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const privyDidRegex = /^did:privy:[a-z0-9]+$/i;
+  const oauth3DidRegex = /^did:oauth3:[a-z0-9]+$/i;
+  const snowflakeRegex = /^\d{15,20}$/;
+
+  if (
+    !uuidRegex.test(userId) &&
+    !privyDidRegex.test(userId) &&
+    !oauth3DidRegex.test(userId) &&
+    !snowflakeRegex.test(userId)
+  ) {
+    throw new Error(`Invalid userId format: ${userId}`);
+  }
+
+  const drizzleInstance = getDrizzleInstance();
+  if (!drizzleInstance) throw new Error('Database not initialized');
+
+  return drizzleInstance.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT set_config('app.current_user_id', ${userId}, true)`
+    );
+    const txClient = createDrizzleClient(tx as Database);
+    return operation(txClient);
+  });
+}
+
+/**
+ * Execute as system (bypass RLS)
+ */
+export async function asSystem<T>(
+  operation: (database: DrizzleClient) => Promise<T>,
+  operationName?: string
+): Promise<T> {
+  const startTime = Date.now();
+  const drizzleInstance = getDrizzleInstance();
+  if (!drizzleInstance) throw new Error('Database not initialized');
+
+  const result = await drizzleInstance.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT set_config('app.current_user_id', 'system', true)`
+    );
+    const txClient = createDrizzleClient(tx as Database);
+    return operation(txClient);
+  });
+
+  if (operationName && process.env.NODE_ENV === 'development') {
+    console.log(
+      `[DB] ${operationName} completed in ${Date.now() - startTime}ms`
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Execute as public (unauthenticated)
+ */
+export async function asPublic<T>(
+  operation: (database: DrizzleClient) => Promise<T>
+): Promise<T> {
+  const drizzleInstance = getDrizzleInstance();
+  if (!drizzleInstance) throw new Error('Database not initialized');
+
+  return drizzleInstance.transaction(async (tx) => {
+    await tx.execute(sql`SELECT set_config('app.current_user_id', '', true)`);
+    const txClient = createDrizzleClient(tx as Database);
+    return operation(txClient);
+  });
+}
+
+// ============================================================================
+// Storage Mode (JSON for simulation/testing)
+// ============================================================================
+
+import { createJsonClient } from './json-client';
+import {
+  clearJsonStorage,
+  exportJsonState,
+  getJsonState,
+  initJsonStorage,
+  loadJsonSnapshot,
+  saveJsonSnapshot,
+} from './json-storage';
+
+export type StorageMode = 'cql' | 'postgres' | 'json' | 'memory';
+
+let currentStorageMode: StorageMode = 'cql';
+let jsonClient: DrizzleClient | null = null;
+
+export async function initializeJsonMode(
+  basePath: string,
+  options: { autoSave?: boolean } = {}
+): Promise<void> {
+  await initJsonStorage(basePath, options);
+  currentStorageMode = 'json';
+  jsonClient = createJsonClient();
+}
+
+export async function initializeMemoryMode(): Promise<void> {
+  await initJsonStorage('/tmp/babylon-memory', { autoSave: false });
+  currentStorageMode = 'memory';
+  jsonClient = createJsonClient();
+}
+
+/**
+ * @deprecated Use resetToCQLMode() instead. PostgreSQL is no longer supported.
+ */
+export function resetToPostgresMode(): void {
+  resetToCQLMode();
+}
+
+export function resetToCQLMode(): void {
+  currentStorageMode = 'cql';
+  jsonClient = null;
+  clearJsonStorage();
+}
+
+export function getStorageMode(): StorageMode {
+  return currentStorageMode;
+}
+
+export function isSimulationMode(): boolean {
+  return currentStorageMode === 'json' || currentStorageMode === 'memory';
+}
+
+export function getJsonClient(): DrizzleClient | null {
+  return jsonClient;
+}
+
+export { exportJsonState, getJsonState, loadJsonSnapshot, saveJsonSnapshot };
+
+// ============================================================================
+// Decentralized Database Layer
+// ============================================================================
+
+export * from './decentralized';
+
+// ============================================================================
+// Utility Exports
+// ============================================================================
+
+export {
+  generateSnowflakeId,
+  isValidSnowflakeId,
+  parseSnowflakeId,
+  SnowflakeGenerator,
+} from '@babylon/shared';
+
 export {
   DatabaseService,
   type FeedPost,
   getDbInstance,
 } from './database-service';
-// Re-export query helpers
+
 export {
   $connect,
   $disconnect,
@@ -561,14 +448,63 @@ export {
   isRetryableError,
   withRetry,
 } from './helpers';
-// Re-export moderation filters
+
 export * from './moderation/filters';
-// Re-export query monitor
+
 export {
   type QueryMetrics,
   queryMonitor,
   type SlowQueryStats,
 } from './query-monitor';
-export type { DatabaseErrorType } from './types';
-// Re-export error utilities
-export { isUniqueConstraintError, toDatabaseErrorType } from './types';
+
+// ============================================================================
+// Initialization
+// ============================================================================
+
+import { getDB, initializeDB, resetDB } from './cql-repository';
+
+export async function initializeDatabase(): Promise<void> {
+  // Initialize CQL (mandatory for decentralized operation)
+  if (!process.env.CQL_BLOCK_PRODUCER_ENDPOINT) {
+    throw new Error(
+      '[DB] CQL_BLOCK_PRODUCER_ENDPOINT is required. ' +
+        'Decentralized database is mandatory. Start Jeju: cd /path/to/jeju && bun run dev'
+    );
+  }
+  await initializeDB();
+
+  // Initialize Drizzle for legacy transaction support (optional)
+  // Only needed if DATABASE_URL is configured for backwards compatibility
+  if (process.env.DATABASE_URL) {
+    getDrizzleInstance();
+  }
+}
+
+export async function checkDatabaseHealth(): Promise<boolean> {
+  // Check CQL (primary, mandatory)
+  const cqlDb = getDB();
+  const cqlHealthy = cqlDb.isHealthy();
+  if (!cqlHealthy) {
+    return false;
+  }
+
+  // Check Drizzle if configured (optional, for legacy support)
+  if (process.env.DATABASE_URL) {
+    const drizzleInstance = getDrizzleInstance();
+    if (!drizzleInstance) return false;
+  }
+
+  return true;
+}
+
+export async function closeDatabase(): Promise<void> {
+  // Close CQL
+  resetDB();
+  // Close Drizzle
+  if (globalForDb.postgresClient) {
+    await globalForDb.postgresClient.end();
+    globalForDb.postgresClient = undefined;
+    globalForDb.drizzleDb = undefined;
+    globalForDb.db = undefined;
+  }
+}

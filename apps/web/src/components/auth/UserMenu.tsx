@@ -66,7 +66,7 @@ export function UserMenu() {
       userMenuFetchInFlight = true;
 
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
       if (!token) {
         userMenuFetchInFlight = false;
         return;

@@ -125,7 +125,7 @@ export function LikeButton({
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
 
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressStartTime = useRef<number>(0);
 
   const {
@@ -304,7 +304,7 @@ export function LikeButton({
           {/* Reaction Options */}
           <div
             className={cn(
-              '-translate-x-1/2 absolute bottom-full left-1/2 z-50 mb-2',
+              'absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2',
               'flex items-center gap-2 p-2',
               'rounded-full border border-border bg-popover shadow-lg',
               'fade-in slide-in-from-bottom-2 animate-in duration-200'

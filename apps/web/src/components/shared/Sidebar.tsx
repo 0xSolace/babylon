@@ -14,11 +14,13 @@ import {
   TrendingUp,
   Trophy,
   User,
+  Vote,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { AirdropStatusBadge } from '@/components/airdrop';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { Avatar } from '@/components/shared/Avatar';
@@ -81,7 +83,7 @@ function SidebarContent() {
 
     const fetchUnreadCount = async () => {
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
       if (!token) {
         return;
@@ -165,6 +167,13 @@ function SidebarContent() {
       icon: Bot,
       color: '#0066FF',
       active: pathname === '/agents' || pathname.startsWith('/agents/'),
+    },
+    {
+      name: 'DAO',
+      href: '/dao',
+      icon: Vote,
+      color: '#22c55e',
+      active: pathname === '/dao',
     },
     {
       name: 'Rewards',
@@ -288,7 +297,7 @@ function SidebarContent() {
                     }}
                   />
                   {hasNotificationBadge && (
-                    <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
                   )}
                 </div>
 
@@ -319,6 +328,13 @@ function SidebarContent() {
             );
           })}
         </nav>
+
+        {/* Airdrop Status - only shown when authenticated and on desktop */}
+        {authenticated && (
+          <div className="hidden px-4 lg:block">
+            <AirdropStatusBadge />
+          </div>
+        )}
 
         {/* Separator - only shown on desktop */}
         <div className="hidden px-4 py-2 lg:block">
@@ -365,7 +381,7 @@ function SidebarContent() {
 
             {/* Dropdown Menu - Icon Only */}
             {showMdMenu && (
-              <div className="-translate-x-1/2 absolute bottom-full left-1/2 z-50 mb-2 w-auto overflow-hidden rounded-lg border border-border bg-sidebar shadow-lg">
+              <div className="absolute bottom-full left-1/2 z-50 mb-2 w-auto -translate-x-1/2 overflow-hidden rounded-lg border border-border bg-sidebar shadow-lg">
                 {/* Referral Code */}
                 {user.referralCode && (
                   <button

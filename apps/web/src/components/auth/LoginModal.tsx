@@ -1,21 +1,18 @@
 'use client';
 
+import { useJejuAuth } from '@babylon/auth/client';
 import { logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { useEffect, useRef } from 'react';
 
 /**
- * Login modal component that triggers Privy's native login modal.
+ * Login modal component that triggers the Jeju auth login flow.
  *
- * Acts as a wrapper that triggers Privy's built-in authentication modal when
- * opened. Automatically closes when user successfully authenticates. Supports
- * custom title and message for context-specific login prompts.
- *
- * Note: This component doesn't render any UI itself - it delegates to Privy's
- * native modal system.
+ * Acts as a wrapper that triggers the authentication modal when
+ * opened. Automatically closes when user successfully authenticates.
+ * Supports custom title and message for context-specific login prompts.
  *
  * @param props - LoginModal component props
- * @returns null (delegates to Privy's native modal)
+ * @returns null (delegates to auth modal)
  *
  * @example
  * ```tsx
@@ -40,7 +37,7 @@ export function LoginModal({
   title,
   message,
 }: LoginModalProps) {
-  const { login, authenticated, ready } = usePrivy();
+  const { authenticated, ready, loginWithWallet } = useJejuAuth();
   const attemptedLoginRef = useRef(false);
 
   // Close modal when user logs in
@@ -50,7 +47,7 @@ export function LoginModal({
     }
   }, [authenticated, isOpen, onClose]);
 
-  // Trigger Privy's built-in login modal when this component opens
+  // Trigger login modal when this component opens
   useEffect(() => {
     if (!isOpen || !ready || authenticated) {
       attemptedLoginRef.current = false;
@@ -59,9 +56,10 @@ export function LoginModal({
 
     if (!attemptedLoginRef.current) {
       attemptedLoginRef.current = true;
-      login();
+      // Trigger wallet-based login (SIWE)
+      loginWithWallet();
     }
-  }, [isOpen, ready, authenticated, login]);
+  }, [isOpen, ready, authenticated, loginWithWallet]);
 
   // Log title/message if provided for debugging
   useEffect(() => {
@@ -73,6 +71,6 @@ export function LoginModal({
     }
   }, [title, message]);
 
-  // This component just triggers Privy's native modal, no custom UI needed
+  // This component triggers the login flow, no custom UI needed
   return null;
 }

@@ -1,25 +1,36 @@
+import { useJejuWallet } from '@babylon/auth/client';
 import { logger, WALLET_ERROR_MESSAGES } from '@babylon/shared';
-import { useWallets } from '@privy-io/react-auth';
-import type { SmartWalletClientType } from '@privy-io/react-auth/smart-wallets';
-import { useSmartWallets } from '@privy-io/react-auth/smart-wallets';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { Hex } from 'viem';
+import type { Address, Hex } from 'viem';
 
-type SmartWalletTxInput = Parameters<
-  SmartWalletClientType['sendTransaction']
->[0];
-type SmartWalletTxOptions = Parameters<
-  SmartWalletClientType['sendTransaction']
->[1];
+interface SmartWalletTxInput {
+  to: Address;
+  value?: bigint;
+  data?: Hex;
+  chain?: { id: number };
+}
+
+interface SmartWalletTxOptions {
+  gasLimit?: bigint;
+}
+
+/** Minimal client interface for backward compatibility */
+interface SmartWalletClient {
+  account?: { address: Address };
+  sendTransaction: (
+    input: SmartWalletTxInput,
+    options?: SmartWalletTxOptions
+  ) => Promise<Hex>;
+}
 
 /**
  * Return type for the useSmartWallet hook.
  */
 interface UseSmartWalletResult {
-  /** The Privy smart wallet client instance */
-  client?: SmartWalletClientType;
+  /** The smart wallet client (for backward compatibility) */
+  client?: SmartWalletClient;
   /** The smart wallet address (if available) */
-  smartWalletAddress?: string;
+  smartWalletAddress: Address | undefined;
   /** Whether the smart wallet is ready for transactions */
   smartWalletReady: boolean;
   /** Function to send a transaction via the smart wallet */
@@ -27,15 +38,18 @@ interface UseSmartWalletResult {
     input: SmartWalletTxInput,
     options?: SmartWalletTxOptions
   ) => Promise<Hex>;
+  /** Function to sign a message */
+  signMessage: (message: string) => Promise<Hex>;
+  /** Function to sign typed data (EIP-712) */
+  signTypedData: (typedData: unknown) => Promise<Hex>;
 }
 
 /**
  * Hook for managing smart wallet operations.
  *
- * Provides access to Privy's smart wallet functionality, enabling gasless
- * transactions when using an embedded wallet. The smart wallet is a contract
- * wallet that can be sponsored by Privy's paymaster, allowing users to
- * interact with the blockchain without holding native tokens.
+ * Provides access to Jeju's MPC-backed wallet functionality, enabling
+ * threshold-signed transactions. The smart wallet uses MPC for key management
+ * with TEE-backed security.
  *
  * @returns Smart wallet state and transaction sending function.
  *
@@ -57,42 +71,39 @@ interface UseSmartWalletResult {
  * ```
  */
 export function useSmartWallet(): UseSmartWalletResult {
-  const { client } = useSmartWallets();
-  const { wallets } = useWallets();
+  const {
+    address,
+    ready,
+    signMessage: jejuSignMessage,
+    signTypedData: jejuSignTypedData,
+    sendTransaction,
+  } = useJejuWallet();
+
   const lastLoggedState = useRef<boolean | null>(null);
   const hasLoggedWarning = useRef(false);
 
-  // Check if embedded wallet exists
-  const hasEmbeddedWallet = useMemo(
-    () => wallets.some((w) => w.walletClientType === 'privy'),
-    [wallets]
-  );
-
   // Only log when the state changes, not on every render
   useEffect(() => {
-    const hasClient = !!client;
-    const hasAddress = !!client?.account?.address;
-
-    if (lastLoggedState.current !== hasClient) {
-      lastLoggedState.current = hasClient;
-      logger.debug('Smart wallet client state changed', {
-        hasClient,
-        hasAddress,
-        address: client?.account?.address,
-        hasEmbeddedWallet,
+    if (lastLoggedState.current !== ready) {
+      lastLoggedState.current = ready;
+      logger.debug('Smart wallet state changed', {
+        ready,
+        hasAddress: !!address,
+        address,
       });
     }
 
-    // Log a warning if client is not available after a delay (but only once)
+    // Log a warning if wallet is not available after a delay (but only once)
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    if (!hasClient && !hasLoggedWarning.current) {
+    if (!ready && !hasLoggedWarning.current) {
       timeoutId = setTimeout(() => {
-        if (!client) {
+        if (!ready) {
           hasLoggedWarning.current = true;
-          const message = hasEmbeddedWallet
-            ? 'Smart wallet client not initialized despite embedded wallet existing. This may indicate a Privy configuration issue.'
-            : 'Smart wallet client not initialized. Embedded wallet may not be created yet.';
-          logger.warn(message, { hasEmbeddedWallet }, 'useSmartWallet');
+          logger.warn(
+            'Smart wallet not initialized. Please login first.',
+            { hasAddress: !!address },
+            'useSmartWallet'
+          );
         }
       }, 5000); // Wait 5 seconds before warning
     }
@@ -102,33 +113,66 @@ export function useSmartWallet(): UseSmartWalletResult {
         clearTimeout(timeoutId);
       }
     };
-  }, [client, hasEmbeddedWallet]);
+  }, [ready, address]);
 
-  const typedClient = client as SmartWalletClientType | undefined;
-  const smartWalletAddress = typedClient?.account?.address;
+  const smartWalletAddress = address ?? undefined;
   const smartWalletReady = useMemo(
-    () => Boolean(typedClient && smartWalletAddress),
-    [typedClient, smartWalletAddress]
+    () => Boolean(ready && smartWalletAddress),
+    [ready, smartWalletAddress]
   );
 
   const sendSmartWalletTransaction = useCallback(
     async (
       input: SmartWalletTxInput,
-      options?: SmartWalletTxOptions
+      _options?: SmartWalletTxOptions
     ): Promise<Hex> => {
-      if (!typedClient || !smartWalletAddress) {
+      if (!ready || !smartWalletAddress) {
         throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
       }
 
-      return await typedClient.sendTransaction(input, options);
+      return await sendTransaction({
+        to: input.to,
+        value: input.value,
+        data: input.data,
+      });
     },
-    [typedClient, smartWalletAddress]
+    [ready, smartWalletAddress, sendTransaction]
   );
 
+  const signMessage = useCallback(
+    async (message: string): Promise<Hex> => {
+      if (!ready) {
+        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+      }
+      return await jejuSignMessage(message);
+    },
+    [ready, jejuSignMessage]
+  );
+
+  const signTypedData = useCallback(
+    async (typedData: unknown): Promise<Hex> => {
+      if (!ready) {
+        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+      }
+      return await jejuSignTypedData(typedData);
+    },
+    [ready, jejuSignTypedData]
+  );
+
+  // Create a backward-compatible client object
+  const client: SmartWalletClient | undefined = smartWalletReady
+    ? {
+        account: { address: smartWalletAddress! },
+        sendTransaction: sendSmartWalletTransaction,
+      }
+    : undefined;
+
   return {
-    client: typedClient,
+    client,
     smartWalletAddress,
     smartWalletReady,
     sendSmartWalletTransaction,
+    signMessage,
+    signTypedData,
   };
 }

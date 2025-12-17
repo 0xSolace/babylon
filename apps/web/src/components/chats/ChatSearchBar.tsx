@@ -11,7 +11,7 @@ interface ChatSearchBarProps {
 export function ChatSearchBar({ value, onChange }: ChatSearchBarProps) {
   return (
     <div className="relative mb-2 px-4">
-      <Search className="-translate-y-1/2 absolute top-1/2 left-7 h-4 w-4 text-muted-foreground" />
+      <Search className="absolute top-1/2 left-7 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       <input
         type="text"
         placeholder="Search conversations..."
@@ -27,7 +27,7 @@ export function ChatSearchBar({ value, onChange }: ChatSearchBarProps) {
       {value && (
         <button
           onClick={() => onChange('')}
-          className="-translate-y-1/2 absolute top-1/2 right-6 flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-muted-foreground/20"
+          className="absolute top-1/2 right-6 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md transition-colors hover:bg-muted-foreground/20"
         >
           <X className="h-4 w-4 text-foreground" />
         </button>

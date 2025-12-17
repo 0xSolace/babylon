@@ -7,10 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { db } from '@babylon/db';
-import {
-  GroupInviteConfig,
-  GroupInviteOrchestrator,
-} from '@babylon/engine';
+import { GroupInviteConfig, GroupInviteOrchestrator } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';
 
 const testIds = {
@@ -70,25 +67,45 @@ async function createTestGroupChat(name: string, npcAdminId: string) {
 
 async function cleanupTestData() {
   if (testIds.inviteIds.length > 0)
-    await db.userGroupInvite.deleteMany({ where: { id: { in: testIds.inviteIds } } });
+    await db.userGroupInvite.deleteMany({
+      where: { id: { in: testIds.inviteIds } },
+    });
   if (testIds.candidateIds.length > 0)
-    await db.pendingGroupInviteCandidate.deleteMany({ where: { id: { in: testIds.candidateIds } } });
+    await db.pendingGroupInviteCandidate.deleteMany({
+      where: { id: { in: testIds.candidateIds } },
+    });
   if (testIds.membershipIds.length > 0)
-    await db.groupChatMembership.deleteMany({ where: { id: { in: testIds.membershipIds } } });
+    await db.groupChatMembership.deleteMany({
+      where: { id: { in: testIds.membershipIds } },
+    });
   if (testIds.chatIds.length > 0) {
-    await db.chatParticipant.deleteMany({ where: { chatId: { in: testIds.chatIds } } });
+    await db.chatParticipant.deleteMany({
+      where: { chatId: { in: testIds.chatIds } },
+    });
     await db.chat.deleteMany({ where: { id: { in: testIds.chatIds } } });
   }
 
   await db.pendingGroupInviteCandidate.deleteMany({
-    where: { OR: [{ userId: { in: testIds.userIds } }, { npcId: { in: testIds.actorIds } }] },
+    where: {
+      OR: [
+        { userId: { in: testIds.userIds } },
+        { npcId: { in: testIds.actorIds } },
+      ],
+    },
   });
   await db.userGroupInvite.deleteMany({
-    where: { OR: [{ invitedUserId: { in: testIds.userIds } }, { invitedBy: { in: testIds.actorIds } }] },
+    where: {
+      OR: [
+        { invitedUserId: { in: testIds.userIds } },
+        { invitedBy: { in: testIds.actorIds } },
+      ],
+    },
   });
 
-  if (testIds.userIds.length > 0) await db.user.deleteMany({ where: { id: { in: testIds.userIds } } });
-  if (testIds.actorIds.length > 0) await db.actorState.deleteMany({ where: { id: { in: testIds.actorIds } } });
+  if (testIds.userIds.length > 0)
+    await db.user.deleteMany({ where: { id: { in: testIds.userIds } } });
+  if (testIds.actorIds.length > 0)
+    await db.actorState.deleteMany({ where: { id: { in: testIds.actorIds } } });
 
   testIds.userIds = [];
   testIds.actorIds = [];
@@ -502,7 +519,8 @@ describe('Data Integrity Verification', () => {
     });
     testIds.candidateIds.push(recentCandidateId);
 
-    const deletedCount = await GroupInviteOrchestrator.cleanupProcessedCandidates();
+    const deletedCount =
+      await GroupInviteOrchestrator.cleanupProcessedCandidates();
 
     expect(deletedCount).toBeGreaterThanOrEqual(1);
 
@@ -537,9 +555,11 @@ describe('Processing Result Accuracy', () => {
 
   test('expired candidates should be counted correctly', async () => {
     const npc = await createTestNPC('Expiry Count NPC');
-    
+
     // Create 3 expired candidates
-    const expiryHoursAgo = new Date(Date.now() - (GroupInviteConfig.candidateExpiryHours + 1) * 60 * 60 * 1000);
+    const expiryHoursAgo = new Date(
+      Date.now() - (GroupInviteConfig.candidateExpiryHours + 1) * 60 * 60 * 1000
+    );
     for (let i = 0; i < 3; i++) {
       const user = await createTestUser(`Expired User ${i}`);
       const candidateId = await generateSnowflakeId();
@@ -570,7 +590,7 @@ describe('Processing Result Accuracy', () => {
     // Create 2 candidates who are already members
     for (let i = 0; i < 2; i++) {
       const user = await createTestUser(`Already Member User ${i}`);
-      
+
       // Create membership
       const membershipId = await generateSnowflakeId();
       await db.groupChatMembership.create({
@@ -706,15 +726,23 @@ describe('Priority Ordering', () => {
   test('higher priority candidates get higher invite probability', async () => {
     // This test verifies the probability calculation, not random outcomes
     const baseProbability = GroupInviteConfig.baseInviteProbability;
-    
+
     const lowPriorityMultiplier = 1.0;
     const highPriorityMultiplier = 3.0;
     const engagementScore = 50;
     const scoreMultiplier = Math.min(engagementScore / 50, 2.0); // = 1.0
     const tierMultiplier = 1.0; // NONE tier
 
-    const lowProb = baseProbability * scoreMultiplier * lowPriorityMultiplier * tierMultiplier;
-    const highProb = baseProbability * scoreMultiplier * highPriorityMultiplier * tierMultiplier;
+    const lowProb =
+      baseProbability *
+      scoreMultiplier *
+      lowPriorityMultiplier *
+      tierMultiplier;
+    const highProb =
+      baseProbability *
+      scoreMultiplier *
+      highPriorityMultiplier *
+      tierMultiplier;
 
     // Higher priority should have proportionally higher probability
     expect(highProb).toBe(lowProb * 3);
@@ -723,7 +751,7 @@ describe('Priority Ordering', () => {
 
   test('candidates are ordered by priority in queue', async () => {
     const npc = await createTestNPC('Priority Order NPC');
-    
+
     // Create candidates with different priorities
     const lowUser = await createTestUser('Low Priority');
     const midUser = await createTestUser('Mid Priority');
@@ -766,4 +794,3 @@ describe('Priority Ordering', () => {
     expect(candidates[2]?.userId).toBe(lowUser.id);
   });
 });
-

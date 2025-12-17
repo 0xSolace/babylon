@@ -38,7 +38,8 @@
   },
   "dependencies": {
     "@babylon/shared": "workspace:*",
-    "@babylon/db": "workspace:*"
+    "@babylon/db": "workspace:*",
+    "drizzle-orm": "^0.44.7"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

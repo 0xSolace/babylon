@@ -230,34 +230,27 @@ async function checkLLMStatus(): Promise<void> {
   const status = await getAgentLLMStatus();
 
   console.log(`Provider: ${status.provider}`);
+  console.log(`Configured: ${status.configured ? '✅ Yes' : '❌ No'}`);
   console.log(`Available: ${status.available ? '✅ Yes' : '❌ No'}`);
-
-  if (status.model) {
-    console.log(`Model: ${status.model}`);
-  }
 
   if (status.error) {
     logger.warn(`Error: ${status.error}`);
   }
 
+  console.log('\nDetails:');
+  for (const [key, value] of Object.entries(status.details)) {
+    console.log(`  ${key}: ${value}`);
+  }
+
   console.log('\nEnvironment:');
   console.log(
-    `  AGENT_LLM_PROVIDER: ${process.env.AGENT_LLM_PROVIDER || 'groq (default)'}`
-  );
-  console.log(
-    `  OLLAMA_HOST: ${process.env.OLLAMA_HOST || 'http://localhost:11434'}`
-  );
-  console.log(
-    `  HUGGINGFACE_API_KEY: ${process.env.HUGGINGFACE_API_KEY ? '✅ Set' : '❌ Not set'}`
-  );
-  console.log(
-    `  GROQ_API_KEY: ${process.env.GROQ_API_KEY ? '✅ Set' : '❌ Not set'}`
+    `  JEJU_NETWORK: ${process.env.JEJU_NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK || 'not set'}`
   );
 
   if (status.available) {
-    logger.success('LLM provider is ready');
+    logger.success('Jeju Compute is ready');
   } else {
-    logger.fail('LLM provider is not available');
+    logger.fail('Jeju Compute is not available - set JEJU_NETWORK');
   }
 }
 

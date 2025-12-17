@@ -193,6 +193,9 @@ export interface TestUser {
   displayName: string;
   email?: string;
   walletAddress?: string;
+  /** OAuth3 identity ID (decentralized identity) */
+  oauth3Id?: string;
+  /** @deprecated Use oauth3Id instead */
   privyId?: string;
   bio?: string;
   reputationPoints?: number;

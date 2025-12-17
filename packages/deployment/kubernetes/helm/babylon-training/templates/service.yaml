@@ -1,0 +1,43 @@
+{{- if .Values.cpuTraining.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "babylon-training.fullname" . }}-cpu
+  labels:
+    {{- include "babylon-training.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cpu-training
+spec:
+  type: {{ .Values.cpuTraining.service.type }}
+  ports:
+    - port: {{ .Values.cpuTraining.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "babylon-training.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: cpu-training
+{{- end }}
+---
+{{- if .Values.gpuTraining.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "babylon-training.fullname" . }}-gpu
+  labels:
+    {{- include "babylon-training.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gpu-training
+spec:
+  type: {{ .Values.gpuTraining.service.type }}
+  ports:
+    - port: {{ .Values.gpuTraining.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.gpuTraining.service.vllmPort }}
+      targetPort: vllm
+      protocol: TCP
+      name: vllm
+  selector:
+    {{- include "babylon-training.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: gpu-training
+{{- end }}

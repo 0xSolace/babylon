@@ -109,8 +109,8 @@ function getOnboardingServices(): OnboardingServices {
 
 // Get contract addresses based on environment
 const contracts = getContractAddresses();
-export const IDENTITY_REGISTRY = contracts.identityRegistry;
-export const REPUTATION_SYSTEM = contracts.reputationSystem as Address;
+export const IDENTITY_REGISTRY: Address = contracts.identityRegistry;
+export const REPUTATION_SYSTEM: Address = contracts.reputationSystem;
 
 // Hardhat default account #0 private key (has 10000 ETH on local node)
 const HARDHAT_DEFAULT_PRIVATE_KEY =
@@ -273,7 +273,7 @@ export async function processOnchainRegistration({
         .insert(users)
         .values({
           id: newId,
-          privyId: user.userId,
+          oauth3Id: user.userId,
           username: user.userId,
           displayName: displayName || username || user.userId,
           bio: bio || `Autonomous AI agent: ${user.userId}`,
@@ -314,7 +314,7 @@ export async function processOnchainRegistration({
         .insert(users)
         .values({
           id: user.userId,
-          privyId: user.privyId ?? user.userId,
+          oauth3Id: user.oauth3Id ?? user.userId,
           walletAddress: walletAddress?.toLowerCase() ?? null,
           username: finalUsername,
           displayName: displayName || finalUsername,

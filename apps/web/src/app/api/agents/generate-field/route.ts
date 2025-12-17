@@ -91,12 +91,9 @@
  * ```
  *
  * @see {@link /src/app/agents/create/page.tsx} Agent creation UI
- * @see {@link https://console.groq.com/docs/models} Groq API
- * @see {@link https://www.anthropic.com/api} Anthropic API
+ * @see {@link https://docs.jeju.network/compute} Jeju Compute API
  */
 
-import { createGroq } from '@ai-sdk/groq';
-import Anthropic from '@anthropic-ai/sdk';
 import {
   authenticateUser,
   checkRateLimitAndDuplicates,
@@ -104,9 +101,43 @@ import {
 } from '@babylon/api';
 import { isPromptLoggingEnabled, logPrompt } from '@babylon/engine';
 import { logger } from '@babylon/shared';
-import { generateText } from 'ai';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+
+// Jeju Compute endpoint for inference
+const JEJU_COMPUTE_ENDPOINT =
+  process.env.JEJU_COMPUTE_ENDPOINT ||
+  process.env.JEJU_DWS_ENDPOINT ||
+  'http://localhost:4100';
+
+async function callJejuCompute(
+  prompt: string,
+  systemPrompt: string
+): Promise<string> {
+  const response = await fetch(`${JEJU_COMPUTE_ENDPOINT}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'llama-3.1-70b-versatile',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: 300,
+      temperature: 0.8,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Jeju Compute error: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    choices: Array<{ message: { content: string } }>;
+  };
+
+  return data.choices[0]?.message?.content?.trim() ?? '';
+}
 
 export async function POST(req: NextRequest) {
   const user = await authenticateUser(req);
@@ -133,100 +164,30 @@ export async function POST(req: NextRequest) {
   const systemPrompt =
     'You are a helpful assistant that generates agent configurations. Be concise, professional, and authentic.';
 
-  let generatedValue: string;
+  // Use Jeju Compute for inference
+  const generatedValue = await callJejuCompute(prompt, systemPrompt);
 
-  // Use Groq qwen/qwen3-32b if available, otherwise fall back to Claude
-  if (process.env.GROQ_API_KEY) {
-    const groq = createGroq({
-      apiKey: process.env.GROQ_API_KEY,
-      baseURL: 'https://api.groq.com/openai/v1',
-    });
+  logger.info(
+    'Generated agent field with Jeju Compute',
+    { fieldName, provider: 'jeju-compute' },
+    'GenerateField'
+  );
 
-    const result = await generateText({
-      model: groq.languageModel('qwen/qwen3-32b'),
-      prompt,
-      system: systemPrompt,
-      temperature: 0.8,
-      maxOutputTokens: 300,
-      // providerOptions: {
-      //   groq: {
-      //     // Hide <think>...</think> reasoning tags from Qwen model output
-      //     reasoningFormat: 'hidden',
-      //   },
-      // },
-    });
-
-    generatedValue = result.text.trim();
-    logger.info(
-      'Generated agent field with Groq',
-      { fieldName, provider: 'groq' },
-      'GenerateField'
-    );
-
-    if (isPromptLoggingEnabled()) {
-      await logPrompt({
-        promptType: `generate_field_${fieldName}`,
-        input: `System: ${systemPrompt}\n\nUser: ${prompt}`,
-        output: generatedValue,
-        metadata: {
-          provider: 'groq',
-          model: 'qwen/qwen3-32b',
-          temperature: 0.8,
-          maxTokens: 300,
-        },
-      });
-    }
-  } else if (process.env.ANTHROPIC_API_KEY) {
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 300,
-      temperature: 0.8,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    });
-
-    const firstContent = message.content[0]!;
-    generatedValue = (firstContent as { text: string }).text.trim();
-    logger.info(
-      'Generated agent field with Claude',
-      { fieldName, provider: 'claude' },
-      'GenerateField'
-    );
-
-    if (isPromptLoggingEnabled()) {
-      await logPrompt({
-        promptType: `generate_field_${fieldName}`,
-        input: `System: ${systemPrompt}\n\nUser: ${prompt}`,
-        output: generatedValue,
-        metadata: {
-          provider: 'claude',
-          model: 'claude-sonnet-4-5',
-          temperature: 0.8,
-          maxTokens: 300,
-        },
-      });
-    }
-  } else {
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          'No LLM API key configured. Set GROQ_API_KEY or ANTHROPIC_API_KEY.',
+  if (isPromptLoggingEnabled()) {
+    await logPrompt({
+      promptType: `generate_field_${fieldName}`,
+      input: `System: ${systemPrompt}\n\nUser: ${prompt}`,
+      output: generatedValue,
+      metadata: {
+        provider: 'jeju-compute',
+        model: 'llama-3.1-70b-versatile',
+        temperature: 0.8,
+        maxTokens: 300,
       },
-      { status: 503 }
-    );
+    });
   }
 
-  // Strip any <think>...</think> tags and their content (from reasoning models like Qwen)
+  // Strip any <think>...</think> tags and their content (from reasoning models)
   // Also remove leading/trailing quotes
   const cleanedValue = generatedValue
     .replace(/<think>[\s\S]*?<\/think>/gi, '')

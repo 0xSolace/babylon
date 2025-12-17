@@ -77,7 +77,7 @@ export function usePullToRefresh(
   const touchStartY = useRef<number>(0);
   const isPulling = useRef<boolean>(false);
   const wheelAccumulator = useRef<number>(0);
-  const wheelResetTimer = useRef<NodeJS.Timeout | null>(null);
+  const wheelResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafRef = useRef<number | null>(null);
   const nodeRef = useRef<HTMLDivElement | null>(null);
   const lastWheelTriggerRef = useRef<number>(0);

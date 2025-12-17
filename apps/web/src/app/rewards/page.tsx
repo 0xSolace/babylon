@@ -23,6 +23,7 @@ import {
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { AirdropStatusWidget } from '@/components/airdrop';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
 import { RewardsSkeleton } from '@/components/rewards/RewardsSkeleton';
@@ -318,6 +319,9 @@ export default function RewardsPage() {
                 Complete tasks and invite friends to earn points
               </p>
             </div>
+
+            {/* BBLN Airdrop Section */}
+            <AirdropStatusWidget />
 
             {/* Stats Row */}
             <div className="grid grid-cols-3 gap-4">
@@ -633,6 +637,9 @@ export default function RewardsPage() {
                 Complete tasks and invite friends to earn points
               </p>
             </div>
+
+            {/* BBLN Airdrop Section - Mobile */}
+            <AirdropStatusWidget />
 
             {/* Stats Row */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3">

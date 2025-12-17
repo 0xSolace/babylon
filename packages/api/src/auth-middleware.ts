@@ -1,14 +1,18 @@
 /**
  * API Authentication Middleware
  *
- * @description Middleware for authenticating API requests. Supports both Privy
- * user authentication (via tokens/cookies) and agent session tokens. Provides
- * helper functions for authentication, optional authentication, and error responses.
+ * ALL authentication routes through OAuth3 (Jeju's decentralized auth).
+ * NO FALLBACKS - OAuth3 is required.
+ *
+ * Supports:
+ * - OAuth3 user authentication (via tokens/cookies)
+ * - Agent session tokens
+ * - Wallet-based authentication
  */
 
+import { getOAuth3Client, type OAuth3Client } from '@babylon/auth';
 import { db, eq, users } from '@babylon/db';
 import type { AuthenticatedUser } from '@babylon/shared';
-import { PrivyClient } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { verifyAgentSession } from './agent-auth';
@@ -21,41 +25,23 @@ export { extractErrorMessage } from '@babylon/shared';
 // Re-export from errors for backwards compatibility
 export { AuthenticationError, isAuthenticationError };
 
-// Lazy initialization of Privy client to prevent build-time errors
-let privyClient: PrivyClient | null = null;
+// Lazy initialization of OAuth3 client
+let oauth3Client: OAuth3Client | null = null;
 
-export function getPrivyClient(): PrivyClient {
-  if (!privyClient) {
-    const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-    const privyAppSecret = process.env.PRIVY_APP_SECRET;
-
-    if (!privyAppId || !privyAppSecret) {
-      throw new Error('Privy credentials not configured');
-    }
-
-    privyClient = new PrivyClient(privyAppId, privyAppSecret);
+export function getAuthClient(): OAuth3Client {
+  if (!oauth3Client) {
+    oauth3Client = getOAuth3Client();
   }
-  return privyClient;
+  return oauth3Client;
 }
 
 /**
  * Authenticate request and return user info
  *
- * @description Authenticates an API request by checking for authentication tokens.
- * With HTTP-only cookies enabled, the privy-token cookie is preferred over the
- * Authorization header because the cookie is automatically managed and refreshed
- * by Privy. Falls back to Authorization header for backwards compatibility with
- * agents or external clients that may still use header-based auth.
- *
- * Token Priority:
- * 1. privy-token cookie (preferred - auto-refreshed by Privy)
- * 2. Authorization Bearer header (fallback for agents/external clients)
- *
- * @param {NextRequest} request - Next.js request object
- * @returns {Promise<AuthenticatedUser>} Authenticated user information
- * @throws {AuthenticationError} If authentication fails
- *
- * @see https://docs.privy.io/guide/react/configuration/cookies
+ * Authentication is performed via OAuth3 (decentralized auth).
+ * Tokens can be provided via:
+ * 1. oauth3-token cookie (preferred - auto-refreshed)
+ * 2. Authorization Bearer header (for agents/external clients)
  */
 export async function authenticate(
   request: NextRequest
@@ -63,11 +49,11 @@ export async function authenticate(
   const authHeader = request.headers.get('authorization');
   let token: string | undefined;
 
-  // With HTTP-only cookies enabled, prefer the cookie over the Authorization header.
-  const cookieToken = request.cookies.get('privy-token')?.value;
+  // Check for OAuth3 token in cookie first
+  const oauth3Token = request.cookies.get('oauth3-token')?.value;
 
-  if (cookieToken) {
-    token = cookieToken;
+  if (oauth3Token) {
+    token = oauth3Token;
   } else if (authHeader?.startsWith('Bearer ')) {
     token = authHeader.substring(7);
   }
@@ -83,14 +69,33 @@ export async function authenticate(
   if (agentSession) {
     return {
       userId: agentSession.agentId,
-      privyId: agentSession.agentId,
+      oauth3Id: agentSession.agentId,
       isAgent: true,
     };
   }
 
-  // Try Privy authentication
-  const privy = getPrivyClient();
-  const claims = await privy.verifyAuthToken(token);
+  // Try OAuth3 authentication
+  const auth = getAuthClient();
+
+  let session;
+  try {
+    session = await auth.validateSession(token);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('expired') || message.includes('invalid')) {
+      throw new AuthenticationError(
+        'Authentication token has expired. Please refresh your session.'
+      );
+    }
+    throw new AuthenticationError(message);
+  }
+
+  if (!session) {
+    throw new AuthenticationError('Invalid session token');
+  }
+
+  // Get user from database using OAuth3 identity
+  const identityId = session.identityId;
 
   const result = await db
     .select({
@@ -98,16 +103,38 @@ export async function authenticate(
       walletAddress: users.walletAddress,
     })
     .from(users)
-    .where(eq(users.privyId, claims.userId))
+    .where(eq(users.oauth3Id, identityId))
     .limit(1);
 
-  const dbUser = result[0];
+  let dbUser = result[0];
+
+  // If not found by oauth3Id, try by wallet address from session
+  if (!dbUser && session.smartAccount) {
+    const walletResult = await db
+      .select({
+        id: users.id,
+        walletAddress: users.walletAddress,
+      })
+      .from(users)
+      .where(eq(users.walletAddress, session.smartAccount))
+      .limit(1);
+
+    dbUser = walletResult[0];
+
+    // Link OAuth3 identity to existing user
+    if (dbUser) {
+      await db
+        .update(users)
+        .set({ oauth3Id: identityId })
+        .where(eq(users.id, dbUser.id));
+    }
+  }
 
   return {
-    userId: dbUser?.id ?? claims.userId,
+    userId: dbUser?.id ?? identityId,
     dbUserId: dbUser?.id,
-    privyId: claims.userId,
-    walletAddress: dbUser?.walletAddress ?? undefined,
+    oauth3Id: identityId,
+    walletAddress: dbUser?.walletAddress ?? session.smartAccount ?? undefined,
     email: undefined,
     isAgent: false,
   };
@@ -139,11 +166,10 @@ export async function optionalAuth(
   const authHeader = request.headers.get('authorization');
   let token: string | undefined;
 
-  // Prefer cookie over header
-  const cookieToken = request.cookies.get('privy-token')?.value;
+  const oauth3Token = request.cookies.get('oauth3-token')?.value;
 
-  if (cookieToken) {
-    token = cookieToken;
+  if (oauth3Token) {
+    token = oauth3Token;
   } else if (authHeader?.startsWith('Bearer ')) {
     token = authHeader.substring(7);
   }
@@ -152,38 +178,43 @@ export async function optionalAuth(
     return null;
   }
 
-  const agentSession = await verifyAgentSession(token);
-  if (agentSession) {
+  try {
+    const agentSession = await verifyAgentSession(token);
+    if (agentSession) {
+      return {
+        userId: agentSession.agentId,
+        oauth3Id: agentSession.agentId,
+        isAgent: true,
+      };
+    }
+
+    const auth = getAuthClient();
+    const session = await auth.validateSession(token);
+
+    if (!session) return null;
+
+    const result = await db
+      .select({
+        id: users.id,
+        walletAddress: users.walletAddress,
+      })
+      .from(users)
+      .where(eq(users.oauth3Id, session.identityId))
+      .limit(1);
+
+    const dbUser = result[0];
+
     return {
-      userId: agentSession.agentId,
-      privyId: agentSession.agentId,
-      isAgent: true,
+      userId: dbUser?.id ?? session.identityId,
+      dbUserId: dbUser?.id,
+      oauth3Id: session.identityId,
+      walletAddress: dbUser?.walletAddress ?? session.smartAccount ?? undefined,
+      email: undefined,
+      isAgent: false,
     };
+  } catch {
+    return null;
   }
-
-  // Try Privy authentication - return null on failure (optional auth)
-  const privy = getPrivyClient();
-  const claims = await privy.verifyAuthToken(token);
-
-  const result = await db
-    .select({
-      id: users.id,
-      walletAddress: users.walletAddress,
-    })
-    .from(users)
-    .where(eq(users.privyId, claims.userId))
-    .limit(1);
-
-  const dbUser = result[0];
-
-  return {
-    userId: dbUser?.id ?? claims.userId,
-    dbUserId: dbUser?.id,
-    privyId: claims.userId,
-    walletAddress: dbUser?.walletAddress ?? undefined,
-    email: undefined,
-    isAgent: false,
-  };
 }
 
 /**
@@ -200,24 +231,31 @@ export async function optionalAuthFromHeaders(
 
   const token = authHeader.substring(7);
 
-  const agentSession = await verifyAgentSession(token);
-  if (agentSession) {
+  try {
+    const agentSession = await verifyAgentSession(token);
+    if (agentSession) {
+      return {
+        userId: agentSession.agentId,
+        oauth3Id: agentSession.agentId,
+        isAgent: true,
+      };
+    }
+
+    const auth = getAuthClient();
+    const session = await auth.validateSession(token);
+
+    if (!session) return null;
+
     return {
-      userId: agentSession.agentId,
-      isAgent: true,
+      userId: session.identityId,
+      oauth3Id: session.identityId,
+      walletAddress: session.smartAccount ?? undefined,
+      email: undefined,
+      isAgent: false,
     };
+  } catch {
+    return null;
   }
-
-  // Try Privy authentication - return null on failure (optional auth)
-  const privy = getPrivyClient();
-  const claims = await privy.verifyAuthToken(token);
-
-  return {
-    userId: claims.userId,
-    walletAddress: undefined,
-    email: undefined,
-    isAgent: false,
-  };
 }
 
 /**
@@ -229,13 +267,6 @@ export function authErrorResponse(message = 'Unauthorized') {
 
 /**
  * Authenticate user from request (convenience wrapper)
- *
- * @description Authenticates a user from a Next.js request and returns user
- * information with an additional 'id' alias for userId.
- *
- * @param {NextRequest} req - Next.js request object
- * @returns {Promise<AuthenticatedUser & { id: string }>} Authenticated user information
- * @throws {AuthenticationError} If authentication fails
  */
 export async function authenticateUser(req: NextRequest) {
   const authUser = await authenticate(req);

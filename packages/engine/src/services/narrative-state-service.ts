@@ -1,7 +1,7 @@
 /**
  * Narrative State Service - Arc plan persistence
  *
- * Uses @babylon/db as the unified interface for storage.
+ * Uses @babylon/db as the primary interface for storage.
  * Works with both PostgreSQL and JSON backends.
  */
 

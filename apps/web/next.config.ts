@@ -95,17 +95,26 @@ const nextConfig: NextConfig = {
   images: {
     qualities: [100, 75],
     remotePatterns: [
+      // Jeju IPFS gateway
       {
         protocol: 'https',
-        hostname: '**.public.blob.vercel-storage.com',
+        hostname: 'ipfs.jeju.network',
         pathname: '/**',
       },
+      // Local IPFS gateway (dev)
       {
         protocol: 'http',
         hostname: 'localhost',
-        port: '9000',
-        pathname: '/**',
+        port: '8080',
+        pathname: '/ipfs/**',
       },
+      {
+        protocol: 'http',
+        hostname: '127.0.0.1',
+        port: '8080',
+        pathname: '/ipfs/**',
+      },
+      // Fallback for any HTTPS images
       {
         protocol: 'https',
         hostname: '**',

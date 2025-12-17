@@ -17,7 +17,7 @@ import {
 } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { parseKeyValueXml } from '@elizaos/core';
-import { callGroqDirect } from '../llm/direct-groq';
+import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -258,7 +258,7 @@ ${contextString}
           ? `${finalPrompt}\n\nREMINDER: You MUST output valid XML. Start with <response> and include <text> with your post content. No <think> tags.`
           : finalPrompt;
 
-        const postContent = await callGroqDirect({
+        const postContent = await callJejuDirect({
           prompt: currentPrompt,
           system: config?.systemPrompt ?? undefined,
           modelSize: 'large', // Uses trained W&B model if available, else qwen3-32b

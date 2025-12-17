@@ -24,7 +24,6 @@ import {
 } from '@babylon/db';
 import { isPromptLoggingEnabled, logPrompt } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
-import OpenAI from 'openai';
 
 // =============================================================================
 // Types
@@ -40,36 +39,65 @@ export interface GeneratedTag {
 }
 
 // =============================================================================
-// LLM Client Setup
+// LLM Client Setup - Routes through Jeju Compute
 // =============================================================================
 
-type OpenAIClient = OpenAI;
+const JEJU_COMPUTE_ENDPOINT =
+  process.env.JEJU_COMPUTE_ENDPOINT ||
+  process.env.JEJU_DWS_ENDPOINT ||
+  'http://localhost:4100';
 
-const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
-const baseURL = process.env.GROQ_API_KEY
-  ? 'https://api.groq.com/openai/v1'
-  : 'https://api.openai.com/v1';
+interface JejuInferenceClient {
+  chat: {
+    completions: {
+      create: (params: {
+        model: string;
+        messages: Array<{ role: string; content: string }>;
+        max_tokens?: number;
+        temperature?: number;
+      }) => Promise<{
+        choices: Array<{ message: { content: string } }>;
+      }>;
+    };
+  };
+}
 
-let openaiClient: OpenAIClient | null = null;
-let openaiImportAttempted = false;
+let jejuClient: JejuInferenceClient | null = null;
 
-async function getOpenAIClient(): Promise<OpenAIClient | null> {
-  if (!apiKey) {
-    return null;
+async function getJejuClient(): Promise<JejuInferenceClient | null> {
+  if (jejuClient) {
+    return jejuClient;
   }
-  if (openaiClient) {
-    return openaiClient;
-  }
 
-  if (!openaiImportAttempted) {
-    openaiImportAttempted = true;
-    openaiClient = new OpenAI({
-      apiKey,
-      baseURL,
-    });
-  }
+  jejuClient = {
+    chat: {
+      completions: {
+        create: async (params) => {
+          const response = await fetch(
+            `${JEJU_COMPUTE_ENDPOINT}/v1/chat/completions`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: params.model || 'llama-3.1-70b-versatile',
+                messages: params.messages,
+                max_tokens: params.max_tokens || 1024,
+                temperature: params.temperature ?? 0.3,
+              }),
+            }
+          );
 
-  return openaiClient;
+          if (!response.ok) {
+            throw new Error(`Jeju Compute error: ${response.status}`);
+          }
+
+          return response.json();
+        },
+      },
+    },
+  };
+
+  return jejuClient;
 }
 
 // =============================================================================
@@ -82,11 +110,11 @@ async function getOpenAIClient(): Promise<OpenAIClient | null> {
 export async function generateTagsFromPost(
   content: string
 ): Promise<GeneratedTag[]> {
-  const openai = await getOpenAIClient();
+  const client = await getJejuClient();
 
-  if (!openai) {
+  if (!client) {
     logger.warn(
-      'Tag generation skipped - no GROQ_API_KEY or OPENAI_API_KEY configured',
+      'Tag generation skipped - Jeju Compute not available',
       undefined,
       'TagService'
     );
@@ -141,11 +169,9 @@ Return ONLY valid XML:
 
 If no good tags, return: <response><tags></tags></response>`;
 
-  const model = process.env.GROQ_API_KEY
-    ? 'llama-3.1-8b-instant'
-    : 'gpt-5-nano';
+  const model = 'llama-3.1-8b-instant'; // Jeju Compute default model
 
-  const response = await openai.chat.completions.create({
+  const response = await client.chat.completions.create({
     model,
     messages: [
       {
@@ -170,7 +196,7 @@ If no good tags, return: <response><tags></tags></response>`;
       input: `System: You are an XML-only assistant for tag extraction. You must respond ONLY with valid XML. No JSON, no explanations, no markdown.\n\nUser: ${prompt}`,
       output: contentText || '',
       metadata: {
-        provider: process.env.GROQ_API_KEY ? 'groq' : 'openai',
+        provider: 'jeju-compute',
         model,
         temperature: 0.3,
         maxTokens: 500,

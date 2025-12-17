@@ -24,7 +24,9 @@
       "!**/*.mdx",
       "!**/babylon-platform-artchitecture",
       "!**/genesis.json",
-      "!**/drizzle/migrations"
+      "!**/drizzle/migrations",
+      "!**/*.d.ts",
+      "!**/*.d.ts.map"
     ]
   },
   "formatter": {
@@ -120,6 +122,16 @@
           },
           "correctness": {
             "useHookAtTopLevel": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/integration/*.test.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }

@@ -1,13 +1,15 @@
 import {
+  and,
   type PerpPosition as DbPerpPosition,
   db as defaultDb,
+  eq,
+  getRawDrizzle,
+  type InferInsertModel,
+  isNull,
   perpMarketSnapshots,
   perpPositions,
-  type Transaction,
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
-import type { InferInsertModel } from 'drizzle-orm';
-import { and, eq, isNull } from 'drizzle-orm';
 import type {
   PerpDbPort,
   PerpMarketRecord,
@@ -16,7 +18,14 @@ import type {
 } from '../../types';
 
 type NewPerpPosition = InferInsertModel<typeof perpPositions>;
-type DrizzleClient = typeof defaultDb | Transaction;
+
+// Database operations interface - works with DrizzleClient and raw transactions
+interface DbOperations {
+  select: typeof defaultDb.select;
+  insert: typeof defaultDb.insert;
+  update: typeof defaultDb.update;
+  delete: typeof defaultDb.delete;
+}
 
 /**
  * Drizzle adapter for PerpDbPort.
@@ -27,10 +36,13 @@ type DrizzleClient = typeof defaultDb | Transaction;
  * - Supports transactions via constructor injection or transaction() method.
  */
 export class PerpDbAdapter implements PerpDbPort {
-  private readonly dbClient: DrizzleClient;
+  private readonly dbClient: DbOperations;
+  // Note: isTransaction is stored for potential future use in transaction-aware operations
+  private readonly _isTransaction: boolean;
 
-  constructor(dbClient?: DrizzleClient) {
+  constructor(dbClient?: DbOperations, isTransaction = false) {
     this.dbClient = dbClient ?? defaultDb;
+    this._isTransaction = isTransaction;
   }
 
   async listMarkets(): Promise<PerpMarketRecord[]> {
@@ -38,7 +50,7 @@ export class PerpDbAdapter implements PerpDbPort {
     if (snapshots.length === 0) return [];
 
     // Name is stored directly in the snapshot - no need to join with organizations
-    return snapshots.map((s) => ({
+    return snapshots.map((s: typeof perpMarketSnapshots.$inferSelect) => ({
       ticker: s.ticker,
       organizationId: s.organizationId,
       name: s.name ?? undefined,
@@ -326,12 +338,13 @@ export class PerpDbAdapter implements PerpDbPort {
    */
   async transaction<T>(fn: (tx: PerpDbPort) => Promise<T>): Promise<T> {
     // If already in a transaction, just use the current client
-    if (this.dbClient !== defaultDb) {
+    if (this._isTransaction) {
       return fn(this);
     }
 
-    return defaultDb.transaction(async (txClient) => {
-      const txAdapter = new PerpDbAdapter(txClient);
+    const rawDrizzle = getRawDrizzle();
+    return rawDrizzle.transaction(async (txClient) => {
+      const txAdapter = new PerpDbAdapter(txClient, true);
       return fn(txAdapter);
     });
   }

@@ -88,11 +88,10 @@ export async function syncReputationIfAvailable(
   return await reputationSyncService.batchSync(options);
 }
 
+import { getDeployerPrivateKey } from '../config/dev-keys';
+
 // Contract addresses from canonical config
 const REPUTATION_SYSTEM = REPUTATION_SYSTEM_BASE_SEPOLIA as Address;
-
-// Server wallet for paying gas (testnet only!)
-const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`;
 
 /**
  * Market resolution information
@@ -170,7 +169,7 @@ export class ReputationService {
       transport: http(getCurrentRpcUrl()),
     });
 
-    const account = privateKeyToAccount(DEPLOYER_PRIVATE_KEY);
+    const account = privateKeyToAccount(getDeployerPrivateKey());
     const walletClient = createWalletClient({
       account,
       chain: baseSepolia,

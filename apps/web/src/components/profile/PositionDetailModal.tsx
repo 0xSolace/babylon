@@ -212,7 +212,7 @@ export function PositionDetailModal({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${window.__privyAccessToken || ''}`,
+        Authorization: `Bearer ${window.__oauth3AccessToken || ''}`,
       },
       body: JSON.stringify({
         ticker: perpMarket.ticker,
@@ -246,7 +246,7 @@ export function PositionDetailModal({
 
     setLoading(true);
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       toast.error('Authentication required');
       setLoading(false);

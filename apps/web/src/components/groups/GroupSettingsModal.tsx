@@ -1,7 +1,7 @@
 'use client';
 
+import { useJejuAuth } from '@babylon/auth/client';
 import { cn } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import {
   Crown,
   Edit2,
@@ -97,7 +97,7 @@ export function GroupSettingsModal({
   onGroupDeleted,
   currentUserId,
 }: GroupSettingsModalProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useJejuAuth();
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [group, setGroup] = useState<GroupDetails | null>(null);
   const [loading, setLoading] = useState(true);

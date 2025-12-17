@@ -121,6 +121,7 @@ export function createJsonClient(): DrizzleClient {
     userGroupMember: createJsonRepo('userGroupMembers'),
     userBlock: createJsonRepo('userBlocks'),
     userMute: createJsonRepo('userMutes'),
+    userMessagingKey: createJsonRepo('userMessagingKeys'),
     report: createJsonRepo('reports'),
     twitterOAuthToken: createJsonRepo('twitterOAuthTokens'),
     onboardingIntent: createJsonRepo('onboardingIntents'),

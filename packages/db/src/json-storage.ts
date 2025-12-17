@@ -28,7 +28,10 @@ import type { JsonValue } from './client';
 // Types
 // ============================================================================
 
-type StorageMode = 'postgres' | 'json' | 'memory';
+export type StorageMode = 'cql' | 'postgres' | 'json' | 'memory';
+
+// Current storage mode - defaults to cql (decentralized)
+let currentStorageMode: StorageMode = 'cql';
 
 interface JsonStorageState {
   metadata: {
@@ -584,4 +587,40 @@ export function clearJsonStorage(): void {
 /** Get raw state access (for debugging) */
 export function getJsonState(): JsonStorageState | null {
   return storageState;
+}
+
+// ============================================================================
+// Storage Mode Management
+// ============================================================================
+
+/** Get current storage mode */
+export function getStorageMode(): StorageMode {
+  return currentStorageMode;
+}
+
+/** Check if running in simulation mode (json or memory) */
+export function isSimulationMode(): boolean {
+  return currentStorageMode === 'json' || currentStorageMode === 'memory';
+}
+
+/** Initialize JSON storage mode */
+export async function initializeJsonMode(basePath: string): Promise<void> {
+  await initJsonStorage(basePath);
+  currentStorageMode = 'json';
+}
+
+/** Initialize memory storage mode (no persistence) */
+export async function initializeMemoryMode(): Promise<void> {
+  storageState = createEmptyState();
+  storageState.metadata.mode = 'memory';
+  storagePath = null;
+  autoSave = false;
+  currentStorageMode = 'memory';
+}
+
+/** Reset to CQL mode */
+export function resetToCQLMode(): void {
+  storageState = null;
+  storagePath = null;
+  currentStorageMode = 'cql';
 }

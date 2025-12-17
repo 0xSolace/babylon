@@ -14,7 +14,7 @@ import type { QuestionPort } from './questions';
 import type { TradingPort } from './trading';
 import type { UserPort } from './users';
 
-export type StorageMode = 'postgres' | 'json' | 'memory';
+export type StorageMode = 'cql' | 'json' | 'memory' | 'postgres';
 
 export interface StorageProviderConfig {
   mode: StorageMode;

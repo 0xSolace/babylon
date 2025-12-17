@@ -1,6 +1,6 @@
 'use client';
 
-import { usePrivy } from '@privy-io/react-auth';
+import { useJejuAuth } from '@babylon/auth/client';
 import { Check, Loader2, Users, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -54,7 +54,7 @@ export function GroupInviteCard({
   onAccepted,
   onDeclined,
 }: GroupInviteCardProps) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useJejuAuth();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'pending' | 'accepted' | 'declined'>(
     'pending'

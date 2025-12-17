@@ -124,7 +124,8 @@ export const experienceEvaluator: Evaluator = {
     }
 
     // Get last 10 messages as context for analysis
-    const recentMessages = state?.recentMessagesData?.slice(-10) || [];
+    const messagesData = (state?.recentMessagesData ?? []) as Memory[];
+    const recentMessages = messagesData.slice(-10);
     if (recentMessages.length < 3) {
       logger.debug(
         '[experienceEvaluator] Not enough messages for experience extraction'
@@ -134,7 +135,7 @@ export const experienceEvaluator: Evaluator = {
 
     // Combine recent messages into analysis context
     const conversationContext = recentMessages
-      .map((m: Memory) => m.content.text)
+      .map((m) => m.content?.text ?? '')
       .filter(Boolean)
       .join(' ');
 

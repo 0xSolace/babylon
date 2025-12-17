@@ -98,7 +98,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const [dbUser] = await db
     .select({
       id: users.id,
-      privyId: users.privyId,
+      oauth3Id: users.oauth3Id,
       username: users.username,
       displayName: users.displayName,
       bio: users.bio,

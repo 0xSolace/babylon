@@ -153,7 +153,7 @@ export function PredictionTradingModal({
     setLoading(true);
 
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       toast.error('Authentication required. Please log in.');
       setLoading(false);
@@ -204,7 +204,7 @@ export function PredictionTradingModal({
       />
 
       {/* Modal */}
-      <div className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-full max-w-lg">
+      <div className="fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2">
         <div className="fade-in zoom-in-95 m-4 max-h-[90vh] animate-in overflow-y-auto rounded bg-popover px-4 py-3 shadow-xl duration-200 sm:px-6 sm:py-4">
           {/* Header */}
           <div className="mb-4 flex items-center justify-between">

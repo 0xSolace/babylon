@@ -184,7 +184,7 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (!authenticated || notifications.length === 0) return;
 
-    const timers = new Map<string, NodeJS.Timeout>();
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
     const observer = new IntersectionObserver(
       (entries) => {

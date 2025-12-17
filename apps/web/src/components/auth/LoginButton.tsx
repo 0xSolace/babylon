@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
  *
  * Displays a "Connect Wallet" button that triggers the authentication
  * flow when clicked. Automatically disables when auth is not ready.
- * Uses Privy for wallet connection.
+ * Uses OAuth3 for wallet connection.
  *
  * @returns Login button element
  *

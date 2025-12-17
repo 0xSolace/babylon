@@ -1,4 +1,4 @@
-import { usePrivy } from '@privy-io/react-auth';
+import { useJejuAuth } from '@babylon/auth/client';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -42,7 +42,7 @@ interface UnreadCounts {
  */
 export function useUnreadMessages() {
   const { authenticated } = useAuth();
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useJejuAuth();
   const [counts, setCounts] = useState<UnreadCounts>({
     pendingDMs: 0,
     hasNewMessages: false,

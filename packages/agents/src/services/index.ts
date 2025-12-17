@@ -25,3 +25,4 @@ export {
   setServiceContainer,
 } from './interfaces';
 export * from './npc-bootstrap.service';
+export * from './npc-decentralized-bootstrap.service';

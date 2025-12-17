@@ -12,8 +12,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { db } from '@babylon/db';
 import {
-  getGroupChatConfigSummary,
   GroupInviteOrchestrator,
+  getGroupChatConfigSummary,
   validateGroupChatConfig,
 } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';
@@ -150,7 +150,7 @@ describe('Group Invite API Flow', () => {
     test('configuration is valid and accessible', () => {
       const config = getGroupChatConfigSummary();
       expect(Object.keys(config).length).toBeGreaterThan(0);
-      
+
       const validation = validateGroupChatConfig();
       expect(validation.valid).toBe(true);
     });
@@ -175,7 +175,7 @@ describe('Group Invite API Flow', () => {
 
       // Step 2: Verify candidate was queued
       expect(queueResult.queued).toBe(true);
-      
+
       const [candidate] = await db.pendingGroupInviteCandidate.findMany({
         where: { userId: user.id, npcId: npc.id, processed: false },
       });
@@ -211,7 +211,7 @@ describe('Group Invite API Flow', () => {
         where: { invitedUserId: user.id, status: 'pending' },
       });
       expect(pendingInvites.length).toBeGreaterThan(0);
-      
+
       const invite = pendingInvites[0]!;
       testIds.inviteIds.push(invite.id);
 
@@ -357,4 +357,3 @@ describe('Group Invite API Flow', () => {
     });
   });
 });
-

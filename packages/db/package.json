@@ -17,6 +17,16 @@
       "types": "./src/types.ts",
       "import": "./src/types.ts",
       "require": "./src/types.ts"
+    },
+    "./moderation/filters": {
+      "types": "./src/moderation/filters.ts",
+      "import": "./src/moderation/filters.ts",
+      "require": "./src/moderation/filters.ts"
+    },
+    "./decentralized": {
+      "types": "./src/decentralized/index.ts",
+      "import": "./src/decentralized/index.ts",
+      "require": "./src/decentralized/index.ts"
     }
   },
   "scripts": {
@@ -31,6 +41,7 @@
   },
   "dependencies": {
     "@babylon/shared": "workspace:*",
+    "@jejunetwork/db": "workspace:*",
     "drizzle-orm": "^0.44.7",
     "postgres": "^3.4.7"
   },

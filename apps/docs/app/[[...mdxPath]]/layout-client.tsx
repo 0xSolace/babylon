@@ -173,7 +173,7 @@ export default function DocsLayoutClient({
       }}
       footer={footer}
     >
-      {children}
+      {children as React.ReactNode}
     </Layout>
   );
 }

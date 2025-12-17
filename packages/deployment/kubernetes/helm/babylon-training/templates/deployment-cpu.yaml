@@ -1,0 +1,65 @@
+{{- if .Values.cpuTraining.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "babylon-training.fullname" . }}-cpu
+  labels:
+    {{- include "babylon-training.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cpu-training
+spec:
+  replicas: {{ .Values.cpuTraining.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "babylon-training.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: cpu-training
+  template:
+    metadata:
+      labels:
+        {{- include "babylon-training.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: cpu-training
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "babylon-training.serviceAccountName" . }}
+      containers:
+        - name: cpu-training
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.cpuTraining.image.repository }}:{{ .Values.cpuTraining.image.tag }}"
+          imagePullPolicy: {{ .Values.cpuTraining.image.pullPolicy }}
+          command:
+            - "/app/entrypoint.sh"
+            - {{ .Values.cpuTraining.command | quote }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          {{- if .Values.healthCheck.enabled }}
+          livenessProbe:
+            {{- toYaml .Values.healthCheck.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.healthCheck.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.cpuTraining.resources | nindent 12 }}
+          env:
+            {{- toYaml .Values.cpuTraining.env | nindent 12 }}
+          envFrom:
+            {{- toYaml .Values.cpuTraining.envFrom | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.persistence.dataPath }}
+            - name: checkpoints
+              mountPath: {{ .Values.persistence.checkpointPath }}
+            {{- end }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "babylon-training.fullname" . }}-data
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: {{ include "babylon-training.fullname" . }}-checkpoints
+        {{- end }}
+{{- end }}

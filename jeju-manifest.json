@@ -1,23 +1,325 @@
 {
-  "$schema": "../../jeju-manifest.schema.json",
+  "$schema": "../../../packages/config/jeju-manifest.schema.json",
   "name": "babylon",
-  "displayName": "Babylon Game Engine",
-  "version": "1.0.0",
+  "displayName": "Babylon",
+  "version": "2.0.0",
   "type": "vendor",
-  "description": "AI-powered game engine with perps trading, social features, and agent integration",
+  "description": "Fully decentralized prediction markets and social game with AI agents, governed by AI CEO (MonkeyKing)",
   "commands": {
     "dev": "bun run dev",
     "build": "bun run build",
-    "start": "bun run start"
+    "build:static": "bun run build:static",
+    "test": "bun run test",
+    "start": "bun run start",
+    "deploy": "bun run deploy:frontend",
+    "deploy:testnet": "bun run deploy:testnet:all",
+    "deploy:mainnet": "bun run deploy:mainnet:all",
+    "deploy:contracts": "forge script script/DeployDAO.s.sol --broadcast",
+    "seed": "bun run packages/contracts/script/auto-seed.ts",
+    "training:status": "bun run packages/training/scripts/status.ts",
+    "ceo:monitor": "bun run packages/agents/scripts/monitor-ceo.ts"
   },
   "ports": {
     "main": 5007,
-    "web": 5007,
-    "docs": 5008
+    "api": 5008,
+    "a2a": 5009,
+    "training": 5010
   },
-  "dependencies": [],
-  "optional": true,
+  "dependencies": [
+    "cql",
+    "cache-service",
+    "storage",
+    "kms",
+    "oauth3",
+    "contracts",
+    "compute",
+    "keepalive"
+  ],
+  "contracts": {
+    "manifest": "contracts/jeju-contracts.json",
+    "autoDeploy": true,
+    "deployOrder": [
+      "BabylonTreasury",
+      "BabylonAgentVault",
+      "BabylonDAO",
+      "TrainingOrchestrator"
+    ]
+  },
   "enabled": true,
-  "autoStart": false,
-  "tags": ["game", "ai", "perps", "social", "agents"]
+  "autoStart": true,
+  "tags": [
+    "game",
+    "prediction-markets",
+    "social",
+    "ai-agents",
+    "decentralized",
+    "dao",
+    "ai-ceo"
+  ],
+  "jns": {
+    "name": "babylon.jeju",
+    "description": "Decentralized prediction markets and social game with AI agents, governed by AI CEO",
+    "url": "https://babylon.game",
+    "subdomains": {
+      "api": "Backend API",
+      "ws": "WebSocket connections",
+      "training": "Training orchestrator",
+      "monkeyking": "AI CEO agent"
+    }
+  },
+  "agent": {
+    "enabled": true,
+    "a2aEndpoint": "https://api.babylon.game/a2a",
+    "mcpEndpoint": "https://api.babylon.game/mcp",
+    "tags": [
+      "prediction-markets",
+      "social",
+      "ai-agents",
+      "gaming",
+      "defi",
+      "dao"
+    ],
+    "metadata": {
+      "category": "prediction-markets",
+      "provider": "babylon",
+      "governance": "ai-ceo"
+    },
+    "trustModels": ["open"],
+    "x402Support": true,
+    "jnsName": "babylon.jeju"
+  },
+  "governance": {
+    "type": "ai-ceo",
+    "aiCEO": {
+      "name": "MonkeyKing",
+      "agentId": 1,
+      "capabilities": [
+        "treasury_management",
+        "training_orchestration",
+        "model_deployment",
+        "game_parameter_optimization",
+        "protocol_upgrade_proposal"
+      ]
+    },
+    "council": {
+      "role": "advisory",
+      "canVeto": true,
+      "canEmergencyPause": true
+    },
+    "timelocks": {
+      "treasurySpend": 0,
+      "modelDeployment": 0,
+      "trainingJob": 0,
+      "gameParameter": 3600,
+      "protocolUpgrade": 604800
+    }
+  },
+  "training": {
+    "enabled": true,
+    "schedule": {
+      "type": "hybrid",
+      "minIntervalDays": 7,
+      "trajectoryThreshold": 10000,
+      "maxTrajectories": 50000
+    },
+    "benchmarking": {
+      "minImprovement": 100,
+      "samples": 1000,
+      "metrics": ["pnl", "winRate", "sharpeRatio", "maxDrawdown"]
+    },
+    "teeWorkers": {
+      "dataPrepCount": 2,
+      "judgingCount": 3,
+      "trainingCount": 3
+    },
+    "mpc": {
+      "parties": 5,
+      "threshold": 3,
+      "rotationDays": 30
+    }
+  },
+  "decentralization": {
+    "database": {
+      "type": "covenantql",
+      "databaseId": "babylon",
+      "consistency": "strong",
+      "replication": 3
+    },
+    "cache": {
+      "enabled": true,
+      "namespace": "babylon",
+      "planId": "standard",
+      "ttl": 3600
+    },
+    "cdn": {
+      "enabled": true,
+      "regions": ["global"],
+      "cacheRules": [
+        { "pattern": "/_next/static/**", "ttl": 31536000, "immutable": true },
+        { "pattern": "/api/**", "ttl": 0 },
+        { "pattern": "/**/*.html", "ttl": 60, "staleWhileRevalidate": 3600 }
+      ],
+      "serviceWorker": true
+    },
+    "secrets": {
+      "required": [],
+      "mpcEncrypted": ["INFERENCE_API_KEY", "TRAINING_CONFIG"],
+      "optional": ["SENTRY_DSN", "POSTHOG_KEY"]
+    },
+    "frontend": {
+      "ipfs": true,
+      "arweave": true,
+      "jnsName": "babylon.jeju",
+      "buildDir": "apps/web/out",
+      "spa": true,
+      "fallbackOrigins": ["https://babylon.game"],
+      "pinning": {
+        "provider": "jeju-storage",
+        "replicas": 3
+      }
+    },
+    "robustness": {
+      "multiOrigin": true,
+      "offlineSupport": true,
+      "p2pFallback": true,
+      "contentAddressed": true
+    },
+    "triggers": [
+      {
+        "name": "game-tick",
+        "type": "cron",
+        "cronExpression": "*/5 * * * *",
+        "endpoint": "/api/cron/game-tick",
+        "description": "Process game tick every 5 minutes",
+        "timeout": 30000,
+        "retries": 2
+      },
+      {
+        "name": "market-resolution",
+        "type": "cron",
+        "cronExpression": "0 * * * *",
+        "endpoint": "/api/cron/resolve-markets",
+        "description": "Check and resolve expired markets hourly",
+        "timeout": 60000,
+        "retries": 3
+      },
+      {
+        "name": "agent-tick",
+        "type": "cron",
+        "cronExpression": "*/2 * * * *",
+        "endpoint": "/api/cron/agent-tick",
+        "description": "Process AI agent actions every 2 minutes",
+        "timeout": 45000,
+        "retries": 2
+      },
+      {
+        "name": "training-check",
+        "type": "cron",
+        "cronExpression": "0 */6 * * *",
+        "endpoint": "/api/cron/training-check",
+        "description": "Check if training should be triggered",
+        "timeout": 60000,
+        "retries": 1
+      },
+      {
+        "name": "health-check",
+        "type": "cron",
+        "cronExpression": "*/5 * * * *",
+        "endpoint": "/api/cron/health-check",
+        "description": "Report health to keepalive registry",
+        "timeout": 30000,
+        "retries": 2
+      }
+    ]
+  },
+  "keepalive": {
+    "enabled": true,
+    "jnsNode": "babylon.jeju",
+    "checkInterval": 300,
+    "autoFund": {
+      "enabled": true,
+      "minBalance": "0.1",
+      "topUpAmount": "1.0"
+    },
+    "resources": [
+      {
+        "type": "COMPUTE_ENDPOINT",
+        "identifier": "api.babylon.game",
+        "healthEndpoint": "/api/health",
+        "required": true
+      },
+      {
+        "type": "COMPUTE_ENDPOINT",
+        "identifier": "ws.babylon.game",
+        "healthEndpoint": "/health",
+        "required": true
+      },
+      {
+        "type": "IPFS_CONTENT",
+        "identifier": "frontend",
+        "required": true
+      },
+      {
+        "type": "CUSTOM",
+        "identifier": "agent-vault-balance",
+        "minBalance": "0.05",
+        "required": true
+      }
+    ],
+    "recoveryTarget": "1h"
+  },
+  "defaultEnv": {
+    "REQUIRE_DECENTRALIZED": "true",
+    "CQL_BLOCK_PRODUCER_ENDPOINT": "http://localhost:4300",
+    "CQL_DATABASE_ID": "babylon",
+    "JEJU_CACHE_SERVICE_URL": "http://localhost:4015",
+    "JEJU_STORAGE_SERVICE_URL": "http://localhost:5001",
+    "JEJU_KMS_SERVICE_URL": "http://localhost:4200",
+    "JEJU_OAUTH3_SERVICE_URL": "http://localhost:4100",
+    "BABYLON_OAUTH3_APP_ID": "babylon",
+    "CACHE_NAMESPACE": "babylon",
+    "STORAGE_NAMESPACE": "babylon",
+    "KMS_NAMESPACE": "babylon",
+    "NEXT_PUBLIC_DOMAIN": "babylon.game",
+    "NEXT_PUBLIC_API_BASE_URL": "https://api.babylon.game",
+    "NEXT_PUBLIC_IPFS_GATEWAY": "https://ipfs.babylon.game",
+    "AI_CEO_AGENT_ID": "1",
+    "AI_CEO_DECISION_THRESHOLD": "0.7",
+    "AI_CEO_MIN_VAULT_BALANCE": "100000000000000000",
+    "MPC_PARTIES": "5",
+    "MPC_THRESHOLD": "3",
+    "USE_MPC_ENCRYPTION": "true"
+  },
+  "healthCheck": {
+    "endpoint": "/api/health",
+    "interval": 30,
+    "timeout": 10,
+    "degradedThreshold": 100,
+    "unhealthyThreshold": 500
+  },
+  "testing": {
+    "unit": {
+      "command": "bun run test:unit",
+      "timeout": 120000
+    },
+    "integration": {
+      "command": "bun run test:integration",
+      "timeout": 180000,
+      "requiresChain": true,
+      "requiresServices": true
+    },
+    "e2e": {
+      "command": "bun run test:e2e",
+      "timeout": 300000,
+      "requiresChain": true,
+      "requiresWallet": true
+    },
+    "recovery": {
+      "command": "bun run test:recovery",
+      "timeout": 3600000,
+      "description": "Test recovery within 1 hour",
+      "scenarios": ["backend-crash", "low-funds", "tee-failure"]
+    },
+    "services": ["contracts", "cql", "cache-service", "storage", "kms"]
+  }
 }

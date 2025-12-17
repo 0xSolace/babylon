@@ -1,13 +1,7 @@
 'use client';
 
+import { useJejuAuth, useJejuWallet } from '@babylon/auth/client';
 import { logger } from '@babylon/shared';
-import {
-  type ConnectedWallet,
-  type User as PrivyUser,
-  usePrivy,
-  useWallets,
-} from '@privy-io/react-auth';
-import { useSmartWallets } from '@privy-io/react-auth/smart-wallets';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { type User, useAuthStore } from '@/stores/authStore';
@@ -17,7 +11,7 @@ import { apiFetch } from '@/utils/api-fetch';
  * Return type for the useAuth hook.
  */
 interface UseAuthReturn {
-  /** Whether Privy authentication is ready */
+  /** Whether OAuth3 authentication is ready */
   ready: boolean;
   /** Whether the user is currently authenticated */
   authenticated: boolean;
@@ -25,8 +19,8 @@ interface UseAuthReturn {
   loadingProfile: boolean;
   /** The current authenticated user, or null if not authenticated */
   user: User | null;
-  /** The connected wallet (prioritizes embedded wallet for gas sponsorship) */
-  wallet: ConnectedWallet | undefined;
+  /** The connected wallet address */
+  wallet: { address: string } | undefined;
   /** The smart wallet address if available */
   smartWalletAddress?: string;
   /** Whether the smart wallet is ready for transactions */
@@ -56,7 +50,6 @@ const linkedSocialUsers = new Set<string>();
 // Track in-flight linking operations to prevent race conditions
 const linkingInProgress = new Set<string>();
 // Track failed linking attempts (409 = account already linked to different user)
-// Key format: `${userId}:${platform}:${identifier}` (e.g., "did:privy:123:wallet:0x...")
 const failedLinkAttempts = new Set<string>();
 
 /**
@@ -64,13 +57,13 @@ const failedLinkAttempts = new Set<string>();
  *
  * This hook provides comprehensive authentication management including:
  * - User profile loading and synchronization
- * - Wallet connection and management (prioritizes embedded wallet for gas sponsorship)
- * - Smart wallet integration
+ * - Wallet connection and management
+ * - Smart wallet integration via OAuth3/MPC
  * - Social account linking (Farcaster, Twitter, Wallet)
  * - Access token management
  * - Onboarding and on-chain registration status
  *
- * The hook uses Privy for authentication and automatically:
+ * The hook uses Jeju OAuth3 for decentralized authentication and automatically:
  * - Fetches user profile when authenticated
  * - Links social accounts when available
  * - Manages access tokens for API calls
@@ -90,16 +83,21 @@ const failedLinkAttempts = new Set<string>();
  * ```
  */
 export function useAuth(): UseAuthReturn {
+  // Use Jeju OAuth3 hooks
   const {
     ready,
     authenticated,
-    user: privyUser,
-    login,
-    logout,
+    userId,
+    walletAddress,
+    linkedAccounts,
+    loading: authLoading,
+    loginWithWallet,
+    logout: jejuLogout,
     getAccessToken,
-  } = usePrivy();
-  const { wallets } = useWallets();
-  const { client } = useSmartWallets();
+  } = useJejuAuth();
+
+  const { address: smartWalletAddress, ready: walletReady } = useJejuWallet();
+
   const {
     user,
     isLoadingProfile,
@@ -114,22 +112,13 @@ export function useAuth(): UseAuthReturn {
     clearAuth,
   } = useAuthStore();
 
-  // Prioritize embedded Privy wallets for gas sponsorship
-  // Embedded wallets enable gasless transactions via Privy's paymaster
-  // External wallets can be used, but users must pay their own gas
+  // Construct wallet object from OAuth3 state
   const wallet = useMemo(() => {
-    if (wallets.length === 0) return undefined;
+    const addr = walletAddress ?? smartWalletAddress;
+    return addr ? { address: addr } : undefined;
+  }, [walletAddress, smartWalletAddress]);
 
-    // First, try to find the Privy embedded wallet for gas sponsorship
-    const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy');
-    if (embeddedWallet) return embeddedWallet;
-
-    // If no embedded wallet, fall back to external wallet (user pays gas)
-    return wallets[0];
-  }, [wallets]);
-
-  const smartWalletAddress = client?.account?.address;
-  const smartWalletReady = Boolean(smartWalletAddress);
+  const smartWalletReady = walletReady && !!smartWalletAddress;
 
   // Use a ref to track if we've already cleared auth to prevent re-triggering
   const hasClearedAuthRef = useRef(false);
@@ -137,21 +126,25 @@ export function useAuth(): UseAuthReturn {
   const persistAccessToken = useCallback(async (): Promise<string | null> => {
     if (!authenticated) {
       if (typeof window !== 'undefined') {
-        window.__privyAccessToken = null;
+        (
+          window as Window & { __oauth3AccessToken?: string | null }
+        ).__oauth3AccessToken = null;
       }
       return null;
     }
 
     const token = await getAccessToken();
     if (typeof window !== 'undefined') {
-      window.__privyAccessToken = token;
+      (
+        window as Window & { __oauth3AccessToken?: string | null }
+      ).__oauth3AccessToken = token;
     }
     return token ?? null;
   }, [authenticated, getAccessToken]);
 
   const fetchCurrentUser = useCallback(
     async (retryCount = 0) => {
-      if (!authenticated || !privyUser) return;
+      if (!authenticated || !userId) return;
 
       // Use global ref to prevent ANY duplicate calls across all components
       if (globalFetchInFlight) {
@@ -161,14 +154,14 @@ export function useAuth(): UseAuthReturn {
 
       const run = async () => {
         setIsLoadingProfile(true);
-        setLoadedUserId(privyUser.id);
+        setLoadedUserId(userId);
 
         const token = await persistAccessToken();
         if (!token) {
           if (retryCount >= 5) {
             logger.error(
-              'Privy access token unavailable after max retries; giving up',
-              { userId: privyUser.id, retryCount },
+              'OAuth3 access token unavailable after max retries; giving up',
+              { userId, retryCount },
               'useAuth'
             );
             setIsLoadingProfile(false);
@@ -176,8 +169,8 @@ export function useAuth(): UseAuthReturn {
           }
 
           logger.warn(
-            'Privy access token unavailable; delaying /api/users/me fetch',
-            { userId: privyUser.id, retryCount },
+            'OAuth3 access token unavailable; delaying /api/users/me fetch',
+            { userId, retryCount },
             'useAuth'
           );
           setIsLoadingProfile(false);
@@ -232,8 +225,8 @@ export function useAuth(): UseAuthReturn {
             displayName:
               me.user.displayName && me.user.displayName.trim() !== ''
                 ? me.user.displayName
-                : privyUser.email?.address || wallet?.address || 'Anonymous',
-            email: privyUser.email?.address,
+                : wallet?.address || 'Anonymous',
+            email: me.user.email ?? undefined,
             username: me.user.username ?? undefined,
             bio: me.user.bio ?? undefined,
             profileImageUrl:
@@ -289,13 +282,11 @@ export function useAuth(): UseAuthReturn {
             setUser(hydratedUser);
           }
         } else {
-          if (!currentUser || currentUser.id !== privyUser.id) {
+          if (!currentUser || currentUser.id !== userId) {
             setUser({
-              id: privyUser.id,
+              id: userId,
               walletAddress: wallet?.address,
-              displayName:
-                privyUser.email?.address ?? wallet?.address ?? 'Anonymous',
-              email: privyUser.email?.address,
+              displayName: wallet?.address ?? 'Anonymous',
               onChainRegistered: false,
             });
           }
@@ -317,7 +308,7 @@ export function useAuth(): UseAuthReturn {
     },
     [
       authenticated,
-      privyUser,
+      userId,
       persistAccessToken,
       setIsLoadingProfile,
       setLoadedUserId,
@@ -336,12 +327,12 @@ export function useAuth(): UseAuthReturn {
     lastSyncedWalletAddress = wallet.address;
     setWallet({
       address: wallet.address,
-      chainId: wallet.chainId,
+      chainId: 'unknown', // OAuth3 doesn't expose chainId the same way
     });
   }, [wallet, setWallet]);
 
   const linkSocialAccounts = useCallback(async () => {
-    if (!authenticated || !privyUser) return;
+    if (!authenticated || !userId) return;
     if (isLoadingProfile) return; // Wait for profile to load
     if (needsOnboarding || needsOnchain) return;
 
@@ -350,31 +341,27 @@ export function useAuth(): UseAuthReturn {
     if (!currentUser) return; // Don't link social accounts if user doesn't exist yet
 
     // Prevent duplicate calls - check both sets synchronously
-    if (linkedSocialUsers.has(privyUser.id)) return;
-    if (linkingInProgress.has(privyUser.id)) return;
+    if (linkedSocialUsers.has(userId)) return;
+    if (linkingInProgress.has(userId)) return;
 
     const token = await getAccessToken();
     if (!token) return;
 
     // Mark as in progress immediately to prevent race conditions
-    linkingInProgress.add(privyUser.id);
+    linkingInProgress.add(userId);
 
-    const userWithFarcaster = privyUser as PrivyUser & {
-      farcaster?: { username?: string; displayName?: string };
-    };
-    const userWithTwitter = privyUser as PrivyUser & {
-      twitter?: { username?: string };
-    };
+    // Check linked accounts from OAuth3
+    const farcasterAccount = linkedAccounts.find((a) => a.type === 'farcaster');
+    const twitterAccount = linkedAccounts.find((a) => a.type === 'twitter');
 
     // Only link accounts that aren't already linked
-    if (userWithFarcaster.farcaster && !currentUser.hasFarcaster) {
-      const farcaster = userWithFarcaster.farcaster;
-      const farcasterKey = `${privyUser.id}:farcaster:${farcaster.username || farcaster.displayName}`;
+    if (farcasterAccount && !currentUser.hasFarcaster) {
+      const farcasterKey = `${userId}:farcaster:${farcasterAccount.identifier}`;
 
       // Skip if this link attempt previously failed with 409
       if (!failedLinkAttempts.has(farcasterKey)) {
         const response = await apiFetch(
-          `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
+          `/api/users/${encodeURIComponent(userId)}/link-social`,
           {
             method: 'POST',
             headers: {
@@ -382,48 +369,43 @@ export function useAuth(): UseAuthReturn {
             },
             body: JSON.stringify({
               platform: 'farcaster',
-              username: farcaster.username || farcaster.displayName,
+              username: farcasterAccount.identifier,
             }),
           }
         );
 
         if (response.status === 409) {
-          // 409 = account already linked to another user - don't retry
           failedLinkAttempts.add(farcasterKey);
           toast.error('Farcaster Account Already Linked', {
-            description: `The Farcaster account @${farcaster.username || farcaster.displayName} is already linked to another Babylon account.`,
+            description: `The Farcaster account @${farcasterAccount.identifier} is already linked to another Babylon account.`,
             duration: 6000,
           });
           logger.info(
             'Farcaster account already linked to another user, skipping future retries',
-            { username: farcaster.username },
+            { username: farcasterAccount.identifier },
             'useAuth'
           );
         } else if (!response.ok) {
-          // Log other errors but don't throw - we don't want to break auth flow
           const errorText = await response.text().catch(() => 'Unknown error');
           logger.warn(
             'Failed to link Farcaster account',
             {
-              username: farcaster.username,
+              username: farcasterAccount.identifier,
               status: response.status,
               error: errorText,
             },
             'useAuth'
           );
         }
-        // 200 means successfully linked - great!
       }
     }
 
-    if (userWithTwitter.twitter && !currentUser.hasTwitter) {
-      const twitter = userWithTwitter.twitter;
-      const twitterKey = `${privyUser.id}:twitter:${twitter.username}`;
+    if (twitterAccount && !currentUser.hasTwitter) {
+      const twitterKey = `${userId}:twitter:${twitterAccount.identifier}`;
 
-      // Skip if this link attempt previously failed with 409
       if (!failedLinkAttempts.has(twitterKey)) {
         const response = await apiFetch(
-          `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
+          `/api/users/${encodeURIComponent(userId)}/link-social`,
           {
             method: 'POST',
             headers: {
@@ -431,37 +413,34 @@ export function useAuth(): UseAuthReturn {
             },
             body: JSON.stringify({
               platform: 'twitter',
-              username: twitter.username,
+              username: twitterAccount.identifier,
             }),
           }
         );
 
         if (response.status === 409) {
-          // 409 = account already linked to another user - don't retry
           failedLinkAttempts.add(twitterKey);
           toast.error('Twitter Account Already Linked', {
-            description: `The Twitter account @${twitter.username} is already linked to another Babylon account.`,
+            description: `The Twitter account @${twitterAccount.identifier} is already linked to another Babylon account.`,
             duration: 6000,
           });
           logger.info(
             'Twitter account already linked to another user, skipping future retries',
-            { username: twitter.username },
+            { username: twitterAccount.identifier },
             'useAuth'
           );
         } else if (!response.ok) {
-          // Log other errors but don't throw - we don't want to break auth flow
           const errorText = await response.text().catch(() => 'Unknown error');
           logger.warn(
             'Failed to link Twitter account',
             {
-              username: twitter.username,
+              username: twitterAccount.identifier,
               status: response.status,
               error: errorText,
             },
             'useAuth'
           );
         }
-        // 200 means successfully linked - great!
       }
     }
 
@@ -470,12 +449,11 @@ export function useAuth(): UseAuthReturn {
       wallet?.address &&
       currentUser.walletAddress?.toLowerCase() !== wallet.address.toLowerCase()
     ) {
-      const walletKey = `${privyUser.id}:wallet:${wallet.address.toLowerCase()}`;
+      const walletKey = `${userId}:wallet:${wallet.address.toLowerCase()}`;
 
-      // Skip if this link attempt previously failed with 409
       if (!failedLinkAttempts.has(walletKey)) {
         const response = await apiFetch(
-          `/api/users/${encodeURIComponent(privyUser.id)}/link-social`,
+          `/api/users/${encodeURIComponent(userId)}/link-social`,
           {
             method: 'POST',
             headers: {
@@ -489,7 +467,6 @@ export function useAuth(): UseAuthReturn {
         );
 
         if (response.status === 409) {
-          // 409 = wallet already linked to another account - don't retry
           failedLinkAttempts.add(walletKey);
           logger.info(
             'Wallet already linked to another account, skipping future retries',
@@ -508,22 +485,20 @@ export function useAuth(): UseAuthReturn {
             'useAuth'
           );
         }
-        // 200 means successfully linked - great!
       }
     }
 
     // Mark as completed and remove from in-progress set
-    linkingInProgress.delete(privyUser.id);
-    // Always mark as "linked" to prevent retries, even if some links failed
-    // The function checks if accounts are already linked before attempting
-    linkedSocialUsers.add(privyUser.id);
+    linkingInProgress.delete(userId);
+    linkedSocialUsers.add(userId);
   }, [
     authenticated,
-    privyUser,
+    userId,
     isLoadingProfile,
     needsOnboarding,
     needsOnchain,
     getAccessToken,
+    linkedAccounts,
     wallet?.address,
   ]);
 
@@ -545,40 +520,40 @@ export function useAuth(): UseAuthReturn {
     if (typeof window !== 'undefined') {
       (
         window as typeof window & {
-          __privyGetAccessToken?: () => Promise<string | null>;
+          __oauth3GetAccessToken?: () => Promise<string | null>;
         }
-      ).__privyGetAccessToken = getAccessToken;
+      ).__oauth3GetAccessToken = getAccessToken;
     }
     return () => {
       if (typeof window !== 'undefined') {
         (
           window as typeof window & {
-            __privyGetAccessToken?: () => Promise<string | null>;
+            __oauth3GetAccessToken?: () => Promise<string | null>;
           }
-        ).__privyGetAccessToken = undefined;
+        ).__oauth3GetAccessToken = undefined;
       }
     };
   }, [getAccessToken]);
 
   // Sync wallet separately from fetching user
   useEffect(() => {
-    if (authenticated && privyUser) {
+    if (authenticated && userId) {
       synchronizeWallet();
     }
-  }, [authenticated, privyUser, synchronizeWallet]);
+  }, [authenticated, userId, synchronizeWallet]);
 
   // Fetch user only when authentication status or user ID changes
   useEffect(() => {
-    if (!authenticated || !privyUser) {
+    if (!authenticated || !userId) {
       // Prevent clearing auth multiple times in a row (infinite loop prevention)
       if (hasClearedAuthRef.current) {
         return;
       }
 
-      linkedSocialUsers.delete(privyUser?.id ?? '');
-      linkingInProgress.delete(privyUser?.id ?? '');
-      // Clear failed link attempts for this user (keys start with userId)
-      const userPrefix = `${privyUser?.id ?? ''}:`;
+      linkedSocialUsers.delete(userId ?? '');
+      linkingInProgress.delete(userId ?? '');
+      // Clear failed link attempts for this user
+      const userPrefix = `${userId ?? ''}:`;
       failedLinkAttempts.forEach((key) => {
         if (key.startsWith(userPrefix)) {
           failedLinkAttempts.delete(key);
@@ -597,14 +572,14 @@ export function useAuth(): UseAuthReturn {
           const parsed = JSON.parse(stored);
           if (
             parsed.state?.user?.id &&
-            privyUser &&
-            parsed.state.user.id !== privyUser.id
+            userId &&
+            parsed.state.user.id !== userId
           ) {
             logger.info(
               'Clearing stale auth cache for different user',
               {
                 cachedUserId: parsed.state.user.id,
-                currentUserId: privyUser?.id,
+                currentUserId: userId,
               },
               'useAuth'
             );
@@ -618,50 +593,43 @@ export function useAuth(): UseAuthReturn {
     // Reset the cleared auth ref when we become authenticated
     hasClearedAuthRef.current = false;
     void fetchCurrentUser();
-  }, [authenticated, privyUser?.id, fetchCurrentUser, privyUser]);
+  }, [authenticated, userId, fetchCurrentUser]);
 
   // Link social accounts only once per user session
-  // Removed wallet?.address from dependencies to prevent spam
-  // The wallet linking logic checks if the address changed before making API calls
   useEffect(() => {
     void linkSocialAccounts();
   }, [linkSocialAccounts]);
 
   const refresh = async () => {
-    if (!authenticated || !privyUser) return;
+    if (!authenticated || !userId) return;
     await fetchCurrentUser();
   };
 
   const handleLogout = async () => {
-    // Call Privy's logout first to clear Privy state
-    await logout();
+    // Call OAuth3's logout first to clear session
+    await jejuLogout();
 
     // Clear our app's auth state
     clearAuth();
 
     // Clear access token
     if (typeof window !== 'undefined') {
-      window.__privyAccessToken = null;
+      (
+        window as Window & { __oauth3AccessToken?: string | null }
+      ).__oauth3AccessToken = null;
 
       // Explicitly remove the persisted auth storage
-      // This ensures localStorage is cleared even if clearAuth() doesn't trigger storage update
       localStorage.removeItem('babylon-auth');
 
-      // Clear any Privy localStorage keys that might persist
-      // Privy's logout() should handle this, but we'll be thorough
-      const privyKeys = Object.keys(localStorage).filter(
-        (key) => key.startsWith('privy:') || key.startsWith('privy-')
-      );
-      privyKeys.forEach((key) => {
-        localStorage.removeItem(key);
-      });
+      // Clear OAuth3 session storage
+      sessionStorage.removeItem('jeju_auth_session');
 
-      // Clear session storage as well
-      const sessionPrivyKeys = Object.keys(sessionStorage).filter(
-        (key) => key.startsWith('privy:') || key.startsWith('privy-')
+      // Clear any OAuth3 localStorage keys
+      const oauth3Keys = Object.keys(localStorage).filter(
+        (key) => key.startsWith('oauth3_') || key.startsWith('jeju_')
       );
-      sessionPrivyKeys.forEach((key) => {
-        sessionStorage.removeItem(key);
+      oauth3Keys.forEach((key) => {
+        localStorage.removeItem(key);
       });
     }
 
@@ -686,14 +654,14 @@ export function useAuth(): UseAuthReturn {
   return {
     ready,
     authenticated,
-    loadingProfile: isLoadingProfile,
+    loadingProfile: isLoadingProfile || authLoading,
     user,
     wallet,
     smartWalletAddress: smartWalletAddress ?? undefined,
     smartWalletReady,
     needsOnboarding,
     needsOnchain,
-    login,
+    login: loginWithWallet,
     logout: handleLogout,
     refresh,
     getAccessToken,

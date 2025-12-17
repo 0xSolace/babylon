@@ -236,7 +236,8 @@ export class GroupInviteOrchestrator {
       }
 
       const npcActor = StaticDataRegistry.getActor(candidate.npcId);
-      const tierMultiplier = GroupInviteConfig.tierMultipliers[npcActor?.tier ?? 'NONE'] ?? 1.0;
+      const tierMultiplier =
+        GroupInviteConfig.tierMultipliers[npcActor?.tier ?? 'NONE'] ?? 1.0;
       const scoreMultiplier = Math.min(candidate.engagementScore / 50, 2.0);
       const probability =
         GroupInviteConfig.baseInviteProbability *
@@ -304,15 +305,13 @@ export class GroupInviteOrchestrator {
       } else {
         chatId = await generateSnowflakeId();
         chatName = `${npcName}'s Circle`;
-        await db
-          .insert(chats)
-          .values({
-            id: chatId,
-            name: chatName,
-            isGroup: true,
-            npcAdminId: npcId,
-            updatedAt: new Date(),
-          });
+        await db.insert(chats).values({
+          id: chatId,
+          name: chatName,
+          isGroup: true,
+          npcAdminId: npcId,
+          updatedAt: new Date(),
+        });
         await db
           .insert(chatParticipants)
           .values({ id: await generateSnowflakeId(), chatId, userId: npcId });
@@ -396,24 +395,34 @@ export class GroupInviteOrchestrator {
   }
 
   static async cleanupProcessedCandidates(): Promise<number> {
-    const cutoff = new Date(Date.now() - GroupInviteConfig.cleanupDays * 24 * 60 * 60 * 1000);
-    const deleted = await db.delete(pendingGroupInviteCandidates)
-      .where(and(
-        eq(pendingGroupInviteCandidates.processed, true),
-        lt(pendingGroupInviteCandidates.processedAt, cutoff)
-      ))
+    const cutoff = new Date(
+      Date.now() - GroupInviteConfig.cleanupDays * 24 * 60 * 60 * 1000
+    );
+    const deleted = await db
+      .delete(pendingGroupInviteCandidates)
+      .where(
+        and(
+          eq(pendingGroupInviteCandidates.processed, true),
+          lt(pendingGroupInviteCandidates.processedAt, cutoff)
+        )
+      )
       .returning({ id: pendingGroupInviteCandidates.id });
     return deleted.length;
   }
 
   static async expireOldInvites(): Promise<number> {
-    const cutoff = new Date(Date.now() - GroupInviteConfig.inviteExpiryDays * 24 * 60 * 60 * 1000);
-    const updated = await db.update(userGroupInvites)
+    const cutoff = new Date(
+      Date.now() - GroupInviteConfig.inviteExpiryDays * 24 * 60 * 60 * 1000
+    );
+    const updated = await db
+      .update(userGroupInvites)
       .set({ status: 'expired', respondedAt: new Date() })
-      .where(and(
-        eq(userGroupInvites.status, 'pending'),
-        lt(userGroupInvites.invitedAt, cutoff)
-      ))
+      .where(
+        and(
+          eq(userGroupInvites.status, 'pending'),
+          lt(userGroupInvites.invitedAt, cutoff)
+        )
+      )
       .returning({ id: userGroupInvites.id });
     return updated.length;
   }

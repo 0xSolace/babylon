@@ -14,6 +14,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
+import { getDeployerPrivateKey, hasDeployerKey } from '../config/dev-keys';
 
 /**
  * Create a prediction market on-chain
@@ -28,21 +29,22 @@ export async function createMarketOnChain(
   oracleAddress?: Address
 ): Promise<`0x${string}` | null> {
   const diamondAddress = DIAMOND_ADDRESS as Address;
-  const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`;
   const rpcUrl = getCurrentRpcUrl();
 
-  if (!diamondAddress || !deployerPrivateKey) {
+  if (!diamondAddress || !hasDeployerKey()) {
     logger.debug(
       'Skipping on-chain market creation - missing configuration',
       {
         hasDiamond: !!diamondAddress,
-        hasKey: !!deployerPrivateKey,
+        hasKey: hasDeployerKey(),
         hasRpc: !!rpcUrl,
       },
       'OnChainMarketService'
     );
     return null;
   }
+
+  const deployerPrivateKey = getDeployerPrivateKey();
 
   const publicClient = createPublicClient({
     chain: rpcUrl.includes('localhost')
@@ -304,10 +306,8 @@ export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
     // Update database with onChainMarketId
     // Get oracle address from deployer private key if not set
     let oracleAddr: string | null = market.oracleAddress;
-    if (!oracleAddr && process.env.DEPLOYER_PRIVATE_KEY) {
-      oracleAddr = privateKeyToAccount(
-        process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`
-      ).address;
+    if (!oracleAddr && hasDeployerKey()) {
+      oracleAddr = privateKeyToAccount(getDeployerPrivateKey()).address;
     }
 
     await db

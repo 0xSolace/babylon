@@ -24,7 +24,12 @@ export {
   getHashedClientIp,
   hashIpAddress,
 } from './ip-utils';
-
+// Production guards
+export {
+  isProductionMode,
+  requireRealImplementation,
+  warnSimulationInProduction,
+} from './production-guards';
 // Token counter utilities (moved from @babylon/shared)
 export {
   budgetTokens,

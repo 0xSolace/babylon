@@ -71,7 +71,7 @@ export function OnChainBadge({
           </span>
         )}
         {showTooltip && (
-          <div className="-translate-x-1/2 absolute bottom-full left-1/2 z-50 mb-2 whitespace-nowrap rounded-lg border border-border bg-popover px-3 py-2 shadow-lg">
+          <div className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-popover px-3 py-2 shadow-lg">
             <div className="space-y-1 text-xs">
               <p className="font-semibold text-green-500">
                 ✓ Verified On-Chain
@@ -83,7 +83,7 @@ export function OnChainBadge({
                 Blockchain identity verified
               </p>
             </div>
-            <div className="-translate-x-1/2 -mt-[1px] absolute top-full left-1/2">
+            <div className="absolute top-full left-1/2 -mt-[1px] -translate-x-1/2">
               <div className="border-4 border-transparent border-t-border" />
             </div>
           </div>
@@ -108,7 +108,7 @@ export function OnChainBadge({
         </span>
       )}
       {showTooltip && (
-        <div className="-translate-x-1/2 absolute bottom-full left-1/2 z-50 mb-2 whitespace-nowrap rounded-lg border border-border bg-popover px-3 py-2 shadow-lg">
+        <div className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-popover px-3 py-2 shadow-lg">
           <div className="space-y-1 text-xs">
             <p className="font-semibold text-muted-foreground">
               ⚠ Not Verified On-Chain
@@ -118,7 +118,7 @@ export function OnChainBadge({
               Limited reputation features
             </p>
           </div>
-          <div className="-translate-x-1/2 -mt-[1px] absolute top-full left-1/2">
+          <div className="absolute top-full left-1/2 -mt-[1px] -translate-x-1/2">
             <div className="border-4 border-transparent border-t-border" />
           </div>
         </div>

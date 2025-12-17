@@ -5,8 +5,10 @@
  * browser context and saves them for use in integration tests. This allows integration
  * tests to use the same authentication state as E2E tests without manual token management.
  *
+ * Uses OAuth3 (Jeju's decentralized auth) for authentication.
+ *
  * Prerequisites:
- * - E2E auth setup must run first (tests/e2e/auth.setup.ts)
+ * - E2E auth setup must run first
  * - Server must be running
  */
 
@@ -30,39 +32,39 @@ setup('extract auth tokens for integration tests', async ({ page }) => {
   // Load authenticated state
   await page.goto(baseURL);
 
-  // Wait for Privy SDK to be ready
-  console.log('⏳ Waiting for Privy SDK to initialize...');
+  // Wait for OAuth3 client to be ready
+  console.log('⏳ Waiting for OAuth3 client to initialize...');
   await page.waitForFunction(
     () => {
       if (typeof window === 'undefined') return false;
-      const privy = (
+      const oauth3 = (
         window as {
-          privy?: {
+          oauth3?: {
             ready?: boolean;
             getAccessToken?: () => Promise<string | null>;
           };
         }
-      ).privy;
+      ).oauth3;
       return (
-        privy?.ready === true && typeof privy.getAccessToken === 'function'
+        oauth3?.ready === true && typeof oauth3.getAccessToken === 'function'
       );
     },
     { timeout: 30000 }
   );
 
-  console.log('✅ Privy SDK is ready');
+  console.log('✅ OAuth3 client is ready');
 
   // Extract access token and user ID from browser
   console.log('🔑 Extracting authentication tokens...');
   const { accessToken, userId } = await page.evaluate(async (apiUrl) => {
-    const privy = (
-      window as { privy?: { getAccessToken?: () => Promise<string | null> } }
-    ).privy;
-    if (!privy?.getAccessToken) {
-      throw new Error('Privy SDK getAccessToken not available');
+    const oauth3 = (
+      window as { oauth3?: { getAccessToken?: () => Promise<string | null> } }
+    ).oauth3;
+    if (!oauth3?.getAccessToken) {
+      throw new Error('OAuth3 client getAccessToken not available');
     }
 
-    const token = await privy.getAccessToken();
+    const token = await oauth3.getAccessToken();
     if (!token) {
       throw new Error(
         'Could not get access token - user may not be authenticated'

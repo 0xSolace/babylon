@@ -261,8 +261,8 @@ If you don't see a good opportunity: {"action": "hold", "reasoning": "why not"}
 Your JSON response:`;
 
     // Call LLM for decision
-    const { callGroqDirect } = await import('../llm/direct-groq');
-    const decision = await callGroqDirect({
+    const { callJejuDirect } = await import('../llm');
+    const decision = await callJejuDirect({
       prompt,
       system: config?.systemPrompt ?? undefined,
       modelSize: 'large',

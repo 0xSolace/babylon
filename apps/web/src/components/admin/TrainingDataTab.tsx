@@ -74,7 +74,7 @@ export function TrainingDataTab() {
 
   const fetchData = useCallback(async () => {
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       setLoading(false);
       toast.error('Not authenticated');

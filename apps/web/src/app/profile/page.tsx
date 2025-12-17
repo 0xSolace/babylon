@@ -583,7 +583,7 @@ export default function ProfilePage() {
         {/* Top Row: Avatar + Action Buttons */}
         <div className="mb-4 flex items-start justify-between">
           {/* Profile Picture - Overlapping cover */}
-          <div className="-mt-16 sm:-mt-20 relative">
+          <div className="relative -mt-16 sm:-mt-20">
             <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-background bg-background sm:h-36 sm:w-36">
               <Avatar
                 id={user?.id || ''}
@@ -781,7 +781,7 @@ export default function ProfilePage() {
         {/* Search Bar - Top Right (hide on trades tab) */}
         {tab !== 'trades' && (
           <div className="relative hidden w-64 sm:block">
-            <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               value={searchQuery}
@@ -1148,7 +1148,7 @@ export default function ProfilePage() {
               </div>
 
               {/* Profile Image Section */}
-              <div className="-mt-12 sm:-mt-16 mb-6 px-4">
+              <div className="-mt-12 mb-6 px-4 sm:-mt-16">
                 <div className="relative h-24 w-24 sm:h-32 sm:w-32">
                   {editModal.profileImage.preview ? (
                     <img

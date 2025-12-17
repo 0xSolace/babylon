@@ -307,7 +307,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'Fetching chats for user',
     {
       userId: user.userId,
-      privyId: user.privyId,
+      oauth3Id: user.oauth3Id,
       dbUserId: user.dbUserId,
       fullUser: user,
     },

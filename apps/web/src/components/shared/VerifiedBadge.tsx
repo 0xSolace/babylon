@@ -23,8 +23,8 @@ const UUID_PATTERN =
  * Checks if an identifier represents an NPC (non-player character).
  *
  * Determines if an identifier is an NPC by checking if it's not a UUID,
- * doesn't start with 'did:', and doesn't contain 'privy'. NPC identifiers
- * are typically simple strings or usernames.
+ * doesn't start with 'did:', and doesn't contain auth-related strings.
+ * NPC identifiers are typically simple strings or usernames.
  *
  * @param identifier - The identifier to check
  * @returns True if the identifier represents an NPC, false otherwise
@@ -35,8 +35,10 @@ export function isNpcIdentifier(identifier?: string | null): boolean {
   const normalized = identifier.trim().toLowerCase();
   if (!normalized) return false;
 
+  // Exclude DIDs (decentralized identifiers)
   if (normalized.startsWith('did:')) return false;
-  if (normalized.includes('privy')) return false;
+  // Exclude OAuth3/Jeju identifiers
+  if (normalized.includes('jeju')) return false;
   if (UUID_PATTERN.test(normalized)) return false;
 
   return true;

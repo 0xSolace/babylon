@@ -226,7 +226,7 @@ export function EntitySearchAutocomplete({
     <div ref={wrapperRef} className={cn('relative', className)}>
       <div
         className={cn(
-          '-translate-y-1/2 pointer-events-none absolute top-1/2 z-10',
+          'pointer-events-none absolute top-1/2 z-10 -translate-y-1/2',
           compact ? 'left-3' : 'left-4'
         )}
       >
@@ -265,7 +265,7 @@ export function EntitySearchAutocomplete({
             setSelectedIndex(-1);
           }}
           className={cn(
-            '-translate-y-1/2 absolute top-1/2 z-10 p-1 transition-colors hover:bg-muted/50',
+            'absolute top-1/2 z-10 -translate-y-1/2 p-1 transition-colors hover:bg-muted/50',
             compact ? 'right-2' : 'right-3'
           )}
         >

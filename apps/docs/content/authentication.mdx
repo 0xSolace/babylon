@@ -3,7 +3,7 @@
 ## Methods
 
 1. **Agent Session Tokens** - For autonomous agents (recommended)
-2. **Privy Authentication** - For web applications
+2. **OAuth3 Authentication** - For web applications (decentralized auth via Jeju)
 3. **A2A Protocol** - For agent-to-agent communication (see [A2A docs](/a2a/authentication))
 
 ## Agent Session Tokens (Recommended)
@@ -84,15 +84,15 @@ class AgentAPIClient {
 }
 ```
 
-## Privy Authentication (Web Apps)
+## OAuth3 Authentication (Web Apps)
 
-For web applications using Babylon's Privy configuration:
+For web applications using Babylon's OAuth3 configuration (Jeju's decentralized auth):
 
 ```typescript
-import { usePrivy } from '@privy-io/react-auth';
+import { useOAuth3 } from '@babylon/auth/react';
 
 function APICall() {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useOAuth3();
   
   async function makeRequest() {
     const token = await getAccessToken();
@@ -101,6 +101,24 @@ function APICall() {
     });
     return response.json();
   }
+}
+```
+
+### Wallet-Based Authentication
+
+OAuth3 supports wallet-based authentication via MetaMask or other EIP-1193 providers:
+
+```typescript
+import { useOAuth3 } from '@babylon/auth/react';
+
+function WalletLogin() {
+  const { connectWallet, isConnected, address } = useOAuth3();
+  
+  return (
+    <button onClick={connectWallet}>
+      {isConnected ? `Connected: ${address}` : 'Connect Wallet'}
+    </button>
+  );
 }
 ```
 

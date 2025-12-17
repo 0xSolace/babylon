@@ -60,7 +60,7 @@ export function NotificationsTab() {
   useEffect(() => {
     const fetchCurrentUser = async () => {
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
       if (!token) return;
 
       const response = await fetch('/api/users/me', {
@@ -91,7 +91,7 @@ export function NotificationsTab() {
 
     startSending(async () => {
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
       if (!token) {
         throw new Error('Not authenticated');
@@ -133,7 +133,7 @@ export function NotificationsTab() {
 
     startSendingDm(async () => {
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
       if (!token) {
         throw new Error('Not authenticated');
@@ -180,7 +180,7 @@ export function NotificationsTab() {
 
     startSendingDm(async () => {
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
       if (!token) {
         throw new Error('Not authenticated');
@@ -639,7 +639,7 @@ function GroupInviteSection() {
     setSending(true);
 
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
     if (!token) {
       throw new Error('Not authenticated');

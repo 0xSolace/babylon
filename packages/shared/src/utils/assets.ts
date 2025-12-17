@@ -4,53 +4,163 @@
  * @description Handles URLs for both local development and production deployment
  * with CDN storage. Provides utilities for profile images, organization images,
  * and banner images.
+ *
+ * Supports multiple storage backends:
+ * - Jeju Storage (IPFS/Arweave) - decentralized, content-addressed
+ * - Vercel Blob - production CDN
+ * - MinIO - local development
  */
 
 /**
- * Check if a URL is already absolute (CDN URL, external URL, or data URL)
+ * Check if a URL is already absolute (CDN URL, external URL, data URL, or IPFS/Arweave)
  *
  * @param {string} url - URL to check
  * @returns {boolean} True if the URL is absolute
  */
 export function isAbsoluteUrl(url: string): boolean {
-  return /^(https?:|data:|blob:)/i.test(url);
+  return /^(https?:|data:|blob:|ipfs:|ar:)/i.test(url);
+}
+
+/**
+ * Check if a URL is a decentralized storage URL (IPFS or Arweave)
+ *
+ * @param {string} url - URL to check
+ * @returns {boolean} True if the URL is from IPFS or Arweave
+ */
+export function isDecentralizedUrl(url: string): boolean {
+  return (
+    url.includes('/ipfs/') ||
+    url.includes('ipfs.io') ||
+    url.includes('arweave.net') ||
+    url.includes('ipfs.jeju.network') ||
+    url.startsWith('ipfs:') ||
+    url.startsWith('ar:')
+  );
+}
+
+/**
+ * Get IPFS gateway URL for a CID
+ *
+ * @param {string} cid - IPFS content identifier
+ * @param {string} [gateway] - Optional gateway URL (defaults to Jeju gateway or ipfs.io)
+ * @returns {string} Full gateway URL
+ */
+export function getIpfsGatewayUrl(cid: string, gateway?: string): string {
+  const defaultGateway =
+    (typeof process !== 'undefined'
+      ? process.env.NEXT_PUBLIC_IPFS_GATEWAY || process.env.JEJU_IPFS_GATEWAY
+      : undefined) || 'https://ipfs.io';
+
+  const gatewayUrl = gateway || defaultGateway;
+
+  // Handle ipfs:// protocol
+  if (cid.startsWith('ipfs://')) {
+    cid = cid.slice(7);
+  }
+
+  return `${gatewayUrl}/ipfs/${cid}`;
+}
+
+/**
+ * Get Arweave URL for a transaction ID
+ *
+ * @param {string} txId - Arweave transaction ID
+ * @returns {string} Arweave gateway URL
+ */
+export function getArweaveUrl(txId: string): string {
+  // Handle ar:// protocol
+  if (txId.startsWith('ar://')) {
+    txId = txId.slice(5);
+  }
+
+  return `https://arweave.net/${txId}`;
+}
+
+/**
+ * Normalize a storage URL to use the preferred gateway
+ *
+ * @param {string} url - Original URL
+ * @param {string} [preferredGateway] - Preferred IPFS gateway
+ * @returns {string} Normalized URL
+ */
+export function normalizeStorageUrl(
+  url: string,
+  preferredGateway?: string
+): string {
+  // Handle IPFS protocol
+  if (url.startsWith('ipfs://')) {
+    return getIpfsGatewayUrl(url.slice(7), preferredGateway);
+  }
+
+  // Handle Arweave protocol
+  if (url.startsWith('ar://')) {
+    return getArweaveUrl(url.slice(5));
+  }
+
+  // If it's already an absolute URL, return as-is
+  if (isAbsoluteUrl(url)) {
+    return url;
+  }
+
+  return url;
 }
 
 /**
  * Get the base URL for static assets
  *
- * @description In Next.js, files in /public are served from the root path /.
- * This function supports both:
- * - Legacy public folder assets (during migration)
- * - CDN assets (Vercel Blob in production, MinIO in dev)
+ * @description Supports multiple storage backends with priority:
+ * 1. Already absolute URLs (CDN, IPFS, Arweave, external) - return as-is
+ * 2. IPFS CIDs (starting with Qm or bafy) - convert to gateway URL
+ * 3. CDN assets (Jeju IPFS gateway, Vercel Blob, MinIO)
+ * 4. Legacy public folder assets
  *
- * @param {string} path - Path to the asset
+ * @param {string} path - Path to the asset (or CID for IPFS)
  * @param {string} [cdnBaseUrl] - Optional CDN base URL (defaults to NEXT_PUBLIC_STATIC_ASSETS_URL)
  * @returns {string} Full URL to the asset
  */
 export function getStaticAssetUrl(path: string, cdnBaseUrl?: string): string {
-  // If already an absolute URL (CDN, external, or data), return as-is
+  // If already an absolute URL (CDN, external, IPFS, Arweave, or data), normalize and return
   if (isAbsoluteUrl(path)) {
-    return path;
+    return normalizeStorageUrl(path);
+  }
+
+  // Check if this looks like an IPFS CID (v0 starts with Qm, v1 starts with bafy)
+  if (path.startsWith('Qm') || path.startsWith('bafy')) {
+    return getIpfsGatewayUrl(path);
   }
 
   // Ensure path starts with /
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
 
-  // Use provided CDN URL or environment variable
+  // Check for Jeju IPFS gateway first (decentralized priority)
+  const ipfsGateway =
+    typeof process !== 'undefined'
+      ? process.env.NEXT_PUBLIC_IPFS_GATEWAY || process.env.JEJU_IPFS_GATEWAY
+      : undefined;
+
+  // Use provided CDN URL, Jeju IPFS gateway, or environment variable
   const staticAssetsUrl =
     cdnBaseUrl ||
+    ipfsGateway ||
     (typeof process !== 'undefined'
       ? process.env.NEXT_PUBLIC_STATIC_ASSETS_URL
       : undefined);
 
-  // In production with CDN configured, use CDN URL
+  // In production with CDN/IPFS configured, use that URL
   if (staticAssetsUrl) {
+    // Don't add path directly to IPFS gateway - it expects CIDs
+    if (staticAssetsUrl.includes('ipfs')) {
+      // For IPFS gateways, static assets should already be CIDs
+      // Fall back to normal CDN behavior
+      const cdnUrl = process.env.NEXT_PUBLIC_STATIC_ASSETS_URL;
+      if (cdnUrl) {
+        return `${cdnUrl}${normalizedPath}`;
+      }
+    }
     return `${staticAssetsUrl}${normalizedPath}`;
   }
 
-  // For local development with MinIO, CDN assets will already be absolute URLs
-  // from the storage client, so this mainly handles public folder fallbacks
+  // For local development, return relative path (handled by Next.js public folder)
   return normalizedPath;
 }
 

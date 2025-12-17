@@ -43,32 +43,56 @@ export {
   authenticate,
   authenticateUser,
   authenticateWithDbUser,
-  getPrivyClient,
+  getAuthClient,
   isAuthenticationError,
   optionalAuth,
   optionalAuthFromHeaders,
 } from './auth-middleware';
-// Cache
+// Cache (Decentralized - NO Redis fallback)
 export {
   CACHE_KEYS,
+  CacheClient,
   type CacheOptions,
+  cacheDel,
   cachedDb,
+  cacheExists,
+  cacheGet,
+  cacheSet,
   clearAllCache,
   DEFAULT_TTLS,
   getCache,
   getCacheOrFetch,
   getCacheStats,
+  initializeCache,
+  initializeCacheService,
   invalidateCache,
   invalidateCachePattern,
+  isCacheServiceReachable,
+  resetCache,
   setCache,
+  tryInitializeCache,
   warmCache,
 } from './cache';
+// Configuration (environment detection)
+export {
+  type BabylonEnvironment,
+  type BabylonMode,
+  detectEnvironment,
+  getEnvironment,
+  logEnvironment,
+  resetEnvironment,
+} from './config';
+// Contracts (Treasury Adapter - works in dev mode without Jeju)
+export * from './contracts';
 // Cron Authentication
 export {
+  type CronAuthOptions,
   cronUnauthorizedResponse,
   requireCronAuth,
   verifyCronAuth,
 } from './cron-auth';
+// Deployment - IPFS/IPNS/JNS
+export * from './deployment';
 // Development credentials (for local testing)
 export {
   type DevCredentials,
@@ -109,11 +133,30 @@ export {
   ValidationError,
 } from './errors';
 // Fetch utilities
-export { type ApiFetchOptions, apiFetch, getPrivyAccessToken } from './fetch';
+export { type ApiFetchOptions, apiFetch, getOAuth3AccessToken } from './fetch';
+// Health checks
+export * from './health';
+// LLM (Decentralized Inference via Jeju Compute)
+export * from './llm';
+// Decentralized Messaging
+export {
+  type DecentralizedMessageResult,
+  getDecentralizedConversations,
+  getOrCreateDecentralizedDM,
+  getPendingDecentralizedMessages,
+  isDecentralizedMessagingEnabled,
+  markDecentralizedMessageDelivered,
+  markDecentralizedMessageRead,
+  sendDecentralizedMessage,
+} from './messaging/decentralized-messaging';
+// Moderation - BanManager and ModerationMarketplace
+export * from './moderation';
 export * from './monitoring/monitored-cache';
 export * from './monitoring/monitored-storage';
 // Performance monitoring (moved from @babylon/shared)
 export { performanceMonitor } from './monitoring/performance-monitor';
+// Payments - ERC-4337 Paymaster
+export * from './payments';
 // Profile utilities
 export {
   type BackendSignedUpdateParams,
@@ -161,17 +204,18 @@ export {
 } from './realtime';
 export { connections } from './realtime/connection-registry';
 export { drainOutboxBatch, enqueueOutbox } from './realtime/outbox';
-// Redis
+// Redis (Decentralized - NO ioredis fallback)
 export {
   closeRedis,
+  DecentralizedRedis,
+  getDecentralizedRedis,
   getRedis,
   getRedisClient,
   isRedisAvailable,
   type RedisInstance,
   redis,
+  resetDecentralizedRedis,
   type StreamMessage,
-  safePoll,
-  safePublish,
   streamAdd,
   streamRead,
 } from './redis';
@@ -182,7 +226,30 @@ export {
   broadcastChatMessage,
   broadcastToChannel,
 } from './sse/event-broadcaster';
-// Storage utilities (moved from @babylon/shared)
+// Storage (Decentralized - NO S3/MinIO fallback)
+export {
+  downloadFile,
+  downloadJson,
+  getStorage,
+  initializeStorage,
+  resetStorage,
+  StorageClient,
+  uploadFile,
+  uploadJson,
+} from './storage';
+// Legacy Jeju Storage exports
+export {
+  getJejuStorageClient,
+  initializeJejuStorage,
+  isJejuStorageAvailable,
+  JejuStorageClient,
+  type JejuStorageConfig,
+  type JejuUploadOptions,
+  type JejuUploadResult,
+  type ModelStorageOptions,
+  type StoredModel,
+} from './storage/jeju-storage';
+// Legacy S3 client (to be removed)
 export {
   getStorageClient,
   type UploadOptions,
@@ -190,6 +257,8 @@ export {
 } from './storage/s3-client';
 // Swagger
 export * from './swagger';
+// TEE (Trusted Execution Environment) - Unruggable Game Infrastructure
+export * from './tee';
 // Types
 export type { ErrorLike, JsonValue, StringRecord } from './types';
 // User management utilities
@@ -221,3 +290,38 @@ export {
   truncateToTokenLimitSync,
   verifyApiKey,
 } from './utils';
+
+// =============================================================================
+// DECENTRALIZED INFRASTRUCTURE - KMS (Secrets)
+// =============================================================================
+
+export {
+  type DecryptRequest,
+  type EncryptRequest,
+  type EncryptResult,
+  getKMSClient,
+  getSecretValue,
+  initializeKMS,
+  KMSClient,
+  type PolicyCondition,
+  resetKMSClient,
+  type SecretPolicy,
+  setSecretValue,
+} from './secrets/kms-client';
+
+// =============================================================================
+// KEEPALIVE - Auto-restart and health monitoring
+// =============================================================================
+
+export {
+  BabylonKeepalive,
+  getBabylonKeepalive,
+  getDefaultBabylonKeepaliveConfig,
+  type HealthCheckResult,
+  HealthStatus,
+  initBabylonKeepalive,
+  type KeepaliveConfig,
+  type ResourceConfig,
+  ResourceType,
+  resetBabylonKeepalive,
+} from './keepalive';

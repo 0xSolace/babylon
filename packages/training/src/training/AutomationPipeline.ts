@@ -20,6 +20,7 @@ import {
   desc,
   eq,
   gte,
+  inArray,
   isNotNull,
   isNull,
   not,
@@ -29,7 +30,6 @@ import {
   users,
 } from '@babylon/db';
 import { spawn } from 'child_process';
-import { inArray } from 'drizzle-orm';
 import { getExportGroupedForGRPO } from '../dependencies';
 import { logger } from '../utils/logger';
 import { benchmarkService } from './BenchmarkService';
@@ -405,87 +405,31 @@ export class AutomationPipeline {
 
     const batch = batchResult[0]!;
 
-    // Determine training mode: 'tinker' for cloud-based or 'atropos' for local vLLM
-    const trainingMode = process.env.TRAINING_MODE || 'atropos';
-    const useTinker = trainingMode.toLowerCase() === 'tinker';
+    // Determine execution mode: jeju (decentralized) or local
+    const useJeju =
+      process.env.USE_JEJU === 'true' ||
+      (process.env.NODE_ENV === 'production' &&
+        !!process.env.BABYLON_TREASURY_ADDRESS);
 
-    // Trigger appropriate Python training script based on mode
-    // Scripts are in packages/training/python/src/training/
-    const pythonScript = path.resolve(
-      process.cwd(),
-      'packages/training/python/src/training',
-      useTinker ? 'tinker_trainer.py' : 'atropos_trainer.py'
-    );
-
-    // Set environment variables for Python script
-    const env = {
-      ...process.env,
-      MODE: 'single',
-      BATCH_ID: batchId,
-      MODEL_VERSION: nextVersion,
-      WINDOW_ID: windowId,
-      BASE_MODEL: modelSelection.modelPath,
-      MAX_EXAMPLES: dataLimit ? dataLimit.toString() : '2000',
-      DATABASE_URL: process.env.DATABASE_URL || '',
-      ATROPOS_API_URL: this.config.atroposApiUrl || 'http://localhost:8000',
-      VLLM_PORT: String(this.config.vllmPort || 9001),
-      FORCE_TRAINING: options.force ? 'true' : 'false',
-      MIN_AGENTS_PER_WINDOW: '1',
-      TRAINING_MODE: trainingMode,
-    };
-
-    logger.info(
-      useTinker
-        ? 'Training will use Tinker cloud-based GRPO'
-        : 'Training will use Atropos GRPO with vLLM',
-      {
-        trainingMode,
-        ...(useTinker
-          ? { model: env.BASE_MODEL }
-          : {
-              atroposUrl: env.ATROPOS_API_URL,
-              vllmPort: env.VLLM_PORT,
-              model: env.BASE_MODEL,
-            }),
-      },
-      'AutomationPipeline'
-    );
-
-    // Use python3 if available, fallback to python
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-
-    const trainingProcess = spawn(pythonCmd, [pythonScript], {
-      detached: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env,
-    });
-
-    // Capture and log training process output
-    trainingProcess.stdout?.on('data', (data: Buffer) => {
-      logger.info('Training stdout', { output: data.toString().trim() });
-    });
-
-    trainingProcess.stderr?.on('data', (data: Buffer) => {
-      logger.warn('Training stderr', { output: data.toString().trim() });
-    });
-
-    trainingProcess.on('error', (error: Error) => {
-      logger.error('Training process error', { error: error.message });
-      // Update batch status to failed
-      db.update(trainingBatches)
-        .set({
-          status: 'failed',
-          error: `Process spawn failed: ${error.message}`,
-        })
-        .where(eq(trainingBatches.batchId, batchId))
-        .catch((err: unknown) =>
-          logger.error('Failed to update batch status', {
-            error: err instanceof Error ? err : String(err),
-          })
-        );
-    });
-
-    trainingProcess.unref();
+    if (useJeju) {
+      // Use Jeju compute marketplace for training
+      await this.executeJejuTraining(
+        batchId,
+        modelSelection.modelPath,
+        windowId,
+        exportResult.trajectoriesExported ?? 0,
+        dataLimit ?? undefined
+      );
+    } else {
+      // Local training execution
+      await this.executeLocalTraining(
+        batchId,
+        modelSelection.modelPath,
+        windowId,
+        dataLimit ?? undefined,
+        options.force
+      );
+    }
 
     this.currentTrainingJob = batch.id;
 
@@ -547,6 +491,184 @@ export class AutomationPipeline {
     const result = await query;
 
     return result.map((t: { trajectoryId: string }) => t.trajectoryId);
+  }
+
+  /**
+   * Execute training via Jeju compute marketplace
+   */
+  private async executeJejuTraining(
+    batchId: string,
+    baseModel: string,
+    windowId: string,
+    trajectoryCount: number,
+    dataLimit?: number
+  ): Promise<void> {
+    const { createComputeTrainingClient } = await import('../compute');
+
+    const client = createComputeTrainingClient({ mode: 'jeju' });
+
+    logger.info('Submitting training to Jeju compute', {
+      batchId,
+      baseModel,
+      windowId,
+      trajectoryCount,
+    });
+
+    const jobId = await client.submitTrainingJob({
+      batchId,
+      baseModel,
+      datasetCID: windowId, // Window ID used as dataset reference
+      trainingSteps: dataLimit ?? 2000,
+      batchSize: 4,
+      learningRate: 2e-5,
+    });
+
+    // Update batch with job ID
+    await db
+      .update(trainingBatches)
+      .set({ status: 'training' })
+      .where(eq(trainingBatches.batchId, batchId));
+
+    // Start background monitoring
+    this.monitorJejuJob(jobId, batchId).catch((err) =>
+      logger.error('Jeju job monitoring failed', { jobId, error: String(err) })
+    );
+  }
+
+  /**
+   * Monitor Jeju training job in background
+   */
+  private async monitorJejuJob(jobId: string, batchId: string): Promise<void> {
+    const { createComputeTrainingClient } = await import('../compute');
+    const client = createComputeTrainingClient({ mode: 'jeju' });
+
+    const result = await client.waitForJob(jobId, 7200000); // 2 hour timeout
+
+    if (result.status === 'completed' && result.modelCID) {
+      await db
+        .update(trainingBatches)
+        .set({
+          status: 'completed',
+          completedAt: new Date(),
+          // Note: modelCID stored in logs until DB schema is updated
+        })
+        .where(eq(trainingBatches.batchId, batchId));
+
+      // Record training on-chain for audit trail
+      try {
+        const { recordTrainingOnChain } = await import(
+          '../compute/treasury-integration'
+        );
+        const record = await recordTrainingOnChain(batchId, result.modelCID);
+        if (record?.txHash) {
+          logger.info('Training recorded on-chain', {
+            epoch: record.epoch,
+            txHash: record.txHash,
+          });
+        }
+      } catch (treasuryError) {
+        logger.warn('Failed to record training on-chain (non-fatal)', {
+          error: treasuryError,
+        });
+      }
+
+      logger.info('Jeju training completed', {
+        batchId,
+        modelCID: result.modelCID,
+        durationSeconds: result.durationSeconds,
+      });
+    } else {
+      await db
+        .update(trainingBatches)
+        .set({
+          status: 'failed',
+          error: result.error ?? 'Unknown error',
+        })
+        .where(eq(trainingBatches.batchId, batchId));
+
+      logger.error('Jeju training failed', {
+        batchId,
+        error: result.error,
+      });
+    }
+  }
+
+  /**
+   * Execute training locally
+   */
+  private async executeLocalTraining(
+    batchId: string,
+    baseModel: string,
+    windowId: string,
+    dataLimit?: number,
+    force?: boolean
+  ): Promise<void> {
+    const trainingMode = process.env.TRAINING_MODE || 'atropos';
+    const useTinker = trainingMode.toLowerCase() === 'tinker';
+
+    const pythonScript = path.resolve(
+      process.cwd(),
+      'packages/training/python/src/training',
+      useTinker ? 'tinker_trainer.py' : 'atropos_trainer.py'
+    );
+
+    const nextVersion = await this.getNextModelVersion();
+
+    const env = {
+      ...process.env,
+      MODE: 'single',
+      BATCH_ID: batchId,
+      MODEL_VERSION: nextVersion,
+      WINDOW_ID: windowId,
+      BASE_MODEL: baseModel,
+      MAX_EXAMPLES: dataLimit ? dataLimit.toString() : '2000',
+      DATABASE_URL: process.env.DATABASE_URL || '',
+      ATROPOS_API_URL: this.config.atroposApiUrl || 'http://localhost:8000',
+      VLLM_PORT: String(this.config.vllmPort || 9001),
+      FORCE_TRAINING: force ? 'true' : 'false',
+      MIN_AGENTS_PER_WINDOW: '1',
+      TRAINING_MODE: trainingMode,
+    };
+
+    logger.info(
+      useTinker
+        ? 'Training will use Tinker cloud-based GRPO'
+        : 'Training will use Atropos GRPO with vLLM',
+      { trainingMode, model: baseModel }
+    );
+
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+
+    const trainingProcess = spawn(pythonCmd, [pythonScript], {
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env,
+    });
+
+    trainingProcess.stdout?.on('data', (data: Buffer) => {
+      logger.info('Training stdout', { output: data.toString().trim() });
+    });
+
+    trainingProcess.stderr?.on('data', (data: Buffer) => {
+      logger.warn('Training stderr', { output: data.toString().trim() });
+    });
+
+    trainingProcess.on('error', (error: Error) => {
+      logger.error('Training process error', { error: error.message });
+      db.update(trainingBatches)
+        .set({
+          status: 'failed',
+          error: `Process spawn failed: ${error.message}`,
+        })
+        .where(eq(trainingBatches.batchId, batchId))
+        .catch((err: unknown) =>
+          logger.error('Failed to update batch status', {
+            error: err instanceof Error ? err : String(err),
+          })
+        );
+    });
+
+    trainingProcess.unref();
   }
 
   /**

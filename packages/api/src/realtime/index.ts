@@ -1,8 +1,22 @@
 import { logger } from '@babylon/shared';
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { randomBytes } from 'crypto';
 import { streamAdd } from '../redis';
 import type { JsonValue } from '../types';
+
 // import { enqueueOutbox } from './outbox'; // Uncomment when needed
+
+// Re-export permissionless realtime auth
+export {
+  createSubscriptionMessage,
+  createSubscriptionToken,
+  decodeSubscriptionToken,
+  hasChannelAccess,
+  isSubscriptionExpired,
+  PermissionlessRealtimeManager,
+  type RealtimeSubscriptionClaims,
+  type RealtimeSubscriptionToken,
+  verifySubscriptionToken,
+} from './permissionless';
 
 /**
  * Supported realtime channels.
@@ -24,6 +38,7 @@ export interface RealtimeEventEnvelope<T extends JsonValue = JsonValue> {
   timestamp: number;
 }
 
+/** @deprecated Use RealtimeSubscriptionClaims instead */
 export interface RealtimeTokenPayload {
   userId: string;
   channels: RealtimeChannel[];
@@ -31,66 +46,26 @@ export interface RealtimeTokenPayload {
   iat: number; // epoch seconds
 }
 
-const REALTIME_SECRET =
-  process.env.REALTIME_SIGNING_SECRET ||
-  process.env.JWT_SECRET ||
-  process.env.CRON_SECRET;
-
-const base64url = (input: Buffer) =>
-  input
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-const decodeBase64url = (input: string) => {
-  const padding = 4 - (input.length % 4 || 4);
-  const normalized =
-    input.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat(padding % 4);
-  return Buffer.from(normalized, 'base64');
-};
-
-const getSecret = (): Buffer => {
-  if (!REALTIME_SECRET) {
-    throw new Error('REALTIME_SIGNING_SECRET is not configured');
-  }
-  return Buffer.from(REALTIME_SECRET);
-};
-
 /**
- * Sign a realtime subscription payload (HMAC-SHA256).
+ * @deprecated Use PermissionlessRealtimeManager instead
+ * This uses a shared secret - prefer wallet-signed tokens
  */
-export function signRealtimeToken(payload: RealtimeTokenPayload): string {
-  const header = { alg: 'HS256', typ: 'JWT', kid: 'realtime' };
-  const encodedHeader = base64url(Buffer.from(JSON.stringify(header)));
-  const encodedPayload = base64url(Buffer.from(JSON.stringify(payload)));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
-  const sig = createHmac('sha256', getSecret()).update(signingInput).digest();
-  return `${signingInput}.${base64url(sig)}`;
+export function signRealtimeToken(_payload: RealtimeTokenPayload): string {
+  throw new Error(
+    'signRealtimeToken is deprecated. Use PermissionlessRealtimeManager instead.'
+  );
 }
 
 /**
- * Verify a realtime subscription token and return the payload if valid.
+ * @deprecated Use verifySubscriptionToken instead
+ * This uses a shared secret - prefer wallet-signed tokens
  */
 export function verifyRealtimeToken(
-  token: string
+  _token: string
 ): RealtimeTokenPayload | null {
-  const [h, p, s] = token.split('.');
-  if (!h || !p || !s) return null;
-  const signingInput = `${h}.${p}`;
-  const expected = createHmac('sha256', getSecret())
-    .update(signingInput)
-    .digest();
-  const actual = decodeBase64url(s);
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
-    return null;
-  }
-  const payload = JSON.parse(
-    decodeBase64url(p).toString()
-  ) as RealtimeTokenPayload;
-  const now = Math.floor(Date.now() / 1000);
-  if (payload.exp <= now) return null;
-  return payload;
+  throw new Error(
+    'verifyRealtimeToken is deprecated. Use verifySubscriptionToken instead.'
+  );
 }
 
 /**
@@ -126,23 +101,25 @@ export async function publishEvent(
 export const toStreamKey = (channel: RealtimeChannel) => `realtime:${channel}`;
 
 /**
- * Generate a short-lived realtime token for a user and channels.
- * Default expiry: 15 minutes.
+ * @deprecated Use createSubscriptionMessage + wallet signature instead
+ *
+ * For permissionless realtime auth:
+ * ```ts
+ * import { createSubscriptionMessage, createSubscriptionToken } from '@babylon/api';
+ *
+ * const { message, claims } = createSubscriptionMessage(address, channels);
+ * const signature = await wallet.signMessage(message);
+ * const token = createSubscriptionToken(claims, signature);
+ * ```
  */
-export function issueRealtimeToken(params: {
+export function issueRealtimeToken(_params: {
   userId: string;
   channels: RealtimeChannel[];
   ttlSeconds?: number;
 }): string {
-  const now = Math.floor(Date.now() / 1000);
-  const exp = now + (params.ttlSeconds ?? 900);
-  const payload: RealtimeTokenPayload = {
-    userId: params.userId,
-    channels: params.channels,
-    exp,
-    iat: now,
-  };
-  return signRealtimeToken(payload);
+  throw new Error(
+    'issueRealtimeToken is deprecated. Use createSubscriptionMessage + wallet signature instead.'
+  );
 }
 
 export const generateConnectionId = () => randomBytes(12).toString('hex');

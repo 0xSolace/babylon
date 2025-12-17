@@ -59,8 +59,11 @@ export interface IAgentRuntimeManager {
 
 /**
  * Interface for LLM calling functionality
+ * Routes through Jeju Compute - NO centralized fallback
+ * @note callGroqDirect is a legacy name maintained for compatibility
  */
 export interface ILLMCaller {
+  /** @deprecated Use callJejuDirect - this routes through Jeju Compute */
   callGroqDirect(params: {
     prompt: string;
     system: string;

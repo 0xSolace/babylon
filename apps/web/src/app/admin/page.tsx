@@ -36,6 +36,7 @@ import {
   BarChart,
   Bell,
   Bot,
+  Coins,
   Database,
   DollarSign,
   Flag,
@@ -87,7 +88,8 @@ type Tab =
   | 'ai-models'
   | 'training-data'
   | 'agents'
-  | 'escrow';
+  | 'escrow'
+  | 'ico';
 
 /**
  * Admin Dashboard Component
@@ -191,6 +193,7 @@ export default function AdminDashboard() {
     { id: 'training-data' as const, label: 'Training Data', icon: Database },
     { id: 'notifications' as const, label: 'Notifications', icon: Bell },
     { id: 'escrow' as const, label: 'Escrow', icon: DollarSign },
+    { id: 'ico' as const, label: 'ICO', icon: Coins, href: '/admin/ico' },
   ];
 
   return (
@@ -210,6 +213,25 @@ export default function AdminDashboard() {
       <div className="mb-6 flex gap-2 overflow-x-auto border-border border-b">
         {tabs.map((tab) => {
           const Icon = tab.icon;
+          const isLink = 'href' in tab && tab.href;
+
+          if (isLink) {
+            return (
+              <a
+                key={tab.id}
+                href={tab.href}
+                className={cn(
+                  'flex items-center gap-2 whitespace-nowrap px-4 py-2 font-medium transition-colors',
+                  '-mb-[1px] border-b-2',
+                  'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </a>
+            );
+          }
+
           return (
             <button
               key={tab.id}

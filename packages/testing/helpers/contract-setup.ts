@@ -5,12 +5,14 @@
  * for integration tests
  */
 
-import { isContractDeployed, loadDeployment } from '@babylon/contracts';
+import { isContractDeployed } from '@babylon/contracts';
 import { LOCAL_CONTRACT_ADDRESSES } from '@babylon/shared';
 import { $ } from 'bun';
 import { execSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { createPublicClient, http } from 'viem';
+import { localhost } from 'viem/chains';
 
 const HARDHAT_RPC_URL = process.env.HARDHAT_RPC_URL || 'http://localhost:8545';
 
@@ -57,41 +59,48 @@ export async function ensureHardhatRunning(): Promise<boolean> {
 }
 
 /**
+ * Check if a contract address has deployed code
+ */
+async function checkContractDeployed(address: string): Promise<boolean> {
+  try {
+    const client = createPublicClient({
+      chain: localhost,
+      transport: http(HARDHAT_RPC_URL),
+    });
+    const code = await client.getBytecode({
+      address: address as `0x${string}`,
+    });
+    return code !== undefined && code !== '0x';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if contracts are deployed on-chain
  */
 export async function areContractsDeployed(): Promise<boolean> {
   // Use canonical config addresses for local development
-  let oracleAddress: string | undefined = LOCAL_CONTRACT_ADDRESSES.gameOracle;
-  let diamondAddress: string | undefined = LOCAL_CONTRACT_ADDRESSES.diamond;
+  const oracleAddress = LOCAL_CONTRACT_ADDRESSES.gameOracle;
+  const diamondAddress = LOCAL_CONTRACT_ADDRESSES.diamond;
 
-  // Try to load from deployment file to check for fresh deployments
-  const deployment = await loadDeployment('localnet');
-  if (deployment) {
-    if (deployment.contracts.gameOracle) {
-      oracleAddress = deployment.contracts.gameOracle;
-    }
-    if (deployment.contracts.diamond) {
-      diamondAddress = deployment.contracts.diamond;
-    }
-  }
+  // Check via contracts package helper (uses environment variables)
+  const oracleDeployed = isContractDeployed('gameOracle');
+  const diamondDeployed = isContractDeployed('diamond');
 
-  if (!oracleAddress && !diamondAddress) {
+  if (!oracleDeployed && !diamondDeployed) {
     return false;
   }
 
   try {
-    // Check oracle if available
+    // Verify on-chain if addresses are configured
     if (oracleAddress) {
-      const deployed = await isContractDeployed(HARDHAT_RPC_URL, oracleAddress);
+      const deployed = await checkContractDeployed(oracleAddress);
       if (!deployed) return false;
     }
 
-    // Check diamond if available
     if (diamondAddress) {
-      const deployed = await isContractDeployed(
-        HARDHAT_RPC_URL,
-        diamondAddress
-      );
+      const deployed = await checkContractDeployed(diamondAddress);
       if (!deployed) return false;
     }
 

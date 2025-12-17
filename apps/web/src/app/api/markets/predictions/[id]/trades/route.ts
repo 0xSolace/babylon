@@ -90,9 +90,9 @@
 
 import type { JsonValue } from '@babylon/api';
 import {
-  getCache,
+  cacheGet,
+  cacheSet,
   optionalAuth,
-  setCache,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -132,7 +132,7 @@ export const GET = withErrorHandling(
 
     // Check Redis cache first
     const cacheKey = `prediction-trades:${marketId}:${queryParams.limit}:${queryParams.offset}`;
-    const cached = await getCache<Record<string, JsonValue>>(cacheKey);
+    const cached = await cacheGet<Record<string, JsonValue>>(cacheKey);
 
     if (cached) {
       logger.debug(
@@ -281,7 +281,7 @@ export const GET = withErrorHandling(
     };
 
     // Cache for 30 seconds
-    await setCache(cacheKey, result, { ttl: 30, namespace: 'market-trades' });
+    await cacheSet(cacheKey, result, 30);
 
     logger.info(
       `Returned ${trades.length} trades for prediction market ${marketId}`,

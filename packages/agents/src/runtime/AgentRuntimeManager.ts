@@ -24,11 +24,9 @@ import {
   type Plugin,
   type UUID,
 } from '@elizaos/core';
-import { anthropicPlugin } from '@elizaos/plugin-anthropic';
-import { openaiPlugin } from '@elizaos/plugin-openai';
 import { babylonPlugin } from '../plugins/babylon';
 import { enhanceRuntimeWithBabylon } from '../plugins/babylon/integration';
-import { groqPlugin } from '../plugins/groq';
+import { jejuComputePlugin } from '../plugins/jeju-compute';
 import { experiencePlugin } from '../plugins/plugin-experience/src';
 import { trajectoryLoggerPlugin } from '../plugins/plugin-trajectory-logger/src';
 import {
@@ -187,16 +185,16 @@ export class AgentRuntimeManager {
     };
 
     logger.info(
-      'Agent using Groq model',
+      'Agent using Jeju Compute',
       {
         agentId: agentUserId,
-        model: 'groq-qwen-32b',
+        network: process.env.JEJU_NETWORK ?? 'localnet',
       },
       'AgentRuntimeManager'
     );
 
     // Build character from agent user config
-    // Always use qwen 32b (TEXT_LARGE) - free chat, 1pt per tick
+    // All inference routes through Jeju Compute marketplace
     const character: Character = {
       name: agentUser.displayName || agentUser.username || 'Agent',
       system: agentConfig?.systemPrompt || 'You are a helpful AI agent',
@@ -205,11 +203,11 @@ export class AgentRuntimeManager {
       style: parseStyle(),
       plugins: [],
       settings: {
-        // GROQ configuration (always available)
-        GROQ_API_KEY: process.env.GROQ_API_KEY || '',
-        LARGE_GROQ_MODEL: 'qwen/qwen3-32b',
-        SMALL_GROQ_MODEL: 'llama-3.1-8b-instant',
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
+        // Jeju Compute configuration (decentralized inference)
+        JEJU_NETWORK: process.env.JEJU_NETWORK ?? 'localnet',
+        JEJU_WALLET_ADDRESS: process.env.JEJU_WALLET_ADDRESS ?? '',
+        JEJU_LARGE_MODEL: 'llama-3.1-70b-versatile',
+        JEJU_SMALL_MODEL: 'llama-3.1-8b-instant',
       },
     };
 
@@ -230,15 +228,12 @@ export class AgentRuntimeManager {
     const trajectoryLogger = new TrajectoryLoggerService();
     trajectoryLoggers.set(agentUserId, trajectoryLogger);
 
-    // Create runtime with groq, experience, and trajectory logger plugins
+    // Create runtime with Jeju Compute (decentralized inference)
     // Type cast plugins to ensure compatibility across different @elizaos/core versions
     const plugins: Plugin[] = [
       experiencePlugin as Plugin,
       trajectoryLoggerPlugin as Plugin,
-      // Conditionally add LLM plugins based on available API keys
-      ...(process.env.GROQ_API_KEY ? [groqPlugin as Plugin] : []),
-      ...(process.env.ANTHROPIC_API_KEY ? [anthropicPlugin as Plugin] : []),
-      ...(process.env.OPENAI_API_KEY ? [openaiPlugin as Plugin] : []),
+      jejuComputePlugin as Plugin, // Decentralized inference - no centralized fallbacks
     ];
 
     const runtimeConfig = {
@@ -253,7 +248,7 @@ export class AgentRuntimeManager {
 
     const runtime = new AgentRuntime(runtimeConfig) as ExtendedAgentRuntime;
 
-    runtime.currentModel = 'groq';
+    runtime.currentModel = 'jeju-compute';
 
     // Override adapter.log to prevent undefined logger errors
     runtime.adapter = {
@@ -506,14 +501,11 @@ export class AgentRuntimeManager {
     const trajectoryLogger = new TrajectoryLoggerService();
     trajectoryLoggers.set(agentId, trajectoryLogger);
 
-    // Create runtime with standard plugins
+    // Create runtime with Jeju Compute (decentralized inference)
     const plugins: Plugin[] = [
       experiencePlugin as Plugin,
       trajectoryLoggerPlugin as Plugin,
-      // Conditionally add LLM plugins based on available API keys
-      ...(process.env.GROQ_API_KEY ? [groqPlugin as Plugin] : []),
-      ...(process.env.ANTHROPIC_API_KEY ? [anthropicPlugin as Plugin] : []),
-      ...(process.env.OPENAI_API_KEY ? [openaiPlugin as Plugin] : []),
+      jejuComputePlugin as Plugin, // Decentralized inference - no centralized fallbacks
     ];
 
     const runtimeConfig = {
@@ -532,7 +524,7 @@ export class AgentRuntimeManager {
     if (character.settings?.MODEL_VERSION) {
       runtime.currentModelVersion = character.settings.MODEL_VERSION as string;
     }
-    runtime.currentModel = 'groq';
+    runtime.currentModel = 'jeju-compute';
 
     // Override adapter.log to prevent undefined logger errors
     runtime.adapter = {
@@ -571,16 +563,16 @@ export class AgentRuntimeManager {
   }
 
   /**
-   * Get model settings (Groq configuration)
+   * Get model settings (Jeju Compute configuration)
    * Shared logic for model configuration
    */
   private getModelSettings(): Record<string, string> {
     return {
-      // GROQ configuration (always available)
-      GROQ_API_KEY: process.env.GROQ_API_KEY || '',
-      LARGE_GROQ_MODEL: 'qwen/qwen3-32b',
-      SMALL_GROQ_MODEL: 'llama-3.1-8b-instant',
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
+      // Jeju Compute configuration (decentralized inference)
+      JEJU_NETWORK: process.env.JEJU_NETWORK ?? 'localnet',
+      JEJU_WALLET_ADDRESS: process.env.JEJU_WALLET_ADDRESS ?? '',
+      JEJU_LARGE_MODEL: 'llama-3.1-70b-versatile',
+      JEJU_SMALL_MODEL: 'llama-3.1-8b-instant',
     };
   }
 

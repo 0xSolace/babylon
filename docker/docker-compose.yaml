@@ -1,0 +1,227 @@
+# Babylon Complete Development Stack
+#
+# Runs all Babylon services locally for development:
+# - Game server (Next.js web app)
+# - Training CPU (data processing, benchmarks)
+# - Training GPU (GRPO training - requires NVIDIA GPU)
+# - PostgreSQL database
+# - Redis (caching, pub/sub)
+# - MinIO (local S3 for storage)
+#
+# Usage:
+#   docker-compose up -d                    # Start all services
+#   docker-compose up game db redis         # Start only core services
+#   docker-compose up training-cpu          # Start CPU training
+#   docker-compose --profile gpu up         # Include GPU training
+#
+# Environment:
+#   Copy ../.env.example to ../.env and configure
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # Core Services
+  # ===========================================================================
+
+  db:
+    image: postgres:15-alpine
+    container_name: babylon-db
+    environment:
+      POSTGRES_USER: babylon
+      POSTGRES_PASSWORD: babylon_dev_password
+      POSTGRES_DB: babylon
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U babylon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: babylon-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: babylon-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: babylon
+      MINIO_ROOT_PASSWORD: babylon_dev_password
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ===========================================================================
+  # Game Server
+  # ===========================================================================
+
+  game:
+    build:
+      context: ..
+      dockerfile: docker/game-server.Dockerfile
+    container_name: babylon-game
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://babylon:babylon_dev_password@db:5432/babylon
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=babylon
+      - MINIO_SECRET_KEY=babylon_dev_password
+    env_file:
+      - ../.env
+    ports:
+      - "3000:3000"
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
+  # Training Services
+  # ===========================================================================
+
+  training-cpu:
+    build:
+      context: ..
+      dockerfile: docker/training-cpu.Dockerfile
+    container_name: babylon-training-cpu
+    command: serve
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://babylon:babylon_dev_password@db:5432/babylon
+      - API_BASE_URL=http://game:3000
+    env_file:
+      - ../.env
+    ports:
+      - "8081:8080"
+    volumes:
+      - training_data:/app/data
+      - checkpoints:/app/checkpoints
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # GPU Training (requires NVIDIA GPU and nvidia-docker2)
+  training-gpu:
+    build:
+      context: ..
+      dockerfile: docker/training-gpu.Dockerfile
+    container_name: babylon-training-gpu
+    command: serve
+    profiles:
+      - gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://babylon:babylon_dev_password@db:5432/babylon
+      - API_BASE_URL=http://game:3000
+      - CUDA_VISIBLE_DEVICES=0
+      - MODEL_NAME=Qwen/Qwen2.5-3B-Instruct
+    env_file:
+      - ../.env
+    ports:
+      - "8082:8080"
+      - "8083:8001"  # vLLM
+    volumes:
+      - training_data:/app/data
+      - checkpoints:/app/checkpoints
+    depends_on:
+      db:
+        condition: service_healthy
+    shm_size: '16gb'  # Required for PyTorch
+
+  # ===========================================================================
+  # Cron Orchestrator
+  # ===========================================================================
+
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: docker/game-server.Dockerfile
+    container_name: babylon-orchestrator
+    command: ["bun", "run", "scripts/local-cron-simulator.ts"]
+    environment:
+      - NODE_ENV=production
+      - API_BASE_URL=http://game:3000
+      - TRAINING_CPU_ENDPOINT=http://training-cpu:8080
+      - TRAINING_GPU_ENDPOINT=http://training-gpu:8080
+    env_file:
+      - ../.env
+    depends_on:
+      - game
+    restart: unless-stopped
+
+  # ===========================================================================
+  # Optional: Local IPFS Node
+  # ===========================================================================
+
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: babylon-ipfs
+    profiles:
+      - storage
+    environment:
+      - IPFS_PROFILE=server
+    volumes:
+      - ipfs_data:/data/ipfs
+    ports:
+      - "4001:4001"     # Swarm
+      - "5001:5001"     # API
+      - "8088:8080"     # Gateway
+    healthcheck:
+      test: ["CMD-SHELL", "ipfs dag stat /ipfs/QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  training_data:
+  checkpoints:
+  ipfs_data:
+
+networks:
+  default:
+    name: babylon-network

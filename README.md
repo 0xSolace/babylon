@@ -28,7 +28,18 @@ A real-time prediction market game with autonomous NPCs, perpetual futures, and 
 
 **NOTE**: This is currently in development. We expect to launch publicly around December 1st, 2025. This repo will change heavily in the meantime.
 
-## 📦 Installation
+## 🏗️ Running Modes
+
+Babylon can run in two modes:
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **Standalone** | Independent project with local Hardhat chain | Development, testing, standalone deployment |
+| **Jeju Vendor** | Integrated with Jeju ecosystem | Production with decentralized compute, TEE, on-chain treasury |
+
+---
+
+## 📦 Standalone Installation
 
 ```bash
 git clone https://github.com/elizaOS/babylon.git
@@ -42,7 +53,7 @@ bun run db:push
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Standalone Quick Start
 
 ```bash
 # 1. Install
@@ -67,7 +78,90 @@ bun run db:seed
 bun run dev   # ← Automatically starts web + game engine!
 ```
 
-Visit `http://localhost:3000` - everything runs and generates content automatically!
+Visit `http://localhost:5007` - everything runs and generates content automatically!
+
+### What `bun run dev` Does (Standalone)
+
+1. **Pre-dev setup** (`pre-dev-local.ts`):
+   - Starts Docker containers (PostgreSQL, Redis, MinIO)
+   - Runs database migrations
+   - Seeds initial data
+
+2. **Development wrapper** (`dev-wrapper.ts`):
+   - Starts Hardhat node (local blockchain on port 8545)
+   - Deploys contracts automatically
+   - Starts Next.js web app (port 5007)
+   - Runs local cron simulator (game/agent ticks)
+
+---
+
+## 🌐 Jeju Vendor Mode
+
+When running as part of the [Jeju](https://github.com/jeju-ai/jeju) ecosystem, Babylon gains:
+
+- **Decentralized Compute**: GPU training via Jeju compute marketplace
+- **On-chain Treasury**: Training audit trail on BabylonTreasury contract
+- **TEE Execution**: Phala Network trusted execution
+- **Decentralized Storage**: IPFS/Arweave via Jeju storage
+
+### Running in Jeju
+
+```bash
+# From Jeju root
+cd vendor/babylon
+bun run dev
+```
+
+Or start from Jeju root (if configured in jeju-manifest.json):
+```bash
+# From Jeju root
+bun run dev:babylon
+```
+
+### Environment Detection
+
+Babylon automatically detects its environment:
+
+```typescript
+// Standalone mode (default)
+{
+  mode: 'dev',
+  hasJeju: false,
+  storageMode: 'local',
+  teeMode: 'simulated'
+}
+
+// Jeju production mode
+{
+  mode: 'production',
+  hasJeju: true,
+  storageMode: 'jeju',
+  teeMode: 'phala'
+}
+```
+
+### Key Environment Variables for Jeju
+
+| Variable | Standalone | Jeju Production |
+|----------|------------|-----------------|
+| `NODE_ENV` | `development` | `production` |
+| `USE_JEJU` | not set | `true` |
+| `BABYLON_TREASURY_ADDRESS` | not set | `0x...` (deployed contract) |
+| `RPC_URL` | `localhost:8545` | Jeju mainnet RPC |
+| `STORAGE_MODE` | `local` | `jeju` |
+| `TEE_MODE` | `simulated` | `phala` |
+
+### Training Pipeline
+
+**Standalone**: Training runs locally via Python scripts
+```bash
+bun run train  # Spawns python3 directly
+```
+
+**Jeju**: Training runs on rented GPUs
+```bash
+USE_JEJU=true bun run train  # Rents GPU, runs in cloud, records on-chain
+```
 
 ---
 
@@ -81,15 +175,9 @@ Runs both web server AND game daemon. Content generates every 60 seconds.
 
 **Web Only** (No Content Generation):
 ```bash
-bun run dev:web-only   # Just Next.js, no daemon
+bun run dev:web   # Just Next.js, no daemon
 ```
 Use if you're only working on frontend and don't need live content.
-
-**Serverless Mode** (Test Vercel Cron Locally):
-```bash
-bun run dev:cron-mode   # Web + Cron simulator (not daemon)
-```
-Tests the serverless cron endpoint instead of daemon. Good for verifying Vercel behavior.
 
 ### Real-Time Updates
 
@@ -121,7 +209,7 @@ bun run lint
 bun run test
 ```
 
-Visit `http://localhost:3000`
+Visit `http://localhost:5007`
 
 ---
 
@@ -136,7 +224,9 @@ bun run contracts:test     # Smart contracts
 
 ---
 
-## 🚢 Deploy to Vercel
+## 🚢 Deployment
+
+### Standalone Deployment (Vercel)
 
 ```bash
 npm i -g vercel
@@ -147,9 +237,44 @@ vercel deploy --prod
 
 - `DATABASE_URL` - PostgreSQL connection
 - `NEXT_PUBLIC_PRIVY_APP_ID` - Authentication
-- `OPENAI_API_KEY` - AI agents
+- `OPENAI_API_KEY` or `GROQ_API_KEY` - AI agents
 
 See `.env.example` for complete list.
+
+### Contract Deployment
+
+```bash
+# Local (Hardhat)
+babylon deploy local
+
+# Testnet (Base Sepolia)
+babylon deploy testnet
+
+# Mainnet (Base) - requires --force flag
+babylon deploy mainnet --force
+```
+
+### Jeju Production Deployment
+
+When deploying with Jeju, additional environment variables are required:
+
+```bash
+# On-chain integration
+BABYLON_TREASURY_ADDRESS=0x...  # Deployed BabylonTreasury contract
+RPC_URL=https://rpc.jeju.ai     # Jeju mainnet RPC
+PRIVATE_KEY=0x...               # Operator private key
+
+# Decentralized compute
+USE_JEJU=true                   # Enable Jeju compute marketplace
+
+# TEE (Trusted Execution)
+TEE_MODE=phala                  # Use Phala Network
+PHALA_ENDPOINT=https://...      # Phala CVM endpoint
+
+# Storage
+STORAGE_MODE=jeju               # Use Jeju decentralized storage
+JEJU_STORAGE_URL=https://...    # Jeju storage endpoint
+```
 
 ---
 

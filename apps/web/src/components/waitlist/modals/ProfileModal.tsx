@@ -274,7 +274,7 @@ export function ProfileModal({
                     Username *
                   </label>
                   <div className="relative">
-                    <span className="-translate-y-1/2 absolute top-1/2 left-3 text-muted-foreground">
+                    <span className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">
                       @
                     </span>
                     <input
@@ -292,15 +292,15 @@ export function ProfileModal({
                       maxLength={20}
                     />
                     {isCheckingUsername && (
-                      <div className="-translate-y-1/2 absolute top-1/2 right-3">
+                      <div className="absolute top-1/2 right-3 -translate-y-1/2">
                         <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                       </div>
                     )}
                     {usernameStatus === 'available' && !isCheckingUsername && (
-                      <Check className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 text-green-500" />
+                      <Check className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-green-500" />
                     )}
                     {usernameStatus === 'taken' && !isCheckingUsername && (
-                      <X className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 text-red-500" />
+                      <X className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-red-500" />
                     )}
                   </div>
                   {usernameStatus === 'taken' && usernameSuggestion && (

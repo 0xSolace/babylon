@@ -353,8 +353,12 @@ class StubUserPort implements UserPort {
   }
 }
 
+/**
+ * @deprecated Use CQLStorageProvider instead
+ */
 export class PostgresStorageProvider implements IStorageProvider {
-  readonly mode: StorageMode = 'postgres';
+  // Cast to StorageMode for backwards compatibility - 'postgres' is no longer a valid mode
+  readonly mode: StorageMode = 'cql' as StorageMode;
 
   readonly actors: ActorPort = new StubActorPort();
   readonly organizations: OrganizationPort = new StubOrganizationPort();

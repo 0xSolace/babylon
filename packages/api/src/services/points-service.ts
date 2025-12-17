@@ -435,7 +435,7 @@ export class PointsService {
           registrationIpHash: users.registrationIpHash,
           createdAt: users.createdAt,
           walletAddress: users.walletAddress,
-          privyId: users.privyId,
+          oauth3Id: users.oauth3Id,
           farcasterFid: users.farcasterFid,
           twitterId: users.twitterId,
         })
@@ -447,7 +447,7 @@ export class PointsService {
           registrationIpHash: users.registrationIpHash,
           createdAt: users.createdAt,
           walletAddress: users.walletAddress,
-          privyId: users.privyId,
+          oauth3Id: users.oauth3Id,
           farcasterFid: users.farcasterFid,
           twitterId: users.twitterId,
         })
@@ -472,10 +472,10 @@ export class PointsService {
           referrer.walletAddress &&
           referredUser.walletAddress &&
           referrer.walletAddress !== referredUser.walletAddress;
-        const hasDifferentPrivyId =
-          referrer.privyId &&
-          referredUser.privyId &&
-          referrer.privyId !== referredUser.privyId;
+        const hasDifferentOAuth3Id =
+          referrer.oauth3Id &&
+          referredUser.oauth3Id &&
+          referrer.oauth3Id !== referredUser.oauth3Id;
         const hasDifferentFarcaster =
           referrer.farcasterFid &&
           referredUser.farcasterFid &&
@@ -487,7 +487,7 @@ export class PointsService {
 
         const hasDifferentIdentifiers =
           hasDifferentWallet ||
-          hasDifferentPrivyId ||
+          hasDifferentOAuth3Id ||
           hasDifferentFarcaster ||
           hasDifferentTwitter;
 
@@ -505,8 +505,8 @@ export class PointsService {
               timeDiffMs: timeDiff,
               referrerWallet: referrer.walletAddress,
               referredWallet: referredUser.walletAddress,
-              referrerPrivyId: referrer.privyId,
-              referredPrivyId: referredUser.privyId,
+              referrerOAuth3Id: referrer.oauth3Id,
+              referredOAuth3Id: referredUser.oauth3Id,
             },
             'PointsService'
           );
@@ -545,7 +545,7 @@ export class PointsService {
               referredUserId,
               timeDiffMs: timeDiff,
               hasDifferentWallet,
-              hasDifferentPrivyId,
+              hasDifferentOAuth3Id,
               hasDifferentFarcaster,
               hasDifferentTwitter,
             },

@@ -104,25 +104,16 @@ async function initializeA2ASdkClient(agentUserId: string): Promise<A2AClient> {
 export class BabylonA2AClient {
   public readonly agentId: string;
   private sdkClient: A2AClient | null;
-  // Stored for potential future use (ERC-8004 headers, etc.)
-  // Prefixed with _ to indicate intentionally unused
-  // @ts-expect-error - Intentionally unused, stored for future ERC-8004 use
-  private readonly _agentAddress?: string;
-  // @ts-expect-error - Intentionally unused, stored for future ERC-8004 use
-  private readonly _agentTokenId?: number;
 
   constructor(
     sdkClient: A2AClient | null,
     agentId: string,
-    agentAddress?: string,
-    agentTokenId?: number
+    _agentAddress?: string,
+    _agentTokenId?: number
   ) {
     this.sdkClient = sdkClient;
-    this._agentAddress = agentAddress;
-    this._agentTokenId = agentTokenId;
-    // These are intentionally unused but stored for potential future use
     this.agentId = agentId;
-    // agentAddress and agentTokenId stored for potential future use (ERC-8004 headers, etc.)
+    // agentAddress and agentTokenId stored for potential future ERC-8004 integration
   }
 
   /**

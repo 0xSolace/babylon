@@ -14,6 +14,8 @@
 export * from './archetypes';
 // Re-export all sub-modules
 export * from './benchmark';
+// Compute integration (Jeju marketplace)
+export * from './compute';
 export type {
   CreateAgentParams,
   ExportGroupedForGRPOFn,
@@ -56,3 +58,15 @@ export * from './scoring';
 export * from './training';
 // Utilities
 export * from './utils';
+
+// =============================================================================
+// DECENTRALIZED TRAINING INFRASTRUCTURE
+// =============================================================================
+
+// MPC Configuration
+export * from './mpc';
+// Encrypted Storage
+export * from './storage';
+
+// TEE Training Workers
+export * from './tee';

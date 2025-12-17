@@ -47,6 +47,11 @@ describe('Agent LLM Provider', () => {
       process.env.HUGGINGFACE_API_KEY = 'test-key';
       process.env.HUGGINGFACE_MODEL_ENDPOINT = 'https://test.endpoint';
 
+      // Mock fetch for the availability check
+      globalThis.fetch = mock(async () => {
+        return new Response('', { status: 200 });
+      });
+
       // Re-import to pick up new env vars
       const { getAgentLLMStatus } = await import('../agent-llm');
       const status = await getAgentLLMStatus();

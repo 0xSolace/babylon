@@ -54,6 +54,7 @@
 import {
   AuthorizationError,
   authenticate,
+  isDecentralizedMessagingEnabled,
   NotFoundError,
   successResponse,
   withErrorHandling,
@@ -72,6 +73,7 @@ import {
   users,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
+import { getMessaging } from '@babylon/messaging';
 import { ChatQuerySchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -323,7 +325,42 @@ export const GET = withErrorHandling(
       : fullChat.messages;
 
     // Reverse to get chronological order (oldest first)
-    const messagesInOrder = [...messagesList].reverse();
+    let messagesInOrder = [...messagesList].reverse();
+
+    // Fetch from decentralized storage if enabled
+    if (isDecentralizedMessagingEnabled()) {
+      try {
+        const messaging = getMessaging();
+        const decentralizedMessages = await messaging.getMessages({
+          conversationId: chatId,
+          limit: effectiveLimit,
+          before: cursor ? Date.now() : undefined, // TODO: Use proper cursor timestamp
+        });
+
+        // Merge decentralized messages (prefer decentralized if IDs match)
+        const existingIds = new Set(messagesInOrder.map((m) => m.id));
+        const newMessages = decentralizedMessages
+          .filter((dm) => !existingIds.has(dm.id))
+          .map((dm) => ({
+            id: dm.id,
+            content: dm.content,
+            senderId: dm.sender as string,
+            createdAt: new Date(dm.timestamp),
+            chatId,
+          }));
+
+        if (newMessages.length > 0) {
+          messagesInOrder = [...messagesInOrder, ...newMessages].sort(
+            (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+          );
+        }
+      } catch (error) {
+        logger.warn('Failed to fetch decentralized messages', {
+          chatId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // Get the cursor for the next page (oldest message ID in this batch)
     const nextCursor = hasMore

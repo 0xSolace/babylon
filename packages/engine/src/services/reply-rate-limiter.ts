@@ -182,7 +182,8 @@ export class ReplyRateLimiter {
     // Queue for invite if quality is good enough (>= 0.7)
     // Higher quality replies get higher priority multiplier
     if (qualityScore >= 0.7) {
-      const priorityMultiplier = qualityScore >= 0.9 ? 1.5 : qualityScore >= 0.8 ? 1.2 : 1.0;
+      const priorityMultiplier =
+        qualityScore >= 0.9 ? 1.5 : qualityScore >= 0.8 ? 1.2 : 1.0;
 
       const queueResult = await GroupInviteOrchestrator.queueInviteCandidate({
         userId,

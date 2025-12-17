@@ -5,12 +5,12 @@
  */
 
 import { expect, test } from '@playwright/test';
+import { loginWithWallet } from './helpers/oauth3-auth';
 import {
   cooldownBetweenTests,
   navigateTo,
   waitForPageLoad,
 } from './helpers/page-helpers';
-import { loginWithWallet } from './helpers/privy-auth';
 import { ROUTES, TIMEOUTS, VIEWPORTS } from './helpers/test-data';
 
 test.setTimeout(TIMEOUTS.EXTRA_LONG);

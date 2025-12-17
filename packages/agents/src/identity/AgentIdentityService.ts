@@ -40,7 +40,7 @@ export class AgentIdentityService {
    */
   async createAgentWallet(agentUserId: string): Promise<{
     walletAddress: string;
-    privyWalletId: string;
+    kmsKeyId: string;
   }> {
     logger.info(
       `Creating wallet for agent user ${agentUserId}`,
@@ -58,7 +58,7 @@ export class AgentIdentityService {
       throw new Error('Agent user not found');
     }
 
-    // Use proper Privy integration via AgentWalletService
+    // Use Jeju KMS for decentralized key management
     const result =
       await agentWalletService.createAgentEmbeddedWallet(agentUserId);
 
@@ -69,7 +69,7 @@ export class AgentIdentityService {
     );
     return {
       walletAddress: result.walletAddress,
-      privyWalletId: result.privyWalletId,
+      kmsKeyId: result.kmsKeyId,
     };
   }
 

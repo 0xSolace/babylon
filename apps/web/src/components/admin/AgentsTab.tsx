@@ -119,7 +119,7 @@ export function AgentsTab() {
 
   const fetchData = useCallback(async () => {
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       logger.error('Not authenticated', undefined, 'AgentsTab');
       toast.error('Failed to load agents');
@@ -159,7 +159,7 @@ export function AgentsTab() {
 
   const handleToggleAgent = async (agentId: string, enable: boolean) => {
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       toast.error('Not authenticated');
       return;
@@ -193,7 +193,7 @@ export function AgentsTab() {
     }
 
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       toast.error('Not authenticated');
       return;
@@ -226,7 +226,7 @@ export function AgentsTab() {
     }
 
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       toast.error('Not authenticated');
       return;

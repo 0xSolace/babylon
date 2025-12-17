@@ -41,6 +41,8 @@
       "@babylon/engine/*": ["../../packages/engine/src/*"],
       "@babylon/api": ["../../packages/api/src/index.ts"],
       "@babylon/api/*": ["../../packages/api/src/*"],
+      "@babylon/messaging": ["../../packages/messaging/src/index.ts"],
+      "@babylon/messaging/*": ["../../packages/messaging/src/*"],
       "@babylon/contracts": ["../../packages/contracts/src/index.ts"],
       "@babylon/contracts/*": ["../../packages/contracts/*"],
       "@babylon/agents": ["../../packages/agents/src/index.ts"],
@@ -57,5 +59,11 @@
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/__tests__/**/*"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/__tests__/**/*",
+    "src/generate-actor-images.ts",
+    "src/migrate-images-to-blob.ts"
+  ]
 }

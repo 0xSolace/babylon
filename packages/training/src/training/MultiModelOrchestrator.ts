@@ -108,9 +108,12 @@ export class MultiModelOrchestrator {
   constructor(config: OrchestratorConfig) {
     this.config = {
       vllmBaseUrl: process.env.VLLM_BASE_URL || 'http://localhost:9001',
+      // Jeju Compute is the only fallback - no centralized providers
       fallbackApiUrl:
-        process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1',
-      fallbackApiKey: process.env.GROQ_API_KEY,
+        process.env.JEJU_COMPUTE_API_URL ||
+        process.env.JEJU_COMPUTE_ENDPOINT ||
+        'http://localhost:4500',
+      fallbackApiKey: undefined, // No API key needed for Jeju Compute
       inferenceTimeoutMs: 30000,
       ...config,
     };
@@ -124,7 +127,7 @@ export class MultiModelOrchestrator {
         quantization: this.multiModelConfig.quantization,
         tier: this.multiModelConfig.modelTier,
         vllmUrl: this.config.vllmBaseUrl,
-        hasFallback: !!this.config.fallbackApiKey,
+        jejuComputeUrl: this.config.fallbackApiUrl,
       },
       'MultiModelOrchestrator'
     );
@@ -132,6 +135,7 @@ export class MultiModelOrchestrator {
 
   /**
    * Check if vLLM server is available
+   * Validates that the response is actually from a vLLM/OpenAI-compatible server
    */
   async checkVllmAvailability(): Promise<boolean> {
     if (this.vllmAvailable !== null) {
@@ -144,17 +148,48 @@ export class MultiModelOrchestrator {
     try {
       const response = await fetch(`${this.config.vllmBaseUrl}/v1/models`, {
         signal: controller.signal,
+        headers: { Accept: 'application/json' },
       });
       clearTimeout(timeout);
-      this.vllmAvailable = response.ok;
 
-      if (this.vllmAvailable) {
-        logger.info(
-          'vLLM server is available',
+      if (!response.ok) {
+        this.vllmAvailable = false;
+        return false;
+      }
+
+      // Verify response is JSON with expected structure (not MinIO or other service)
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        logger.warn(
+          'vLLM endpoint returned non-JSON response, likely not vLLM',
+          { url: this.config.vllmBaseUrl, contentType },
+          'MultiModelOrchestrator'
+        );
+        this.vllmAvailable = false;
+        return false;
+      }
+
+      const data = (await response.json()) as {
+        data?: unknown[];
+        object?: string;
+      };
+      // vLLM returns { "object": "list", "data": [...] }
+      if (!data.data || !Array.isArray(data.data)) {
+        logger.warn(
+          'vLLM endpoint returned unexpected JSON structure',
           { url: this.config.vllmBaseUrl },
           'MultiModelOrchestrator'
         );
+        this.vllmAvailable = false;
+        return false;
       }
+
+      this.vllmAvailable = true;
+      logger.info(
+        'vLLM server is available',
+        { url: this.config.vllmBaseUrl, models: data.data.length },
+        'MultiModelOrchestrator'
+      );
 
       return this.vllmAvailable;
     } catch {

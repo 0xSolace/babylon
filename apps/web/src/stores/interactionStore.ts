@@ -97,8 +97,8 @@ type PersistedInteractionState = {
 // Helper to get auth token from Privy
 async function getAuthToken(): Promise<string | null> {
   // Access the token from window object that gets set by useAuth hook
-  if (typeof window !== 'undefined' && window.__privyAccessToken) {
-    return window.__privyAccessToken;
+  if (typeof window !== 'undefined' && window.__oauth3AccessToken) {
+    return window.__oauth3AccessToken;
   }
 
   return null;

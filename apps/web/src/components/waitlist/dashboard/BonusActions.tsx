@@ -10,8 +10,8 @@ interface BonusActionsProps {
     hasDiscord?: boolean;
     hasFarcaster?: boolean;
   } | null;
-  privyUser: {
-    wallet?: { address?: string };
+  walletData: {
+    address?: string;
   } | null;
   // Twitter state
   hasTwitterFollow: boolean;
@@ -47,7 +47,7 @@ interface BonusActionsProps {
  */
 export function BonusActions({
   dbUser,
-  privyUser,
+  walletData,
   hasTwitterFollow,
   showVerifyTwitterFollowButton,
   isVerifyingTwitterFollow,
@@ -381,7 +381,7 @@ export function BonusActions({
         )}
 
         {/* Wallet Connect */}
-        {!privyUser?.wallet?.address && (
+        {!walletData?.address && (
           <button
             onClick={onWalletConnect}
             className="flex min-h-[48px] w-full touch-manipulation items-center justify-between rounded-lg border border-border bg-background/50 p-3 transition-all duration-200 hover:border-primary/30 hover:bg-background active:scale-[0.98] sm:p-4"
@@ -395,7 +395,7 @@ export function BonusActions({
             </span>
           </button>
         )}
-        {privyUser?.wallet?.address && (
+        {walletData?.address && (
           <div className="flex w-full items-center justify-between rounded-lg border border-green-500/20 bg-green-500/10 p-3 sm:p-4">
             <div className="flex items-center gap-3">
               <Check className="h-4 w-4 shrink-0 text-green-500 sm:h-5 sm:w-5" />

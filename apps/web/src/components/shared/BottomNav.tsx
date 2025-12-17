@@ -37,7 +37,7 @@ function BottomNavContent() {
 
     const fetchUnreadCount = async () => {
       const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
       if (!token) {
         return;

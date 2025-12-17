@@ -11,8 +11,8 @@
 export interface LLMCallTokenUsage {
   /** Unique identifier for this call */
   callId: string;
-  /** Provider used (groq, claude, openai) */
-  provider: 'groq' | 'claude' | 'openai';
+  /** Provider used (jeju, groq, claude, openai) */
+  provider: 'jeju' | 'groq' | 'claude' | 'openai';
   /** Model used for the call */
   model: string;
   /** Number of input/prompt tokens */
@@ -62,7 +62,7 @@ export interface PromptTypeStats {
  */
 export interface ModelStats {
   /** Provider */
-  provider: 'groq' | 'claude' | 'openai';
+  provider: 'jeju' | 'groq' | 'claude' | 'openai';
   /** Model name */
   model: string;
   /** Number of calls made */

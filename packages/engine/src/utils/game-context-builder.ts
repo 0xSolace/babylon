@@ -1401,7 +1401,7 @@ function buildFullProfile(actor: Actor): string {
 
 /**
  * Format character roster with organizations included.
- * Combines NPCs and organizations into unified context.
+ * Combines NPCs and organizations into complete context.
  */
 export function formatCharacterAndOrgRoster(
   actors: Actor[],

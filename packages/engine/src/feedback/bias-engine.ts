@@ -28,7 +28,7 @@ export interface BiasAdjustment {
 export class BiasEngine {
   private static instance: BiasEngine | null = null;
   private biases: Map<string, BiasConfig> = new Map();
-  private cleanupInterval: NodeJS.Timeout | null = null;
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   private constructor() {
     this.startCleanupInterval();

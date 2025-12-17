@@ -25,6 +25,8 @@ export interface PromptLogEntry {
     temperature?: number;
     maxTokens?: number;
     format?: string;
+    latencyMs?: number;
+    settlement?: unknown;
   };
 }
 

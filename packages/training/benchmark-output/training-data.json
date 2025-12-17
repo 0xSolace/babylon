@@ -1,0 +1,1558 @@
+[
+  {
+    "agentId": "agent-trader-001",
+    "archetype": "trader",
+    "trajectory": [
+      {
+        "tick": 1,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "NO",
+          "amount": 401
+        },
+        "reward": 10
+      },
+      {
+        "tick": 3,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 339
+        },
+        "reward": -5
+      },
+      {
+        "tick": 9,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 380
+        },
+        "reward": -5
+      },
+      {
+        "tick": 10,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 359
+        },
+        "reward": 10
+      },
+      {
+        "tick": 11,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 149
+        },
+        "reward": 10
+      },
+      {
+        "tick": 15,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 17,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 512
+        },
+        "reward": 10
+      },
+      {
+        "tick": 17,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 19,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 381
+        },
+        "reward": 10
+      },
+      {
+        "tick": 20,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 447
+        },
+        "reward": 10
+      },
+      {
+        "tick": 21,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "NO",
+          "amount": 136
+        },
+        "reward": 10
+      },
+      {
+        "tick": 26,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 596
+        },
+        "reward": -5
+      },
+      {
+        "tick": 28,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 260
+        },
+        "reward": 10
+      },
+      {
+        "tick": 29,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 30,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 127
+        },
+        "reward": 10
+      },
+      {
+        "tick": 35,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 577
+        },
+        "reward": 10
+      },
+      {
+        "tick": 37,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "NO",
+          "amount": 101
+        },
+        "reward": 10
+      },
+      {
+        "tick": 38,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "YES",
+          "amount": 518
+        },
+        "reward": -5
+      },
+      {
+        "tick": 39,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "YES",
+          "amount": 166
+        },
+        "reward": -5
+      },
+      {
+        "tick": 40,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 45,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 109
+        },
+        "reward": 10
+      },
+      {
+        "tick": 46,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 49,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 328
+        },
+        "reward": 10
+      },
+      {
+        "tick": 50,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 51,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 303
+        },
+        "reward": -5
+      },
+      {
+        "tick": 57,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 61,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 181
+        },
+        "reward": 10
+      },
+      {
+        "tick": 65,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 537
+        },
+        "reward": 10
+      },
+      {
+        "tick": 67,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 371
+        },
+        "reward": -5
+      },
+      {
+        "tick": 68,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 423
+        },
+        "reward": 10
+      },
+      {
+        "tick": 72,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 132
+        },
+        "reward": 10
+      },
+      {
+        "tick": 72,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 75,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 550
+        },
+        "reward": 10
+      },
+      {
+        "tick": 75,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 78,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 364
+        },
+        "reward": 10
+      },
+      {
+        "tick": 81,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 82,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "NO",
+          "amount": 485
+        },
+        "reward": 10
+      },
+      {
+        "tick": 84,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 160
+        },
+        "reward": 10
+      },
+      {
+        "tick": 86,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 588
+        },
+        "reward": 10
+      },
+      {
+        "tick": 86,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 91,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 483
+        },
+        "reward": -5
+      },
+      {
+        "tick": 92,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 96,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 564
+        },
+        "reward": -5
+      },
+      {
+        "tick": 96,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 98,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 202
+        },
+        "reward": -5
+      },
+      {
+        "tick": 99,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 445
+        },
+        "reward": 10
+      },
+      {
+        "tick": 102,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 104,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 244
+        },
+        "reward": 10
+      },
+      {
+        "tick": 106,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "NO",
+          "amount": 171
+        },
+        "reward": 10
+      },
+      {
+        "tick": 106,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 109,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "NO",
+          "amount": 131
+        },
+        "reward": 10
+      },
+      {
+        "tick": 111,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 372
+        },
+        "reward": -5
+      },
+      {
+        "tick": 113,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 291
+        },
+        "reward": -5
+      },
+      {
+        "tick": 115,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 110
+        },
+        "reward": 10
+      },
+      {
+        "tick": 118,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "NO",
+          "amount": 286
+        },
+        "reward": 10
+      },
+      {
+        "tick": 118,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      }
+    ],
+    "totalReward": 221.59999999999994,
+    "metrics": {
+      "totalActions": 56,
+      "correctPredictions": 28,
+      "wrongPredictions": 12,
+      "avgResponseTime": 51.75471776636528,
+      "profitableTrades": 28
+    }
+  },
+  {
+    "agentId": "agent-researcher-001",
+    "archetype": "researcher",
+    "trajectory": [
+      {
+        "tick": 1,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 464
+        },
+        "reward": 10
+      },
+      {
+        "tick": 3,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 191
+        },
+        "reward": 10
+      },
+      {
+        "tick": 3,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 10,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 500
+        },
+        "reward": 10
+      },
+      {
+        "tick": 20,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "NO",
+          "amount": 464
+        },
+        "reward": 10
+      },
+      {
+        "tick": 21,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 197
+        },
+        "reward": 10
+      },
+      {
+        "tick": 25,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 27,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 32,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 100
+        },
+        "reward": 10
+      },
+      {
+        "tick": 33,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 36,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 37,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 44,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "YES",
+          "amount": 368
+        },
+        "reward": -5
+      },
+      {
+        "tick": 44,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 46,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 53,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 64,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 68,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 72,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 77,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 359
+        },
+        "reward": -5
+      },
+      {
+        "tick": 82,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 83,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 510
+        },
+        "reward": -5
+      },
+      {
+        "tick": 86,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 93,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "NO",
+          "amount": 371
+        },
+        "reward": -5
+      },
+      {
+        "tick": 95,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 257
+        },
+        "reward": 10
+      },
+      {
+        "tick": 102,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 524
+        },
+        "reward": 10
+      },
+      {
+        "tick": 102,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 103,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 113,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 116,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 595
+        },
+        "reward": 10
+      },
+      {
+        "tick": 117,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      }
+    ],
+    "totalReward": 71.80000000000001,
+    "metrics": {
+      "totalActions": 31,
+      "correctPredictions": 9,
+      "wrongPredictions": 4,
+      "avgResponseTime": 33.42104437789991,
+      "profitableTrades": 9
+    }
+  },
+  {
+    "agentId": "agent-degenerate-001",
+    "archetype": "degenerate",
+    "trajectory": [
+      {
+        "tick": 0,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 423
+        },
+        "reward": -5
+      },
+      {
+        "tick": 2,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "NO",
+          "amount": 135
+        },
+        "reward": -5
+      },
+      {
+        "tick": 3,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 233
+        },
+        "reward": 10
+      },
+      {
+        "tick": 4,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 260
+        },
+        "reward": -5
+      },
+      {
+        "tick": 5,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "YES",
+          "amount": 553
+        },
+        "reward": -5
+      },
+      {
+        "tick": 8,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 182
+        },
+        "reward": -5
+      },
+      {
+        "tick": 9,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 191
+        },
+        "reward": 10
+      },
+      {
+        "tick": 10,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 302
+        },
+        "reward": -5
+      },
+      {
+        "tick": 11,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 200
+        },
+        "reward": -5
+      },
+      {
+        "tick": 14,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 328
+        },
+        "reward": 10
+      },
+      {
+        "tick": 17,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 321
+        },
+        "reward": -5
+      },
+      {
+        "tick": 18,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 372
+        },
+        "reward": -5
+      },
+      {
+        "tick": 21,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 451
+        },
+        "reward": -5
+      },
+      {
+        "tick": 21,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 22,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 272
+        },
+        "reward": 10
+      },
+      {
+        "tick": 23,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 126
+        },
+        "reward": 10
+      },
+      {
+        "tick": 27,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "NO",
+          "amount": 195
+        },
+        "reward": -5
+      },
+      {
+        "tick": 28,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 201
+        },
+        "reward": 10
+      },
+      {
+        "tick": 30,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 215
+        },
+        "reward": 10
+      },
+      {
+        "tick": 31,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 410
+        },
+        "reward": -5
+      },
+      {
+        "tick": 32,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 105
+        },
+        "reward": 10
+      },
+      {
+        "tick": 33,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 122
+        },
+        "reward": -5
+      },
+      {
+        "tick": 33,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 36,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 401
+        },
+        "reward": -5
+      },
+      {
+        "tick": 39,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 340
+        },
+        "reward": 10
+      },
+      {
+        "tick": 41,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 47,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 48,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 338
+        },
+        "reward": -5
+      },
+      {
+        "tick": 51,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 337
+        },
+        "reward": -5
+      },
+      {
+        "tick": 54,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "NO",
+          "amount": 225
+        },
+        "reward": -5
+      },
+      {
+        "tick": 55,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 300
+        },
+        "reward": 10
+      },
+      {
+        "tick": 55,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 56,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 109
+        },
+        "reward": 10
+      },
+      {
+        "tick": 57,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 254
+        },
+        "reward": -5
+      },
+      {
+        "tick": 58,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 549
+        },
+        "reward": -5
+      },
+      {
+        "tick": 59,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 461
+        },
+        "reward": 10
+      },
+      {
+        "tick": 61,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 547
+        },
+        "reward": 10
+      },
+      {
+        "tick": 63,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "NO",
+          "amount": 271
+        },
+        "reward": 10
+      },
+      {
+        "tick": 63,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 64,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 299
+        },
+        "reward": 10
+      },
+      {
+        "tick": 68,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 508
+        },
+        "reward": 10
+      },
+      {
+        "tick": 70,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 387
+        },
+        "reward": -5
+      },
+      {
+        "tick": 71,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "YES",
+          "amount": 516
+        },
+        "reward": -5
+      },
+      {
+        "tick": 72,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 151
+        },
+        "reward": -5
+      },
+      {
+        "tick": 73,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 531
+        },
+        "reward": 10
+      },
+      {
+        "tick": 80,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "YES",
+          "amount": 384
+        },
+        "reward": -5
+      },
+      {
+        "tick": 81,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 513
+        },
+        "reward": 10
+      },
+      {
+        "tick": 83,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 164
+        },
+        "reward": -5
+      },
+      {
+        "tick": 84,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 409
+        },
+        "reward": 10
+      },
+      {
+        "tick": 85,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "NO",
+          "amount": 241
+        },
+        "reward": -5
+      },
+      {
+        "tick": 86,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 372
+        },
+        "reward": 10
+      },
+      {
+        "tick": 87,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 248
+        },
+        "reward": 10
+      },
+      {
+        "tick": 88,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 534
+        },
+        "reward": 10
+      },
+      {
+        "tick": 89,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "NO",
+          "amount": 512
+        },
+        "reward": -5
+      },
+      {
+        "tick": 94,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 269
+        },
+        "reward": 10
+      },
+      {
+        "tick": 96,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 420
+        },
+        "reward": 10
+      },
+      {
+        "tick": 97,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 338
+        },
+        "reward": 10
+      },
+      {
+        "tick": 99,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "YES",
+          "amount": 269
+        },
+        "reward": 10
+      },
+      {
+        "tick": 99,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 100,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 439
+        },
+        "reward": -5
+      },
+      {
+        "tick": 101,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-3",
+          "side": "YES",
+          "amount": 121
+        },
+        "reward": 10
+      },
+      {
+        "tick": 101,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 103,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 472
+        },
+        "reward": -5
+      },
+      {
+        "tick": 109,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "YES",
+          "amount": 207
+        },
+        "reward": 10
+      },
+      {
+        "tick": 113,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 375
+        },
+        "reward": -5
+      },
+      {
+        "tick": 117,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 355
+        },
+        "reward": -5
+      }
+    ],
+    "totalReward": 130.8,
+    "metrics": {
+      "totalActions": 66,
+      "correctPredictions": 28,
+      "wrongPredictions": 30,
+      "avgResponseTime": 64.81453476171751,
+      "profitableTrades": 28
+    }
+  },
+  {
+    "agentId": "agent-conservative-001",
+    "archetype": "conservative",
+    "trajectory": [
+      {
+        "tick": 2,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 3,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-4",
+          "side": "YES",
+          "amount": 463
+        },
+        "reward": -5
+      },
+      {
+        "tick": 11,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 23,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 31,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 35,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 270
+        },
+        "reward": -5
+      },
+      {
+        "tick": 36,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-2",
+          "side": "NO",
+          "amount": 329
+        },
+        "reward": -5
+      },
+      {
+        "tick": 54,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 72,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 79,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 83,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 534
+        },
+        "reward": 10
+      },
+      {
+        "tick": 83,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 90,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 91,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 101,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 110,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-0",
+          "side": "YES",
+          "amount": 458
+        },
+        "reward": 10
+      },
+      {
+        "tick": 110,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 111,
+        "action": "query_state",
+        "data": {},
+        "reward": 0.1
+      },
+      {
+        "tick": 117,
+        "action": "buy_prediction",
+        "data": {
+          "marketId": "market-1",
+          "side": "NO",
+          "amount": 260
+        },
+        "reward": -5
+      }
+    ],
+    "totalReward": 1.2999999999999954,
+    "metrics": {
+      "totalActions": 19,
+      "correctPredictions": 2,
+      "wrongPredictions": 4,
+      "avgResponseTime": 33.48977958419605,
+      "profitableTrades": 2
+    }
+  }
+]

@@ -28,9 +28,13 @@ export {
   getExternalAgentAdapter,
   type Protocol,
 } from './external/ExternalAgentAdapter';
+// Farcaster native posting
+export * from './farcaster';
 // Identity and wallet management
 export * from './identity/AgentIdentityService';
 export * from './identity/AgentWalletService';
+export * from './identity/NPCIdentityService';
+export * from './identity/NPCTokenWalletService';
 // LLM integrations
 export * from './llm';
 // Plugins - Babylon plugin is the main export
@@ -40,12 +44,14 @@ export {
   initializeBabylonPlugin,
 } from './plugins/babylon';
 export type { BabylonRuntime } from './plugins/babylon/types';
-// Plugin utilities
-export { groqPlugin } from './plugins/groq';
+// Plugin utilities - Jeju Compute (decentralized inference)
+export { jejuComputePlugin } from './plugins/jeju-compute';
 export * from './plugins/plugin-autonomy/src';
 export * from './plugins/plugin-experience/src';
 // Plugin sub-exports for trajectory logging, autonomy, experience
 export * from './plugins/plugin-trajectory-logger/src';
+// Decentralized Agent Runner
+export * from './runner';
 // Runtime
 export * from './runtime/AgentRuntimeManager';
 // Services
@@ -61,3 +67,9 @@ export * from './types/goals';
 // Utils
 export * from './utils/createTestAgent';
 export * from './utils/prompt-builder';
+
+// =============================================================================
+// AI CEO - MonkeyKing
+// =============================================================================
+
+export * from './ceo';

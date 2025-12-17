@@ -638,7 +638,7 @@ export function RegistryTab() {
 
     setIsBanning(true);
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     const response = await fetch(`/api/admin/users/${entity.id}/ban`, {
       method: 'POST',
       headers: {

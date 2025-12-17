@@ -55,6 +55,7 @@ import {
   BusinessLogicError,
   CACHE_KEYS,
   checkRateLimitAndDuplicates,
+  EngagementService,
   ensureUserForAuth,
   invalidateCache,
   NotFoundError,
@@ -209,6 +210,13 @@ export const POST = withErrorHandling(
     await NPCInteractionTracker.trackLike(canonicalUserId, postId).catch(
       (error) => {
         logger.warn('Failed to track NPC interaction', { error });
+      }
+    );
+
+    // Record engagement for airdrop qualification
+    await EngagementService.recordLike(canonicalUserId, postId).catch(
+      (error) => {
+        logger.warn('Failed to record like engagement', { error });
       }
     );
 

@@ -1,0 +1,72 @@
+# Babylon Training GPU Container
+# Used for distributed training on Jeju compute marketplace
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+
+LABEL maintainer="Jeju Team"
+LABEL description="GPU training container for Babylon RL agents"
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_HOME=/usr/local/cuda
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    git \
+    curl \
+    wget \
+    openssh-server \
+    && rm -rf /var/lib/apt/lists/*
+
+# Setup SSH for remote access
+RUN mkdir /var/run/sshd
+RUN echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config
+RUN echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config
+EXPOSE 22
+
+# Install Python dependencies
+RUN python3.11 -m pip install --upgrade pip setuptools wheel
+
+# Install PyTorch with CUDA support
+RUN pip install torch==2.2.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# Install training dependencies
+RUN pip install \
+    transformers==4.38.0 \
+    accelerate==0.27.0 \
+    peft==0.9.0 \
+    bitsandbytes==0.42.0 \
+    datasets==2.17.0 \
+    wandb==0.16.3 \
+    trl==0.7.10 \
+    vllm==0.3.3 \
+    huggingface_hub==0.21.0
+
+# Install IPFS for data/model transfer
+RUN wget -q https://dist.ipfs.tech/kubo/v0.27.0/kubo_v0.27.0_linux-amd64.tar.gz \
+    && tar -xzf kubo_v0.27.0_linux-amd64.tar.gz \
+    && cd kubo && bash install.sh \
+    && rm -rf kubo kubo_v0.27.0_linux-amd64.tar.gz
+
+# Create app directory
+WORKDIR /app
+
+# Copy training scripts
+COPY python/src/training/*.py /app/
+COPY python/requirements.txt /app/
+
+# Install any additional requirements
+RUN pip install -r /app/requirements.txt || true
+
+# Startup script handler
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
+    CMD nvidia-smi > /dev/null 2>&1 || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -73,25 +73,14 @@ export async function initializeTrainingPackage(): Promise<void> {
       },
     };
 
-    // Get the LLM caller from agents (uses groqLLMCaller)
-    const llmModule = agentsModule;
+    // Get the LLM caller from agents (uses Jeju Compute)
     const llmCaller: ILLMCaller = {
       callGroqDirect: async (params) => {
-        // Use the groqLLMCaller if available
-        if ('groqLLMCaller' in llmModule) {
-          const groqCaller = llmModule.groqLLMCaller as {
-            callGroqDirect: typeof params extends infer P
-              ? (p: P) => Promise<string>
-              : never;
-          };
-          return groqCaller.callGroqDirect(params);
-        }
-
-        // Fallback: use fetch to call Groq API directly
-        const apiKey = process.env.GROQ_API_KEY;
-        if (!apiKey) {
-          throw new Error('GROQ_API_KEY not set');
-        }
+        // Route through Jeju Compute - NO centralized fallback
+        const jejuEndpoint =
+          process.env.JEJU_COMPUTE_API_URL ||
+          process.env.JEJU_COMPUTE_ENDPOINT ||
+          'http://localhost:4500';
 
         const modelMap = {
           small: 'llama-3.1-8b-instant',
@@ -101,28 +90,24 @@ export async function initializeTrainingPackage(): Promise<void> {
 
         const model = modelMap[params.modelSize || 'medium'];
 
-        const response = await fetch(
-          'https://api.groq.com/openai/v1/chat/completions',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model,
-              messages: [
-                { role: 'system', content: params.system },
-                { role: 'user', content: params.prompt },
-              ],
-              temperature: params.temperature ?? 0.7,
-              max_tokens: params.maxTokens ?? 1024,
-            }),
-          }
-        );
+        const response = await fetch(`${jejuEndpoint}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: params.system },
+              { role: 'user', content: params.prompt },
+            ],
+            temperature: params.temperature ?? 0.7,
+            max_tokens: params.maxTokens ?? 1024,
+          }),
+        });
 
         if (!response.ok) {
-          throw new Error(`Groq API error: ${response.status}`);
+          throw new Error(`Jeju Compute error: ${response.status}`);
         }
 
         const data = (await response.json()) as {

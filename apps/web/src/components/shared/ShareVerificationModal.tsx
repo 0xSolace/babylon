@@ -56,7 +56,7 @@ export function ShareVerificationModal({
     setVerifying(true);
 
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
     };

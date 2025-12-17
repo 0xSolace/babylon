@@ -232,6 +232,7 @@ import {
   cachedDb,
   checkRateLimitAndDuplicates,
   DUPLICATE_DETECTION_CONFIGS,
+  EngagementService,
   ensureUserForAuth,
   getCacheOrFetch,
   notifyMention,
@@ -1025,6 +1026,24 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     { postId: post.id },
     'POST /api/posts'
   );
+
+  // Record engagement for airdrop qualification (validates post content)
+  const engagementResult = await EngagementService.recordPost(
+    canonicalUserId,
+    post.id,
+    content.trim()
+  ).catch((error) => {
+    logger.warn('Failed to record post engagement', { error });
+    return { recorded: false, qualified: false };
+  });
+
+  if (engagementResult.recorded) {
+    logger.info(
+      'Post qualifies for engagement',
+      { postId: post.id, qualified: engagementResult.qualified },
+      'POST /api/posts'
+    );
+  }
 
   broadcastToChannel('feed', {
     type: 'new_post',

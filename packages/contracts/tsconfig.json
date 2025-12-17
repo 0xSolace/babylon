@@ -2,15 +2,18 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": ".",
+    "rootDir": "./src",
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
-    "resolveJsonModule": true,
+    "composite": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "baseUrl": ".",
     "paths": {
-      "@babylon/contracts": ["./src/index.ts"],
-      "@babylon/contracts/*": ["./*"]
+      "@babylon/shared": ["../shared/src/index.ts"],
+      "@babylon/shared/*": ["../shared/src/*"]
     }
   },
-  "include": ["src/**/*", "deployments/**/*.ts", "deployments/**/*.json"],
-  "exclude": ["node_modules", "dist", "out", "cache"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"],
+  "references": [{ "path": "../shared" }]
 }

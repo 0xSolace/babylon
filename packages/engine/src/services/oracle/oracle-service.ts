@@ -11,6 +11,7 @@
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
 import { getCurrentChainId, logger } from '@babylon/shared';
 import { ethers } from 'ethers';
+import { getOraclePrivateKey as getOracleKey } from '../../config/dev-keys';
 import { CommitmentStore } from '../oracle-commitment-store';
 import { GameOracleABI } from './abi/GameOracle';
 import type {
@@ -20,6 +21,17 @@ import type {
   OracleConfig,
   RevealTransactionResult,
 } from './types';
+
+/**
+ * Get oracle private key with optional explicit override
+ */
+function getOraclePrivateKey(configKey?: string): string {
+  // Explicit config takes priority
+  if (configKey) return configKey;
+
+  // Use centralized dev-keys utility
+  return getOracleKey();
+}
 
 export class OracleService {
   private provider: ethers.JsonRpcProvider;
@@ -33,11 +45,7 @@ export class OracleService {
 
     this.config = {
       oracleAddress: config?.oracleAddress || contractAddresses.gameOracle,
-      privateKey:
-        config?.privateKey ||
-        process.env.ORACLE_PRIVATE_KEY ||
-        process.env.DEPLOYER_PRIVATE_KEY ||
-        '',
+      privateKey: getOraclePrivateKey(config?.privateKey),
       rpcUrl: config?.rpcUrl || getRpcUrl(),
       chainId: config?.chainId || getCurrentChainId(),
       gasMultiplier: config?.gasMultiplier || 1.2,
@@ -47,10 +55,6 @@ export class OracleService {
 
     if (!this.config.oracleAddress) {
       throw new Error('Oracle address not configured');
-    }
-
-    if (!this.config.privateKey) {
-      throw new Error('Oracle private key not configured');
     }
 
     // Setup provider and wallet

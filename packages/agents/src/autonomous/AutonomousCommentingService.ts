@@ -18,7 +18,7 @@ import {
   users,
 } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
-import { callGroqDirect } from '../llm/direct-groq';
+import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -104,7 +104,7 @@ Keep it under 200 characters.
 Generate ONLY the comment text, nothing else.`;
 
     // Use small model (llama-3.1-8b-instant) for fast comment generation
-    const commentContent = await callGroqDirect({
+    const commentContent = await callJejuDirect({
       prompt,
       system: config?.systemPrompt ?? undefined,
       modelSize: 'small', // Free tier: Frequent operation, use fast model

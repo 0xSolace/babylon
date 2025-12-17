@@ -4,5 +4,7 @@
  * Provides different backend implementations for the storage ports.
  */
 
+export * from './cql';
 export * from './json';
+// Legacy postgres export - deprecated, use CQL instead
 export * from './postgres';

@@ -12,7 +12,7 @@ interface MockNextRequest {
 }
 
 const mockVerifyAgentSession = mock();
-const mockVerifyAuthToken = mock();
+const mockValidateSession = mock();
 const mockSelect = mock();
 
 // Mock the local agent-auth module
@@ -28,16 +28,16 @@ mock.module('@babylon/db', () => ({
   eq: (field: unknown, value: unknown) => ({ field, value }),
   users: {
     id: 'id',
-    privyId: 'privyId',
+    oauth3Id: 'oauth3Id',
     walletAddress: 'walletAddress',
   },
 }));
 
-// Mock @privy-io/server-auth - PrivyClient is a class that gets instantiated
-mock.module('@privy-io/server-auth', () => ({
-  PrivyClient: class MockPrivyClient {
-    verifyAuthToken = mockVerifyAuthToken;
-  },
+// Mock @babylon/auth - OAuth3Client
+mock.module('@babylon/auth', () => ({
+  getOAuth3Client: () => ({
+    validateSession: mockValidateSession,
+  }),
 }));
 
 // Import after mocks are set up
@@ -57,10 +57,8 @@ const createRequest = (token: string): NextRequest =>
 describe('authenticate middleware', () => {
   beforeEach(() => {
     mockVerifyAgentSession.mockReset();
-    mockVerifyAuthToken.mockReset();
+    mockValidateSession.mockReset();
     mockSelect.mockReset();
-    process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app';
-    process.env.PRIVY_APP_SECRET = 'test-secret';
 
     // Default mock chain for db.select().from().where().limit()
     mockSelect.mockReturnValue({
@@ -80,15 +78,15 @@ describe('authenticate middleware', () => {
 
     expect(result).toEqual({
       userId: 'agent-123',
-      privyId: 'agent-123',
+      oauth3Id: 'agent-123',
       isAgent: true,
     });
-    expect(mockVerifyAuthToken).not.toHaveBeenCalled();
+    expect(mockValidateSession).not.toHaveBeenCalled();
   });
 
-  it('falls back to privy claims when agent session missing and db user absent', async () => {
+  it('falls back to oauth3 session when agent session missing and db user absent', async () => {
     mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
+    mockValidateSession.mockResolvedValueOnce({ identityId: 'oauth3-user' });
 
     // Mock empty db result
     mockSelect.mockReturnValue({
@@ -99,20 +97,20 @@ describe('authenticate middleware', () => {
       }),
     });
 
-    const request = createRequest('privy-token');
+    const request = createRequest('oauth3-token');
     const result = await authenticate(request);
 
     expect(result).toMatchObject({
-      userId: 'privy-user',
+      userId: 'oauth3-user',
       dbUserId: undefined,
-      privyId: 'privy-user',
+      oauth3Id: 'oauth3-user',
       isAgent: false,
     });
   });
 
-  it('returns canonical id when privy user exists in db', async () => {
+  it('returns canonical id when oauth3 user exists in db', async () => {
     mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
+    mockValidateSession.mockResolvedValueOnce({ identityId: 'oauth3-user' });
 
     // Mock db user found
     mockSelect.mockReturnValue({
@@ -129,20 +127,20 @@ describe('authenticate middleware', () => {
       }),
     });
 
-    const request = createRequest('privy-token');
+    const request = createRequest('oauth3-token');
     const result = await authenticate(request);
 
     expect(result).toMatchObject({
       userId: 'db-user-id',
       dbUserId: 'db-user-id',
-      privyId: 'privy-user',
+      oauth3Id: 'oauth3-user',
       walletAddress: '0xabc',
     });
   });
 
-  it('throws descriptive error when privy token is expired', async () => {
+  it('throws descriptive error when oauth3 token is expired', async () => {
     mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockRejectedValueOnce(
+    mockValidateSession.mockRejectedValueOnce(
       new Error('token expired: exp mismatch')
     );
 

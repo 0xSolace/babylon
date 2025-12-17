@@ -135,7 +135,7 @@ export class ExternalAgentAdapter {
   private authStore: Map<string, AuthCredentials> = new Map();
   private discoveryCache: Map<string, { card: AgentCard; timestamp: number }> =
     new Map();
-  private healthCheckInterval: NodeJS.Timeout | null = null;
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
   private requestIdCounter = 0;
   private readonly DISCOVERY_CACHE_TTL = 300000;
 

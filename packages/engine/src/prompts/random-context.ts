@@ -11,6 +11,7 @@
  */
 
 import {
+  and,
   db,
   desc,
   eq,
@@ -291,6 +292,3 @@ export function formatRandomContext(context: RandomMarketContext): string {
 export function shuffleActors<T>(actors: T[]): T[] {
   return shuffleArray(actors);
 }
-
-// Import and for queries
-import { and } from 'drizzle-orm';

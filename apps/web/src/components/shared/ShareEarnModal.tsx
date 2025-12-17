@@ -114,7 +114,7 @@ export function ShareEarnModal({
     if (!user) return;
 
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) return;
 
     setCheckingExistingShares(true);
@@ -182,7 +182,7 @@ export function ShareEarnModal({
     }
 
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       logger.warn('No access token available', undefined, 'ShareEarnModal');
       return { success: false };

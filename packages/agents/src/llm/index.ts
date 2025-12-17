@@ -1,30 +1,45 @@
 /**
  * LLM Integrations
  *
- * Direct integrations with various LLM providers:
+ * ALL LLM inference routes through Jeju Compute marketplace.
+ * NO FALLBACKS to centralized providers.
  *
  * FOR AGENTS (autonomous services):
- * - callAgentLLM() - Routes to configured provider
- * - Providers: HuggingFace, Phala, Ollama, Groq
- * - Set AGENT_LLM_PROVIDER env var
+ * - callAgentLLM() - Routes through Jeju Compute
+ * - Uses decentralized inference with TEE support
+ * - On-chain settlement and micropayments
  *
  * FOR CORE GAME (MarketDecisionEngine, etc.):
  * - Uses BabylonLLMClient (in @babylon/engine)
- * - Always uses Groq/Claude/OpenAI
- * - Do NOT use agent LLM for core game
+ * - Routes through Jeju Compute
  *
  * RL Training Loop:
  * - Agents use trained models via callAgentLLM()
  * - Generate trajectory data
  * - Training pipeline trains new model
- * - Deploy to HuggingFace/Phala/Ollama
+ * - Deploy to Jeju network
  * - Agents use new model
  */
 
-// Agent LLM (for autonomous agents - routes to HF/Phala/Ollama/Groq)
+// Agent LLM (routes through Jeju Compute)
 export * from './agent-llm';
-// Direct providers (for specific use cases)
-export * from './direct-groq';
 
-// Ollama provider (used by agent-llm, also exported for direct use)
+// Legacy compatibility exports (callGroqDirect -> callJejuDirect)
+export { callGroqDirect, callJejuDirect } from './agent-llm';
+
+// Jeju inference marketplace (decentralized LLM routing)
+export {
+  type ChatMessage as JejuChatMessage,
+  createJejuInference,
+  type InferenceProvider,
+  type InferenceRequest,
+  type InferenceResponse,
+  JejuInference,
+  type JejuInferenceConfig,
+} from './jeju-inference';
+
+// Jeju provider (alternative interface)
+export * from './jeju-provider';
+
+// Ollama provider (for local development with self-hosted models)
 export * from './ollama-provider';

@@ -30,7 +30,7 @@ import {
   WalletService,
 } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
-import { callGroqDirect } from '../llm/direct-groq';
+import { callJejuDirect } from '../llm';
 import { agentPnLService } from '../services/AgentPnLService';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
@@ -227,9 +227,9 @@ ${contextString}`;
 
     // Use large model (qwen3-32b or trained W&B model) for trading decisions
     // Add timeout to prevent hanging (30 seconds max)
-    // Trajectory logging is auto-extracted from runtime in callGroqDirect
+    // Trajectory logging is auto-extracted from runtime in callJejuDirect
     const decision = await Promise.race([
-      callGroqDirect({
+      callJejuDirect({
         prompt: finalPrompt,
         system:
           config?.systemPrompt ??

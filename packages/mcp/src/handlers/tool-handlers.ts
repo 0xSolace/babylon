@@ -1471,29 +1471,47 @@ export async function executeGetGroupInvites(
   _args: GetGroupInvitesArgs
 ): Promise<GetGroupInvitesResult> {
   const [chatInvites, npcInvites] = await Promise.all([
-    db.chatInvite.findMany({ where: { invitedUserId: agent.userId, status: 'pending' } }),
-    db.userGroupInvite.findMany({ where: { invitedUserId: agent.userId, status: 'pending' } }),
+    db.chatInvite.findMany({
+      where: { invitedUserId: agent.userId, status: 'pending' },
+    }),
+    db.userGroupInvite.findMany({
+      where: { invitedUserId: agent.userId, status: 'pending' },
+    }),
   ]);
 
-  const allChatIds = [...new Set([
-    ...chatInvites.map((i) => i.chatId),
-    ...npcInvites.map((i) => i.groupId),
-  ])];
+  const allChatIds = [
+    ...new Set([
+      ...chatInvites.map((i) => i.chatId),
+      ...npcInvites.map((i) => i.groupId),
+    ]),
+  ];
 
   const chatsMap = new Map(
-    (await db.chat.findMany({ where: { id: { in: allChatIds } }, select: { id: true, name: true } }))
-      .map((c) => [c.id, c])
+    (
+      await db.chat.findMany({
+        where: { id: { in: allChatIds } },
+        select: { id: true, name: true },
+      })
+    ).map((c) => [c.id, c])
   );
 
   return {
     invites: [
       ...chatInvites.map((i) => ({
-        id: i.id, groupId: i.chatId, groupName: chatsMap.get(i.chatId)?.name ?? null,
-        inviterId: i.invitedBy, timestamp: i.invitedAt.toISOString(), source: 'user' as const,
+        id: i.id,
+        groupId: i.chatId,
+        groupName: chatsMap.get(i.chatId)?.name ?? null,
+        inviterId: i.invitedBy,
+        timestamp: i.invitedAt.toISOString(),
+        source: 'user' as const,
       })),
       ...npcInvites.map((i) => ({
-        id: i.id, groupId: i.groupId, groupName: chatsMap.get(i.groupId)?.name ?? null,
-        inviterId: i.invitedBy, timestamp: i.invitedAt.toISOString(), source: 'npc' as const,
+        id: i.id,
+        groupId: i.groupId,
+        groupName: chatsMap.get(i.groupId)?.name ?? null,
+        inviterId: i.invitedBy,
+        timestamp: i.invitedAt.toISOString(),
+        source: 'npc' as const,
       })),
     ],
   };
@@ -1507,26 +1525,52 @@ export async function executeAcceptGroupInvite(
   args: AcceptGroupInviteArgs
 ): Promise<AcceptGroupInviteResult> {
   // Try chatInvite (user-initiated)
-  const chatInvite = await db.chatInvite.findUnique({ where: { id: args.inviteId } });
+  const chatInvite = await db.chatInvite.findUnique({
+    where: { id: args.inviteId },
+  });
   if (chatInvite?.invitedUserId === agent.userId) {
-    await db.chatInvite.update({ where: { id: args.inviteId }, data: { status: 'accepted' } });
+    await db.chatInvite.update({
+      where: { id: args.inviteId },
+      data: { status: 'accepted' },
+    });
     await db.chatParticipant.create({
-      data: { id: await generateSnowflakeId(), chatId: chatInvite.chatId, userId: agent.userId, invitedBy: chatInvite.invitedBy },
+      data: {
+        id: await generateSnowflakeId(),
+        chatId: chatInvite.chatId,
+        userId: agent.userId,
+        invitedBy: chatInvite.invitedBy,
+      },
     });
     return { success: true, chatId: chatInvite.chatId };
   }
 
   // Try userGroupInvite (NPC-initiated)
-  const npcInvite = await db.userGroupInvite.findUnique({ where: { id: args.inviteId } });
+  const npcInvite = await db.userGroupInvite.findUnique({
+    where: { id: args.inviteId },
+  });
   if (npcInvite?.invitedUserId === agent.userId) {
-    await db.userGroupInvite.update({ where: { id: args.inviteId }, data: { status: 'accepted', respondedAt: new Date() } });
+    await db.userGroupInvite.update({
+      where: { id: args.inviteId },
+      data: { status: 'accepted', respondedAt: new Date() },
+    });
     await db.chatParticipant.create({
-      data: { id: await generateSnowflakeId(), chatId: npcInvite.groupId, userId: agent.userId, invitedBy: npcInvite.invitedBy },
+      data: {
+        id: await generateSnowflakeId(),
+        chatId: npcInvite.groupId,
+        userId: agent.userId,
+        invitedBy: npcInvite.invitedBy,
+      },
     });
     await db.groupChatMembership.create({
       data: {
-        id: await generateSnowflakeId(), userId: agent.userId, chatId: npcInvite.groupId,
-        npcAdminId: npcInvite.invitedBy, joinedAt: new Date(), isActive: true, messageCount: 0, qualityScore: 1.0,
+        id: await generateSnowflakeId(),
+        userId: agent.userId,
+        chatId: npcInvite.groupId,
+        npcAdminId: npcInvite.invitedBy,
+        joinedAt: new Date(),
+        isActive: true,
+        messageCount: 0,
+        qualityScore: 1.0,
       },
     });
     return { success: true, chatId: npcInvite.groupId };
@@ -1542,15 +1586,25 @@ export async function executeDeclineGroupInvite(
   agent: AuthenticatedAgent,
   args: DeclineGroupInviteArgs
 ): Promise<DeclineGroupInviteResult> {
-  const chatInvite = await db.chatInvite.findUnique({ where: { id: args.inviteId } });
+  const chatInvite = await db.chatInvite.findUnique({
+    where: { id: args.inviteId },
+  });
   if (chatInvite?.invitedUserId === agent.userId) {
-    await db.chatInvite.update({ where: { id: args.inviteId }, data: { status: 'declined' } });
+    await db.chatInvite.update({
+      where: { id: args.inviteId },
+      data: { status: 'declined' },
+    });
     return { success: true };
   }
 
-  const npcInvite = await db.userGroupInvite.findUnique({ where: { id: args.inviteId } });
+  const npcInvite = await db.userGroupInvite.findUnique({
+    where: { id: args.inviteId },
+  });
   if (npcInvite?.invitedUserId === agent.userId) {
-    await db.userGroupInvite.update({ where: { id: args.inviteId }, data: { status: 'declined', respondedAt: new Date() } });
+    await db.userGroupInvite.update({
+      where: { id: args.inviteId },
+      data: { status: 'declined', respondedAt: new Date() },
+    });
     return { success: true };
   }
 

@@ -807,7 +807,7 @@ export default function CreateAgentPage() {
               {/* Profile Info */}
               <div className="px-4 pb-4">
                 {/* Profile Picture */}
-                <div className="-mt-12 relative mb-4">
+                <div className="relative -mt-12 mb-4">
                   <div className="h-24 w-24 overflow-hidden rounded-full border-4 border-background">
                     <Image
                       src={currentProfileImage}
@@ -1159,7 +1159,7 @@ export default function CreateAgentPage() {
                 </div>
 
                 {/* Profile Image Section */}
-                <div className="-mt-12 sm:-mt-16 mb-6 px-4">
+                <div className="-mt-12 mb-6 px-4 sm:-mt-16">
                   <div className="relative h-24 w-24 sm:h-32 sm:w-32">
                     <div className="h-full w-full overflow-hidden rounded-full border-4 border-background">
                       {currentProfileImage && (
@@ -1181,7 +1181,7 @@ export default function CreateAgentPage() {
                       className="hidden"
                     />
                     {/* Mobile: Visible buttons */}
-                    <div className="-bottom-2 -right-2 absolute flex items-center gap-1 sm:hidden">
+                    <div className="absolute -right-2 -bottom-2 flex items-center gap-1 sm:hidden">
                       <button
                         onClick={() => cycleProfilePicture('prev')}
                         className="rounded-full border-2 border-background bg-primary p-1.5 text-primary-foreground transition-colors hover:bg-primary/90"

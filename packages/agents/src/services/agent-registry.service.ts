@@ -9,7 +9,7 @@
  */
 
 import { verifyApiKey } from '@babylon/api';
-import type { JsonValue } from '@babylon/db';
+import type { JsonValue, SQL } from '@babylon/db';
 import {
   type AgentRegistry,
   agentCapabilities,
@@ -394,7 +394,7 @@ export class AgentRegistryService {
     } = filter;
 
     // Build where conditions
-    const conditions = [];
+    const conditions: SQL<unknown>[] = [];
 
     if (types && types.length > 0) {
       conditions.push(inArray(agentRegistries.type, types));

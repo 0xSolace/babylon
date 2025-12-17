@@ -1,0 +1,159 @@
+{{- if .Values.trainingJobs.trajectoryExtraction.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "babylon-training.fullname" . }}-trajectory-extraction
+  labels:
+    {{- include "babylon-training.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cronjob
+spec:
+  schedule: {{ .Values.trainingJobs.trajectoryExtraction.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "babylon-training.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: extract
+              image: "{{ .Values.global.imageRegistry }}{{ .Values.cpuTraining.image.repository }}:{{ .Values.cpuTraining.image.tag }}"
+              command:
+                - "/app/entrypoint.sh"
+                - {{ .Values.trainingJobs.trajectoryExtraction.command | quote }}
+              resources:
+                {{- toYaml .Values.trainingJobs.trajectoryExtraction.resources | nindent 16 }}
+              envFrom:
+                {{- toYaml .Values.cpuTraining.envFrom | nindent 16 }}
+              {{- if .Values.persistence.enabled }}
+              volumeMounts:
+                - name: data
+                  mountPath: {{ .Values.persistence.dataPath }}
+              {{- end }}
+          {{- if .Values.persistence.enabled }}
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ include "babylon-training.fullname" . }}-data
+          {{- end }}
+{{- end }}
+---
+{{- if .Values.trainingJobs.benchmark.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "babylon-training.fullname" . }}-benchmark
+  labels:
+    {{- include "babylon-training.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cronjob
+spec:
+  schedule: {{ .Values.trainingJobs.benchmark.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "babylon-training.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: benchmark
+              image: "{{ .Values.global.imageRegistry }}{{ .Values.cpuTraining.image.repository }}:{{ .Values.cpuTraining.image.tag }}"
+              command:
+                - "/app/entrypoint.sh"
+                - {{ .Values.trainingJobs.benchmark.command | quote }}
+              resources:
+                {{- toYaml .Values.trainingJobs.benchmark.resources | nindent 16 }}
+              envFrom:
+                {{- toYaml .Values.cpuTraining.envFrom | nindent 16 }}
+              {{- if .Values.persistence.enabled }}
+              volumeMounts:
+                - name: data
+                  mountPath: {{ .Values.persistence.dataPath }}
+                - name: checkpoints
+                  mountPath: {{ .Values.persistence.checkpointPath }}
+              {{- end }}
+          {{- if .Values.persistence.enabled }}
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ include "babylon-training.fullname" . }}-data
+            - name: checkpoints
+              persistentVolumeClaim:
+                claimName: {{ include "babylon-training.fullname" . }}-checkpoints
+          {{- end }}
+{{- end }}
+---
+{{- if .Values.trainingJobs.weeklyTraining.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "babylon-training.fullname" . }}-weekly-training
+  labels:
+    {{- include "babylon-training.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cronjob
+spec:
+  schedule: {{ .Values.trainingJobs.weeklyTraining.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "babylon-training.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          {{- if .Values.trainingJobs.weeklyTraining.useGpu }}
+          tolerations:
+            {{- toYaml .Values.gpuTraining.tolerations | nindent 12 }}
+          nodeSelector:
+            {{- toYaml .Values.gpuTraining.nodeSelector | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: training
+              {{- if .Values.trainingJobs.weeklyTraining.useGpu }}
+              image: "{{ .Values.global.imageRegistry }}{{ .Values.gpuTraining.image.repository }}:{{ .Values.gpuTraining.image.tag }}"
+              {{- else }}
+              image: "{{ .Values.global.imageRegistry }}{{ .Values.cpuTraining.image.repository }}:{{ .Values.cpuTraining.image.tag }}"
+              {{- end }}
+              command:
+                - "/app/entrypoint.sh"
+                - {{ .Values.trainingJobs.weeklyTraining.command | quote }}
+              resources:
+                {{- toYaml .Values.trainingJobs.weeklyTraining.resources | nindent 16 }}
+              envFrom:
+                {{- if .Values.trainingJobs.weeklyTraining.useGpu }}
+                {{- toYaml .Values.gpuTraining.envFrom | nindent 16 }}
+                {{- else }}
+                {{- toYaml .Values.cpuTraining.envFrom | nindent 16 }}
+                {{- end }}
+              volumeMounts:
+                {{- if .Values.persistence.enabled }}
+                - name: data
+                  mountPath: {{ .Values.persistence.dataPath }}
+                - name: checkpoints
+                  mountPath: {{ .Values.persistence.checkpointPath }}
+                {{- end }}
+                {{- if .Values.trainingJobs.weeklyTraining.useGpu }}
+                - name: dshm
+                  mountPath: /dev/shm
+                {{- end }}
+          volumes:
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ include "babylon-training.fullname" . }}-data
+            - name: checkpoints
+              persistentVolumeClaim:
+                claimName: {{ include "babylon-training.fullname" . }}-checkpoints
+            {{- end }}
+            {{- if .Values.trainingJobs.weeklyTraining.useGpu }}
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 16Gi
+            {{- end }}
+{{- end }}

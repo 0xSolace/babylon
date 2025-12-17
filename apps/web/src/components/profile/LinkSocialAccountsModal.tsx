@@ -73,7 +73,7 @@ export function LinkSocialAccountsModal({
 
     // Send authentication data to backend for verification and linking
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     const response = await fetch('/api/auth/farcaster/callback', {
       method: 'POST',
       headers: {

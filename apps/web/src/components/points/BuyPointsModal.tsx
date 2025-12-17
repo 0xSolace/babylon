@@ -1,7 +1,7 @@
 'use client';
 
-import { CHAIN, cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared';
-import { useFundWallet, usePrivy } from '@privy-io/react-auth';
+import { useJejuAuth } from '@babylon/auth/client';
+import { cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared';
 import {
   AlertCircle,
   CheckCircle2,
@@ -76,8 +76,7 @@ export function BuyPointsModal({
   onSuccess,
 }: BuyPointsModalProps) {
   const { user, smartWalletAddress, smartWalletReady } = useAuth();
-  const { getAccessToken } = usePrivy();
-  const { fundWallet } = useFundWallet();
+  const { getAccessToken } = useJejuAuth();
   const { sendPointsPayment } = useBuyPointsTx();
   const { balance, refreshBalance } = useSmartWalletBalance();
 
@@ -107,43 +106,16 @@ export function BuyPointsModal({
           ? requiredAmountWei - (currentBalance ?? 0n)
           : requiredAmountWei;
 
-      await fundWallet({
-        address: smartWalletAddress,
-        options: {
-          chain: CHAIN,
-          amount: formatEther(deficit),
-          asset: 'native-currency',
-        },
-      });
-
-      // Poll for balance updates with timeout (30 seconds)
-      const maxAttempts = 30;
-      const pollInterval = 1000; // 1 second
-
-      // Show feedback to user
-      toast.info('Waiting for deposit to settle...');
-
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const updatedBalance = await refreshBalance();
-
-        if (updatedBalance && updatedBalance >= requiredAmountWei) {
-          toast.success('Funds received!');
-          return true;
-        }
-
-        // Wait before next check (except on last attempt)
-        if (attempt < maxAttempts - 1) {
-          await new Promise((resolve) => setTimeout(resolve, pollInterval));
-        }
-      }
-
-      // If we get here, funds didn't arrive in time
-      toast.error('Deposit is taking longer than expected');
+      // Show user they need to fund their wallet manually
+      const deficitETH = formatEther(deficit);
+      toast.error(
+        `Insufficient balance. Please add at least ${deficitETH} ETH to your wallet.`
+      );
       throw new Error(
-        'Funds are still settling. Please try again in a moment once the deposit arrives.'
+        `Insufficient funds. Please deposit at least ${deficitETH} ETH to continue.`
       );
     },
-    [balance, fundWallet, refreshBalance, smartWalletAddress]
+    [balance, refreshBalance, smartWalletAddress]
   );
 
   // Reset state when modal closes
@@ -296,7 +268,7 @@ export function BuyPointsModal({
     paymentRequest: PaymentRequest
   ) => {
     const token =
-      typeof window !== 'undefined' ? window.__privyAccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
     if (!token) {
       logger.error('Authentication required', undefined, 'BuyPointsModal');
       setError('Authentication required');
@@ -370,7 +342,7 @@ export function BuyPointsModal({
                   Amount (USD)
                 </label>
                 <div className="relative">
-                  <DollarSign className="-translate-y-1/2 absolute top-1/2 left-3 h-5 w-5 text-muted-foreground" />
+                  <DollarSign className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                   <input
                     data-testid="points-amount-input"
                     type="number"

@@ -13,7 +13,7 @@ export {
   initializeBabylonPlugin,
 } from './babylon';
 export type { BabylonRuntime } from './babylon/types';
-export { groqPlugin } from './groq';
+export { jejuComputePlugin } from './jeju-compute';
 export * from './plugin-autonomy/src';
 export * from './plugin-experience/src';
 export * from './plugin-trajectory-logger/src';

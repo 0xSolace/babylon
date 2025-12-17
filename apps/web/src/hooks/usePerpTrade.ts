@@ -11,7 +11,7 @@ type TradeSide = 'long' | 'short';
  * Options for configuring the usePerpTrade hook.
  */
 interface UsePerpTradeOptions {
-  /** Optional function to get the access token. Falls back to window.__privyAccessToken */
+  /** Optional function to get the access token. Falls back to window.__oauth3AccessToken */
   getAccessToken?: () => Promise<string | null> | string | null;
 }
 
@@ -74,14 +74,14 @@ async function resolveToken(
 ): Promise<string | null> {
   if (!resolver) {
     if (typeof window === 'undefined') return null;
-    return window.__privyAccessToken ?? null;
+    return window.__oauth3AccessToken ?? null;
   }
 
   const value = typeof resolver === 'function' ? resolver() : resolver;
   const token = await Promise.resolve(value);
   if (token) return token;
   if (typeof window === 'undefined') return null;
-  return window.__privyAccessToken ?? null;
+  return window.__oauth3AccessToken ?? null;
 }
 
 function extractErrorMessage(

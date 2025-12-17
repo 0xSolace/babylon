@@ -1,27 +1,28 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
     "baseUrl": ".",
     "paths": {
       "@babylon/shared": ["../shared/src/index.ts"],
       "@babylon/shared/*": ["../shared/src/*"],
       "@babylon/db": ["../db/src/index.ts"],
       "@babylon/db/*": ["../db/src/*"],
+      "@babylon/contracts": ["../contracts/src/index.ts"],
+      "@babylon/contracts/*": ["../contracts/src/*"],
+      "@babylon/messaging": ["../messaging/src/index.ts"],
+      "@babylon/messaging/*": ["../messaging/src/*"],
+      "@babylon/auth": ["../auth/src/index.ts"],
+      "@babylon/auth/*": ["../auth/src/*"],
       "@babylon/engine": ["../engine/src/index.ts"],
       "@babylon/engine/*": ["../engine/src/*"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"]
+      "@babylon/core": ["../core/markets/index.ts"],
+      "@babylon/core/*": ["../core/*"],
+      "@babylon/api/storage": ["./src/storage/index.ts"]
     }
   },
   "include": ["src/**/*", "src/**/*.d.ts"],
-  "exclude": ["node_modules", "dist", "**/__tests__/**"],
-  "references": [
-    { "path": "../shared" },
-    { "path": "../db" },
-    { "path": "../engine" },
-    { "path": "../contracts" }
-  ]
+  "exclude": ["node_modules", "dist", "**/__tests__/**"]
 }

@@ -58,6 +58,8 @@
       "@babylon/shared/*": ["./packages/shared/src/*"],
       "@babylon/contracts": ["./packages/contracts/src/index.ts"],
       "@babylon/contracts/*": ["./packages/contracts/src/*"],
+      "@babylon/auth": ["./packages/auth/src/index.ts"],
+      "@babylon/auth/*": ["./packages/auth/src/*"],
       "@babylon/training": ["./packages/training/src/index.ts"],
       "@babylon/training/*": ["./packages/training/src/*"],
       "@babylon/testing": ["./packages/testing/src/index.ts"],

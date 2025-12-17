@@ -1,0 +1,83 @@
+{{- if .Values.gpuTraining.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "babylon-training.fullname" . }}-gpu
+  labels:
+    {{- include "babylon-training.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gpu-training
+spec:
+  replicas: {{ .Values.gpuTraining.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "babylon-training.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gpu-training
+  template:
+    metadata:
+      labels:
+        {{- include "babylon-training.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: gpu-training
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "babylon-training.serviceAccountName" . }}
+      {{- with .Values.gpuTraining.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.gpuTraining.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: gpu-training
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.gpuTraining.image.repository }}:{{ .Values.gpuTraining.image.tag }}"
+          imagePullPolicy: {{ .Values.gpuTraining.image.pullPolicy }}
+          command:
+            - "/app/entrypoint.sh"
+            - {{ .Values.gpuTraining.command | quote }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: vllm
+              containerPort: 8001
+              protocol: TCP
+          {{- if .Values.healthCheck.enabled }}
+          livenessProbe:
+            {{- toYaml .Values.healthCheck.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.healthCheck.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.gpuTraining.resources | nindent 12 }}
+          env:
+            {{- toYaml .Values.gpuTraining.env | nindent 12 }}
+          envFrom:
+            {{- toYaml .Values.gpuTraining.envFrom | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.persistence.dataPath }}
+            - name: checkpoints
+              mountPath: {{ .Values.persistence.checkpointPath }}
+            {{- end }}
+            # Shared memory for GPU operations
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "babylon-training.fullname" . }}-data
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: {{ include "babylon-training.fullname" . }}-checkpoints
+        {{- end }}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi
+{{- end }}

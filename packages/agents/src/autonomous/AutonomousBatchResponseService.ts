@@ -31,7 +31,7 @@ import {
   users,
 } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
-import { callGroqDirect } from '../llm/direct-groq';
+import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -371,7 +371,7 @@ Array:`;
     // Use large model for batch evaluation - better at consistent counting
     // Add timeout to prevent hanging (30 seconds max for larger model)
     const decisionText = await Promise.race([
-      callGroqDirect({
+      callJejuDirect({
         prompt: finalPrompt,
         system: config?.systemPrompt ?? undefined,
         modelSize: 'large', // Large model: Better at structured outputs and counting
@@ -513,7 +513,7 @@ Generate ONLY the response text, nothing else.`;
       // Use large model for response generation - better quality responses
       // Add timeout to prevent hanging (20 seconds max)
       const responseContent = await Promise.race([
-        callGroqDirect({
+        callJejuDirect({
           prompt: finalRespPrompt,
           system: respConfig?.systemPrompt ?? undefined,
           modelSize: 'large', // Large model: Higher quality responses

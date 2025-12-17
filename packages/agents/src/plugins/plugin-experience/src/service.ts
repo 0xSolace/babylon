@@ -198,8 +198,15 @@ export class ExperienceService extends Service {
       await this.pruneOldExperiences();
     }
 
-    // Emit event
-    await this.runtime.emitEvent('EXPERIENCE_RECORDED', {
+    // Emit custom event (use string type for custom events)
+    await (
+      this.runtime as {
+        emitEvent: (
+          event: string,
+          payload: Record<string, unknown>
+        ) => Promise<void>;
+      }
+    ).emitEvent('EXPERIENCE_RECORDED', {
       experienceId: experience.id,
       eventType: 'created',
       timestamp: experience.createdAt,

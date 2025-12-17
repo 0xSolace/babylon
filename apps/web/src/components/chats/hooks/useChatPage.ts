@@ -1,6 +1,6 @@
 'use client';
 
-import { usePrivy } from '@privy-io/react-auth';
+import { useJejuAuth } from '@babylon/auth/client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useChatMessages } from '@/hooks/useChatMessages';
@@ -11,7 +11,7 @@ import type { Chat, ChatDetails, ChatFilter } from '../types';
 export function useChatPage() {
   const { ready, authenticated } = useAuth();
   const { user } = useAuthStore();
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useJejuAuth();
 
   // UI state
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');

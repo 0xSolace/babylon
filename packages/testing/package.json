@@ -14,7 +14,7 @@
   },
   "scripts": {
     "lint": "biome lint .",
-    "typecheck": "tsc -b .",
+    "typecheck": "tsc --noEmit",
     "test:unit": "bun test unit/ --preload ./unit/preload.ts",
     "test:integration": "bun test integration/ --preload ./integration/preload.ts",
     "test:e2e": "playwright test e2e/",
@@ -22,12 +22,15 @@
   },
   "dependencies": {
     "@babylon/api": "workspace:*",
+    "@babylon/auth": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@babylon/engine": "workspace:*",
     "@babylon/db": "workspace:*",
     "@babylon/agents": "workspace:*",
     "@babylon/training": "workspace:*",
-    "@babylon/contracts": "workspace:*"
+    "@babylon/contracts": "workspace:*",
+    "@babylon/messaging": "workspace:*",
+    "next": "^16.0.10"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
@@ -35,7 +38,6 @@
     "@synthetixio/synpress-cache": "^0.0.13",
     "@synthetixio/synpress-metamask": "^0.0.13",
     "dotenv": "^16.4.5",
-    "next": "^16.0.7",
     "playwright": "^1.56.1"
   }
 }

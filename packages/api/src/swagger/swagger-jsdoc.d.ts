@@ -1,13 +1,28 @@
-// Type declaration for optional swagger-jsdoc module
-// swagger-jsdoc is an optional dev dependency for docs generation
 declare module 'swagger-jsdoc' {
-  type SwaggerJsdocOptions = {
-    definition: Record<string, unknown>;
+  interface Options {
+    definition: {
+      openapi: string;
+      info: {
+        title: string;
+        version: string;
+        description?: string;
+      };
+      servers?: Array<{
+        url: string;
+        description?: string;
+      }>;
+      components?: {
+        securitySchemes?: Record<string, unknown>;
+        schemas?: Record<string, unknown>;
+      };
+      security?: Array<Record<string, unknown[]>>;
+    };
     apis: string[];
-  };
-  type SwaggerJsdocFunction = (
-    options: SwaggerJsdocOptions
-  ) => Record<string, unknown>;
-  const swaggerJsdoc: SwaggerJsdocFunction;
-  export default swaggerJsdoc;
+  }
+
+  function swaggerJsdoc(options: Options): object;
+
+  export = swaggerJsdoc;
 }
+
+

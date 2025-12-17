@@ -5,7 +5,7 @@
  * The engine uses @babylon/db for all storage operations.
  *
  * ## Modes
- * - **postgres** (default): PostgreSQL database for production
+ * - **cql** (default): CQL (CovenantSQL) database for production (decentralized)
  * - **json**: JSON file storage for simulation/training data generation
  * - **memory**: In-memory storage for testing (no persistence)
  *
@@ -53,7 +53,7 @@ import {
   initializeJsonMode,
   initializeMemoryMode,
   loadJsonSnapshot,
-  resetToPostgresMode,
+  resetToCQLMode,
   type StorageMode,
   saveJsonSnapshot,
 } from '@babylon/db';
@@ -87,14 +87,14 @@ export async function initializeTestMode(): Promise<void> {
  * This is the default mode and doesn't require explicit initialization.
  */
 export function initializeDatabaseMode(): void {
-  resetToPostgresMode();
+  resetToCQLMode();
 }
 
 /**
  * Check if we're in database mode (production).
  */
 export function isDatabaseMode(): boolean {
-  return getStorageMode() === 'postgres';
+  return getStorageMode() === 'cql';
 }
 
 /**

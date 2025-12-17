@@ -295,8 +295,8 @@ export function FeesTab() {
                 border: '1px solid #333',
               }}
               labelFormatter={(date) => new Date(date).toLocaleDateString()}
-              formatter={(value: number | string) => [
-                `$${Number(value).toFixed(2)}`,
+              formatter={(value) => [
+                `$${Number(value ?? 0).toFixed(2)}`,
                 'Fees',
               ]}
             />

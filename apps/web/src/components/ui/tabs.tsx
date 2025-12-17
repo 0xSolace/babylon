@@ -7,7 +7,7 @@ import * as React from 'react';
  *
  * Main tabs container component. Provides tab navigation functionality.
  */
-const Tabs = TabsPrimitive.Root;
+const Tabs: typeof TabsPrimitive.Root = TabsPrimitive.Root;
 
 /**
  * Tabs list container component.
@@ -17,7 +17,10 @@ const Tabs = TabsPrimitive.Root;
  * @param props - TabsList component props
  * @returns Tabs list element
  */
-const TabsList = React.forwardRef<
+const TabsList: React.ForwardRefExoticComponent<
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List> &
+    React.RefAttributes<React.ElementRef<typeof TabsPrimitive.List>>
+> = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
 >(({ className, ...props }, ref) => (
@@ -40,7 +43,10 @@ TabsList.displayName = TabsPrimitive.List.displayName;
  * @param props - TabsTrigger component props
  * @returns Tabs trigger element
  */
-const TabsTrigger = React.forwardRef<
+const TabsTrigger: React.ForwardRefExoticComponent<
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger> &
+    React.RefAttributes<React.ElementRef<typeof TabsPrimitive.Trigger>>
+> = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
 >(({ className, ...props }, ref) => (
@@ -64,7 +70,10 @@ TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
  * @param props - TabsContent component props
  * @returns Tabs content element
  */
-const TabsContent = React.forwardRef<
+const TabsContent: React.ForwardRefExoticComponent<
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content> &
+    React.RefAttributes<React.ElementRef<typeof TabsPrimitive.Content>>
+> = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
 >(({ className, ...props }, ref) => (

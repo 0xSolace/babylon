@@ -69,6 +69,8 @@
       "@babylon/core/markets/*": ["../../packages/core/markets/*"],
       "@babylon/shared": ["../../packages/shared/src/index.ts"],
       "@babylon/shared/*": ["../../packages/shared/src/*"],
+      "@babylon/messaging": ["../../packages/messaging/src/index.ts"],
+      "@babylon/messaging/*": ["../../packages/messaging/src/*"],
       "@/components/*": ["./src/components/*"],
       "@/lib/*": ["./src/lib/*"],
       "@/hooks/*": ["./src/hooks/*"],
@@ -78,12 +80,18 @@
     },
     "allowJs": true
   },
-  "include": [
-    "src/**/*",
-    "next.config.ts",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "types/**/*.d.ts"
-  ],
-  "exclude": ["node_modules", "dist", "**/*.disabled", "src/**/__tests__/**/*"]
+  "include": ["src/**/*", "next.config.ts", "types/**/*.d.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.disabled",
+    "src/**/__tests__/**/*",
+    "src/app/_*backup*/**/*",
+    "src/app/api/airdrop/**/*",
+    "src/app/api/npcs/**/*",
+    "src/app/api/users/me/**/*",
+    "src/app/api/users/signup/**/*",
+    "src/app/api/auth/jeju/**/*",
+    "src/app/api/waitlist/**/*"
+  ]
 }

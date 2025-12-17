@@ -119,12 +119,16 @@ export function getGroupChatConfigSummary(): Record<string, number> {
     'dynamics.minGroupSize': NPCGroupDynamicsConfig.minGroupSize,
     'dynamics.maxGroupSize': NPCGroupDynamicsConfig.maxGroupSize,
     'service.baseKickProbability': GroupChatServiceConfig.baseKickProbability,
-    'service.inactivityGracePeriodTicks': GroupChatServiceConfig.inactivityGracePeriodTicks,
+    'service.inactivityGracePeriodTicks':
+      GroupChatServiceConfig.inactivityGracePeriodTicks,
   };
 }
 
 /** Validate configuration and return warnings for unusual values */
-export function validateGroupChatConfig(): { valid: boolean; warnings: string[] } {
+export function validateGroupChatConfig(): {
+  valid: boolean;
+  warnings: string[];
+} {
   const warnings: string[] = [];
 
   const probabilities: [string, number][] = [
@@ -141,14 +145,18 @@ export function validateGroupChatConfig(): { valid: boolean; warnings: string[] 
     if (value > 0.5) warnings.push(`${name} (${value}) unusually high`);
   }
 
-  for (const [tier, mult] of Object.entries(GroupInviteConfig.tierMultipliers)) {
-    if (mult < 0 || mult > 2) warnings.push(`Tier ${tier} (${mult}) must be 0-2`);
+  for (const [tier, mult] of Object.entries(
+    GroupInviteConfig.tierMultipliers
+  )) {
+    if (mult < 0 || mult > 2)
+      warnings.push(`Tier ${tier} (${mult}) must be 0-2`);
   }
 
-  if (NPCGroupDynamicsConfig.minGroupSize >= NPCGroupDynamicsConfig.maxGroupSize) {
+  if (
+    NPCGroupDynamicsConfig.minGroupSize >= NPCGroupDynamicsConfig.maxGroupSize
+  ) {
     warnings.push('minGroupSize must be < maxGroupSize');
   }
 
   return { valid: warnings.length === 0, warnings };
 }
-

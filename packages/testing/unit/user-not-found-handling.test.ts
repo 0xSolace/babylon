@@ -19,8 +19,8 @@ const createChainableMock = () => {
 const mockSelect = mock(() => createChainableMock());
 
 // Mock modules before importing the module under test
-const mockVerifyAuthToken = mock((_token: string) =>
-  Promise.resolve({ userId: 'did:privy:testuser123' })
+const mockValidateSession = mock((_token: string) =>
+  Promise.resolve({ identityId: 'did:jeju:testnet:testuser123' })
 );
 const mockVerifyAgentSession = mock((_token: string) =>
   Promise.resolve<{ agentId: string } | null>(null)
@@ -29,15 +29,12 @@ const mockFindUnique = mock<
   (args?: UserFindUniqueArgs) => Promise<MockUserRecord | null>
 >(() => Promise.resolve(null));
 
-// Mock Privy client - must be done before importing auth-middleware
-mock.module('@privy-io/server-auth', () => {
+// Mock OAuth3 client - must be done before importing auth-middleware
+mock.module('@babylon/auth', () => {
   return {
-    PrivyClient: class MockPrivyClient {
-      verifyAuthToken = mockVerifyAuthToken;
-      constructor(_appId: string, _appSecret: string) {
-        // Mock constructor - no-op, doesn't validate app ID
-      }
-    },
+    getOAuth3Client: () => ({
+      validateSession: mockValidateSession,
+    }),
   };
 });
 
@@ -46,16 +43,16 @@ mock.module('@babylon/api/src/agent-auth', () => ({
   verifyAgentSession: mockVerifyAgentSession,
 }));
 
-// Mock auth-middleware module completely to avoid PrivyClient initialization
+// Mock auth-middleware module completely to avoid OAuth3Client initialization
 // We need to provide all exports that might be used
 const mockAuthMiddleware = () => {
-  // Create a mock Privy client instance
-  const mockPrivyClient = {
-    verifyAuthToken: mockVerifyAuthToken,
+  // Create a mock OAuth3 client instance
+  const mockOAuth3Client = {
+    validateSession: mockValidateSession,
   };
 
-  // Mock getPrivyClient to return our mock without initialization
-  const getPrivyClient = () => mockPrivyClient;
+  // Mock getAuthClient to return our mock without initialization
+  const getAuthClient = () => mockOAuth3Client;
 
   // Mock authenticate function
   const authenticate = async (request: NextRequest) => {
@@ -63,7 +60,7 @@ const mockAuthMiddleware = () => {
     const authHeader = request.headers.get('authorization');
     let token: string | undefined;
 
-    const cookieToken = request.cookies.get('privy-token')?.value;
+    const cookieToken = request.cookies.get('oauth3-token')?.value;
     if (cookieToken) {
       token = cookieToken;
     } else if (authHeader?.startsWith('Bearer ')) {
@@ -83,13 +80,13 @@ const mockAuthMiddleware = () => {
     if (agentSession) {
       return {
         userId: agentSession.agentId,
-        privyId: agentSession.agentId,
+        oauth3Id: agentSession.agentId,
         isAgent: true,
       };
     }
 
-    // Try Privy authentication
-    const claims = await mockVerifyAuthToken(token);
+    // Try OAuth3 authentication
+    const session = await mockValidateSession(token);
 
     // Query database for user - use the mocked select chain
     const selectChain = mockSelect();
@@ -98,9 +95,9 @@ const mockAuthMiddleware = () => {
       Array.isArray(dbResult) && dbResult.length > 0 ? dbResult[0] : null;
 
     return {
-      userId: dbUser?.id ?? claims.userId,
+      userId: dbUser?.id ?? session.identityId,
       dbUserId: dbUser?.id,
-      privyId: claims.userId,
+      oauth3Id: session.identityId,
       walletAddress: dbUser?.walletAddress ?? undefined,
       email: undefined,
       isAgent: false,
@@ -113,7 +110,7 @@ const mockAuthMiddleware = () => {
     if (!authUser.dbUserId) {
       throw new NotFoundError(
         'User',
-        authUser.privyId,
+        authUser.oauth3Id,
         'User profile not found. Please complete onboarding first.'
       );
     }
@@ -126,7 +123,7 @@ const mockAuthMiddleware = () => {
   return {
     authenticate,
     authenticateWithDbUser,
-    getPrivyClient,
+    getAuthClient,
     isAuthenticationError: (
       error: unknown
     ): error is Error & { code: string } => {
@@ -170,7 +167,7 @@ mock.module('@babylon/db', () => ({
   // Tables
   users: {
     id: 'id',
-    privyId: 'privyId',
+    oauth3Id: 'oauth3Id',
     walletAddress: 'walletAddress',
   },
   actors: {},
@@ -211,15 +208,15 @@ import { authenticate, authenticateWithDbUser } from '@babylon/api';
 describe('User Not Found Handling', () => {
   beforeEach(() => {
     // Reset all mocks
-    mockVerifyAuthToken.mockClear();
+    mockValidateSession.mockClear();
     mockVerifyAgentSession.mockClear();
     mockFindUnique.mockClear();
     mockSelect.mockClear();
     mockDbResult = null;
 
     // Set default mock implementations
-    mockVerifyAuthToken.mockImplementation((_token: string) =>
-      Promise.resolve({ userId: 'did:privy:testuser123' })
+    mockValidateSession.mockImplementation((_token: string) =>
+      Promise.resolve({ identityId: 'did:jeju:testnet:testuser123' })
     );
     mockVerifyAgentSession.mockImplementation((_token: string) =>
       Promise.resolve<{ agentId: string } | null>(null)
@@ -233,14 +230,10 @@ describe('User Not Found Handling', () => {
       chain.limit = () => Promise.resolve(mockDbResult ? [mockDbResult] : []);
       return chain;
     });
-
-    // Set required env vars
-    process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id';
-    process.env.PRIVY_APP_SECRET = 'test-secret';
   });
 
   describe('authenticate()', () => {
-    it('should return Privy DID when user does not exist in database', async () => {
+    it('should return OAuth3 DID when user does not exist in database', async () => {
       mockDbResult = null; // No user in DB
 
       const request = new NextRequest('https://babylon.market/api/test', {
@@ -251,8 +244,8 @@ describe('User Not Found Handling', () => {
 
       const result = await authenticate(request);
 
-      expect(result.userId).toBe('did:privy:testuser123');
-      expect(result.privyId).toBe('did:privy:testuser123');
+      expect(result.userId).toBe('did:jeju:testnet:testuser123');
+      expect(result.oauth3Id).toBe('did:jeju:testnet:testuser123');
       expect(result.dbUserId).toBeUndefined();
       expect(result.isAgent).toBe(false);
     });
@@ -274,7 +267,7 @@ describe('User Not Found Handling', () => {
 
       expect(result.userId).toBe('db-user-123');
       expect(result.dbUserId).toBe('db-user-123');
-      expect(result.privyId).toBe('did:privy:testuser123');
+      expect(result.oauth3Id).toBe('did:jeju:testnet:testuser123');
       expect(result.walletAddress).toBe(
         '0x1234567890123456789012345678901234567890'
       );
@@ -314,7 +307,7 @@ describe('User Not Found Handling', () => {
 
       expect(result.userId).toBe('db-user-123');
       expect(result.dbUserId).toBe('db-user-123');
-      expect(result.privyId).toBe('did:privy:testuser123');
+      expect(result.oauth3Id).toBe('did:jeju:testnet:testuser123');
     });
   });
 
@@ -322,7 +315,7 @@ describe('User Not Found Handling', () => {
     it('should support custom messages', () => {
       const error = new NotFoundError(
         'User',
-        'did:privy:testuser123',
+        'did:jeju:testnet:testuser123',
         'User profile not found. Please complete onboarding first.'
       );
 
@@ -332,13 +325,15 @@ describe('User Not Found Handling', () => {
       expect(error.code).toBe('NOT_FOUND');
       expect(error.statusCode).toBe(404);
       expect(error.context?.resource).toBe('User');
-      expect(error.context?.identifier).toBe('did:privy:testuser123');
+      expect(error.context?.identifier).toBe('did:jeju:testnet:testuser123');
     });
 
     it('should work with default message format', () => {
-      const error = new NotFoundError('User', 'did:privy:testuser123');
+      const error = new NotFoundError('User', 'did:jeju:testnet:testuser123');
 
-      expect(error.message).toBe('User not found: did:privy:testuser123');
+      expect(error.message).toBe(
+        'User not found: did:jeju:testnet:testuser123'
+      );
       expect(error.code).toBe('NOT_FOUND');
       expect(error.statusCode).toBe(404);
     });

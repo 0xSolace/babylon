@@ -1,20 +1,20 @@
 /**
  * Authentication E2E Tests
  *
- * Tests authentication flow with Privy + MetaMask:
- * - Wallet connection via Privy
+ * Tests authentication flow with OAuth3 + MetaMask:
+ * - Wallet connection via OAuth3
  * - Session persistence
  * - Protected route access
  * - Admin access verification (Anvil test wallet is admin)
  */
 
 import { expect, test } from '@playwright/test';
+import { loginWithWallet } from './helpers/oauth3-auth';
 import {
   cooldownBetweenTests,
   navigateTo,
   waitForPageLoad,
 } from './helpers/page-helpers';
-import { loginWithWallet } from './helpers/privy-auth';
 import {
   ADMIN_ROUTES,
   AUTHENTICATED_ROUTES,

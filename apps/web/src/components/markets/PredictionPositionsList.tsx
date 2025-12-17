@@ -99,7 +99,7 @@ export function PredictionPositionsList({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${window.__privyAccessToken || ''}`,
+          Authorization: `Bearer ${window.__oauth3AccessToken || ''}`,
         },
         body: JSON.stringify({
           shares: position.shares,

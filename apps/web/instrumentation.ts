@@ -68,6 +68,74 @@ export async function register() {
         );
       },
     });
+
+    // ==========================================================================
+    // DECENTRALIZED SERVICES - REQUIRED (NO FALLBACKS)
+    // ==========================================================================
+    // Babylon runs 100% on Jeju decentralized infrastructure.
+    // If services are not available, the application MUST fail to start.
+
+    // Initialize Jeju CQL (CovenantSQL) - PRIMARY DATABASE
+    const { initializeDB } = await import('@babylon/db/decentralized');
+    try {
+      await initializeDB();
+      console.log(
+        '[CQL] CovenantSQL initialized - decentralized database ready'
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `[CQL] FATAL: CovenantSQL required but failed to initialize. ` +
+          `Error: ${msg}. ` +
+          `Ensure CQL_BLOCK_PRODUCER_ENDPOINT is set and Jeju services are running.`
+      );
+    }
+
+    // Initialize Jeju decentralized cache service
+    const { initializeCache } = await import('@babylon/api');
+    try {
+      await initializeCache();
+      console.log('[Cache] Decentralized cache initialized');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `[Cache] FATAL: Decentralized cache required but failed to initialize. ` +
+          `Error: ${msg}. ` +
+          `Ensure JEJU_CACHE_SERVICE_URL is set and Jeju services are running.`
+      );
+    }
+
+    // Initialize Jeju decentralized storage
+    const { initializeStorage } = await import('@babylon/api');
+    try {
+      await initializeStorage();
+      console.log('[Storage] Decentralized storage initialized');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `[Storage] FATAL: Decentralized storage required but failed to initialize. ` +
+          `Error: ${msg}. ` +
+          `Ensure JEJU_STORAGE_SERVICE_URL is set and Jeju services are running.`
+      );
+    }
+
+    // Initialize Jeju KMS for secrets
+    const { initializeKMS } = await import('@babylon/api');
+    try {
+      await initializeKMS();
+      console.log('[KMS] Decentralized key management initialized');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `[KMS] FATAL: Decentralized KMS required but failed to initialize. ` +
+          `Error: ${msg}. ` +
+          `Ensure JEJU_KMS_SERVICE_URL is set and Jeju services are running.`
+      );
+    }
+
+    console.log(
+      '[Decentralized] All Jeju services initialized - running 100% decentralized'
+    );
   }
 
   if (sentryDisabled && process.env.NODE_ENV === 'development') {
@@ -101,6 +169,37 @@ export async function register() {
   ) {
     const { registerBabylonGame } = await import('@babylon/agents');
     await registerBabylonGame();
+  }
+
+  // Bootstrap NPC decentralized identities (wallets, Farcaster keys, encryption keys)
+  // Only in production and when decentralized messaging is enabled
+  if (
+    process.env.USE_DECENTRALIZED_MESSAGING === 'true' &&
+    process.env.NEXT_RUNTIME === 'nodejs'
+  ) {
+    const { getNPCDecentralizedBootstrapService } = await import(
+      '@babylon/agents'
+    );
+    const bootstrap = getNPCDecentralizedBootstrapService();
+
+    // Bootstrap in background to avoid blocking startup
+    bootstrap
+      .bootstrapAll({
+        enableFarcasterRegistration:
+          process.env.ENABLE_FARCASTER_REGISTRATION === 'true',
+        enableEncryptionKeys: true,
+        batchSize: 10,
+        batchDelay: 1000,
+        skipExisting: true,
+      })
+      .then((result) => {
+        console.log(
+          `[NPC Bootstrap] Completed: ${result.success}/${result.total} NPCs initialized`
+        );
+      })
+      .catch((error) => {
+        console.error('[NPC Bootstrap] Failed:', error);
+      });
   }
 }
 
