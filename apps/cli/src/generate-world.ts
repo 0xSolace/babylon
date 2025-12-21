@@ -15,27 +15,6 @@
  * - JSON export for integration with other systems
  * - Verbose mode for detailed event tracking
  *
- * **Generated Content:**
- * - NPC actions and behaviors
- * - Conversations between NPCs
- * - News articles and publications
- * - Rumors and speculation
- * - Clues pointing to outcome
- * - Market developments
- * - Feed posts (news, reactions, threads)
- *
- * **Event Types:**
- * - `world:started` - World generation begins
- * - `day:begins` - New day starts
- * - `npc:action` - NPC performs action
- * - `npc:conversation` - NPCs converse
- * - `news:published` - News article published
- * - `rumor:spread` - Rumor spreads
- * - `clue:revealed` - Clue about outcome revealed
- * - `development:occurred` - Major development happens
- * - `feed:post` - Social media post created
- * - `outcome:revealed` - Final outcome revealed
- *
  * @module cli/generate-world
  * @category CLI - Game Generation
  *
@@ -58,7 +37,6 @@
  * ```
  *
  * @see {@link GameWorld} for world generation implementation
- * @see {@link ../engine/GameWorld.ts} for implementation details
  * @since v0.1.0
  */
 
@@ -66,14 +44,6 @@ import { GameWorld } from '@babylon/engine';
 import { writeFile } from 'fs/promises';
 import { logger } from './lib/logger.js';
 
-/**
- * Command-line options for world generation
- * @interface CLIOptions
- * @property {'SUCCESS' | 'FAILURE'} [outcome] - Predetermined world outcome
- * @property {string} [save] - File path to save world JSON
- * @property {boolean} [verbose] - Enable detailed event logging
- * @property {boolean} [json] - Output JSON only (no logs)
- */
 interface CLIOptions {
   outcome?: 'SUCCESS' | 'FAILURE';
   save?: string;
@@ -83,21 +53,6 @@ interface CLIOptions {
 
 /**
  * Parses command-line arguments into typed options
- *
- * **Supported Arguments:**
- * - `--outcome=SUCCESS` or `--outcome=FAILURE` - Set predetermined outcome
- * - `--save=filename.json` - Save world to JSON file
- * - `--verbose` or `-v` - Enable verbose logging
- * - `--json` - Output JSON only (for piping to other tools)
- *
- * @returns {CLIOptions} Parsed command-line options
- * @example
- * ```typescript
- * // Called internally with:
- * // bun run generate-world.ts --outcome=SUCCESS --verbose
- * const options = parseArgs();
- * // { outcome: 'SUCCESS', verbose: true }
- * ```
  */
 function parseArgs(): CLIOptions {
   const args = process.argv.slice(2);
@@ -120,50 +75,6 @@ function parseArgs(): CLIOptions {
 
 /**
  * Main execution function for world generation CLI
- *
- * Creates a complete game world narrative with:
- * 1. Question/scenario setup
- * 2. NPC cast (default: 8 NPCs)
- * 3. 30-day timeline simulation
- * 4. Event-driven narrative generation
- * 5. Social media feed generation
- * 6. Outcome revelation
- *
- * **Verbosity Levels:**
- * - Normal: Basic progress indicators
- * - Verbose: All events, actions, and posts
- * - JSON: Raw output only (no logs)
- *
- * **Output Modes:**
- * - Console: Formatted narrative logs
- * - JSON: Machine-readable world data
- * - File: Saved JSON for later use
- *
- * @throws {Error} Exits with code 1 if world generation fails
- * @returns {Promise<void>} Exits with code 0 on success
- * @example
- * ```bash
- * # Generate and watch narrative unfold
- * bun run src/cli/generate-world.ts --verbose
- *
- * # Output:
- * # GENERATING BABYLON GAME WORLD
- * # =================================
- * # Question: Will the AI regulation bill pass?
- * # True Outcome: SUCCESS
- * # NPCs in world: 8
- * # --- TIMELINE ---
- * # DAY 1
- * # ──────────────────────────────────────────────
- * # Senator Smith: Announces support for AI bill
- * # Tech CEO Jones: Posts skepticism on social media
- * # ...
- * # ================================================
- * # FINAL OUTCOME: SUCCESS
- * # ================================================
- * # World generation complete
- * # { totalEvents: 450, npcs: 8, daysSimulated: 30 }
- * ```
  */
 async function main() {
   const options = parseArgs();

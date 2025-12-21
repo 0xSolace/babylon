@@ -836,20 +836,8 @@ ${prompt}`
       );
     }
 
-    // Validate structure with Zod
-    try {
-      z.array(TradingDecisionSchema).parse(response);
-    } catch (error) {
-      logger.error(
-        'TradingDecision validation failed',
-        { error },
-        'MarketDecisionEngine'
-      );
-      // We don't throw here to allow partial success if some decisions are valid?
-      // Actually, if structure is invalid, we should probably fail or filter?
-      // But validateDecisions does extensive validation anyway.
-      // Let's just log for now to satisfy "thoroughly review" requirement
-    }
+    // Validate structure with Zod - fail fast if invalid
+    z.array(TradingDecisionSchema).parse(response);
 
     return response;
   }
@@ -1784,16 +1772,8 @@ ${prompt}`
       });
     }
 
-    // Validate decisions
-    try {
-      z.array(TradingDecisionSchema).parse(valid);
-    } catch (error) {
-      logger.error(
-        'Validation failed for filtered decisions',
-        { error },
-        'MarketDecisionEngine'
-      );
-    }
+    // Validate decisions - fail fast if invalid
+    z.array(TradingDecisionSchema).parse(valid);
 
     logger.info(
       `Validated ${valid.length}/${decisions.length} decisions`,

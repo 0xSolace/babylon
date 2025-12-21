@@ -119,7 +119,7 @@ export class BaseBridgeClient {
     },
     userAddress: Address,
     signature: Hex
-  ): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  ): Promise<{ txHash: string }> {
     const registration: CrossChainKeyRegistration = {
       address: userAddress,
       identityKey: keys.identityKey,
@@ -132,31 +132,25 @@ export class BaseBridgeClient {
       signature,
     };
 
-    // Submit to relay node for bridging
-    try {
-      const response = await fetch(
-        `${this.config.relayNodeUrl}/bridge/register-keys`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(registration),
-          signal: AbortSignal.timeout(30000),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.text();
-        return { success: false, error };
+    const response = await fetch(
+      `${this.config.relayNodeUrl}/bridge/register-keys`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registration),
+        signal: AbortSignal.timeout(30000),
       }
+    );
 
-      const result = (await response.json()) as { txHash: string };
-      return { success: true, txHash: result.txHash };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to register keys: ${response.status} ${errorText}`
+      );
     }
+
+    const result = (await response.json()) as { txHash: string };
+    return { txHash: result.txHash };
   }
 
   /**
@@ -170,7 +164,7 @@ export class BaseBridgeClient {
     nonce: string,
     sourceChain: MessagingChain,
     destinationChain: MessagingChain
-  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  ): Promise<{ messageId: string }> {
     const messageId = `xc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     const message: CrossChainMessage = {
@@ -186,33 +180,28 @@ export class BaseBridgeClient {
       bridgeNonce: BigInt(Date.now()),
     };
 
-    try {
-      const response = await fetch(
-        `${this.config.relayNodeUrl}/bridge/send-message`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...message,
-            bridgeNonce: message.bridgeNonce.toString(),
-          }),
-          signal: AbortSignal.timeout(30000),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.text();
-        return { success: false, error };
+    const response = await fetch(
+      `${this.config.relayNodeUrl}/bridge/send-message`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...message,
+          bridgeNonce: message.bridgeNonce.toString(),
+        }),
+        signal: AbortSignal.timeout(30000),
       }
+    );
 
-      this.pendingMessages.set(messageId, message);
-      return { success: true, messageId };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to send cross-chain message: ${response.status} ${errorText}`
+      );
     }
+
+    this.pendingMessages.set(messageId, message);
+    return { messageId };
   }
 
   /**

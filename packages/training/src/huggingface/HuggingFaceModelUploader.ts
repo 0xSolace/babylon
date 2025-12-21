@@ -72,143 +72,133 @@ export class HuggingFaceModelUploader {
    * Upload model to HuggingFace with benchmarks and model card
    */
   async uploadModel(options: ModelUploadOptions): Promise<ModelUploadResult> {
-    try {
-      logger.info('Starting HuggingFace model upload', {
-        modelId: options.modelId,
-      });
+    logger.info('Starting HuggingFace model upload', {
+      modelId: options.modelId,
+    });
 
-      // Validate token (throws if not set)
-      const token = this.huggingFaceToken || requireHuggingFaceToken();
-      this.huggingFaceToken = token;
+    // Validate token (throws if not set)
+    const token = this.huggingFaceToken || requireHuggingFaceToken();
+    this.huggingFaceToken = token;
 
-      // Step 1: Load model from database
-      const model = await db.trainedModel.findUnique({
-        where: { modelId: options.modelId },
-      });
+    // Step 1: Load model from database
+    const model = await db.trainedModel.findUnique({
+      where: { modelId: options.modelId },
+    });
 
-      if (!model) {
-        throw new Error(`Model not found: ${options.modelId}`);
-      }
-
-      // Step 2: Get benchmark results
-      logger.info('Loading benchmark results', { modelId: options.modelId });
-      const modelBenchmarks = await this.getBenchmarkResults(options.modelId);
-
-      if (modelBenchmarks.length === 0) {
-        logger.warn('No benchmark results found for model', {
-          modelId: options.modelId,
-        });
-      }
-
-      // Step 3: Prepare model card data
-      const cardData: ModelCardData = {
-        modelId: String(model.modelId),
-        modelName: options.modelName,
-        version: String(model.version),
-        baseModel: String(model.baseModel),
-        trainedAt: model.createdAt
-          ? new Date(String(model.createdAt))
-          : new Date(),
-        trainingRunId: model.trainingBatch
-          ? String(model.trainingBatch)
-          : undefined,
-        benchmarkResults: modelBenchmarks,
-        metrics: this.calculateAverageMetrics(modelBenchmarks),
-      };
-
-      // Step 4: Create output directory
-      const outputDir =
-        options.outputDir ||
-        path.join(process.cwd(), 'exports', 'models', model.version);
-      await fs.mkdir(outputDir, { recursive: true });
-
-      // Step 5: Generate model card
-      logger.info('Generating model card');
-      await this.generateModelCard(cardData, outputDir);
-
-      // Step 6: Save metadata
-      const metadataPath = path.join(outputDir, 'model_metadata.json');
-      const trainedAt = model.createdAt
-        ? new Date(String(model.createdAt))
-        : new Date();
-      await fs.writeFile(
-        metadataPath,
-        JSON.stringify(
-          {
-            modelId: String(model.modelId),
-            version: String(model.version),
-            baseModel: String(model.baseModel),
-            storagePath: String(model.storagePath),
-            trainingBatch: model.trainingBatch
-              ? String(model.trainingBatch)
-              : null,
-            trainedAt: trainedAt.toISOString(),
-            benchmarkScore: model.benchmarkScore
-              ? Number(model.benchmarkScore)
-              : null,
-            avgReward: model.avgReward ? Number(model.avgReward) : null,
-            accuracy: model.accuracy ? Number(model.accuracy) : null,
-          },
-          null,
-          2
-        )
-      );
-
-      // Step 7: Save benchmark results
-      const benchmarksPath = path.join(outputDir, 'benchmark_results.json');
-      await fs.writeFile(
-        benchmarksPath,
-        JSON.stringify(modelBenchmarks, null, 2)
-      );
-
-      // Step 8: Upload to HuggingFace (if weights available and requested)
-      let filesUploaded = 2; // README.md + metadata
-
-      if (options.includeWeights && model.storagePath) {
-        logger.info('Uploading model to HuggingFace', {
-          modelName: options.modelName,
-        });
-        const uploadCount = await this.uploadToHub(
-          options.modelName,
-          outputDir,
-          options.private ?? false
-        );
-        filesUploaded = uploadCount;
-      } else {
-        logger.info(
-          'Skipping model weight upload (not requested or no weights available)'
-        );
-      }
-
-      const modelUrl = `https://huggingface.co/${options.modelName}`;
-
-      logger.info('Model uploaded successfully', { modelUrl, filesUploaded });
-
-      // Update model status in database
-      await db.trainedModel.update({
-        where: { modelId: options.modelId },
-        data: {
-          status: 'deployed',
-          deployedAt: new Date(),
-          updatedAt: new Date(),
-        },
-      });
-
-      return {
-        success: true,
-        modelUrl,
-        modelId: options.modelId,
-        filesUploaded,
-      };
-    } catch (error) {
-      logger.error('Failed to upload model', { error });
-      return {
-        success: false,
-        modelId: options.modelId,
-        filesUploaded: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
+    if (!model) {
+      throw new Error(`Model not found: ${options.modelId}`);
     }
+
+    // Step 2: Get benchmark results
+    logger.info('Loading benchmark results', { modelId: options.modelId });
+    const modelBenchmarks = await this.getBenchmarkResults(options.modelId);
+
+    if (modelBenchmarks.length === 0) {
+      logger.warn('No benchmark results found for model', {
+        modelId: options.modelId,
+      });
+    }
+
+    // Step 3: Prepare model card data
+    const cardData: ModelCardData = {
+      modelId: String(model.modelId),
+      modelName: options.modelName,
+      version: String(model.version),
+      baseModel: String(model.baseModel),
+      trainedAt: model.createdAt
+        ? new Date(String(model.createdAt))
+        : new Date(),
+      trainingRunId: model.trainingBatch
+        ? String(model.trainingBatch)
+        : undefined,
+      benchmarkResults: modelBenchmarks,
+      metrics: this.calculateAverageMetrics(modelBenchmarks),
+    };
+
+    // Step 4: Create output directory
+    const outputDir =
+      options.outputDir ||
+      path.join(process.cwd(), 'exports', 'models', model.version);
+    await fs.mkdir(outputDir, { recursive: true });
+
+    // Step 5: Generate model card
+    logger.info('Generating model card');
+    await this.generateModelCard(cardData, outputDir);
+
+    // Step 6: Save metadata
+    const metadataPath = path.join(outputDir, 'model_metadata.json');
+    const trainedAt = model.createdAt
+      ? new Date(String(model.createdAt))
+      : new Date();
+    await fs.writeFile(
+      metadataPath,
+      JSON.stringify(
+        {
+          modelId: String(model.modelId),
+          version: String(model.version),
+          baseModel: String(model.baseModel),
+          storagePath: String(model.storagePath),
+          trainingBatch: model.trainingBatch
+            ? String(model.trainingBatch)
+            : null,
+          trainedAt: trainedAt.toISOString(),
+          benchmarkScore: model.benchmarkScore
+            ? Number(model.benchmarkScore)
+            : null,
+          avgReward: model.avgReward ? Number(model.avgReward) : null,
+          accuracy: model.accuracy ? Number(model.accuracy) : null,
+        },
+        null,
+        2
+      )
+    );
+
+    // Step 7: Save benchmark results
+    const benchmarksPath = path.join(outputDir, 'benchmark_results.json');
+    await fs.writeFile(
+      benchmarksPath,
+      JSON.stringify(modelBenchmarks, null, 2)
+    );
+
+    // Step 8: Upload to HuggingFace (if weights available and requested)
+    let filesUploaded = 2; // README.md + metadata
+
+    if (options.includeWeights && model.storagePath) {
+      logger.info('Uploading model to HuggingFace', {
+        modelName: options.modelName,
+      });
+      const uploadCount = await this.uploadToHub(
+        options.modelName,
+        outputDir,
+        options.private ?? false
+      );
+      filesUploaded = uploadCount;
+    } else {
+      logger.info(
+        'Skipping model weight upload (not requested or no weights available)'
+      );
+    }
+
+    const modelUrl = `https://huggingface.co/${options.modelName}`;
+
+    logger.info('Model uploaded successfully', { modelUrl, filesUploaded });
+
+    // Update model status in database
+    await db.trainedModel.update({
+      where: { modelId: options.modelId },
+      data: {
+        status: 'deployed',
+        deployedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      modelUrl,
+      modelId: options.modelId,
+      filesUploaded,
+    };
   }
 
   /**
@@ -218,61 +208,19 @@ export class HuggingFaceModelUploader {
     modelId: string
   ): Promise<ModelCardBenchmarkResult[]> {
     // Query benchmark results from database
-    try {
-      const results = await db.benchmarkResult.findMany({
-        where: { modelId },
-        orderBy: { runAt: 'desc' },
-      });
+    const results = await db.benchmarkResult.findMany({
+      where: { modelId },
+      orderBy: { runAt: 'desc' },
+    });
 
-      return results.map((r) => ({
-        benchmarkId: String(r.benchmarkId),
-        runAt: r.runAt
-          ? new Date(String(r.runAt)).toISOString()
-          : new Date().toISOString(),
-        // detailedMetrics is stored as JSON in database, validate it matches SimulationMetrics
-        metrics: parseSimulationMetrics(r.detailedMetrics),
-      }));
-    } catch (error) {
-      logger.warn('Could not load benchmark results from database', { error });
-
-      // Fallback to files if database fails
-      return await this.getBenchmarkResultsFromFiles(modelId);
-    }
-  }
-
-  /**
-   * Fallback: Get benchmark results from files
-   */
-  private async getBenchmarkResultsFromFiles(
-    modelId: string
-  ): Promise<ModelCardBenchmarkResult[]> {
-    const results: ModelCardBenchmarkResult[] = [];
-
-    try {
-      const benchmarksDir = path.join(process.cwd(), 'benchmarks');
-      const files = await fs.readdir(benchmarksDir);
-
-      for (const file of files) {
-        if (file.endsWith('.json') && file.includes(modelId)) {
-          const filePath = path.join(benchmarksDir, file);
-          const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
-
-          if (data.metrics) {
-            results.push({
-              benchmarkId: data.benchmarkId || file,
-              runAt: data.runAt || new Date().toISOString(),
-              metrics: data.metrics,
-            });
-          }
-        }
-      }
-    } catch (error) {
-      logger.warn('Could not load benchmark results from files either', {
-        error,
-      });
-    }
-
-    return results;
+    return results.map((r) => ({
+      benchmarkId: String(r.benchmarkId),
+      runAt: r.runAt
+        ? new Date(String(r.runAt)).toISOString()
+        : new Date().toISOString(),
+      // detailedMetrics is stored as JSON in database, validate it matches SimulationMetrics
+      metrics: parseSimulationMetrics(r.detailedMetrics),
+    }));
   }
 
   /**

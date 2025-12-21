@@ -127,17 +127,15 @@ export async function GET(request: Request) {
   }
 
   const leaderboard = poolsList.map((pool, index) => {
-    const totalValue = Number.parseFloat(pool.totalValue?.toString() || '0');
+    const totalValue = Number.parseFloat(pool.totalValue.toString());
     const availableBalance = Number.parseFloat(
-      pool.availableBalance?.toString() || '0'
+      pool.availableBalance.toString()
     );
-    const initialValue = Number.parseFloat(
-      pool.totalDeposits?.toString() || '0'
-    );
+    const initialValue = Number.parseFloat(pool.totalDeposits.toString());
 
     const poolPositionsList = positionsByPool.get(pool.id) || [];
     const unrealizedPnL = poolPositionsList.reduce((sum: number, pos) => {
-      return sum + Number.parseFloat(pos.unrealizedPnL?.toString() || '0');
+      return sum + Number.parseFloat(pos.unrealizedPnL.toString());
     }, 0);
 
     const roi =

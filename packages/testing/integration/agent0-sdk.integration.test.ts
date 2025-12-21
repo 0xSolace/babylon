@@ -293,20 +293,13 @@ describe('Agent0 SDK Complete Integration', () => {
         return;
       }
 
-      try {
-        const agents = await subgraphClient.searchAgents({
-          type: 'agent',
-          limit: 10,
-        });
+      // Let errors fail the test naturally - subgraph should be available when SDK is available
+      const agents = await subgraphClient.searchAgents({
+        type: 'agent',
+        limit: 10,
+      });
 
-        expect(Array.isArray(agents)).toBe(true);
-      } catch (error) {
-        // Subgraph may not be available in all environments - this is acceptable
-        expect(error).toBeDefined();
-        console.log(
-          '   ⚠️  Subgraph not available (expected in some environments)'
-        );
-      }
+      expect(Array.isArray(agents)).toBe(true);
     });
 
     test('should get game platforms via subgraph', async () => {
@@ -315,19 +308,12 @@ describe('Agent0 SDK Complete Integration', () => {
         return;
       }
 
-      try {
-        const platforms = await subgraphClient.getGamePlatforms({
-          markets: ['prediction'],
-        });
+      // Let errors fail the test naturally - subgraph should be available when SDK is available
+      const platforms = await subgraphClient.getGamePlatforms({
+        markets: ['prediction'],
+      });
 
-        expect(Array.isArray(platforms)).toBe(true);
-      } catch (error) {
-        // Subgraph may not be available - this is acceptable
-        expect(error).toBeDefined();
-        console.log(
-          '   ⚠️  Subgraph not available (expected in some environments)'
-        );
-      }
+      expect(Array.isArray(platforms)).toBe(true);
     });
 
     test('should get agent feedback via subgraph', async () => {
@@ -336,17 +322,10 @@ describe('Agent0 SDK Complete Integration', () => {
         return;
       }
 
-      try {
-        const feedback = await subgraphClient.getAgentFeedback(1);
+      // Let errors fail the test naturally - subgraph should be available when SDK is available
+      const feedback = await subgraphClient.getAgentFeedback(1);
 
-        expect(Array.isArray(feedback)).toBe(true);
-      } catch (error) {
-        // Subgraph may not be available - this is acceptable
-        expect(error).toBeDefined();
-        console.log(
-          '   ⚠️  Subgraph not available (expected in some environments)'
-        );
-      }
+      expect(Array.isArray(feedback)).toBe(true);
     });
   });
 

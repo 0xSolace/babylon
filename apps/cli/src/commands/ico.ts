@@ -920,11 +920,11 @@ export async function runICOCommand(args: string[]): Promise<void> {
     process.exit(0);
   }
 
-  const networkName = (parsed.options?.network || 'local') as NetworkName;
+  const networkName = (parsed.options.network || 'local') as NetworkName;
   const devMode = getFlag(parsed, 'dev');
   const force = getFlag(parsed, 'force');
-  const durationDays = parseInt(parsed.options?.duration || '7', 10);
-  const delayDays = parseInt(parsed.options?.delay || '1', 10);
+  const durationDays = parseInt(parsed.options.duration || '7', 10);
+  const delayDays = parseInt(parsed.options.delay || '1', 10);
 
   // Mainnet safety check
   if (networkName === 'mainnet' && !force) {

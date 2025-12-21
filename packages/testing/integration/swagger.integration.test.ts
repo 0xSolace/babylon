@@ -15,13 +15,9 @@ let serverAvailable = false;
 
 describe('Swagger/OpenAPI Documentation', () => {
   beforeAll(async () => {
-    // Check if server is running
-    try {
-      const response = await fetch(`${BASE_URL}/api/health`);
-      serverAvailable = response.ok;
-    } catch {
-      serverAvailable = false;
-    }
+    // Check if server is running - let connection errors fail the test setup
+    const response = await fetch(`${BASE_URL}/api/health`);
+    serverAvailable = response.ok;
   });
 
   test('should serve OpenAPI spec at /api/docs', async () => {

@@ -533,22 +533,41 @@ class KMSClient {
 
     // Try KMS if connected
     if (this.connected) {
-      const response = await fetch(`${this.endpoint}/keys/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
-        signal: AbortSignal.timeout(30000),
-      });
+      // Network errors handled - KMS may become unavailable after connect
+      let response: Response;
+      try {
+        response = await fetch(`${this.endpoint}/keys/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(params),
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch (error) {
+        logger.warn(
+          'KMS key generation network error, falling back to local',
+          {
+            endpoint: this.endpoint,
+            label: params.label,
+            error: (error as Error).message,
+          },
+          'NPCIdentityService'
+        );
+        this.connected = false;
+        // Fall through to local generation
+        response = { ok: false } as Response;
+      }
 
       if (response.ok) {
         return response.json() as Promise<KMSGeneratedKey>;
       }
 
-      logger.warn(
-        `KMS key generation failed: ${response.status} ${response.statusText}`,
-        { endpoint: this.endpoint, label: params.label },
-        'NPCIdentityService'
-      );
+      if (this.connected) {
+        logger.warn(
+          `KMS key generation failed: ${response.status} ${response.statusText}`,
+          { endpoint: this.endpoint, label: params.label },
+          'NPCIdentityService'
+        );
+      }
     }
 
     // Local fallback - generate key locally (KMS unavailable)

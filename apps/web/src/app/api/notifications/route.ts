@@ -306,9 +306,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           )
         );
 
+      if (!unreadCountResult) {
+        throw new InternalServerError('Failed to fetch unread count');
+      }
+
       return {
         notificationsList,
-        unreadCount: Number(unreadCountResult?.count ?? 0),
+        unreadCount: Number(unreadCountResult.count),
       };
     },
     {

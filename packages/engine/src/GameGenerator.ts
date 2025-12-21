@@ -1771,17 +1771,15 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
 
     let parsedResponse = rawResponse;
     if (typeof rawResponse === 'string') {
-      try {
-        parsedResponse = JSON.parse(
-          (rawResponse as string).replace(/```json\n?|\n?```/g, '').trim()
-        );
-      } catch {
-        // ignore
-      }
+      parsedResponse = JSON.parse(
+        (rawResponse as string).replace(/```json\n?|\n?```/g, '').trim()
+      );
     }
 
     if (!parsedResponse || typeof parsedResponse !== 'object') {
-      return `${admin.name}'s Group`; // Fallback
+      throw new Error(
+        `Invalid response for group chat name generation: expected object, got ${typeof parsedResponse}`
+      );
     }
 
     // Handle XML structure
@@ -2270,26 +2268,15 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
 
     let parsedResponse = rawResponse;
     if (typeof rawResponse === 'string') {
-      try {
-        parsedResponse = JSON.parse(
-          (rawResponse as string).replace(/```json\n?|\n?```/g, '').trim()
-        );
-      } catch {
-        // ignore
-      }
+      parsedResponse = JSON.parse(
+        (rawResponse as string).replace(/```json\n?|\n?```/g, '').trim()
+      );
     }
 
     if (typeof parsedResponse !== 'object') {
-      logger.warn(
-        'LLM returned non-object events response',
-        { type: typeof parsedResponse },
-        'GameGenerator'
+      throw new Error(
+        `Invalid events response: expected object, got ${typeof parsedResponse}`
       );
-      return eventRequests.map((req) => ({
-        eventNumber: req.eventNumber,
-        event: `${req.actors.map((a) => a.name).join(' and ')} involved in ${req.type}`,
-        pointsToward: null,
-      }));
     }
 
     // Handle XML structure - may be nested like { events: { event: [...] } }
@@ -2352,22 +2339,13 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
     }));
 
     // Validate internal structure
-    try {
-      z.array(
-        z.object({
-          eventNumber: z.number(),
-          event: z.string(),
-          pointsToward: z.enum(['YES', 'NO']).nullable(),
-        })
-      ).parse(sanitizedEvents);
-    } catch (error) {
-      logger.error(
-        'Day events batch validation failed',
-        { error },
-        'GameGenerator'
-      );
-      throw error;
-    }
+    z.array(
+      z.object({
+        eventNumber: z.number(),
+        event: z.string(),
+        pointsToward: z.enum(['YES', 'NO']).nullable(),
+      })
+    ).parse(sanitizedEvents);
 
     return sanitizedEvents;
   }

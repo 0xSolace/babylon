@@ -70,11 +70,8 @@ export async function initPlaywrightAPI(): Promise<{
   let tokens: { TEST_USER_ID?: string; TEST_ACCESS_TOKEN?: string } | null =
     null;
   if (existsSync(tokenFile)) {
-    try {
-      tokens = JSON.parse(readFileSync(tokenFile, 'utf-8'));
-    } catch (error) {
-      console.warn(`⚠️  Could not read token file: ${error}`);
-    }
+    // Let JSON parse errors fail - corrupted token file should be fixed
+    tokens = JSON.parse(readFileSync(tokenFile, 'utf-8'));
   }
 
   browser = await chromium.launch();
@@ -85,16 +82,12 @@ export async function initPlaywrightAPI(): Promise<{
 
   apiRequest = context.request;
 
-  try {
-    const response = await apiRequest.get(`${baseURL}/api/users/me`);
-    if (response.ok()) {
-      const userData = await response.json();
-      testUserId = userData.user?.id || tokens?.TEST_USER_ID || null;
-    } else {
-      testUserId = tokens?.TEST_USER_ID || null;
-    }
-  } catch (error) {
-    console.warn(`⚠️  Could not fetch user ID from API: ${error}`);
+  // Fetch user ID - let API errors fail (auth should work if setup ran)
+  const response = await apiRequest.get(`${baseURL}/api/users/me`);
+  if (response.ok()) {
+    const userData = await response.json();
+    testUserId = userData.user?.id || tokens?.TEST_USER_ID || null;
+  } else {
     testUserId = tokens?.TEST_USER_ID || null;
   }
 

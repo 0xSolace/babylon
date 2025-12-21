@@ -73,7 +73,11 @@ export async function GET(
     }),
   ]);
 
-  const displayName = user?.displayName || user?.username || 'A Babylon Trader';
+  if (!user) {
+    return new Response('User not found', { status: 404 });
+  }
+
+  const displayName = user.displayName || user.username || 'A Babylon Trader';
 
   return new ImageResponse(
     <div
@@ -121,7 +125,7 @@ export async function GET(
           zIndex: 1,
         }}
       >
-        {user?.profileImageUrl && (
+        {user.profileImageUrl && (
           <img
             src={user.profileImageUrl}
             alt={displayName}
@@ -196,7 +200,7 @@ export async function GET(
                 display: 'flex',
               }}
             >
-              {(user?.reputationPoints || 0).toLocaleString()}
+              {(user.reputationPoints || 0).toLocaleString()}
             </div>
           </div>
 

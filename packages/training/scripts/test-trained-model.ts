@@ -130,20 +130,14 @@ async function testModel(config: TestConfig): Promise<void> {
   logger.info('TEST 3: Inference Test');
   logger.info('='.repeat(60));
 
-  try {
-    // Get test agent
-    const testAgentResult = await db.select().from(trainedModels).limit(1);
+  // Get test agent
+  const testAgentResult = await db.select().from(trainedModels).limit(1);
 
-    if (testAgentResult.length > 0) {
-      logger.info('✅ Inference test setup available');
-      logger.info('Run full benchmark to test inference with real agent');
-    } else {
-      logger.warn('No test agent available for inference test');
-    }
-  } catch (error) {
-    logger.warn('Inference test skipped', {
-      error: error instanceof Error ? error.message : String(error),
-    });
+  if (testAgentResult.length > 0) {
+    logger.info('✅ Inference test setup available');
+    logger.info('Run full benchmark to test inference with real agent');
+  } else {
+    logger.warn('No test agent available for inference test');
   }
 
   // Summary

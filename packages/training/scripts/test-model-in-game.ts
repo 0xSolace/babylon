@@ -948,8 +948,4 @@ process.on('SIGTERM', async () => {
   process.exit(143);
 });
 
-main().catch(async (error) => {
-  console.error('Test failed:', error);
-  await cleanup();
-  process.exit(1);
-});
+main();

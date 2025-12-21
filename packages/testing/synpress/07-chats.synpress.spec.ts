@@ -126,17 +126,17 @@ test.describe('Chats Page - Updated Design', () => {
       .catch(() => false);
 
     if (dmsVisible) {
-      await dmsTab.click({ timeout: 5000 }).catch(() => {});
+      await dmsTab.click({ timeout: 5000 });
       await page.waitForTimeout(500);
     }
 
     if (groupsVisible) {
-      await groupsTab.click({ timeout: 5000 }).catch(() => {});
+      await groupsTab.click({ timeout: 5000 });
       await page.waitForTimeout(500);
     }
 
     if (allVisible) {
-      await allTab.click({ timeout: 5000 }).catch(() => {});
+      await allTab.click({ timeout: 5000 });
       await page.waitForTimeout(500);
     }
 
@@ -214,7 +214,7 @@ test.describe('Chat Messaging - New Implementation', () => {
 
     if (dmsVisible) {
       // Use force click to bypass any overlays
-      await dmsTab.click({ force: true }).catch(() => {});
+      await dmsTab.click({ force: true });
       await page.waitForTimeout(1000);
 
       // Check for empty state guidance text or any chat-related content

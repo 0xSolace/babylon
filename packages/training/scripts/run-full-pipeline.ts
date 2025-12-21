@@ -80,75 +80,58 @@ async function runPipeline() {
 
   // Step 1: Check database connection
   console.log('Step 1: Checking database connection...');
-  try {
-    const result = await db.select({ count: count() }).from(trajectories);
-    console.log(
-      `  ✅ Database connected. ${result[0]?.count || 0} existing trajectories.\n`
-    );
-  } catch (error) {
-    console.log(`  ❌ Database connection failed: ${error}`);
-    console.log('  Make sure DATABASE_URL is set correctly.\n');
-    process.exit(1);
-  }
+  const result = await db.select({ count: count() }).from(trajectories);
+  console.log(
+    `  ✅ Database connected. ${result[0]?.count || 0} existing trajectories.\n`
+  );
 
   // Step 2: Initialize training package
   console.log('Step 2: Initializing training package...');
-  try {
-    const { initializeTrainingPackage } = await import('../src/init-training');
-    await initializeTrainingPackage();
-    console.log('  ✅ Training package initialized.\n');
-  } catch (error) {
-    console.log(`  ⚠️  Training package initialization failed: ${error}`);
-    console.log('  Will continue with limited functionality.\n');
-  }
+  const { initializeTrainingPackage } = await import('../src/init-training');
+  await initializeTrainingPackage();
+  console.log('  ✅ Training package initialized.\n');
 
   // Step 3: Generate trajectories
   if (!config.skipGeneration) {
     console.log('Step 3: Generating real trajectories...');
-    try {
-      const { TrajectoryGenerator } = await import(
-        '../src/generation/TrajectoryGenerator'
-      );
+    const { TrajectoryGenerator } = await import(
+      '../src/generation/TrajectoryGenerator'
+    );
 
-      // Get a manager ID (first user in DB or create one)
-      const { users, desc } = await import('@babylon/db');
-      const managerResult = await db
-        .select({ id: users.id })
-        .from(users)
-        .orderBy(desc(users.createdAt))
-        .limit(1);
+    // Get a manager ID (first user in DB or create one)
+    const { users, desc } = await import('@babylon/db');
+    const managerResult = await db
+      .select({ id: users.id })
+      .from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(1);
 
-      if (managerResult.length === 0) {
-        console.log('  ⚠️  No users found in database. Skipping generation.');
-        console.log('  Create a user first or use --skip-generation.\n');
-      } else {
-        const managerId = managerResult[0].id;
-
-        const generator = new TrajectoryGenerator({
-          archetypes: config.archetypes,
-          agentsPerArchetype: config.agentsPerArchetype,
-          ticksPerAgent: config.ticksPerAgent,
-          parallelAgents: 3,
-          recordTrajectories: true,
-          managerId,
-        });
-
-        const result = await generator.generate();
-        console.log(
-          `  ✅ Generated ${result.trajectoryIds.length} trajectories.`
-        );
-        console.log(`  Agents created: ${result.agentsCreated.length}`);
-        console.log(`  Duration: ${result.duration}ms\n`);
-
-        // Cleanup test agents
-        await generator.cleanup();
-      }
-    } catch (error) {
-      console.log(`  ❌ Generation failed: ${error}`);
-      console.log(
-        '  Make sure the server is running or use --skip-generation.\n'
+    if (managerResult.length === 0) {
+      throw new Error(
+        'No users found in database. Create a user first or use --skip-generation.'
       );
     }
+
+    const managerId = managerResult[0].id;
+
+    const generator = new TrajectoryGenerator({
+      archetypes: config.archetypes,
+      agentsPerArchetype: config.agentsPerArchetype,
+      ticksPerAgent: config.ticksPerAgent,
+      parallelAgents: 3,
+      recordTrajectories: true,
+      managerId,
+    });
+
+    const generationResult = await generator.generate();
+    console.log(
+      `  ✅ Generated ${generationResult.trajectoryIds.length} trajectories.`
+    );
+    console.log(`  Agents created: ${generationResult.agentsCreated.length}`);
+    console.log(`  Duration: ${generationResult.duration}ms\n`);
+
+    // Cleanup test agents
+    await generator.cleanup();
   } else {
     console.log(
       'Step 3: Skipping trajectory generation (--skip-generation).\n'
@@ -158,92 +141,77 @@ async function runPipeline() {
   // Step 4: Score trajectories
   if (!config.skipScoring) {
     console.log('Step 4: Scoring trajectories with LLM-as-judge...');
-    try {
-      const { archetypeScoringService } = await import(
-        '../src/scoring/ArchetypeScoringService'
-      );
+    const { archetypeScoringService } = await import(
+      '../src/scoring/ArchetypeScoringService'
+    );
 
-      // Check for unscored trajectories
-      const unscoredCount = await db
-        .select({ count: count() })
-        .from(trajectories)
-        .where(eq(trajectories.isTrainingData, true));
+    // Check for unscored trajectories
+    const unscoredCount = await db
+      .select({ count: count() })
+      .from(trajectories)
+      .where(eq(trajectories.isTrainingData, true));
 
-      const scoredCount = await db
-        .select({ count: count() })
-        .from(trajectories)
-        .where(isNotNull(trajectories.aiJudgeReward));
+    const scoredCount = await db
+      .select({ count: count() })
+      .from(trajectories)
+      .where(isNotNull(trajectories.aiJudgeReward));
 
-      console.log(`  Training trajectories: ${unscoredCount[0]?.count || 0}`);
-      console.log(`  Already scored: ${scoredCount[0]?.count || 0}`);
+    console.log(`  Training trajectories: ${unscoredCount[0]?.count || 0}`);
+    console.log(`  Already scored: ${scoredCount[0]?.count || 0}`);
 
-      // Score a batch of unscored trajectories
-      const result = await archetypeScoringService.scoreUnscoredTrajectories(
-        'default',
-        10
-      );
-      console.log(
-        `  ✅ Scored ${result.scored} trajectories (${result.errors} errors).\n`
-      );
-    } catch (error) {
-      console.log(`  ❌ Scoring failed: ${error}`);
-      console.log('  Make sure GROQ_API_KEY is set.\n');
-    }
+    // Score a batch of unscored trajectories
+    const scoringResult =
+      await archetypeScoringService.scoreUnscoredTrajectories('default', 10);
+    console.log(
+      `  ✅ Scored ${scoringResult.scored} trajectories (${scoringResult.errors} errors).\n`
+    );
   } else {
     console.log('Step 4: Skipping scoring (--skip-scoring).\n');
   }
 
   // Step 5: Run archetype matchup benchmark
   console.log('Step 5: Running archetype matchup benchmark...');
-  try {
-    const { ArchetypeMatchupBenchmark } = await import(
-      '../src/benchmark/ArchetypeMatchupBenchmark'
-    );
+  const { ArchetypeMatchupBenchmark } = await import(
+    '../src/benchmark/ArchetypeMatchupBenchmark'
+  );
 
-    const benchmark = new ArchetypeMatchupBenchmark({
-      archetypes: config.archetypes,
-      agentsPerArchetype: 2,
-      rounds: 3,
-      ticksPerRound: 50,
-      marketConditions: ['bull', 'bear'],
-      availableVramGb: 16,
-    });
+  const benchmark = new ArchetypeMatchupBenchmark({
+    archetypes: config.archetypes,
+    agentsPerArchetype: 2,
+    rounds: 3,
+    ticksPerRound: 50,
+    marketConditions: ['bull', 'bear'],
+    availableVramGb: 16,
+  });
 
-    const results = await benchmark.run();
+  const benchmarkResults = await benchmark.run();
 
-    console.log(`  ✅ Benchmark complete.`);
-    for (const result of results) {
-      console.log(`  ${result.marketCondition.toUpperCase()} market:`);
-      const top3 = result.archetypeRankings.slice(0, 3);
-      for (const r of top3) {
-        console.log(
-          `    ${r.avgRank.toFixed(1)}. ${r.archetype} (avg PnL: ${r.avgPnl.toFixed(2)})`
-        );
-      }
+  console.log(`  ✅ Benchmark complete.`);
+  for (const benchResult of benchmarkResults) {
+    console.log(`  ${benchResult.marketCondition.toUpperCase()} market:`);
+    const top3 = benchResult.archetypeRankings.slice(0, 3);
+    for (const r of top3) {
+      console.log(
+        `    ${r.avgRank.toFixed(1)}. ${r.archetype} (avg PnL: ${r.avgPnl.toFixed(2)})`
+      );
     }
-    console.log('');
-  } catch (error) {
-    console.log(`  ❌ Benchmark failed: ${error}\n`);
   }
+  console.log('');
 
   // Step 6: Export training data
   console.log('Step 6: Checking training data export...');
-  try {
-    const scoredResult = await db
-      .select({ count: count() })
-      .from(trajectories)
-      .where(isNotNull(trajectories.aiJudgeReward));
+  const scoredResult = await db
+    .select({ count: count() })
+    .from(trajectories)
+    .where(isNotNull(trajectories.aiJudgeReward));
 
-    const scored = scoredResult[0]?.count || 0;
-    if (scored > 0) {
-      console.log(`  ✅ ${scored} trajectories ready for export.`);
-      console.log('  Run "babylon train export" to export training data.\n');
-    } else {
-      console.log('  ⚠️  No scored trajectories available for export.');
-      console.log('  Generate and score trajectories first.\n');
-    }
-  } catch (error) {
-    console.log(`  ❌ Export check failed: ${error}\n`);
+  const scored = scoredResult[0]?.count || 0;
+  if (scored > 0) {
+    console.log(`  ✅ ${scored} trajectories ready for export.`);
+    console.log('  Run "babylon train export" to export training data.\n');
+  } else {
+    console.log('  ⚠️  No scored trajectories available for export.');
+    console.log('  Generate and score trajectories first.\n');
   }
 
   // Summary

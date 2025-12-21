@@ -70,87 +70,74 @@ export class HuggingFaceDatasetUploader {
    * Prepare and upload benchmark dataset to HuggingFace
    */
   async uploadDataset(options: UploadOptions): Promise<UploadResult> {
-    try {
-      logger.info('Starting HuggingFace dataset upload', {
-        datasetName: options.datasetName,
-      });
+    logger.info('Starting HuggingFace dataset upload', {
+      datasetName: options.datasetName,
+    });
 
-      // Validate token (throws if not set)
-      const token = this.huggingFaceToken || requireHuggingFaceToken();
-      this.huggingFaceToken = token;
+    // Validate token (throws if not set)
+    const token = this.huggingFaceToken || requireHuggingFaceToken();
+    this.huggingFaceToken = token;
 
-      // Set defaults
-      const version = options.version || this.generateVersion();
-      const benchmarkDir =
-        options.benchmarkDir || path.join(process.cwd(), 'benchmarks');
-      const outputDir =
-        options.outputDir ||
-        path.join(process.cwd(), 'exports', 'huggingface', version);
+    // Set defaults
+    const version = options.version || this.generateVersion();
+    const benchmarkDir =
+      options.benchmarkDir || path.join(process.cwd(), 'benchmarks');
+    const outputDir =
+      options.outputDir ||
+      path.join(process.cwd(), 'exports', 'huggingface', version);
 
-      // Step 1: Collect benchmark data
-      logger.info('Collecting benchmark data', { benchmarkDir });
-      const benchmarks = await this.collectBenchmarkData(benchmarkDir);
-      logger.info(`Collected ${benchmarks.length} benchmark records`);
+    // Step 1: Collect benchmark data
+    logger.info('Collecting benchmark data', { benchmarkDir });
+    const benchmarks = await this.collectBenchmarkData(benchmarkDir);
+    logger.info(`Collected ${benchmarks.length} benchmark records`);
 
-      if (benchmarks.length === 0) {
-        throw new Error('No benchmark data found to upload');
-      }
-
-      // Step 2: Prepare dataset files
-      logger.info('Preparing dataset files', { outputDir });
-      await fs.mkdir(outputDir, { recursive: true });
-
-      const metadata = await this.prepareDatasetFiles(benchmarks, outputDir, {
-        datasetName: options.datasetName,
-        version,
-        description: options.description || 'Babylon agent benchmark results',
-      });
-
-      // Step 3: Generate dataset card
-      logger.info('Generating dataset card');
-      await this.generateDatasetCard(metadata, benchmarks, outputDir);
-
-      // Step 4: Create repository if it doesn't exist
-      logger.info('Ensuring repository exists', {
-        datasetName: options.datasetName,
-      });
-      await this.ensureRepository(
-        options.datasetName,
-        options.private ?? false
-      );
-
-      // Step 5: Upload to HuggingFace
-      logger.info('Uploading to HuggingFace', {
-        datasetName: options.datasetName,
-      });
-      const filesUploaded = await this.uploadToHub(
-        options.datasetName,
-        outputDir,
-        options.private ?? false
-      );
-
-      const datasetUrl = `https://huggingface.co/datasets/${options.datasetName}`;
-
-      logger.info('Dataset uploaded successfully', {
-        datasetUrl,
-        filesUploaded,
-      });
-
-      return {
-        success: true,
-        datasetUrl,
-        version,
-        filesUploaded,
-      };
-    } catch (error) {
-      logger.error('Failed to upload dataset', { error });
-      return {
-        success: false,
-        version: options.version || 'unknown',
-        filesUploaded: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
+    if (benchmarks.length === 0) {
+      throw new Error('No benchmark data found to upload');
     }
+
+    // Step 2: Prepare dataset files
+    logger.info('Preparing dataset files', { outputDir });
+    await fs.mkdir(outputDir, { recursive: true });
+
+    const metadata = await this.prepareDatasetFiles(benchmarks, outputDir, {
+      datasetName: options.datasetName,
+      version,
+      description: options.description || 'Babylon agent benchmark results',
+    });
+
+    // Step 3: Generate dataset card
+    logger.info('Generating dataset card');
+    await this.generateDatasetCard(metadata, benchmarks, outputDir);
+
+    // Step 4: Create repository if it doesn't exist
+    logger.info('Ensuring repository exists', {
+      datasetName: options.datasetName,
+    });
+    await this.ensureRepository(options.datasetName, options.private ?? false);
+
+    // Step 5: Upload to HuggingFace
+    logger.info('Uploading to HuggingFace', {
+      datasetName: options.datasetName,
+    });
+    const filesUploaded = await this.uploadToHub(
+      options.datasetName,
+      outputDir,
+      options.private ?? false
+    );
+
+    const datasetUrl = `https://huggingface.co/datasets/${options.datasetName}`;
+
+    logger.info('Dataset uploaded successfully', {
+      datasetUrl,
+      filesUploaded,
+    });
+
+    return {
+      success: true,
+      datasetUrl,
+      version,
+      filesUploaded,
+    };
   }
 
   /**

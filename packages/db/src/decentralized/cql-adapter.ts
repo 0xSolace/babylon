@@ -149,7 +149,9 @@ class CQLAdapterImpl implements CQLAdapter {
 
     const result = await this.getConnection().exec(sql, values);
     if (result.lastInsertId === undefined || result.lastInsertId === null) {
-      throw new Error(`[CQLAdapter] Insert into "${table}" did not return an id`);
+      throw new Error(
+        `[CQLAdapter] Insert into "${table}" did not return an id`
+      );
     }
     return result.lastInsertId.toString();
   }
@@ -224,7 +226,9 @@ class CQLAdapterImpl implements CQLAdapter {
     );
     const row = result.rows[0];
     if (row === undefined) {
-      throw new Error(`[CQLAdapter] COUNT query on "${table}" returned no rows`);
+      throw new Error(
+        `[CQLAdapter] COUNT query on "${table}" returned no rows`
+      );
     }
     return row.count;
   }
@@ -289,7 +293,9 @@ class CQLAdapterImpl implements CQLAdapter {
         const sql = `INSERT INTO "${table}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders}) RETURNING id`;
         const result = await jejuTx.exec(sql, values);
         if (result.lastInsertId === undefined || result.lastInsertId === null) {
-          throw new Error(`[CQLAdapter] Transaction insert into "${table}" did not return an id`);
+          throw new Error(
+            `[CQLAdapter] Transaction insert into "${table}" did not return an id`
+          );
         }
         return result.lastInsertId.toString();
       },

@@ -939,7 +939,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Calculate next cursor (timestamp of last post)
   const nextCursor =
     formattedPosts.length > 0
-      ? formattedPosts[formattedPosts.length - 1]?.timestamp
+      ? formattedPosts[formattedPosts.length - 1].timestamp
       : null;
 
   const response = NextResponse.json({

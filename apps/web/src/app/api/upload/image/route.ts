@@ -83,33 +83,11 @@
  *         description: Unauthorized
  *       429:
  *         description: Rate limit exceeded
- *
- * @example
- * ```typescript
- * // Upload profile image
- * const formData = new FormData();
- * formData.append('file', imageFile);
- * formData.append('type', 'profile');
- *
- * const response = await fetch('/api/upload/image', {
- *   method: 'POST',
- *   headers: { 'Authorization': `Bearer ${token}` },
- *   body: formData
- * });
- *
- * const { url, size } = await response.json();
- * console.log(`Uploaded to: ${url} (${size} bytes)`);
- * ```
- *
- * @see {@link @babylon/shared} S3 storage client
- * @see {@link /lib/validation/schemas} Upload validation
  */
 
 import {
   authenticate,
-  checkRateLimitAndDuplicates,
   getStorageClient,
-  RATE_LIMIT_CONFIGS,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -142,16 +120,6 @@ export const dynamic = 'force-dynamic';
 export const POST = withErrorHandling(async (request: NextRequest) => {
   // Authenticate user
   const authUser = await authenticate(request);
-
-  // Apply rate limiting (no duplicate detection for uploads)
-  const rateLimitError = checkRateLimitAndDuplicates(
-    authUser.userId,
-    null,
-    RATE_LIMIT_CONFIGS.UPLOAD_IMAGE
-  );
-  if (rateLimitError) {
-    return rateLimitError;
-  }
 
   // Parse multipart form data
   const formData = await request.formData();

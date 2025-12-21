@@ -279,12 +279,8 @@ export async function bootstrap(
     // Start heartbeat interval
     const interval = config.heartbeatIntervalMs ?? 60000; // 1 minute default
     heartbeatTimer = setInterval(async () => {
-      try {
-        await blockchain.heartbeat();
-        console.log(`[Heartbeat] ${new Date().toISOString()}`);
-      } catch (e) {
-        console.error('[Heartbeat] Failed:', e);
-      }
+      await blockchain.heartbeat();
+      console.log(`[Heartbeat] ${new Date().toISOString()}`);
     }, interval);
 
     console.log(`[Game] Running (heartbeat every ${interval / 1000}s)`);

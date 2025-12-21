@@ -332,18 +332,8 @@ export class QuestionManager {
         };
       });
 
-    // Validate generated questions
-    try {
-      z.array(QuestionSchema).parse(questions);
-    } catch (error) {
-      logger.error(
-        'Generated daily questions validation failed',
-        { error },
-        'QuestionManager'
-      );
-      // We log but still return them as the system handles partial data well,
-      // but strict validation warns us of schema drifts.
-    }
+    // Validate generated questions - fail fast if invalid
+    z.array(QuestionSchema).parse(questions);
 
     return questions;
   }

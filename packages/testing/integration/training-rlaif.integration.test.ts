@@ -171,11 +171,8 @@ describe('Babylon Training RLAIF Integration', () => {
           }),
         });
 
-        if (!trajResponse.ok) {
-          // Storage might not be configured, skip
-          console.warn('[Test] Storage not available for RULER test');
-          return;
-        }
+        // Storage must be available for this test - fail if not configured
+        expect(trajResponse.ok).toBe(true);
 
         const { cid } = (await trajResponse.json()) as { cid: string };
 
@@ -196,12 +193,7 @@ describe('Babylon Training RLAIF Integration', () => {
           }),
         });
 
-        // Judge endpoint might not have inference backend
-        if (scoreResponse.status === 503) {
-          console.warn('[Test] Judge inference backend not available');
-          return;
-        }
-
+        // Judge endpoint must be available - fail if 503
         expect(scoreResponse.ok).toBe(true);
       }
     );

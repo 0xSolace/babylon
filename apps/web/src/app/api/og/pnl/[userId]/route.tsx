@@ -71,10 +71,18 @@ export async function GET(
     calculatePortfolioPnL(userId),
   ]);
 
-  const displayName = user?.displayName || user?.username || 'Babylon User';
-  const totalPnL = pnlData?.totalPnL || 0;
-  const accountEquity = pnlData?.accountEquity || 0;
-  const availableBalance = pnlData?.availableBalance || 0;
+  if (!user) {
+    return new Response('User not found', { status: 404 });
+  }
+
+  if (!pnlData) {
+    return new Response('Portfolio data not found', { status: 404 });
+  }
+
+  const displayName = user.displayName || user.username || 'Babylon User';
+  const totalPnL = pnlData.totalPnL;
+  const accountEquity = pnlData.accountEquity;
+  const availableBalance = pnlData.availableBalance;
   const pnlSign = totalPnL >= 0 ? '+' : '';
   const pnlColor = totalPnL >= 0 ? '#10B981' : '#EF4444';
 
@@ -113,7 +121,7 @@ export async function GET(
           marginBottom: 60,
         }}
       >
-        {user?.profileImageUrl && (
+        {user.profileImageUrl && (
           <img
             src={user.profileImageUrl}
             alt={displayName}
@@ -137,7 +145,7 @@ export async function GET(
         >
           {displayName}
         </div>
-        {user?.username && (
+        {user.username && (
           <div
             style={{
               fontSize: 24,

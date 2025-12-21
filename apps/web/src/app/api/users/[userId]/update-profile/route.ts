@@ -386,6 +386,10 @@ export const POST = withErrorHandling(
         nftTokenId: users.nftTokenId,
       });
 
+    if (!updatedUser) {
+      throw new Error('Failed to update user profile');
+    }
+
     // Award points for profile milestones
     const pointsAwarded: { reason: string; amount: number }[] = [];
 
@@ -490,7 +494,7 @@ export const POST = withErrorHandling(
       hasNewBio:
         normalizedBio !== undefined && normalizedBio !== currentUser!.bio,
       usernameChanged: isUsernameChanging,
-      profileComplete: updatedUser?.profileComplete ?? false,
+      profileComplete: updatedUser.profileComplete ?? false,
       pointsAwarded: pointsAwarded.reduce((sum, p) => sum + p.amount, 0),
       onchainUpdate: requiresOnchainUpdate,
       backendSigned: Boolean(backendSignedTxHash),

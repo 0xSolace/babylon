@@ -1,0 +1,10 @@
+{
+  "network": "jeju-testnet",
+  "chainId": 420690,
+  "contracts": {
+    "BabylonTreasury": "",
+    "BabylonAgentVault": "",
+    "BabylonDAO": "",
+    "TrainingOrchestrator": ""
+  }
+}

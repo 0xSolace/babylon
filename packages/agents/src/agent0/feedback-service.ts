@@ -499,27 +499,20 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
 
     // If agent has Agent0 ID, submit feedback to Agent0
     if (agent0AgentId) {
-      try {
-        const targetAgentId = parseTokenId(agent0AgentId);
-        const rating = scoreToRating(score);
+      const targetAgentId = parseTokenId(agent0AgentId);
+      const rating = scoreToRating(score);
 
-        await this.submitFeedback({
-          targetAgentId,
-          rating,
-          comment: comment || '',
-          skill,
-          transactionId: `babylon_rating_${fromUserId}_${Date.now()}`,
-        });
-        logger.info('Agent rating submitted to Agent0', {
-          agentUserId: babylonAgentUserId,
-          agent0AgentId,
-        });
-      } catch (error) {
-        logger.warn('Failed to submit to Agent0, storing locally only', {
-          agentUserId: babylonAgentUserId,
-          error: String(error),
-        });
-      }
+      await this.submitFeedback({
+        targetAgentId,
+        rating,
+        comment: comment || '',
+        skill,
+        transactionId: `babylon_rating_${fromUserId}_${Date.now()}`,
+      });
+      logger.info('Agent rating submitted to Agent0', {
+        agentUserId: babylonAgentUserId,
+        agent0AgentId,
+      });
     }
 
     // Always store locally for tracking (even if submitted to Agent0)

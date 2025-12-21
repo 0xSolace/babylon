@@ -92,7 +92,7 @@ const ActorSchema = z.object({
   description: z.string(),
   domain: z.array(z.string()).optional(),
   personality: z.string().optional(),
-  pfpDescription: z.string().optional(),
+  physicalDescription: z.string().optional(),
   profileBanner: z.string().optional(),
 });
 type Actor = z.infer<typeof ActorSchema>;
@@ -131,16 +131,6 @@ interface FalResponse {
 
 /**
  * Checks if a file exists at the given path
- *
- * @param {string} path - File path to check
- * @returns {Promise<boolean>} true if file exists, false otherwise
- * @example
- * ```typescript
- * const exists = await fileExists('./image.jpg');
- * if (!exists) {
- *   // Generate image
- * }
- * ```
  */
 async function fileExists(path: string): Promise<boolean> {
   return access(path)
@@ -150,24 +140,6 @@ async function fileExists(path: string): Promise<boolean> {
 
 /**
  * Maps satirical organization IDs to their real-world company names
- *
- * Used to generate logo parodies that reference the original company's branding
- * while maintaining the satirical nature of the game.
- *
- * **Example Mappings:**
- * - `openlie` → OpenAGI
- * - `anthropimp` → Anthropic
- * - `xitter` → Twitter/X
- * - `goolag` → Google
- *
- * @param {string} satiricalName - The satirical name (currently unused)
- * @param {string} orgId - Organization ID to map
- * @returns {string} Original company name, or satirical name if no mapping
- * @example
- * ```typescript
- * const realName = getOriginalCompanyName('OpenLie', 'openlie');
- * // Returns: 'OpenAGI'
- * ```
  */
 function getOriginalCompanyName(satiricalName: string, orgId: string): string {
   const mappings: Record<string, string> = {
@@ -236,40 +208,22 @@ function getOriginalCompanyName(satiricalName: string, orgId: string): string {
 
 /**
  * Generates a profile picture for an actor using fal.ai's Flux Krea model
- *
- * Creates a high-quality square portrait based on the actor's physical description
- * and personality traits. Uses template-based prompts for consistent results.
- *
- * **Generation Settings:**
- * - Model: fal-ai/flux/krea (high quality)
- * - Size: Square (1024x1024)
- * - Images: 1
- * - Quality: Best for portraits
- *
- * @param {Actor} actor - Actor object with pfpDescription field
- * @returns {Promise<string>} URL of generated image
- * @throws {Error} If actor missing pfpDescription or API fails
- * @example
- * ```typescript
- * const actor = {
- *   id: 'actor1',
- *   name: 'John Doe',
- *   pfpDescription: 'Middle-aged man with glasses',
- *   personality: 'analytical'
- * };
- * const imageUrl = await generateActorImage(actor);
- * // Returns: 'https://fal.media/files/...'
- * ```
  */
 async function generateActorImage(actor: Actor): Promise<string> {
   logger.info(`Generating profile picture for ${actor.name}...`);
 
+  if (!actor.physicalDescription) {
+    throw new Error(`Actor ${actor.name} is missing physicalDescription field`);
+  }
+
+  // Extract key satirical elements from description
   const descriptionParts = actor.description.split('.').slice(0, 3).join('. ');
 
+  // Render prompt template with variables
   const prompt = renderPrompt(actorPortrait, {
     actorName: actor.name,
     realName: actor.realName || actor.name,
-    pfpDescription: actor.pfpDescription!,
+    physicalDescription: actor.physicalDescription,
     descriptionParts,
     personality: actor.personality || 'satirical',
   });
@@ -290,10 +244,22 @@ async function generateActorImage(actor: Actor): Promise<string> {
     },
   })) as FalResponse;
 
-  const imageUrl = result.data.images[0]!.url;
-  logger.info(`Generated profile picture for ${actor.name}: ${imageUrl}`);
+  // Validate response has images array with at least one image
+  if (!result.data.images || result.data.images.length === 0) {
+    throw new Error(
+      `Fal.ai API returned no images for ${actor.name}. Response: ${JSON.stringify(result.data)}`
+    );
+  }
 
-  return imageUrl;
+  const firstImage = result.data.images[0];
+  if (!firstImage?.url) {
+    throw new Error(
+      `First image missing URL for ${actor.name}. Image data: ${JSON.stringify(firstImage)}`
+    );
+  }
+
+  logger.info(`Generated profile picture for ${actor.name}: ${firstImage.url}`);
+  return firstImage.url;
 }
 
 async function generateActorBanner(actor: Actor): Promise<string> {
@@ -327,22 +293,21 @@ async function generateActorBanner(actor: Actor): Promise<string> {
     },
   })) as FalResponse;
 
-  // Validate response
+  // Validate response has images array with at least one image
   if (!result.data.images || result.data.images.length === 0) {
     throw new Error(
       `Fal.ai API returned no images for ${actor.name} banner. Response: ${JSON.stringify(result.data)}`
     );
   }
 
-  const firstImage = result.data.images[0]!;
-  if (!firstImage.url) {
+  const firstImage = result.data.images[0];
+  if (!firstImage?.url) {
     throw new Error(
       `First image missing URL for ${actor.name} banner. Image data: ${JSON.stringify(firstImage)}`
     );
   }
 
   logger.info(`Generated banner for ${actor.name}: ${firstImage.url}`);
-
   return firstImage.url;
 }
 
@@ -382,22 +347,21 @@ async function generateOrganizationImage(org: Organization): Promise<string> {
     },
   })) as FalResponse;
 
-  // Validate response
+  // Validate response has images array with at least one image
   if (!result.data.images || result.data.images.length === 0) {
     throw new Error(
       `Fal.ai API returned no images for ${org.name}. Response: ${JSON.stringify(result.data)}`
     );
   }
 
-  const firstImage = result.data.images[0]!;
-  if (!firstImage.url) {
+  const firstImage = result.data.images[0];
+  if (!firstImage?.url) {
     throw new Error(
       `First image missing URL for ${org.name}. Image data: ${JSON.stringify(firstImage)}`
     );
   }
 
   logger.info(`Generated logo for ${org.name}: ${firstImage.url}`);
-
   return firstImage.url;
 }
 
@@ -437,22 +401,21 @@ async function generateOrganizationBanner(org: Organization): Promise<string> {
     },
   })) as FalResponse;
 
-  // Validate response
+  // Validate response has images array with at least one image
   if (!result.data.images || result.data.images.length === 0) {
     throw new Error(
       `Fal.ai API returned no images for ${org.name} banner. Response: ${JSON.stringify(result.data)}`
     );
   }
 
-  const firstImage = result.data.images[0]!;
-  if (!firstImage.url) {
+  const firstImage = result.data.images[0];
+  if (!firstImage?.url) {
     throw new Error(
       `First image missing URL for ${org.name} banner. Image data: ${JSON.stringify(firstImage)}`
     );
   }
 
   logger.info(`Generated banner for ${org.name}: ${firstImage.url}`);
-
   return firstImage.url;
 }
 
@@ -474,33 +437,6 @@ interface ImageJob {
 
 /**
  * Processes image generation jobs with concurrency control
- *
- * Manages a queue of image generation jobs with a maximum concurrent limit
- * to respect API rate limits. Tracks success/failure statistics.
- *
- * **Concurrency Control:**
- * - Default: 10 concurrent jobs
- * - Prevents API rate limiting
- * - Removes completed jobs from active set
- * - Waits for next slot when at max
- *
- * **Error Handling:**
- * - Jobs that fail are logged but don't stop the queue
- * - All jobs complete before function returns
- * - Final statistics include success and failure counts
- *
- * @param {ImageJob[]} jobs - Array of image generation jobs to process
- * @param {number} [maxConcurrent=10] - Maximum concurrent jobs (default: 10)
- * @returns {Promise<{generated: number, failed: number}>} Generation statistics
- * @example
- * ```typescript
- * const jobs = [
- *   { type: 'actor-pfp', id: '1', name: 'Actor1', outputPath: '...', generator: () => {...} },
- *   { type: 'org-logo', id: '2', name: 'Org1', outputPath: '...', generator: () => {...} }
- * ];
- * const result = await processQueue(jobs, 5);
- * // { generated: 2, failed: 0 }
- * ```
  */
 async function processQueue(
   jobs: ImageJob[],
@@ -511,10 +447,12 @@ async function processQueue(
   const activeJobs = new Set<Promise<void>>();
 
   for (const job of jobs) {
+    // Wait if we're at max concurrency
     if (activeJobs.size >= maxConcurrent) {
       await Promise.race(activeJobs);
     }
 
+    // Create and track the job
     const jobPromise = (async () => {
       logger.info(`Generating ${job.type} for ${job.name}...`);
       await job
@@ -531,9 +469,12 @@ async function processQueue(
     })();
 
     activeJobs.add(jobPromise);
+
+    // Remove from active set when complete
     jobPromise.finally(() => activeJobs.delete(jobPromise));
   }
 
+  // Wait for all remaining jobs to complete
   await Promise.all(activeJobs);
 
   return { generated, failed };
@@ -541,35 +482,6 @@ async function processQueue(
 
 /**
  * Main execution function for image generation CLI
- *
- * Orchestrates the complete image generation workflow:
- * 1. Validates FAL_KEY environment variable
- * 2. Loads actors database
- * 3. Checks for existing images (skips if present)
- * 4. Builds generation job queue
- * 5. Processes jobs concurrently (max 10)
- * 6. Reports statistics
- *
- * **Image Types Generated:**
- * - Actor profile pictures (portrait style)
- * - Actor banners (landscape backgrounds)
- * - Organization logos (satirical parodies)
- * - Organization banners (branded backgrounds)
- *
- * **Performance:**
- * - Concurrent generation for speed
- * - Automatic skip for existing images
- * - Progress logging for each image
- * - Final statistics summary
- *
- * @throws {Error} Exits with code 1 if FAL_KEY missing or generation fails
- * @returns {Promise<void>} Exits with code 0 on success
- * @example
- * ```bash
- * export FAL_KEY=your_key
- * bun run src/cli/generate-actor-images.ts
- * # Generates all missing images with concurrent processing
- * ```
  */
 async function main() {
   logger.info('Checking actor and organization images...');

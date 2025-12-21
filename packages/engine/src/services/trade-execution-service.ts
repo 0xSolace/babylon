@@ -713,21 +713,9 @@ export class TradeExecutionService {
         liquidity: liquidityAfter,
         eventType: 'trade',
         source: 'npc_trade',
-      }).catch((error) => {
-        logger.warn(
-          'Failed to record price history for NPC close',
-          { error, marketId: positionMarketId },
-          'TradeExecutionService'
-        );
       });
 
-      await invalidateAfterPredictionTrade(positionMarketId).catch((error) => {
-        logger.warn(
-          'Failed to invalidate cache after NPC prediction close',
-          { error, marketId: positionMarketId },
-          'TradeExecutionService'
-        );
-      });
+      await invalidateAfterPredictionTrade(positionMarketId);
 
       PredictionMarketService.emitTradeUpdate({
         marketId: positionMarketId,

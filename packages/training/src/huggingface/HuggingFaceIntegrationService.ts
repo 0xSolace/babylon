@@ -72,214 +72,185 @@ export class HuggingFaceIntegrationService {
       duration: 0,
     };
 
-    try {
-      // Step 1: Upload benchmark dataset
-      if (!options.dryRun) {
-        logger.info(
-          'Step 1: Uploading benchmark dataset',
-          undefined,
-          'HuggingFaceIntegration'
-        );
-        const benchmarkResult = await this.datasetUploader.uploadDataset({
-          datasetName:
-            options.datasetName ||
-            process.env.HF_DATASET_NAME ||
-            'babylonlabs/agent-benchmarks',
-          description:
-            'Weekly benchmark results for Babylon autonomous trading agents',
-        });
-
-        result.datasets.benchmarks = {
-          success: benchmarkResult.success,
-          url: benchmarkResult.datasetUrl,
-          error: benchmarkResult.error,
-        };
-
-        if (!benchmarkResult.success) {
-          result.errors.push(
-            `Benchmark dataset upload: ${benchmarkResult.error}`
-          );
-        }
-      } else {
-        logger.info(
-          'DRY RUN: Skipping benchmark dataset upload',
-          undefined,
-          'HuggingFaceIntegration'
-        );
-        result.datasets.benchmarks.success = true;
-      }
-
-      // Step 2: Upload trajectory dataset
-      if (!options.dryRun) {
-        logger.info(
-          'Step 2: Uploading trajectory dataset',
-          undefined,
-          'HuggingFaceIntegration'
-        );
-        const exportToHuggingFace = getExportToHuggingFace();
-        const trajectoryResult = await exportToHuggingFace({
-          datasetName:
-            options.trajectoryDatasetName ||
-            process.env.HF_TRAJECTORY_DATASET_NAME ||
-            'babylonlabs/agent-trajectories',
-          format: 'jsonl',
-        });
-
-        result.datasets.trajectories = {
-          success: trajectoryResult.success,
-          url: trajectoryResult.url,
-          error: trajectoryResult.error,
-        };
-
-        if (!trajectoryResult.success) {
-          result.errors.push(
-            `Trajectory dataset upload: ${trajectoryResult.error}`
-          );
-        }
-      } else {
-        logger.info(
-          'DRY RUN: Skipping trajectory dataset upload',
-          undefined,
-          'HuggingFaceIntegration'
-        );
-        result.datasets.trajectories.success = true;
-      }
-
-      // Step 3: Process models
-      const unbenchmarkedModels =
-        await ModelBenchmarkService.getUnbenchmarkedModels();
-      result.models.processed = unbenchmarkedModels.length;
-
+    // Step 1: Upload benchmark dataset
+    if (!options.dryRun) {
       logger.info(
-        `Step 3: Found ${unbenchmarkedModels.length} unbenchmarked models`,
+        'Step 1: Uploading benchmark dataset',
         undefined,
         'HuggingFaceIntegration'
       );
+      const benchmarkResult = await this.datasetUploader.uploadDataset({
+        datasetName:
+          options.datasetName ||
+          process.env.HF_DATASET_NAME ||
+          'babylonlabs/agent-benchmarks',
+        description:
+          'Weekly benchmark results for Babylon autonomous trading agents',
+      });
 
-      if (unbenchmarkedModels.length > 0) {
-        const standardBenchmarks =
-          await ModelBenchmarkService.getStandardBenchmarkPaths();
+      result.datasets.benchmarks = {
+        success: benchmarkResult.success,
+        url: benchmarkResult.datasetUrl,
+      };
+    } else {
+      logger.info(
+        'DRY RUN: Skipping benchmark dataset upload',
+        undefined,
+        'HuggingFaceIntegration'
+      );
+      result.datasets.benchmarks.success = true;
+    }
 
-        if (standardBenchmarks.length === 0) {
-          const error = 'No standard benchmarks available for model evaluation';
-          logger.error(error, undefined, 'HuggingFaceIntegration');
-          result.errors.push(error);
-        } else {
-          for (const modelId of unbenchmarkedModels) {
-            try {
-              // Benchmark model
-              logger.info(
-                `Benchmarking model: ${modelId}`,
-                undefined,
-                'HuggingFaceIntegration'
-              );
-              await ModelBenchmarkService.benchmarkModel({
-                modelId,
-                benchmarkPaths: standardBenchmarks,
-                saveResults: true,
-              });
-              result.models.benchmarked++;
+    // Step 2: Upload trajectory dataset
+    if (!options.dryRun) {
+      logger.info(
+        'Step 2: Uploading trajectory dataset',
+        undefined,
+        'HuggingFaceIntegration'
+      );
+      const exportToHuggingFace = getExportToHuggingFace();
+      const trajectoryResult = await exportToHuggingFace({
+        datasetName:
+          options.trajectoryDatasetName ||
+          process.env.HF_TRAJECTORY_DATASET_NAME ||
+          'babylonlabs/agent-trajectories',
+        format: 'jsonl',
+      });
 
-              // Compare to baseline
-              const comparison =
-                await ModelBenchmarkService.compareToBaseline(modelId);
+      result.datasets.trajectories = {
+        success: trajectoryResult.success,
+        url: trajectoryResult.url,
+      };
+    } else {
+      logger.info(
+        'DRY RUN: Skipping trajectory dataset upload',
+        undefined,
+        'HuggingFaceIntegration'
+      );
+      result.datasets.trajectories.success = true;
+    }
 
-              // Upload if improved
-              if (comparison.recommendation === 'deploy' && !options.dryRun) {
-                logger.info(
-                  `Model ${modelId} improved, uploading`,
-                  undefined,
-                  'HuggingFaceIntegration'
-                );
+    // Step 3: Process models
+    const unbenchmarkedModels =
+      await ModelBenchmarkService.getUnbenchmarkedModels();
+    result.models.processed = unbenchmarkedModels.length;
 
-                const model = await db.trainedModel.findUnique({
-                  where: { modelId },
-                });
+    logger.info(
+      `Step 3: Found ${unbenchmarkedModels.length} unbenchmarked models`,
+      undefined,
+      'HuggingFaceIntegration'
+    );
 
-                if (model) {
-                  const modelName = options.modelNamePrefix
-                    ? `${options.modelNamePrefix}-${model.version}`
-                    : process.env.HF_MODEL_NAME
-                      ? `${process.env.HF_MODEL_NAME}-${model.version}`
-                      : `babylonlabs/babylon-agent-${model.version}`;
+    if (unbenchmarkedModels.length > 0) {
+      const standardBenchmarks =
+        await ModelBenchmarkService.getStandardBenchmarkPaths();
 
-                  const uploadResult = await this.modelUploader.uploadModel({
-                    modelId,
-                    modelName,
-                    description: `Babylon autonomous trading agent - v${model.version}`,
-                    includeWeights: true,
-                  });
-
-                  if (uploadResult.success) {
-                    result.models.uploaded++;
-
-                    // Update model with HuggingFace repo
-                    await db.trainedModel.update({
-                      where: { modelId },
-                      data: {
-                        huggingFaceRepo: modelName,
-                        deployedAt: new Date(),
-                        updatedAt: new Date(),
-                      },
-                    });
-                  } else {
-                    result.errors.push(
-                      `Model upload ${modelId}: ${uploadResult.error}`
-                    );
-                  }
-                }
-              } else {
-                logger.info(
-                  `Model ${modelId} not ready for deployment: ${comparison.recommendation}`,
-                  undefined,
-                  'HuggingFaceIntegration'
-                );
-              }
-            } catch (error) {
-              const errorMsg =
-                error instanceof Error ? error.message : String(error);
-              logger.error(
-                `Failed to process model ${modelId}`,
-                { error },
-                'HuggingFaceIntegration'
-              );
-              result.errors.push(`Model ${modelId}: ${errorMsg}`);
-            }
-          }
-        }
+      if (standardBenchmarks.length === 0) {
+        throw new Error(
+          'No standard benchmarks available for model evaluation'
+        );
       }
 
-      result.success = result.errors.length === 0;
-      result.duration = Date.now() - startTime;
+      for (const modelId of unbenchmarkedModels) {
+        // Benchmark model - errors propagate for individual models (batch processing)
+        // but we continue processing other models
+        try {
+          logger.info(
+            `Benchmarking model: ${modelId}`,
+            undefined,
+            'HuggingFaceIntegration'
+          );
+          await ModelBenchmarkService.benchmarkModel({
+            modelId,
+            benchmarkPaths: standardBenchmarks,
+            saveResults: true,
+          });
+          result.models.benchmarked++;
 
-      logger.info(
-        'Weekly upload pipeline complete',
-        {
-          success: result.success,
-          benchmarkDataset: result.datasets.benchmarks.success,
-          trajectoryDataset: result.datasets.trajectories.success,
-          modelsProcessed: result.models.processed,
-          modelsBenchmarked: result.models.benchmarked,
-          modelsUploaded: result.models.uploaded,
-          errors: result.errors.length,
-          duration: result.duration,
-        },
-        'HuggingFaceIntegration'
-      );
+          // Compare to baseline
+          const comparison =
+            await ModelBenchmarkService.compareToBaseline(modelId);
 
-      return result;
-    } catch (error) {
-      result.duration = Date.now() - startTime;
-      result.errors.push(
-        error instanceof Error ? error.message : String(error)
-      );
-      logger.error(
-        'Weekly upload pipeline failed',
-        { error },
-        'HuggingFaceIntegration'
-      );
-      return result;
+          // Upload if improved
+          if (comparison.recommendation === 'deploy' && !options.dryRun) {
+            logger.info(
+              `Model ${modelId} improved, uploading`,
+              undefined,
+              'HuggingFaceIntegration'
+            );
+
+            const model = await db.trainedModel.findUnique({
+              where: { modelId },
+            });
+
+            if (model) {
+              const modelName = options.modelNamePrefix
+                ? `${options.modelNamePrefix}-${model.version}`
+                : process.env.HF_MODEL_NAME
+                  ? `${process.env.HF_MODEL_NAME}-${model.version}`
+                  : `babylonlabs/babylon-agent-${model.version}`;
+
+              const uploadResult = await this.modelUploader.uploadModel({
+                modelId,
+                modelName,
+                description: `Babylon autonomous trading agent - v${model.version}`,
+                includeWeights: true,
+              });
+
+              if (uploadResult.success) {
+                result.models.uploaded++;
+
+                // Update model with HuggingFace repo
+                await db.trainedModel.update({
+                  where: { modelId },
+                  data: {
+                    huggingFaceRepo: modelName,
+                    deployedAt: new Date(),
+                    updatedAt: new Date(),
+                  },
+                });
+              }
+            }
+          } else {
+            logger.info(
+              `Model ${modelId} not ready for deployment: ${comparison.recommendation}`,
+              undefined,
+              'HuggingFaceIntegration'
+            );
+          }
+        } catch (error) {
+          // Log but continue processing other models (batch processing pattern)
+          const errorMsg =
+            error instanceof Error ? error.message : String(error);
+          logger.error(
+            `Failed to process model ${modelId}`,
+            { error },
+            'HuggingFaceIntegration'
+          );
+          result.errors.push(`Model ${modelId}: ${errorMsg}`);
+        }
+      }
     }
+
+    result.success = result.errors.length === 0;
+    result.duration = Date.now() - startTime;
+
+    logger.info(
+      'Weekly upload pipeline complete',
+      {
+        success: result.success,
+        benchmarkDataset: result.datasets.benchmarks.success,
+        trajectoryDataset: result.datasets.trajectories.success,
+        modelsProcessed: result.models.processed,
+        modelsBenchmarked: result.models.benchmarked,
+        modelsUploaded: result.models.uploaded,
+        errors: result.errors.length,
+        duration: result.duration,
+      },
+      'HuggingFaceIntegration'
+    );
+
+    return result;
   }
 
   /**

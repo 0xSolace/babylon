@@ -581,54 +581,50 @@ export class ModelBenchmarkService {
     const benchmarksDir = path.join(process.cwd(), 'benchmarks');
     const standardBenchmarks: string[] = [];
 
-    try {
-      // First, look in benchmarks/standard/ directory
-      const standardDir = path.join(benchmarksDir, 'standard');
-      if (
-        await fs
-          .access(standardDir)
-          .then(() => true)
-          .catch(() => false)
-      ) {
-        const standardFiles = await fs.readdir(standardDir);
-        for (const file of standardFiles) {
-          if (file.startsWith('standard-') && file.endsWith('.json')) {
-            standardBenchmarks.push(path.join(standardDir, file));
-          }
+    // First, look in benchmarks/standard/ directory
+    const standardDir = path.join(benchmarksDir, 'standard');
+    const standardDirExists = await fs
+      .access(standardDir)
+      .then(() => true)
+      .catch(() => false);
+
+    if (standardDirExists) {
+      const standardFiles = await fs.readdir(standardDir);
+      for (const file of standardFiles) {
+        if (file.startsWith('standard-') && file.endsWith('.json')) {
+          standardBenchmarks.push(path.join(standardDir, file));
         }
       }
+    }
 
-      // If standard benchmarks found, use those
-      if (standardBenchmarks.length > 0) {
-        logger.info(
-          `Using ${standardBenchmarks.length} standard benchmarks from benchmarks/standard/`
-        );
-        return standardBenchmarks;
+    // If standard benchmarks found, use those
+    if (standardBenchmarks.length > 0) {
+      logger.info(
+        `Using ${standardBenchmarks.length} standard benchmarks from benchmarks/standard/`
+      );
+      return standardBenchmarks;
+    }
+
+    // Fallback: Look for week-long benchmarks in main directory
+    const files = await fs.readdir(benchmarksDir);
+    for (const file of files) {
+      if (file.startsWith('benchmark-week-') && file.endsWith('.json')) {
+        standardBenchmarks.push(path.join(benchmarksDir, file));
       }
+    }
 
-      // Fallback: Look for week-long benchmarks in main directory
-      const files = await fs.readdir(benchmarksDir);
+    // If still nothing, use any benchmark files
+    if (standardBenchmarks.length === 0) {
       for (const file of files) {
-        if (file.startsWith('benchmark-week-') && file.endsWith('.json')) {
-          standardBenchmarks.push(path.join(benchmarksDir, file));
+        if (
+          file.startsWith('benchmark-') &&
+          file.endsWith('.json') &&
+          !file.includes('comparison')
+        ) {
+          const filePath = path.join(benchmarksDir, file);
+          standardBenchmarks.push(filePath);
         }
       }
-
-      // If still nothing, use any benchmark files
-      if (standardBenchmarks.length === 0) {
-        for (const file of files) {
-          if (
-            file.startsWith('benchmark-') &&
-            file.endsWith('.json') &&
-            !file.includes('comparison')
-          ) {
-            const filePath = path.join(benchmarksDir, file);
-            standardBenchmarks.push(filePath);
-          }
-        }
-      }
-    } catch (error) {
-      logger.error('Could not load standard benchmarks', { error });
     }
 
     if (standardBenchmarks.length === 0) {

@@ -157,7 +157,7 @@ async function showGameStatus(): Promise<void> {
   console.log(`Game ID:        ${game.id}`);
   console.log(`Status:         ${game.isRunning ? '✅ RUNNING' : '⏸️  PAUSED'}`);
   console.log(`Current Day:    ${game.currentDay}`);
-  console.log(`Current Date:   ${game.currentDate?.toLocaleString() || 'N/A'}`);
+  console.log(`Current Date:   ${game.currentDate.toLocaleString()}`);
   console.log(`Speed:          ${game.speed}ms between ticks`);
   console.log(`Active Qs:      ${game.activeQuestions || 0}`);
 
@@ -379,9 +379,9 @@ async function generateGame(args: ReturnType<typeof parseArgs>): Promise<void> {
         .from(gameConfigs)
         .where(eq(gameConfigs.key, `game-history-${gameData.id}`))
         .limit(1);
-      const historyConfig = historyConfigResult[0] || null;
+      const historyConfig = historyConfigResult[0];
 
-      if (historyConfig?.value) {
+      if (historyConfig && historyConfig.value) {
         history.push(validateGameHistory(historyConfig.value));
       } else {
         history.push(await generateMinimalGameHistory(gameData.id, i + 1));

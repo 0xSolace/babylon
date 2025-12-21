@@ -120,7 +120,9 @@ export const POST = withErrorHandling(
     let actorPersonality: string | null = null;
     if (pool) {
       const actorDetails = StaticDataRegistry.getActor(pool.npcActorId);
-      actorPersonality = actorDetails?.personality || null;
+      if (actorDetails) {
+        actorPersonality = actorDetails.personality || null;
+      }
     }
 
     let strategy: 'aggressive' | 'conservative' | 'balanced' = 'balanced';

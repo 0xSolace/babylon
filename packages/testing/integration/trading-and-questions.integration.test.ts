@@ -114,25 +114,13 @@ describe('Trading and Question Generation Integration', () => {
   });
 
   afterAll(async () => {
-    // Cleanup test data
-    if (testQuestionIds.length > 0) {
-      for (const id of testQuestionIds) {
-        try {
-          await db.question.delete({ where: { id } }).catch(() => {});
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
+    // Cleanup test data - ignore errors for records that may not exist
+    for (const id of testQuestionIds) {
+      await db.question.delete({ where: { id } }).catch(() => {});
     }
 
-    if (testMarketIds.length > 0) {
-      for (const id of testMarketIds) {
-        try {
-          await db.market.delete({ where: { id } }).catch(() => {});
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
+    for (const id of testMarketIds) {
+      await db.market.delete({ where: { id } }).catch(() => {});
     }
   });
 

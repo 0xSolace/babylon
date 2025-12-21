@@ -45,7 +45,6 @@ if (!authAvailable) {
 describe('Settings Page Integration Tests', () => {
   // Check if server is running and auth is available
   let serverAvailable = false;
-  let authInitialized = false;
 
   beforeAll(async () => {
     // Skip early if auth not available
@@ -53,44 +52,29 @@ describe('Settings Page Integration Tests', () => {
       return;
     }
 
-    // Check server health
-    try {
-      const healthResponse = await fetch(`${API_URL}/health`);
-      serverAvailable = healthResponse.ok;
-    } catch {
-      serverAvailable = false;
-    }
+    // Check server health - let connection errors fail
+    const healthResponse = await fetch(`${API_URL}/health`);
+    serverAvailable = healthResponse.ok;
 
     if (!serverAvailable) {
-      console.log('ℹ️  Settings Page Tests: Skipping - Server not available');
+      console.log('ℹ️  Settings Page Tests: Server health check failed');
       return;
     }
 
-    // Initialize Playwright API with authentication
-    try {
-      const { apiRequest: request, testUserId: userId } =
-        await initPlaywrightAPI();
-      apiRequest = request;
-      testUserId = userId;
-      authInitialized = true;
-      console.log(
-        `✅ Settings Page Tests: Authenticated as user: ${testUserId}`
-      );
-    } catch (error) {
-      console.log(
-        `ℹ️  Settings Page Tests: Skipping - Auth initialization failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-      return;
-    }
+    // Initialize Playwright API with authentication - let errors fail
+    const { apiRequest: request, testUserId: userId } =
+      await initPlaywrightAPI();
+    apiRequest = request;
+    testUserId = userId;
+    console.log(`✅ Settings Page Tests: Authenticated as user: ${testUserId}`);
   });
 
   afterAll(async () => {
     await cleanupPlaywrightAPI();
   });
 
-  // Helper to check if tests can run
-  const canRunTests = () =>
-    authAvailable && serverAvailable && authInitialized && apiRequest;
+  // Helper to check if tests can run (auth + server must be available)
+  const canRunTests = () => authAvailable && serverAvailable && apiRequest;
 
   describe('Profile Tab', () => {
     test('should update display name', async () => {

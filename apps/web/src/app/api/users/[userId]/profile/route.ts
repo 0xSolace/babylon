@@ -135,27 +135,6 @@ import type { NextRequest } from 'next/server';
  *
  * @throws {NotFoundError} When user is not found
  * @throws {ValidationError} When userId parameter is invalid
- *
- * @example
- * ```typescript
- * // Request
- * GET /api/users/johndoe/profile
- *
- * // Response
- * {
- *   "user": {
- *     "id": "user_123",
- *     "username": "johndoe",
- *     "displayName": "John Doe",
- *     "virtualBalance": 10000,
- *     "stats": {
- *       "followers": 150,
- *       "following": 75,
- *       "posts": 42
- *     }
- *   }
- * }
- * ```
  */
 export const GET = withErrorHandling(
   async (

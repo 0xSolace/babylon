@@ -104,21 +104,15 @@ async function main() {
     const archetypes = ArchetypeConfigService.getAvailableArchetypes();
     const issues: string[] = [];
     for (const arch of archetypes) {
-      try {
-        const config = ArchetypeConfigService.getConfig(arch);
-        if (!config.system || config.system.length < 50) {
-          issues.push(`${arch}: missing system prompt`);
-        }
-        if (!config.traits || Object.keys(config.traits).length < 5) {
-          issues.push(`${arch}: incomplete traits`);
-        }
-        if (!config.actionWeights) {
-          issues.push(`${arch}: missing action weights`);
-        }
-      } catch (err) {
-        issues.push(
-          `${arch}: ${err instanceof Error ? err.message : 'failed'}`
-        );
+      const config = ArchetypeConfigService.getConfig(arch);
+      if (!config.system || config.system.length < 50) {
+        issues.push(`${arch}: missing system prompt`);
+      }
+      if (!config.traits || Object.keys(config.traits).length < 5) {
+        issues.push(`${arch}: incomplete traits`);
+      }
+      if (!config.actionWeights) {
+        issues.push(`${arch}: missing action weights`);
       }
     }
     return {

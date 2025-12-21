@@ -88,7 +88,6 @@ export function useJejuWallet() {
       }
 
       setSigning(true);
-      setTxError(null);
 
       try {
         // Check if user has gas
@@ -103,10 +102,6 @@ export function useJejuWallet() {
         // In production, would build and submit the transaction
         const txHash = await context.signMessage(JSON.stringify(tx));
         return txHash;
-      } catch (err) {
-        const error = err instanceof Error ? err.message : 'Transaction failed';
-        setTxError(error);
-        throw err;
       } finally {
         setSigning(false);
       }

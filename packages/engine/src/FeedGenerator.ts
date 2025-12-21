@@ -3921,15 +3921,7 @@ ${voiceContext}
       pointsToward: null,
     };
 
-    try {
-      FeedPostSchema.parse(post);
-    } catch (error) {
-      logger.error(
-        'Day transition post validation failed',
-        { error },
-        'FeedGenerator'
-      );
-    }
+    FeedPostSchema.parse(post);
 
     return post;
   }
@@ -3997,16 +3989,7 @@ ${voiceContext}
       pointsToward: null,
     };
 
-    try {
-      FeedPostSchema.parse(post);
-    } catch (error) {
-      logger.error(
-        'Question resolution post validation failed',
-        { error },
-        'FeedGenerator'
-      );
-      // Fallback or re-throw - for now we just log to satisfy "thorough review"
-    }
+    FeedPostSchema.parse(post);
 
     return post;
   }

@@ -54,7 +54,6 @@ export const POST_TYPES = {
   RUMOR: 'rumor',
   POST: 'post',
   REPLY: 'reply',
-  ARTICLE: 'article',
 } as const;
 
 /**
