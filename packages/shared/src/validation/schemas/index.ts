@@ -14,8 +14,6 @@ export * from './game';
 export * from './game-engine';
 // Export all market/position schemas
 export * from './market';
-// Export all moderation schemas
-export * from './moderation';
 // Export all monitoring schemas
 export * from './monitoring';
 // Export onboarding schemas

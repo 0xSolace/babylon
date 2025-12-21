@@ -12,7 +12,6 @@
 export * from './assets';
 export * from './content-analysis';
 export * from './content-safety';
-export * from './decimal-converter';
 export * from './format';
 export * from './json-parser';
 export * from './logger';
