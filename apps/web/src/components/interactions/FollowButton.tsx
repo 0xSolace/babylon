@@ -1,12 +1,19 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { UserMinus, UserPlus } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useSocialTracking } from '@/hooks/usePostHog';
+
+/**
+ * Follow status API response.
+ */
+interface FollowStatusResponse {
+  isFollowing: boolean;
+}
 
 /**
  * Follow button component for following/unfollowing users.
@@ -47,41 +54,28 @@ export function FollowButton({
   onFollowerCountChange,
 }: FollowButtonProps) {
   const { authenticated, user } = useAuth();
-  const [isFollowing, setIsFollowing] = useState(initialFollowing);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
   const { trackFollow } = useSocialTracking();
+  const queryClient = useQueryClient();
 
-  // Check follow status on mount
-  useEffect(() => {
-    // Check if viewing own profile (userId could be username or user ID)
-    const isOwnProfile =
-      user &&
-      (user.id === userId ||
-        user.username === userId ||
-        (user.username &&
-          user.username.startsWith('@') &&
-          user.username.slice(1) === userId));
+  // Check if viewing own profile (userId could be username or user ID)
+  const isOwnProfile =
+    user &&
+    (user.id === userId ||
+      user.username === userId ||
+      (user.username &&
+        user.username.startsWith('@') &&
+        user.username.slice(1) === userId));
 
-    if (!authenticated || !user || isOwnProfile) {
-      setIsChecking(false);
-      return;
-    }
-
-    const checkFollowStatus = async () => {
-      if (!userId) {
-        setIsChecking(false);
-        return;
-      }
-
+  // Fetch follow status
+  const { data: followStatus, isLoading: isChecking } = useQuery({
+    queryKey: ['followStatus', userId],
+    queryFn: async (): Promise<FollowStatusResponse> => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
       if (!token) {
-        setIsChecking(false);
-        return;
+        return { isFollowing: false };
       }
 
-      // Encode userId/username to handle special characters
       const encodedIdentifier = encodeURIComponent(userId);
       const response = await fetch(`/api/users/${encodedIdentifier}/follow`, {
         headers: {
@@ -90,34 +84,96 @@ export function FollowButton({
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setIsFollowing(data.isFollowing || false);
-      } else {
-        // If check fails, assume not following (don't show error)
-        setIsFollowing(false);
+        return response.json() as Promise<FollowStatusResponse>;
       }
-      setIsChecking(false);
-    };
+      return { isFollowing: false };
+    },
+    enabled: authenticated && !!user && !isOwnProfile && !!userId,
+    initialData: { isFollowing: initialFollowing },
+  });
 
-    checkFollowStatus();
-  }, [authenticated, user, userId]);
+  const isFollowing = followStatus?.isFollowing ?? initialFollowing;
 
-  const handleFollow = async () => {
+  // Follow/unfollow mutation
+  const followMutation = useMutation({
+    mutationFn: async (shouldFollow: boolean): Promise<void> => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const encodedIdentifier = encodeURIComponent(userId);
+      const method = shouldFollow ? 'POST' : 'DELETE';
+      const response = await fetch(`/api/users/${encodedIdentifier}/follow`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData: { error?: string | { message?: string } } =
+          await response.json();
+        if (response.status === 404) {
+          throw new Error('Unable to follow this profile');
+        }
+        const errorMessage =
+          typeof errorData?.error === 'string'
+            ? errorData.error
+            : (errorData?.error as { message?: string })?.message ||
+              'Failed to update follow status';
+        throw new Error(errorMessage);
+      }
+    },
+    onMutate: async (shouldFollow) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['followStatus', userId] });
+
+      // Snapshot the previous value
+      const previousStatus = queryClient.getQueryData<FollowStatusResponse>([
+        'followStatus',
+        userId,
+      ]);
+
+      // Optimistically update
+      queryClient.setQueryData<FollowStatusResponse>(['followStatus', userId], {
+        isFollowing: shouldFollow,
+      });
+
+      const delta = shouldFollow ? 1 : -1;
+      onFollowChange?.(shouldFollow);
+      onFollowerCountChange?.(delta);
+
+      return { previousStatus, delta };
+    },
+    onSuccess: (_, shouldFollow) => {
+      trackFollow(userId, shouldFollow);
+    },
+    onError: (error: Error, _, context) => {
+      // Revert optimistic update
+      if (context?.previousStatus) {
+        queryClient.setQueryData<FollowStatusResponse>(
+          ['followStatus', userId],
+          context.previousStatus
+        );
+        onFollowChange?.(context.previousStatus.isFollowing);
+        onFollowerCountChange?.(-context.delta);
+      }
+      toast.error(error.message);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['followStatus', userId] });
+    },
+  });
+
+  const handleFollow = () => {
     if (!authenticated || !user) {
       toast.error('Please sign in to follow users');
       return;
     }
 
-    // Check if viewing own profile (userId could be username or user ID)
-    const isOwnProfile =
-      user.id === userId ||
-      user.username === userId ||
-      (user.username &&
-        user.username.startsWith('@') &&
-        user.username.slice(1) === userId);
-
     if (isOwnProfile) {
-      // Don't show error, just return silently (button shouldn't be visible anyway)
       return;
     }
 
@@ -130,66 +186,10 @@ export function FollowButton({
       return;
     }
 
-    setIsLoading(true);
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      toast.error('Authentication required');
-      setIsLoading(false);
-      return;
-    }
-
-    // Optimistic update
-    const newFollowingState = !isFollowing;
-    const delta = newFollowingState ? 1 : -1;
-
-    setIsFollowing(newFollowingState);
-    onFollowChange?.(newFollowingState);
-    onFollowerCountChange?.(delta); // Update follower count immediately
-
-    // Encode userId/username to handle special characters
-    const encodedIdentifier = encodeURIComponent(userId);
-    const method = newFollowingState ? 'POST' : 'DELETE';
-    const response = await fetch(`/api/users/${encodedIdentifier}/follow`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.ok) {
-      const newFollowingState = !isFollowing;
-      setIsFollowing(newFollowingState);
-      onFollowChange?.(newFollowingState);
-      trackFollow(userId, newFollowingState);
-      // Success! The follower count is already updated via onFollowerCountChange callback
-    } else {
-      // Revert optimistic update on error
-      setIsFollowing(!newFollowingState);
-      onFollowChange?.(!newFollowingState);
-      onFollowerCountChange?.(-delta); // Revert follower count
-
-      // Try to get error message, but don't show generic errors for 404s
-      const errorData = await response.json();
-      if (response.status === 404) {
-        // If profile not found, silently fail or show a more helpful message
-        logger.warn(
-          'Profile not found for follow:',
-          { userId },
-          'FollowButton'
-        );
-        toast.error('Unable to follow this profile');
-      } else {
-        // Extract error message properly (handle both string and object formats)
-        const errorMessage =
-          typeof errorData?.error === 'string'
-            ? errorData.error
-            : errorData?.error?.message || 'Failed to update follow status';
-        toast.error(errorMessage);
-      }
-    }
-    setIsLoading(false);
+    followMutation.mutate(!isFollowing);
   };
+
+  const isLoading = followMutation.isPending;
 
   // Don't show button if checking or if user is viewing their own profile
   const isOwnProfile =

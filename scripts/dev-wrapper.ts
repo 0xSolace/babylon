@@ -1,40 +1,50 @@
 #!/usr/bin/env bun
 /**
- * Development wrapper that conditionally starts Hardhat based on environment
+ * Development wrapper for fully decentralized mode.
+ *
+ * Assumptions:
+ * - Jeju services are running (started by pre-dev-decentralized.ts or jeju dev)
+ * - No local Hardhat/Postgres/Redis fallbacks
  */
 
 // @ts-ignore - bun global is available in bun runtime
 import { $ } from 'bun';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { detectEnvironment } from '../packages/contracts/src/deployment/env-detection';
 
-// Load .env file to detect environment
+// Load .env file to hydrate process env (fail fast if missing required vars)
 const envPath = join(process.cwd(), '.env');
 if (existsSync(envPath)) {
   const envContent = readFileSync(envPath, 'utf-8');
-  // Parse .env file and set environment variables
   for (const line of envContent.split('\n')) {
     const trimmed = line.trim();
     if (trimmed && !trimmed.startsWith('#')) {
       const [key, ...valueParts] = trimmed.split('=');
-      if (key && valueParts.length > 0) {
+      if (key && valueParts.length > 0 && !process.env[key]) {
         const value = valueParts.join('=').replace(/^["']|["']$/g, '');
-        if (!process.env[key]) {
-          process.env[key] = value;
-        }
+        process.env[key] = value;
       }
     }
   }
 }
 
-const detectedEnv = detectEnvironment();
-const isLocalnet = detectedEnv === 'localnet';
+const requiredEnv = [
+  'JEJU_NETWORK',
+  'CQL_BLOCK_PRODUCER_ENDPOINT',
+  'CQL_DATABASE_ID',
+  'JEJU_CACHE_SERVICE_URL',
+  'JEJU_STORAGE_SERVICE_URL',
+  'JEJU_OAUTH3_SERVICE_URL',
+  'JEJU_KMS_SERVICE_URL',
+  'JEJU_RPC_URL',
+];
 
-if (isLocalnet) {
-  // Start Hardhat, deploy, Next.js, and cron
-  await $`concurrently --kill-others-on-fail --kill-others -n "hardhat,deploy,next,cron" -c "yellow,blue,cyan,magenta" "cd packages/contracts && bunx hardhat node --hostname 0.0.0.0" "bun run scripts/wait-for-hardhat-and-deploy.ts" "bunx turbo dev" "bun run scripts/local-cron-simulator.ts"`.nothrow();
-} else {
-  // Start Next.js and cron only (no Hardhat/deploy)
-  await $`concurrently --kill-others-on-fail --kill-others -n "next,cron" -c "cyan,magenta" "bunx turbo dev" "bun run scripts/local-cron-simulator.ts"`.nothrow();
+const missing = requiredEnv.filter((key) => !process.env[key]);
+if (missing.length > 0) {
+  throw new Error(
+    `Missing required Jeju environment: ${missing.join(', ')}. Start Jeju and rerun pre-dev.`
+  );
 }
+
+// Start web + cron only. Chains/contracts are expected to be provided by Jeju.
+await $`concurrently --kill-others-on-fail --kill-others -n "next,cron" -c "cyan,magenta" "bunx turbo dev" "bun run scripts/local-cron-simulator.ts"`.nothrow();

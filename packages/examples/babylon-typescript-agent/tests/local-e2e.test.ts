@@ -10,11 +10,12 @@
  */
 
 import { beforeAll, describe, expect, it } from 'bun:test';
-import { ethers } from 'ethers';
+import type { Hex } from 'viem';
+import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 
 const A2A_URL = 'http://localhost:3001';
 const TEST_PRIVATE_KEY =
-  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as Hex;
 
 // Helper to make A2A calls
 async function a2aCall<T>(
@@ -48,7 +49,7 @@ async function a2aCall<T>(
 }
 
 describe('Local A2A Server E2E Tests', () => {
-  let wallet: ethers.Wallet;
+  let account: PrivateKeyAccount;
   let agentId: string;
   let address: string;
   let tokenId: number;
@@ -65,9 +66,9 @@ describe('Local A2A Server E2E Tests', () => {
       `);
     }
 
-    // Setup test wallet
-    wallet = new ethers.Wallet(TEST_PRIVATE_KEY);
-    address = wallet.address;
+    // Setup test wallet using viem
+    account = privateKeyToAccount(TEST_PRIVATE_KEY);
+    address = account.address;
     tokenId = Math.floor(Date.now() / 1000) % 1000000;
     agentId = `agent-31337-${tokenId}`;
   });

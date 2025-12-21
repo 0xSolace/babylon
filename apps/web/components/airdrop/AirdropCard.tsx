@@ -58,7 +58,7 @@ export function AirdropCard() {
     if (data.success) {
       setStatus(data);
     } else {
-      setError(data.message ?? 'Failed to fetch status');
+      setError(data.message || 'Failed to fetch status');
     }
 
     setLoading(false);
@@ -75,7 +75,7 @@ export function AirdropCard() {
     if (data.success) {
       await fetchStatus();
     } else {
-      setError(data.message ?? 'Registration failed');
+      setError(data.message || 'Registration failed');
     }
 
     setRegisterLoading(false);
@@ -97,7 +97,7 @@ export function AirdropCard() {
     if (data.success && data.canDrip) {
       await fetchStatus();
     } else {
-      setError(data.message ?? 'Drip unlock failed');
+      setError(data.message || 'Drip unlock failed');
     }
 
     setDripLoading(false);
@@ -200,7 +200,7 @@ export function AirdropCard() {
           </>
         ) : (
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            {status?.message ?? 'Not eligible for airdrop'}
+            {status?.message || 'Not eligible for airdrop'}
           </p>
         )}
 

@@ -102,7 +102,7 @@
  * ```
  */
 
-import { authenticate, withErrorHandling } from '@babylon/api';
+import { authenticate, NotFoundError, withErrorHandling } from '@babylon/api';
 import {
   and,
   chatParticipants,
@@ -203,11 +203,14 @@ export const GET = withErrorHandling(
         const userDetails = usersList.find(
           (u: (typeof usersList)[number]) => u.id === member.userId
         );
+        if (!userDetails) {
+          throw new NotFoundError('User', member.userId);
+        }
         return {
           userId: member.userId,
-          username: userDetails?.username,
-          displayName: userDetails?.displayName,
-          profileImageUrl: userDetails?.profileImageUrl,
+          username: userDetails.username,
+          displayName: userDetails.displayName,
+          profileImageUrl: userDetails.profileImageUrl,
           joinedAt: member.joinedAt,
           addedBy: member.addedBy,
           isAdmin: groupAdminsList.some(

@@ -163,16 +163,18 @@ export async function updateGameMetrics(
   }
 
   // Calculate new average game score
-  const totalGames = metrics.gamesPlayed + 1;
-  const newAverageScore =
-    (metrics.averageGameScore * metrics.gamesPlayed + gameScore) / totalGames;
+  const gamesPlayed = Number(metrics.gamesPlayed ?? 0);
+  const gamesWon = Number(metrics.gamesWon ?? 0);
+  const avgScore = Number(metrics.averageGameScore ?? 0);
+  const totalGames = gamesPlayed + 1;
+  const newAverageScore = (avgScore * gamesPlayed + gameScore) / totalGames;
 
   // Update metrics
   await db
     .update(agentPerformanceMetrics)
     .set({
       gamesPlayed: totalGames,
-      gamesWon: won ? metrics.gamesWon + 1 : metrics.gamesWon,
+      gamesWon: won ? gamesWon + 1 : gamesWon,
       averageGameScore: newAverageScore,
       lastGameScore: gameScore,
       lastGamePlayedAt: new Date(),
@@ -262,10 +264,12 @@ export async function updateTradingMetrics(
   }
 
   // Update trade counts
-  const newTotalTrades = metrics.totalTrades + 1;
+  const totalTrades = Number(metrics.totalTrades ?? 0);
+  const profitableTrades = Number(metrics.profitableTrades ?? 0);
+  const newTotalTrades = totalTrades + 1;
   const newProfitableTrades = profitable
-    ? metrics.profitableTrades + 1
-    : metrics.profitableTrades;
+    ? profitableTrades + 1
+    : profitableTrades;
 
   // Calculate win rate
   const winRate = calculateWinRate(newProfitableTrades, newTotalTrades);
@@ -357,10 +361,10 @@ export async function updateFeedbackMetrics(
   }
 
   // Calculate new average
-  const newCount = metrics.totalFeedbackCount + 1;
-  const newAverage =
-    (metrics.averageFeedbackScore * metrics.totalFeedbackCount + score) /
-    newCount;
+  const feedbackCount = Number(metrics.totalFeedbackCount ?? 0);
+  const avgFeedbackScore = Number(metrics.averageFeedbackScore ?? 0);
+  const newCount = feedbackCount + 1;
+  const newAverage = (avgFeedbackScore * feedbackCount + score) / newCount;
 
   // Classify feedback
   const isPositive = score >= 70;
@@ -374,8 +378,8 @@ export async function updateFeedbackMetrics(
     category === 'helpful_intel' ||
     interactionType === 'intel';
 
-  let intelFeedbackCount = metrics.intelFeedbackCount ?? 0;
-  let averageIntelScore = metrics.averageIntelScore ?? 50;
+  let intelFeedbackCount = Number(metrics.intelFeedbackCount ?? 0);
+  let averageIntelScore = Number(metrics.averageIntelScore ?? 50);
 
   if (isIntel) {
     const newIntelCount = intelFeedbackCount + 1;
@@ -386,6 +390,11 @@ export async function updateFeedbackMetrics(
   }
 
   // Update metrics
+  const currentPositiveCount = Number(metrics.positiveCount ?? 0);
+  const currentNeutralCount = Number(metrics.neutralCount ?? 0);
+  const currentNegativeCount = Number(metrics.negativeCount ?? 0);
+  const currentTotalInteractions = Number(metrics.totalInteractions ?? 0);
+
   await db
     .update(agentPerformanceMetrics)
     .set({
@@ -394,13 +403,13 @@ export async function updateFeedbackMetrics(
       intelFeedbackCount,
       averageIntelScore,
       positiveCount: isPositive
-        ? metrics.positiveCount + 1
-        : metrics.positiveCount,
-      neutralCount: isNeutral ? metrics.neutralCount + 1 : metrics.neutralCount,
+        ? currentPositiveCount + 1
+        : currentPositiveCount,
+      neutralCount: isNeutral ? currentNeutralCount + 1 : currentNeutralCount,
       negativeCount: isNegative
-        ? metrics.negativeCount + 1
-        : metrics.negativeCount,
-      totalInteractions: metrics.totalInteractions + 1,
+        ? currentNegativeCount + 1
+        : currentNegativeCount,
+      totalInteractions: currentTotalInteractions + 1,
       lastActivityAt: new Date(),
       firstActivityAt: metrics.firstActivityAt || new Date(),
     })
@@ -437,19 +446,25 @@ export async function recalculateReputation(userId: string) {
   }
 
   // Calculate composite reputation
+  const normalizedPnL = Number(metrics.normalizedPnL ?? 0);
+  const avgFeedback = Number(metrics.averageFeedbackScore ?? 50);
+  const gamesPlayed = Number(metrics.gamesPlayed ?? 0);
+  const winRate = Number(metrics.winRate ?? 0);
+  const intelScore = Number(metrics.averageIntelScore ?? avgFeedback);
+
   const reputationScore = calculateReputationScore(
-    metrics.normalizedPnL,
-    metrics.averageFeedbackScore,
-    metrics.gamesPlayed,
-    metrics.winRate ?? 0,
-    metrics.averageIntelScore ?? metrics.averageFeedbackScore
+    normalizedPnL,
+    avgFeedback,
+    gamesPlayed,
+    winRate,
+    intelScore
   );
 
   // Determine trust level
   const trustLevel = getTrustLevel(reputationScore);
 
   // Calculate confidence based on sample size (games + feedback)
-  const sampleSize = metrics.gamesPlayed + metrics.totalFeedbackCount;
+  const sampleSize = gamesPlayed + Number(metrics.totalFeedbackCount ?? 0);
   const confidenceScore = calculateConfidenceScore(sampleSize);
 
   // Update metrics
@@ -512,25 +527,29 @@ export async function getReputationBreakdown(
   }
 
   // Calculate components
-  const pnlComponent = metrics.normalizedPnL * 100;
-  const feedbackComponent = metrics.averageFeedbackScore;
-  const activityComponent = Math.min(100, metrics.gamesPlayed * 2);
+  const normalizedPnL = Number(metrics.normalizedPnL ?? 0);
+  const avgFeedbackScore = Number(metrics.averageFeedbackScore ?? 50);
+  const gamesPlayed = Number(metrics.gamesPlayed ?? 0);
+
+  const pnlComponent = normalizedPnL * 100;
+  const feedbackComponent = avgFeedbackScore;
+  const activityComponent = Math.min(100, gamesPlayed * 2);
 
   return {
-    reputationScore: metrics.reputationScore,
-    trustLevel: metrics.trustLevel,
-    confidenceScore: metrics.confidenceScore,
+    reputationScore: Number(metrics.reputationScore ?? 0),
+    trustLevel: String(metrics.trustLevel ?? 'unknown'),
+    confidenceScore: Number(metrics.confidenceScore ?? 0),
     breakdown: {
       pnlComponent,
       feedbackComponent,
       activityComponent,
     },
     metrics: {
-      normalizedPnL: metrics.normalizedPnL,
-      averageFeedbackScore: metrics.averageFeedbackScore,
-      gamesPlayed: metrics.gamesPlayed,
-      totalFeedbackCount: metrics.totalFeedbackCount,
-      winRate: metrics.winRate,
+      normalizedPnL,
+      averageFeedbackScore: avgFeedbackScore,
+      gamesPlayed,
+      totalFeedbackCount: Number(metrics.totalFeedbackCount ?? 0),
+      winRate: Number(metrics.winRate ?? 0),
     },
   };
 }

@@ -112,8 +112,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         return 0;
       })
     );
+    if (memberCounts.length !== groupIds.length) {
+      throw new Error('Member count array length mismatch');
+    }
     const memberCountMap = new Map(
-      groupIds.map((gid, i) => [gid, memberCounts[i] ?? 0])
+      groupIds.map((gid, i) => [gid, memberCounts[i]!])
     );
 
     return pendingInvites.map((invite) => {
@@ -125,7 +128,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         groupId: invite.groupId,
         groupName: userGroup?.name || npcChat?.name || 'Unknown Group',
         groupDescription: userGroup?.description || null,
-        memberCount: memberCountMap.get(invite.groupId) ?? 0,
+        memberCount: memberCountMap.get(invite.groupId) || 0,
         invitedAt: invite.invitedAt,
         invitedBy: invite.invitedBy,
         isNpcGroup: !!npcChat,

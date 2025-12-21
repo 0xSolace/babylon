@@ -42,6 +42,7 @@ export interface LiquidityConfig {
   xlpRouterAddress: Address;
   lpLockerAddress: Address;
   feeDistributorAddress: Address;
+  ethUsdPriceFeedAddress?: Address; // Chainlink ETH/USD aggregator
 
   // Keys
   deployerPrivateKey: `0x${string}`;
@@ -346,6 +347,37 @@ const ERC20_ABI = [
     outputs: [{ type: 'uint256' }],
   },
 ] as const;
+
+const CHAINLINK_AGGREGATOR_ABI = [
+  {
+    name: 'latestRoundData',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [
+      { name: 'roundId', type: 'uint80' },
+      { name: 'answer', type: 'int256' },
+      { name: 'startedAt', type: 'uint256' },
+      { name: 'updatedAt', type: 'uint256' },
+      { name: 'answeredInRound', type: 'uint80' },
+    ],
+  },
+  {
+    name: 'decimals',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ type: 'uint8' }],
+  },
+] as const;
+
+// Chainlink ETH/USD price feed addresses by chain
+const CHAINLINK_ETH_USD_FEEDS: Record<number, Address> = {
+  1: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419', // Mainnet
+  8453: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70', // Base
+  56: '0x9ef1B8c0E4F7dc8bF5719Ea496883DC6401d5b2e', // BSC
+  11155111: '0x694AA1769357215DE4FAC081bf1f309aDC325306', // Sepolia
+};
 
 // =============================================================================
 // LIQUIDITY POOL SERVICE
@@ -895,13 +927,59 @@ export class LiquidityPoolService {
 
   async getTokenPrice(): Promise<{ priceInEth: number; priceInUsd: number }> {
     const poolInfo = await this.getPoolInfo();
+    const ethUsdPrice = await this.getEthUsdPrice();
 
-    // For USD price, we'd need an oracle or ETH/USD feed
-    // For now, return ETH price and placeholder USD
     return {
       priceInEth: poolInfo.price,
-      priceInUsd: poolInfo.price * 3600, // Placeholder ETH price
+      priceInUsd: poolInfo.price * ethUsdPrice,
     };
+  }
+
+  /**
+   * Get ETH/USD price from Chainlink oracle
+   */
+  async getEthUsdPrice(): Promise<number> {
+    const feedAddress =
+      this.config.ethUsdPriceFeedAddress ??
+      CHAINLINK_ETH_USD_FEEDS[this.config.chainId];
+
+    if (!feedAddress) {
+      logger.warn(
+        'No Chainlink price feed configured for chain',
+        { chainId: this.config.chainId },
+        'LiquidityPoolService'
+      );
+      return 3600; // Fallback price
+    }
+
+    const [roundData, decimals] = await Promise.all([
+      this.publicClient
+        .readContract({
+          address: feedAddress,
+          abi: CHAINLINK_AGGREGATOR_ABI,
+          functionName: 'latestRoundData',
+        })
+        .catch(() => null),
+      this.publicClient
+        .readContract({
+          address: feedAddress,
+          abi: CHAINLINK_AGGREGATOR_ABI,
+          functionName: 'decimals',
+        })
+        .catch(() => 8),
+    ]);
+
+    if (!roundData) {
+      logger.warn(
+        'Failed to read Chainlink price feed',
+        { feedAddress },
+        'LiquidityPoolService'
+      );
+      return 3600;
+    }
+
+    const price = Number(roundData[1]) / Math.pow(10, decimals);
+    return price;
   }
 
   async getQuote(amountIn: bigint, tokenIn: 'bbln' | 'eth'): Promise<bigint> {

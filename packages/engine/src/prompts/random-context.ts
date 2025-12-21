@@ -22,7 +22,6 @@ import {
   posts,
   worldEvents,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
 import { StaticDataRegistry } from '../services/static-data-registry';
 import { sampleRandom, shuffleArray } from '../utils/randomization';
 
@@ -40,36 +39,31 @@ export interface RandomMarketContext {
 async function getMarketGainers(
   limit = 3
 ): Promise<Array<{ name: string; price: number; change: number }>> {
-  try {
-    // Get static org data and dynamic prices
-    const staticOrgs = StaticDataRegistry.getAllOrganizations().filter(
-      (o) => o.type === 'company'
-    );
-    const orgStates = await getDbInstance().getAllOrganizationStates();
-    const priceMap = new Map(
-      orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
-    );
+  // Get static org data and dynamic prices
+  const staticOrgs = StaticDataRegistry.getAllOrganizations().filter(
+    (o) => o.type === 'company'
+  );
+  const orgStates = await getDbInstance().getAllOrganizationStates();
+  const priceMap = new Map(
+    orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
+  );
 
-    const withChanges = staticOrgs
-      .filter((c) => {
-        const currentPrice = priceMap.get(c.id) ?? c.initialPrice;
-        return currentPrice !== null && c.initialPrice !== null;
-      })
-      .map((c) => {
-        const current = priceMap.get(c.id) ?? c.initialPrice ?? 0;
-        const initial = c.initialPrice ?? 0;
-        const change = initial > 0 ? ((current - initial) / initial) * 100 : 0;
-        return { name: c.name, price: current, change };
-      })
-      .filter((c) => c.change > 0)
-      .sort((a, b) => b.change - a.change)
-      .slice(0, limit);
+  const withChanges = staticOrgs
+    .filter((c) => {
+      const currentPrice = priceMap.get(c.id) ?? c.initialPrice;
+      return currentPrice !== null && c.initialPrice !== null;
+    })
+    .map((c) => {
+      const current = priceMap.get(c.id) ?? c.initialPrice ?? 0;
+      const initial = c.initialPrice ?? 0;
+      const change = initial > 0 ? ((current - initial) / initial) * 100 : 0;
+      return { name: c.name, price: current, change };
+    })
+    .filter((c) => c.change > 0)
+    .sort((a, b) => b.change - a.change)
+    .slice(0, limit);
 
-    return withChanges;
-  } catch (error) {
-    logger.error('Error fetching market gainers', { error }, 'random-context');
-    return [];
-  }
+  return withChanges;
 }
 
 /**
@@ -78,36 +72,31 @@ async function getMarketGainers(
 async function getMarketLosers(
   limit = 3
 ): Promise<Array<{ name: string; price: number; change: number }>> {
-  try {
-    // Get static org data and dynamic prices (reuse data from gainers)
-    const staticOrgs = StaticDataRegistry.getAllOrganizations().filter(
-      (o) => o.type === 'company'
-    );
-    const orgStates = await getDbInstance().getAllOrganizationStates();
-    const priceMap = new Map(
-      orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
-    );
+  // Get static org data and dynamic prices (reuse data from gainers)
+  const staticOrgs = StaticDataRegistry.getAllOrganizations().filter(
+    (o) => o.type === 'company'
+  );
+  const orgStates = await getDbInstance().getAllOrganizationStates();
+  const priceMap = new Map(
+    orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
+  );
 
-    const withChanges = staticOrgs
-      .filter((c) => {
-        const currentPrice = priceMap.get(c.id) ?? c.initialPrice;
-        return currentPrice !== null && c.initialPrice !== null;
-      })
-      .map((c) => {
-        const current = priceMap.get(c.id) ?? c.initialPrice ?? 0;
-        const initial = c.initialPrice ?? 0;
-        const change = initial > 0 ? ((current - initial) / initial) * 100 : 0;
-        return { name: c.name, price: current, change };
-      })
-      .filter((c) => c.change < 0)
-      .sort((a, b) => a.change - b.change) // Most negative first
-      .slice(0, limit);
+  const withChanges = staticOrgs
+    .filter((c) => {
+      const currentPrice = priceMap.get(c.id) ?? c.initialPrice;
+      return currentPrice !== null && c.initialPrice !== null;
+    })
+    .map((c) => {
+      const current = priceMap.get(c.id) ?? c.initialPrice ?? 0;
+      const initial = c.initialPrice ?? 0;
+      const change = initial > 0 ? ((current - initial) / initial) * 100 : 0;
+      return { name: c.name, price: current, change };
+    })
+    .filter((c) => c.change < 0)
+    .sort((a, b) => a.change - b.change) // Most negative first
+    .slice(0, limit);
 
-    return withChanges;
-  } catch (error) {
-    logger.error('Error fetching market losers', { error }, 'random-context');
-    return [];
-  }
+  return withChanges;
 }
 
 /**
@@ -116,34 +105,25 @@ async function getMarketLosers(
 async function getActiveQuestions(
   limit = 3
 ): Promise<Array<{ question: string; yesPrice: number }>> {
-  try {
-    const now = new Date();
-    const marketsResult = await db
-      .select()
-      .from(markets)
-      .where(and(eq(markets.resolved, false), gte(markets.endDate, now)))
-      .limit(20); // Get more, then sample randomly
+  const now = new Date();
+  const marketsResult = await db
+    .select()
+    .from(markets)
+    .where(and(eq(markets.resolved, false), gte(markets.endDate, now)))
+    .limit(20); // Get more, then sample randomly
 
-    const formatted = marketsResult.map((m) => {
-      const yesShares = Number.parseFloat(m.yesShares.toString());
-      const noShares = Number.parseFloat(m.noShares.toString());
-      const totalShares = yesShares + noShares;
-      const yesPrice =
-        totalShares > 0 ? Math.round((yesShares / totalShares) * 100) : 50;
+  const formatted = marketsResult.map((m) => {
+    const yesShares = Number.parseFloat((m.yesShares ?? '0').toString());
+    const noShares = Number.parseFloat((m.noShares ?? '0').toString());
+    const totalShares = yesShares + noShares;
+    const yesPrice =
+      totalShares > 0 ? Math.round((yesShares / totalShares) * 100) : 50;
 
-      return { question: m.question, yesPrice };
-    });
+    return { question: String(m.question), yesPrice };
+  });
 
-    // Randomly sample
-    return sampleRandom(formatted, limit);
-  } catch (error) {
-    logger.error(
-      'Error fetching active questions',
-      { error },
-      'random-context'
-    );
-    return [];
-  }
+  // Randomly sample
+  return sampleRandom(formatted, limit);
 }
 
 /**
@@ -152,30 +132,27 @@ async function getActiveQuestions(
 async function getTrendingPosts(
   limit = 3
 ): Promise<Array<{ author: string; content: string; likes: number }>> {
-  try {
-    const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const now = new Date();
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const postsResult = await db
-      .select()
-      .from(posts)
-      .where(and(gte(posts.timestamp, oneDayAgo), lte(posts.timestamp, now)))
-      .orderBy(desc(posts.timestamp))
-      .limit(20); // Get more, then sample
+  const postsResult = await db
+    .select()
+    .from(posts)
+    .where(and(gte(posts.timestamp, oneDayAgo), lte(posts.timestamp, now)))
+    .orderBy(desc(posts.timestamp))
+    .limit(20); // Get more, then sample
 
-    const formatted = postsResult.map((p) => ({
+  const formatted = postsResult.map((p) => {
+    const content = String(p.content);
+    return {
       author: 'Unknown', // Author info would need a join with User table
-      content:
-        p.content.length > 150 ? p.content.slice(0, 150) + '...' : p.content,
+      content: content.length > 150 ? content.slice(0, 150) + '...' : content,
       likes: 0, // Like count would need aggregation from Reaction table
-    }));
+    };
+  });
 
-    // Randomly sample from top posts
-    return sampleRandom(formatted, limit);
-  } catch (error) {
-    logger.error('Error fetching trending posts', { error }, 'random-context');
-    return [];
-  }
+  // Randomly sample from top posts
+  return sampleRandom(formatted, limit);
 }
 
 /**
@@ -184,28 +161,26 @@ async function getTrendingPosts(
 async function getRecentEvents(
   limit = 2
 ): Promise<Array<{ title: string; description: string }>> {
-  try {
-    const now = new Date();
-    const eventsResult = await db
-      .select()
-      .from(worldEvents)
-      .where(lte(worldEvents.timestamp, now))
-      .orderBy(desc(worldEvents.timestamp))
-      .limit(10); // Get more, then sample
+  const now = new Date();
+  const eventsResult = await db
+    .select()
+    .from(worldEvents)
+    .where(lte(worldEvents.timestamp, now))
+    .orderBy(desc(worldEvents.timestamp))
+    .limit(10); // Get more, then sample
 
-    const formatted = eventsResult.map((e) => ({
-      title: e.eventType, // Use eventType as title since there's no title field
+  const formatted = eventsResult.map((e) => {
+    const description = String(e.description);
+    return {
+      title: String(e.eventType), // Use eventType as title since there's no title field
       description:
-        e.description.length > 100
-          ? e.description.slice(0, 100) + '...'
-          : e.description,
-    }));
+        description.length > 100
+          ? description.slice(0, 100) + '...'
+          : description,
+    };
+  });
 
-    return sampleRandom(formatted, limit);
-  } catch (error) {
-    logger.error('Error fetching recent events', { error }, 'random-context');
-    return [];
-  }
+  return sampleRandom(formatted, limit);
 }
 
 /**

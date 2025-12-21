@@ -67,6 +67,11 @@ type WhereValue<T> =
   | null
   | undefined;
 
+/**
+ * Where input type - uses any for internal compatibility while preserving
+ * the constraint at the call site through the TSelect generic parameter.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type WhereInput<TTable> = {
   [K in keyof TTable]?: WhereValue<TTable[K]>;
 } & {
@@ -138,10 +143,8 @@ interface UpsertOptions<TSelect, TInsert> {
 // SQL Building Helpers
 // ============================================================================
 
-function buildWhereClause<
-  TWhere extends Record<string, DatabaseValue | JsonValue>,
->(
-  where: WhereInput<TWhere> | undefined,
+function buildWhereClause(
+  where: Record<string, unknown> | undefined,
   params: QueryParam[],
   paramOffset = 0
 ): { sql: string; newOffset: number } {
@@ -323,8 +326,11 @@ function buildWhereClause<
   };
 }
 
-function buildOrderByClause<TOrder extends Record<string, DatabaseValue>>(
-  orderBy: OrderByInput<TOrder> | OrderByInput<TOrder>[] | undefined
+function buildOrderByClause(
+  orderBy:
+    | OrderByInput<Record<string, unknown>>
+    | OrderByInput<Record<string, unknown>>[]
+    | undefined
 ): string {
   if (!orderBy) return '';
 
@@ -344,9 +350,16 @@ function buildOrderByClause<TOrder extends Record<string, DatabaseValue>>(
 // CQL Table Repository
 // ============================================================================
 
+/**
+ * CQL Table Repository with proper type preservation.
+ *
+ * Note: We use minimal constraints on TSelect and TInsert to preserve
+ * the exact types from Drizzle schema inference. The constraints are
+ * only applied where needed for internal operations.
+ */
 export class CQLTableRepository<
-  TSelect extends Record<string, DatabaseValue | JsonValue>,
-  TInsert extends Record<string, DatabaseValue | JsonValue>,
+  TSelect extends Record<string, unknown> = Record<string, DatabaseValue>,
+  TInsert extends Record<string, unknown> = Record<string, DatabaseValue>,
 > {
   constructor(
     private readonly tableName: string,
@@ -426,8 +439,9 @@ export class CQLTableRepository<
   }
 
   async create(options: CreateOptions<TInsert>): Promise<TSelect> {
-    const columns = Object.keys(options.data);
-    const values = Object.values(options.data);
+    const data = options.data as Record<string, DatabaseValue>;
+    const columns = Object.keys(data);
+    const values = Object.values(data);
     const placeholders = columns.map((_, i) => `$${i + 1}`);
 
     const query = `INSERT INTO "${this.tableName}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`;
@@ -448,14 +462,15 @@ export class CQLTableRepository<
   }): Promise<{ count: number }> {
     if (options.data.length === 0) return { count: 0 };
 
-    const firstRecord = options.data[0];
+    const firstRecord = options.data[0] as Record<string, DatabaseValue>;
     if (!firstRecord) return { count: 0 };
 
     const columns = Object.keys(firstRecord);
     const allValues: QueryParam[] = [];
     const valueSets: string[] = [];
 
-    options.data.forEach((record, rowIndex) => {
+    options.data.forEach((insertRecord, rowIndex) => {
+      const record = insertRecord as Record<string, DatabaseValue>;
       const placeholders = columns.map((col, colIndex) => {
         allValues.push(record[col] as QueryParam);
         return `$${rowIndex * columns.length + colIndex + 1}`;

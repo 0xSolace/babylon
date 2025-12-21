@@ -10,6 +10,7 @@
 
 import {
   authenticate,
+  BusinessLogicError,
   EngagementService,
   successResponse,
   withErrorHandling,
@@ -56,6 +57,31 @@ export const POST = withErrorHandling(
       maxSlippage: parsed.slippage,
     });
 
+    // Validate required fields exist after close operation
+    if (result.exitPrice === undefined) {
+      throw new BusinessLogicError(
+        'Close operation failed: exit price not calculated',
+        'CLOSE_CALCULATION_ERROR',
+        { positionId }
+      );
+    }
+    if (result.realizedPnL === undefined) {
+      throw new BusinessLogicError(
+        'Close operation failed: PnL not calculated',
+        'CLOSE_CALCULATION_ERROR',
+        { positionId }
+      );
+    }
+    if (result.marginPaid === undefined) {
+      throw new BusinessLogicError(
+        'Close operation failed: margin not found',
+        'CLOSE_CALCULATION_ERROR',
+        { positionId }
+      );
+    }
+
+    const { exitPrice, realizedPnL, marginPaid } = result;
+
     void trackServerEvent(user.userId, 'trade_closed', {
       type: 'perp',
       ticker: result.ticker,
@@ -63,12 +89,9 @@ export const POST = withErrorHandling(
       size: result.size,
       leverage: result.leverage,
       entryPrice: result.entryPrice,
-      exitPrice: result.exitPrice ?? result.entryPrice,
-      realizedPnL: result.realizedPnL ?? 0,
-      pnlPercent:
-        result.marginPaid && result.marginPaid > 0
-          ? ((result.realizedPnL ?? 0) / result.marginPaid) * 100
-          : 0,
+      exitPrice,
+      realizedPnL,
+      pnlPercent: marginPaid > 0 ? (realizedPnL / marginPaid) * 100 : 0,
       feeCharged: result.feePaid,
       wasLiquidated: false,
       positionId,
@@ -79,16 +102,10 @@ export const POST = withErrorHandling(
 
     return successResponse({
       position: result,
-      grossSettlement:
-        result.realizedPnL !== undefined && result.marginPaid !== undefined
-          ? result.marginPaid + result.realizedPnL
-          : undefined,
-      netSettlement:
-        result.realizedPnL !== undefined && result.marginPaid !== undefined
-          ? Math.max(0, result.marginPaid + result.realizedPnL - result.feePaid)
-          : undefined,
-      marginReturned: result.marginPaid,
-      pnl: result.realizedPnL,
+      grossSettlement: marginPaid + realizedPnL,
+      netSettlement: Math.max(0, marginPaid + realizedPnL - result.feePaid),
+      marginReturned: marginPaid,
+      pnl: realizedPnL,
       fee: {
         amount: result.feePaid,
         referrerPaid: 0,

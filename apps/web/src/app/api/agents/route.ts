@@ -196,8 +196,13 @@ export async function POST(req: NextRequest) {
     'AgentsAPI'
   );
 
-  // Get agent config for the response
+  // Get agent config for the response - config must exist after agent creation
   const config = await getAgentConfig(agentUser.id);
+  if (!config) {
+    throw new Error(
+      `Agent config not found for newly created agent ${agentUser.id}`
+    );
+  }
 
   return NextResponse.json({
     success: true,
@@ -207,13 +212,13 @@ export async function POST(req: NextRequest) {
       name: agentUser.displayName,
       description: agentUser.bio,
       profileImageUrl: agentUser.profileImageUrl,
-      pointsBalance: config?.pointsBalance ?? 0,
-      autonomousTrading: config?.autonomousTrading ?? false,
-      autonomousPosting: config?.autonomousPosting ?? false,
-      autonomousCommenting: config?.autonomousCommenting ?? false,
-      autonomousDMs: config?.autonomousDMs ?? false,
-      autonomousGroupChats: config?.autonomousGroupChats ?? false,
-      modelTier: config?.modelTier ?? 'lite',
+      pointsBalance: config.pointsBalance,
+      autonomousTrading: config.autonomousTrading,
+      autonomousPosting: config.autonomousPosting,
+      autonomousCommenting: config.autonomousCommenting,
+      autonomousDMs: config.autonomousDMs,
+      autonomousGroupChats: config.autonomousGroupChats,
+      modelTier: config.modelTier,
       lifetimePnL: agentUser.lifetimePnL.toString(),
       walletAddress: agentUser.walletAddress,
       onChainRegistered: agentUser.onChainRegistered,
@@ -241,31 +246,34 @@ export async function GET(req: NextRequest) {
         agentService.getPerformance(agent.id),
         getAgentConfig(agent.id),
       ]);
+      if (!config) {
+        throw new Error(`Agent config not found for agent ${agent.id}`);
+      }
       return {
         id: agent.id,
         username: agent.username,
         name: agent.displayName,
         description: agent.bio,
         profileImageUrl: agent.profileImageUrl,
-        pointsBalance: config?.pointsBalance ?? 0,
-        totalDeposited: config?.totalDeposited ?? 0,
-        totalWithdrawn: config?.totalWithdrawn ?? 0,
-        totalPointsSpent: config?.totalPointsSpent ?? 0,
-        autonomousEnabled: config?.autonomousTrading ?? false,
-        autonomousTrading: config?.autonomousTrading ?? false,
-        autonomousPosting: config?.autonomousPosting ?? false,
-        autonomousCommenting: config?.autonomousCommenting ?? false,
-        autonomousDMs: config?.autonomousDMs ?? false,
-        autonomousGroupChats: config?.autonomousGroupChats ?? false,
-        modelTier: config?.modelTier ?? 'lite',
-        status: config?.status ?? 'idle',
-        isActive: config?.status === 'active',
+        pointsBalance: config.pointsBalance,
+        totalDeposited: config.totalDeposited,
+        totalWithdrawn: config.totalWithdrawn,
+        totalPointsSpent: config.totalPointsSpent,
+        autonomousEnabled: config.autonomousTrading,
+        autonomousTrading: config.autonomousTrading,
+        autonomousPosting: config.autonomousPosting,
+        autonomousCommenting: config.autonomousCommenting,
+        autonomousDMs: config.autonomousDMs,
+        autonomousGroupChats: config.autonomousGroupChats,
+        modelTier: config.modelTier,
+        status: config.status,
+        isActive: config.status === 'active',
         lifetimePnL: agent.lifetimePnL.toString(),
         totalTrades: performance.totalTrades,
         profitableTrades: performance.profitableTrades,
         winRate: performance.winRate,
-        lastTickAt: config?.lastTickAt?.toISOString(),
-        lastChatAt: config?.lastChatAt?.toISOString(),
+        lastTickAt: config.lastTickAt?.toISOString(),
+        lastChatAt: config.lastChatAt?.toISOString(),
         walletAddress: agent.walletAddress,
         onChainRegistered: agent.onChainRegistered!,
         agent0TokenId: agent.agent0TokenId,

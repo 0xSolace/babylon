@@ -1,5 +1,6 @@
 import { CHAIN, RPC_URL } from '@babylon/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import type { Address } from 'viem';
 import { createPublicClient, http } from 'viem';
 import { useSmartWallet } from '@/hooks/useSmartWallet';
@@ -33,31 +34,38 @@ const publicClient = createPublicClient({
  */
 export function useSmartWalletBalance() {
   const { smartWalletAddress } = useSmartWallet();
-  const [balance, setBalance] = useState<bigint | null>(null);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: balance = null, isLoading } = useQuery({
+    queryKey: ['smartWalletBalance', smartWalletAddress],
+    queryFn: async (): Promise<bigint> => {
+      const result = await publicClient.getBalance({
+        address: smartWalletAddress as Address,
+      });
+      return result;
+    },
+    enabled: !!smartWalletAddress,
+    staleTime: 15000,
+  });
 
   const refreshBalance = useCallback(async () => {
     if (!smartWalletAddress) {
-      setBalance(null);
       return null;
     }
-
-    setLoading(true);
-    const next = await publicClient.getBalance({
-      address: smartWalletAddress as Address,
+    await queryClient.invalidateQueries({
+      queryKey: ['smartWalletBalance', smartWalletAddress],
     });
-    setBalance(next);
-    setLoading(false);
-    return next;
-  }, [smartWalletAddress]);
-
-  useEffect(() => {
-    void refreshBalance();
-  }, [refreshBalance]);
+    return (
+      queryClient.getQueryData<bigint>([
+        'smartWalletBalance',
+        smartWalletAddress,
+      ]) ?? null
+    );
+  }, [queryClient, smartWalletAddress]);
 
   return {
     balance,
-    loading,
+    loading: isLoading,
     refreshBalance,
   };
 }

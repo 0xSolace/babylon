@@ -161,7 +161,18 @@ export async function calculateTradeMetrics(
   positionId: string
 ): Promise<TradeMetrics | null> {
   // Fetch position with related data using Drizzle
-  const positionResult = await db
+  type PositionWithQuestion = {
+    id: string;
+    userId: string;
+    questionId: number | null;
+    outcome: boolean | null;
+    amount: string;
+    pnl: string | null;
+    createdAt: Date;
+    resolvedAt: Date | null;
+    questionResolutionDate: Date | null;
+  };
+  const positionResult = (await db
     .select({
       id: positions.id,
       userId: positions.userId,
@@ -176,7 +187,7 @@ export async function calculateTradeMetrics(
     .from(positions)
     .leftJoin(questions, eq(positions.questionId, questions.questionNumber))
     .where(eq(positions.id, positionId))
-    .limit(1);
+    .limit(1)) as unknown as PositionWithQuestion[];
 
   const position = positionResult[0];
   if (!position || !position.questionId) {

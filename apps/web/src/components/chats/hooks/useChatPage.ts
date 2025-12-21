@@ -1,6 +1,7 @@
 'use client';
 
 import { useJejuAuth } from '@babylon/auth/client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useChatMessages } from '@/hooks/useChatMessages';
@@ -8,24 +9,70 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useAuthStore } from '@/stores/authStore';
 import type { Chat, ChatDetails, ChatFilter } from '../types';
 
+interface ChatsApiResponse {
+  groupChats?: Chat[];
+  directChats?: Chat[];
+  chats?: Chat[];
+}
+
+interface ChatDetailsApiResponse {
+  chat?: {
+    id: string;
+    name: string | null;
+    isGroup: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+  messages?: Array<{
+    id: string;
+    content: string;
+    chatId: string;
+    senderId: string;
+    createdAt: string;
+  }>;
+  participants?: Array<{
+    id: string;
+    displayName: string;
+    username: string | null;
+    profileImageUrl: string | null;
+  }>;
+}
+
+interface SendMessageResponse {
+  message?: {
+    id: string;
+    content: string;
+    chatId: string;
+    senderId: string;
+    createdAt: string | Date;
+  };
+  warnings?: string[];
+  error?: string;
+}
+
+interface GroupIdResponse {
+  groupId: string;
+}
+
+interface UserProfileResponse {
+  user: {
+    id: string;
+    displayName?: string;
+    username?: string;
+    profileImageUrl?: string;
+  };
+}
+
 export function useChatPage() {
   const { ready, authenticated } = useAuth();
   const { user } = useAuthStore();
   const { getAccessToken } = useJejuAuth();
+  const queryClient = useQueryClient();
 
   // UI state
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-
-  // Data state
-  const [allChats, setAllChats] = useState<Chat[]>([]);
-  const [chatDetails, setChatDetails] = useState<ChatDetails | null>(null);
-
-  // Loading/sending state
-  const [loading, setLoading] = useState(true);
-  const [loadingChat, setLoadingChat] = useState(false);
-  const [sending, setSending] = useState(false);
 
   // Message input state
   const [messageInput, setMessageInput] = useState('');
@@ -35,7 +82,6 @@ export function useChatPage() {
 
   // Leave chat state
   const [isLeaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-  const [isLeavingChat, setIsLeavingChat] = useState(false);
   const [leaveChatError, setLeaveChatError] = useState<string | null>(null);
 
   // Group modals
@@ -79,237 +125,242 @@ export function useChatPage() {
     addMessage,
   } = useChatMessages(selectedChatId);
 
-  // Load chats
-  const loadChats = useCallback(async () => {
-    setLoading(true);
-
-    if (!isDebugMode) {
-      if (!ready || !authenticated) {
-        setLoading(false);
-        return;
+  // Query for all chats
+  const {
+    data: allChats = [],
+    isLoading: loading,
+    refetch: refetchChats,
+  } = useQuery({
+    queryKey: ['chats'],
+    queryFn: async (): Promise<Chat[]> => {
+      if (!isDebugMode && (!ready || !authenticated)) {
+        return [];
       }
-    }
 
-    const token = await getAccessToken();
-    if (!token && !isDebugMode) {
-      setLoading(false);
-      return;
-    }
+      const token = await getAccessToken();
+      if (!token && !isDebugMode) {
+        return [];
+      }
 
-    const [personalResponse, gameResponse] = await Promise.all([
-      fetch('/api/chats', {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-      isDebugMode ? fetch('/api/chats?all=true') : Promise.resolve(null),
-    ]);
+      const [personalResponse, gameResponse] = await Promise.all([
+        fetch('/api/chats', {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        isDebugMode ? fetch('/api/chats?all=true') : Promise.resolve(null),
+      ]);
 
-    if (!personalResponse.ok) {
-      setLoading(false);
-      return;
-    }
+      if (!personalResponse.ok) {
+        return [];
+      }
 
-    const personalData = await personalResponse.json();
+      const personalData = (await personalResponse.json()) as ChatsApiResponse;
 
-    let gameChats: Chat[] = [];
-    if (gameResponse?.ok) {
-      const gameData = await gameResponse.json();
-      gameChats = gameData.chats || [];
-    }
+      let gameChats: Chat[] = [];
+      if (gameResponse?.ok) {
+        const gameData = (await gameResponse.json()) as ChatsApiResponse;
+        gameChats = gameData.chats ?? [];
+      }
 
-    const combined = [
-      ...(personalData.groupChats || []),
-      ...(personalData.directChats || []),
-      ...gameChats,
-    ].sort((a, b) => {
-      const aTime = a.lastMessage?.createdAt || a.updatedAt;
-      const bTime = b.lastMessage?.createdAt || b.updatedAt;
-      return new Date(bTime).getTime() - new Date(aTime).getTime();
-    });
+      const combined = [
+        ...(personalData.groupChats ?? []),
+        ...(personalData.directChats ?? []),
+        ...gameChats,
+      ].sort((a, b) => {
+        const aTime = a.lastMessage?.createdAt || a.updatedAt;
+        const bTime = b.lastMessage?.createdAt || b.updatedAt;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      });
 
-    setAllChats(combined);
-    setLoading(false);
-  }, [getAccessToken, isDebugMode, ready, authenticated]);
+      return combined;
+    },
+    enabled: (ready && authenticated) || isDebugMode,
+    staleTime: 30000,
+  });
 
-  // Load chat details
-  const loadChatDetails = useCallback(
-    async (chatId: string) => {
-      setLoadingChat(true);
-
+  // Query for chat details
+  const {
+    data: chatDetails = null,
+    isLoading: loadingChat,
+    refetch: refetchChatDetails,
+  } = useQuery({
+    queryKey: ['chatDetails', selectedChatId],
+    queryFn: async (): Promise<ChatDetails | null> => {
       if (isDebugMode) {
-        const response = await fetch(`/api/chats/${chatId}?debug=true`);
-        const data = await response.json();
-        setChatDetails({
+        const response = await fetch(`/api/chats/${selectedChatId}?debug=true`);
+        const data = (await response.json()) as ChatDetailsApiResponse;
+        return {
           ...data,
-          chat: data.chat || null,
-          messages: data.messages || [],
-          participants: data.participants || [],
-        });
-        setLoadingChat(false);
-        return;
+          chat: data.chat ?? {
+            id: selectedChatId!,
+            name: null,
+            isGroup: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          messages: data.messages ?? [],
+          participants: data.participants ?? [],
+        } as ChatDetails;
       }
 
       const token = await getAccessToken();
       if (!token) {
-        setLoadingChat(false);
-        return;
+        return null;
       }
 
-      const response = await fetch(`/api/chats/${chatId}`, {
+      const response = await fetch(`/api/chats/${selectedChatId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (response.status === 404) {
-        setLoadingChat(false);
-        return;
+      if (response.status === 404 || !response.ok) {
+        return null;
       }
+
+      const data = (await response.json()) as ChatDetailsApiResponse;
+      return {
+        ...data,
+        chat: data.chat ?? {
+          id: selectedChatId!,
+          name: null,
+          isGroup: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        messages: data.messages ?? [],
+        participants: data.participants ?? [],
+      } as ChatDetails;
+    },
+    enabled: !!selectedChatId,
+    staleTime: 30000,
+  });
+
+  // Mutation for sending messages
+  const sendMessageMutation = useMutation({
+    mutationFn: async (): Promise<SendMessageResponse> => {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+
+      const response = await fetch(`/api/chats/${selectedChatId}/message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: messageInput.trim() }),
+      });
+
+      const data = (await response.json()) as SendMessageResponse;
 
       if (!response.ok) {
-        setLoadingChat(false);
-        return;
+        throw new Error(
+          data.error ?? 'Failed to send message. Please try again.'
+        );
       }
 
-      const data = await response.json();
-      setChatDetails({
-        ...data,
-        chat: data.chat || null,
-        messages: data.messages || [],
-        participants: data.participants || [],
-      });
-      setLoadingChat(false);
+      return data;
     },
-    [getAccessToken, isDebugMode]
-  );
+    onSuccess: (data) => {
+      const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+      if (warnings.length > 0) {
+        setSendWarning(warnings.join('. '));
+        setTimeout(() => setSendWarning(null), 5000);
+      }
 
-  // Send message
+      setSendSuccess(true);
+      setTimeout(() => setSendSuccess(false), 2000);
+
+      if (data.message) {
+        addMessage({
+          id: data.message.id,
+          content: data.message.content,
+          chatId: data.message.chatId,
+          senderId: data.message.senderId,
+          createdAt:
+            typeof data.message.createdAt === 'string'
+              ? data.message.createdAt
+              : new Date(data.message.createdAt).toISOString(),
+        });
+      }
+
+      setMessageInput('');
+      void refetchChats();
+    },
+    onError: (error) => {
+      setSendError((error as Error).message);
+    },
+  });
+
+  // Mutation for leaving chat
+  const leaveChatMutation = useMutation({
+    mutationFn: async (): Promise<void> => {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        throw new Error('Authentication failed. Please try again.');
+      }
+
+      const response = await fetch(
+        `/api/chats/${selectedChatId}/participants/me`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message ?? 'Failed to leave chat');
+      }
+    },
+    onSuccess: () => {
+      setLeaveConfirmOpen(false);
+      setSelectedChatId(null);
+      void refetchChats();
+    },
+    onError: (error) => {
+      setLeaveChatError((error as Error).message);
+    },
+  });
+
   const sendMessage = useCallback(async () => {
-    if (!selectedChatId || !messageInput.trim() || sending) return;
+    if (
+      !selectedChatId ||
+      !messageInput.trim() ||
+      sendMessageMutation.isPending
+    )
+      return;
 
-    setSending(true);
     setSendError(null);
     setSendWarning(null);
     setSendSuccess(false);
 
-    const token = await getAccessToken();
-    if (!token) {
-      setSendError('Authentication required. Please log in again.');
-      setSending(false);
-      return;
-    }
+    await sendMessageMutation.mutateAsync();
+  }, [selectedChatId, messageInput, sendMessageMutation]);
 
-    const response = await fetch(`/api/chats/${selectedChatId}/message`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ content: messageInput.trim() }),
-    }).catch((error: Error) => {
-      setSendError('Failed to send message. Please try again.');
-      setSending(false);
-      throw error;
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const message =
-        (data && (data.error || data.message)) ||
-        'Failed to send message. Please try again.';
-      setSendError(message);
-      setSending(false);
-      return;
-    }
-
-    const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
-    if (warnings.length > 0) {
-      setSendWarning(warnings.join('. '));
-      setTimeout(() => setSendWarning(null), 5000);
-    }
-
-    setSendSuccess(true);
-    setTimeout(() => setSendSuccess(false), 2000);
-
-    if (data.message) {
-      addMessage({
-        id: data.message.id,
-        content: data.message.content,
-        chatId: data.message.chatId,
-        senderId: data.message.senderId,
-        createdAt:
-          typeof data.message.createdAt === 'string'
-            ? data.message.createdAt
-            : new Date(data.message.createdAt).toISOString(),
-      });
-    }
-
-    setMessageInput('');
-    void loadChats();
-    setSending(false);
-  }, [
-    selectedChatId,
-    messageInput,
-    sending,
-    getAccessToken,
-    addMessage,
-    loadChats,
-  ]);
-
-  // Leave chat
   const handleLeaveChat = useCallback(async () => {
     if (!selectedChatId) return;
-    setIsLeavingChat(true);
     setLeaveChatError(null);
-
-    const accessToken = await getAccessToken();
-    if (!accessToken) {
-      setLeaveChatError('Authentication failed. Please try again.');
-      setIsLeavingChat(false);
-      return;
-    }
-
-    const response = await fetch(
-      `/api/chats/${selectedChatId}/participants/me`,
-      {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    ).catch((error: Error) => {
-      setLeaveChatError(error.message);
-      setIsLeavingChat(false);
-      throw error;
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      setLeaveChatError(errorData.message || 'Failed to leave chat');
-      setIsLeavingChat(false);
-      return;
-    }
-
-    setLeaveConfirmOpen(false);
-    setSelectedChatId(null);
-    await loadChats();
-    setIsLeavingChat(false);
-  }, [selectedChatId, getAccessToken, loadChats]);
+    await leaveChatMutation.mutateAsync();
+  }, [selectedChatId, leaveChatMutation]);
 
   // Group handlers
   const handleGroupCreated = useCallback(
     async (groupId: string, chatId: string) => {
-      await loadChats();
+      await refetchChats();
       await new Promise((resolve) => setTimeout(resolve, 500));
       setSelectedGroupId(groupId);
       setSelectedChatId(chatId);
-      await loadChatDetails(chatId);
+      await refetchChatDetails();
     },
-    [loadChats, loadChatDetails]
+    [refetchChats, refetchChatDetails]
   );
 
   const handleGroupUpdated = useCallback(async () => {
-    await loadChats();
+    await refetchChats();
     if (selectedChatId) {
-      await loadChatDetails(selectedChatId);
+      await refetchChatDetails();
     }
-  }, [loadChats, selectedChatId, loadChatDetails]);
+  }, [refetchChats, selectedChatId, refetchChatDetails]);
 
   const handleManageGroup = useCallback(async () => {
     if (!chatDetails?.chat.id) return;
@@ -317,13 +368,10 @@ export function useChatPage() {
     const token = await getAccessToken();
     const response = await fetch(`/api/chats/${chatDetails.chat.id}/group`, {
       headers: { Authorization: `Bearer ${token}` },
-    }).catch((error: Error) => {
-      console.error('Error fetching group ID:', error);
-      throw error;
     });
 
     if (response.ok) {
-      const data = await response.json();
+      const data = (await response.json()) as GroupIdResponse;
       setSelectedGroupId(data.groupId);
       setIsGroupManagementModalOpen(true);
     }
@@ -332,30 +380,24 @@ export function useChatPage() {
   // Load new DM chat
   const loadNewDMChat = useCallback(
     async (chatId: string, targetUserId: string) => {
-      setLoadingChat(true);
-
       const token = await getAccessToken();
       if (!token) {
-        setLoadingChat(false);
         return;
       }
 
       const response = await fetch(`/api/users/${targetUserId}/profile`, {
         headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {
-        setLoadingChat(false);
-        throw new Error('Failed to load user info');
       });
 
       if (!response.ok) {
-        setLoadingChat(false);
         return;
       }
 
-      const userData = await response.json();
+      const userData = (await response.json()) as UserProfileResponse;
       const targetUser = userData.user;
 
-      setChatDetails({
+      // Update chat details cache directly
+      queryClient.setQueryData<ChatDetails>(['chatDetails', chatId], {
         chat: {
           id: chatId,
           name: null,
@@ -368,15 +410,15 @@ export function useChatPage() {
           {
             id: user!.id,
             displayName: user!.displayName || user!.username || 'You',
-            username: user!.username,
-            profileImageUrl: user!.profileImageUrl,
+            username: user!.username ?? undefined,
+            profileImageUrl: user!.profileImageUrl ?? undefined,
           },
           {
             id: targetUser.id,
             displayName:
               targetUser.displayName || targetUser.username || 'User',
-            username: targetUser.username,
-            profileImageUrl: targetUser.profileImageUrl,
+            username: targetUser.username ?? undefined,
+            profileImageUrl: targetUser.profileImageUrl ?? undefined,
           },
         ],
       });
@@ -389,22 +431,21 @@ export function useChatPage() {
         updatedAt: new Date().toISOString(),
         otherUser: {
           id: targetUser.id,
-          displayName: targetUser.displayName,
-          username: targetUser.username,
-          profileImageUrl: targetUser.profileImageUrl,
+          displayName: targetUser.displayName ?? null,
+          username: targetUser.username ?? null,
+          profileImageUrl: targetUser.profileImageUrl ?? null,
         },
       };
 
-      setAllChats((prev) => {
+      queryClient.setQueryData<Chat[]>(['chats'], (prev) => {
+        if (!prev) return [newChat];
         if (prev.some((c) => c.id === chatId)) {
           return prev;
         }
         return [newChat, ...prev];
       });
-
-      setLoadingChat(false);
     },
-    [getAccessToken, user]
+    [getAccessToken, user, queryClient]
   );
 
   // Scroll to bottom
@@ -423,9 +464,7 @@ export function useChatPage() {
   const { pullDistance, containerRef: setPullToRefreshRef } = usePullToRefresh({
     onRefresh: async () => {
       if (!selectedChatId) return;
-      await loadChatDetails(selectedChatId).catch((error: Error) => {
-        console.error('Error refreshing chat details:', error);
-      });
+      await refetchChatDetails();
     },
   });
 
@@ -451,35 +490,26 @@ export function useChatPage() {
       )
     : filteredByType;
 
-  // Load chats on mount
-  useEffect(() => {
-    if ((ready && authenticated) || isDebugMode) {
-      loadChats();
-    }
-  }, [ready, authenticated, isDebugMode, loadChats]);
+  // Combined chat details with realtime messages
+  const chatDetailsWithRealtimeMessages: ChatDetails | null = chatDetails
+    ? {
+        ...chatDetails,
+        messages:
+          realtimeMessages.length > 0 ? realtimeMessages : chatDetails.messages,
+      }
+    : null;
 
   // Load selected chat details
   useEffect(() => {
-    lastMessageIdRef.current = null;
-    setIsAtBottom(true);
     if (selectedChatId) {
-      loadChatDetails(selectedChatId);
+      lastMessageIdRef.current = null;
+      setIsAtBottom(true);
     }
-  }, [selectedChatId, loadChatDetails]);
-
-  // Update chatDetails with realtime messages
-  useEffect(() => {
-    if (chatDetails && realtimeMessages.length > 0) {
-      setChatDetails((prev) => {
-        if (!prev) return prev;
-        return { ...prev, messages: realtimeMessages };
-      });
-    }
-  }, [realtimeMessages, chatDetails]);
+  }, [selectedChatId]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    const msgs = chatDetails?.messages || [];
+    const msgs = chatDetailsWithRealtimeMessages?.messages ?? [];
     const lastId = msgs.length > 0 ? msgs[msgs.length - 1]?.id : null;
     if (!lastId) return;
 
@@ -497,7 +527,7 @@ export function useChatPage() {
       scrollToBottom('smooth');
       setIsAtBottom(true);
     }
-  }, [chatDetails?.messages, isAtBottom, scrollToBottom]);
+  }, [chatDetailsWithRealtimeMessages?.messages, isAtBottom, scrollToBottom]);
 
   // Intersection observer for infinite scroll
   useEffect(() => {
@@ -571,12 +601,10 @@ export function useChatPage() {
       if (chatParam && chatParam !== selectedChatId) {
         setSelectedChatId(chatParam);
 
-        // If this is a new DM, store it as pending until user is available
         if (newDMParam && chatParam.startsWith('dm-')) {
           setPendingDM({ chatId: chatParam, targetUserId: newDMParam });
         }
 
-        // Clean up URL
         window.history.replaceState({}, '', '/chats');
       }
     }
@@ -585,10 +613,14 @@ export function useChatPage() {
   // Load pending DM once user is available
   useEffect(() => {
     if (pendingDM && user) {
-      loadNewDMChat(pendingDM.chatId, pendingDM.targetUserId);
+      void loadNewDMChat(pendingDM.chatId, pendingDM.targetUserId);
       setPendingDM(null);
     }
   }, [pendingDM, user, loadNewDMChat]);
+
+  const loadChats = useCallback(async () => {
+    await refetchChats();
+  }, [refetchChats]);
 
   return {
     // Auth
@@ -606,12 +638,12 @@ export function useChatPage() {
 
     // Data
     filteredChats,
-    chatDetails,
+    chatDetails: chatDetailsWithRealtimeMessages,
 
     // Loading state
     loading,
     loadingChat,
-    sending,
+    sending: sendMessageMutation.isPending,
     isLoadingMore,
     hasMore,
 
@@ -625,7 +657,7 @@ export function useChatPage() {
     // Leave chat
     isLeaveConfirmOpen,
     setLeaveConfirmOpen,
-    isLeavingChat,
+    isLeavingChat: leaveChatMutation.isPending,
     leaveChatError,
     setLeaveChatError,
     handleLeaveChat,

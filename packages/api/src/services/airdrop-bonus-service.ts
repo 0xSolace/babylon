@@ -14,7 +14,7 @@
  * @packageDocumentation
  */
 
-import { airdropAllocations, db, desc, eq, sql, users } from '@babylon/db';
+import { db } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { parseUnits } from 'viem';
 
@@ -92,6 +92,35 @@ export interface BonusCalculationResult {
 }
 
 // =============================================================================
+// DATABASE ROW TYPES
+// =============================================================================
+
+interface UserRow {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  profileImageUrl: string | null;
+  reputationPoints: number;
+  earnedPoints: number;
+  invitePoints: number;
+  bonusPoints: number;
+  walletAddress: string | null;
+  isActor: boolean;
+}
+
+interface AirdropAllocationRow {
+  id: string;
+  userId: string;
+  walletAddress: string;
+  totalAllocation: string;
+  bonusMultiplier: number;
+  snapshotPoints: number;
+  isElizaHolder: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// =============================================================================
 // SERVICE
 // =============================================================================
 
@@ -142,18 +171,11 @@ export class AirdropBonusService {
     usersProcessed: number;
     totalPoints: number;
   }> {
-    const allUsers = await db
-      .select({
-        id: users.id,
-        reputationPoints: users.reputationPoints,
-        earnedPoints: users.earnedPoints,
-        invitePoints: users.invitePoints,
-        bonusPoints: users.bonusPoints,
-        walletAddress: users.walletAddress,
-        isActor: users.isActor,
-      })
-      .from(users)
-      .where(eq(users.isActor, false));
+    const allUsers = await db.query<UserRow>(
+      `SELECT "id", "reputationPoints", "earnedPoints", "invitePoints", "bonusPoints", "walletAddress", "isActor"
+       FROM "User"
+       WHERE "isActor" = false`
+    );
 
     let totalPoints = 0;
     let usersProcessed = 0;
@@ -162,37 +184,39 @@ export class AirdropBonusService {
       if (!user.walletAddress) continue;
 
       const totalUserPoints =
-        user.reputationPoints +
-        user.earnedPoints +
-        user.invitePoints +
-        user.bonusPoints;
+        Number(user.reputationPoints) +
+        Number(user.earnedPoints) +
+        Number(user.invitePoints) +
+        Number(user.bonusPoints);
 
-      // Create or update airdrop allocation
-      const existingAlloc = await db
-        .select()
-        .from(airdropAllocations)
-        .where(eq(airdropAllocations.userId, user.id))
-        .limit(1);
+      // Check for existing allocation
+      const existingAlloc = await db.queryOne<AirdropAllocationRow>(
+        `SELECT * FROM "AirdropAllocation" WHERE "userId" = $1 LIMIT 1`,
+        [user.id]
+      );
 
-      if (existingAlloc.length === 0) {
-        await db.insert(airdropAllocations).values({
-          id: await generateSnowflakeId(),
-          userId: user.id,
-          walletAddress: user.walletAddress,
-          totalAllocation: '0',
-          bonusMultiplier: 100,
-          snapshotPoints: totalUserPoints,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
+      if (!existingAlloc) {
+        const newId = await generateSnowflakeId();
+        const now = new Date().toISOString();
+        await db.exec(
+          `INSERT INTO "AirdropAllocation" ("id", "userId", "walletAddress", "totalAllocation", "bonusMultiplier", "snapshotPoints", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            newId,
+            user.id,
+            user.walletAddress,
+            '0',
+            100,
+            totalUserPoints,
+            now,
+            now,
+          ]
+        );
       } else {
-        await db
-          .update(airdropAllocations)
-          .set({
-            snapshotPoints: totalUserPoints,
-            updatedAt: new Date(),
-          })
-          .where(eq(airdropAllocations.userId, user.id));
+        await db.exec(
+          `UPDATE "AirdropAllocation" SET "snapshotPoints" = $1, "updatedAt" = $2 WHERE "userId" = $3`,
+          [totalUserPoints, new Date().toISOString(), user.id]
+        );
       }
 
       totalPoints += totalUserPoints;
@@ -212,22 +236,19 @@ export class AirdropBonusService {
    * Calculate base allocation for a user based on their points snapshot
    */
   async calculateBaseAllocation(userId: string): Promise<bigint> {
-    const [allocation] = await db
-      .select()
-      .from(airdropAllocations)
-      .where(eq(airdropAllocations.userId, userId))
-      .limit(1);
+    const allocation = await db.queryOne<AirdropAllocationRow>(
+      `SELECT * FROM "AirdropAllocation" WHERE "userId" = $1 LIMIT 1`,
+      [userId]
+    );
 
     if (!allocation) return 0n;
 
     // Get total points across all users for proportional allocation
-    const [totals] = await db
-      .select({
-        totalPoints: sql<number>`sum(${airdropAllocations.snapshotPoints})`,
-      })
-      .from(airdropAllocations);
+    const totals = await db.queryOne<{ totalPoints: string | number | null }>(
+      `SELECT SUM("snapshotPoints") as "totalPoints" FROM "AirdropAllocation"`
+    );
 
-    const totalPoints = totals?.totalPoints ?? 0;
+    const totalPoints = Number(totals?.totalPoints ?? 0);
     if (totalPoints === 0) return 0n;
 
     // Airdrop pool: 10% of 1B = 100M BBLN
@@ -246,42 +267,46 @@ export class AirdropBonusService {
    * Get current leaderboard for bonus period
    */
   async getLeaderboard(limit = 100): Promise<LeaderboardEntry[]> {
-    // Calculate points earned since launch
-    const leaderboard = await db
-      .select({
-        userId: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        profileImageUrl: users.profileImageUrl,
-        currentPoints: users.reputationPoints,
-      })
-      .from(users)
-      .where(eq(users.isActor, false))
-      .orderBy(desc(users.reputationPoints))
-      .limit(limit);
+    // Get users ordered by reputation points
+    const leaderboard = await db.query<{
+      userId: string;
+      username: string | null;
+      displayName: string | null;
+      profileImageUrl: string | null;
+      currentPoints: number;
+    }>(
+      `SELECT "id" as "userId", "username", "displayName", "profileImageUrl", "reputationPoints" as "currentPoints"
+       FROM "User"
+       WHERE "isActor" = false
+       ORDER BY "reputationPoints" DESC
+       LIMIT $1`,
+      [limit]
+    );
 
-    // Get snapshot points for comparison
+    // Get snapshot points for all users in the leaderboard
     const userIds = leaderboard.map((u) => u.userId);
-    const snapshots = await db
-      .select({
-        userId: airdropAllocations.userId,
-        snapshotPoints: airdropAllocations.snapshotPoints,
-      })
-      .from(airdropAllocations)
-      .where(
-        sql`${airdropAllocations.userId} IN (${sql.join(
-          userIds.map((id) => sql`${id}`),
-          sql`, `
-        )})`
-      );
+    if (userIds.length === 0) return [];
+
+    // Build IN clause with proper parameterization
+    const placeholders = userIds.map((_, i) => `$${i + 1}`).join(', ');
+    const snapshots = await db.query<{
+      userId: string;
+      snapshotPoints: number;
+    }>(
+      `SELECT "userId", "snapshotPoints" FROM "AirdropAllocation" WHERE "userId" IN (${placeholders})`,
+      userIds
+    );
 
     const snapshotMap = new Map(
-      snapshots.map((s) => [s.userId, s.snapshotPoints])
+      snapshots.map((s) => [s.userId, Number(s.snapshotPoints)])
     );
 
     return leaderboard.map((user, index) => {
       const snapshotPoints = snapshotMap.get(user.userId) ?? 0;
-      const pointsEarned = Math.max(0, user.currentPoints - snapshotPoints);
+      const pointsEarned = Math.max(
+        0,
+        Number(user.currentPoints) - snapshotPoints
+      );
 
       return {
         userId: user.userId,
@@ -327,43 +352,38 @@ export class AirdropBonusService {
    * Get user's current bonus status
    */
   async getUserBonusStatus(userId: string): Promise<UserBonusStatus | null> {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await db.queryOne<UserRow>(
+      `SELECT * FROM "User" WHERE "id" = $1 LIMIT 1`,
+      [userId]
+    );
 
     if (!user) return null;
 
-    const [allocation] = await db
-      .select()
-      .from(airdropAllocations)
-      .where(eq(airdropAllocations.userId, userId))
-      .limit(1);
+    const allocation = await db.queryOne<AirdropAllocationRow>(
+      `SELECT * FROM "AirdropAllocation" WHERE "userId" = $1 LIMIT 1`,
+      [userId]
+    );
 
     if (!allocation) return null;
 
-    // Get total participants and user's rank
-    const countResult = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(airdropAllocations);
-    const totalParticipants = countResult[0]?.count ?? 0;
+    // Get total participants
+    const countResult = await db.queryOne<{ count: string | number }>(
+      `SELECT COUNT(*) as count FROM "AirdropAllocation"`
+    );
+    const totalParticipants = Number(countResult?.count ?? 0);
 
     // Get user's leaderboard position
     const pointsEarned = Math.max(
       0,
-      user.reputationPoints - (allocation.snapshotPoints ?? 0)
+      Number(user.reputationPoints) - Number(allocation.snapshotPoints ?? 0)
     );
 
-    const rankResult = await db
-      .select({
-        rank: sql<number>`count(*) + 1`,
-      })
-      .from(users)
-      .where(
-        sql`${users.reputationPoints} > ${user.reputationPoints} AND ${users.isActor} = false`
-      );
-    const rank = rankResult[0]?.rank ?? totalParticipants;
+    // Count users with more reputation points to determine rank
+    const rankResult = await db.queryOne<{ rank: string | number }>(
+      `SELECT COUNT(*) + 1 as rank FROM "User" WHERE "reputationPoints" > $1 AND "isActor" = false`,
+      [user.reputationPoints]
+    );
+    const rank = Number(rankResult?.rank ?? totalParticipants);
 
     const leaderboardMultiplier = this.getLeaderboardMultiplier(
       rank,
@@ -393,7 +413,7 @@ export class AirdropBonusService {
     return {
       userId,
       baseAllocation,
-      pointsAtLaunch: allocation.snapshotPoints ?? 0,
+      pointsAtLaunch: Number(allocation.snapshotPoints ?? 0),
       pointsEarnedDuringBonus: pointsEarned,
       leaderboardPosition: rank,
       totalParticipants,
@@ -419,11 +439,10 @@ export class AirdropBonusService {
     let totalBonusAllocated = 0n;
 
     for (const [i, entry] of leaderboard.entries()) {
-      const [allocation] = await db
-        .select()
-        .from(airdropAllocations)
-        .where(eq(airdropAllocations.userId, entry.userId))
-        .limit(1);
+      const allocation = await db.queryOne<AirdropAllocationRow>(
+        `SELECT * FROM "AirdropAllocation" WHERE "userId" = $1 LIMIT 1`,
+        [entry.userId]
+      );
 
       if (!allocation) continue;
 
@@ -450,13 +469,11 @@ export class AirdropBonusService {
 
       // Update allocation with bonus
       const currentAllocation = BigInt(allocation.totalAllocation);
-      await db
-        .update(airdropAllocations)
-        .set({
-          totalAllocation: (currentAllocation + totalBonus).toString(),
-          updatedAt: new Date(),
-        })
-        .where(eq(airdropAllocations.userId, entry.userId));
+      const newAllocation = (currentAllocation + totalBonus).toString();
+      await db.exec(
+        `UPDATE "AirdropAllocation" SET "totalAllocation" = $1, "updatedAt" = $2 WHERE "userId" = $3`,
+        [newAllocation, new Date().toISOString(), entry.userId]
+      );
     }
 
     logger.info(
@@ -480,21 +497,18 @@ export class AirdropBonusService {
    * (Would integrate with on-chain check)
    */
   async checkElizaHoldings(userId: string): Promise<boolean> {
-    const [user] = await db
-      .select({ walletAddress: users.walletAddress })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await db.queryOne<{ walletAddress: string | null }>(
+      `SELECT "walletAddress" FROM "User" WHERE "id" = $1 LIMIT 1`,
+      [userId]
+    );
 
     if (!user?.walletAddress) return false;
 
     // Check allocation table (set by ElizaHolderAirdropService after on-chain verification)
-    // On-chain balance check requires ELIZA token addresses to be configured
-    const [allocation] = await db
-      .select({ isElizaHolder: airdropAllocations.isElizaHolder })
-      .from(airdropAllocations)
-      .where(eq(airdropAllocations.userId, userId))
-      .limit(1);
+    const allocation = await db.queryOne<{ isElizaHolder: boolean }>(
+      `SELECT "isElizaHolder" FROM "AirdropAllocation" WHERE "userId" = $1 LIMIT 1`,
+      [userId]
+    );
 
     return allocation?.isElizaHolder ?? false;
   }
@@ -503,14 +517,10 @@ export class AirdropBonusService {
    * Mark user as ELIZA holder (called after on-chain verification)
    */
   async markAsElizaHolder(userId: string): Promise<void> {
-    await db
-      .update(airdropAllocations)
-      .set({
-        isElizaHolder: true,
-        bonusMultiplier: ELIZA_HOLDER_MULTIPLIER,
-        updatedAt: new Date(),
-      })
-      .where(eq(airdropAllocations.userId, userId));
+    await db.exec(
+      `UPDATE "AirdropAllocation" SET "isElizaHolder" = true, "bonusMultiplier" = $1, "updatedAt" = $2 WHERE "userId" = $3`,
+      [ELIZA_HOLDER_MULTIPLIER, new Date().toISOString(), userId]
+    );
 
     logger.info(
       `Marked user as ELIZA holder`,

@@ -9,8 +9,27 @@
  */
 
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
-import { getCurrentChainId, logger } from '@babylon/shared';
-import { ethers } from 'ethers';
+import {
+  getCurrentChainId,
+  keccak256,
+  logger,
+  zeroHash,
+} from '@babylon/shared';
+import {
+  type Address,
+  createPublicClient,
+  createWalletClient,
+  encodeAbiParameters,
+  type GetContractReturnType,
+  getContract,
+  type Hash,
+  type Hex,
+  http,
+  type PublicClient,
+  parseAbiParameters,
+  type WalletClient,
+} from 'viem';
+import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { getOraclePrivateKey as getOracleKey } from '../../config/dev-keys';
 import { CommitmentStore } from '../oracle-commitment-store';
 import { GameOracleABI } from './abi/GameOracle';
@@ -21,6 +40,11 @@ import type {
   OracleConfig,
   RevealTransactionResult,
 } from './types';
+
+type OracleContract = GetContractReturnType<
+  typeof GameOracleABI,
+  { public: PublicClient; wallet: WalletClient }
+>;
 
 /**
  * Get oracle private key with optional explicit override
@@ -34,9 +58,11 @@ function getOraclePrivateKey(configKey?: string): string {
 }
 
 export class OracleService {
-  private provider: ethers.JsonRpcProvider;
-  private wallet: ethers.Wallet;
-  private contract: ethers.Contract;
+  private publicClient: PublicClient;
+  private walletClient: WalletClient;
+  private walletAddress: Address;
+  private account: PrivateKeyAccount;
+  private contract: OracleContract;
   private config: OracleConfig;
 
   constructor(config?: Partial<OracleConfig>) {
@@ -57,22 +83,34 @@ export class OracleService {
       throw new Error('Oracle address not configured');
     }
 
-    // Setup provider and wallet
-    this.provider = new ethers.JsonRpcProvider(this.config.rpcUrl);
-    this.wallet = new ethers.Wallet(this.config.privateKey, this.provider);
+    // Setup viem clients
+    this.account = privateKeyToAccount(this.config.privateKey as Hex);
+    this.walletAddress = this.account.address;
+
+    this.publicClient = createPublicClient({
+      transport: http(this.config.rpcUrl),
+    });
+
+    this.walletClient = createWalletClient({
+      account: this.account,
+      transport: http(this.config.rpcUrl),
+    });
 
     // Setup contract with Jeju GameOracle ABI
-    this.contract = new ethers.Contract(
-      this.config.oracleAddress,
-      GameOracleABI,
-      this.wallet
-    );
+    this.contract = getContract({
+      address: this.config.oracleAddress as Address,
+      abi: GameOracleABI,
+      client: {
+        public: this.publicClient,
+        wallet: this.walletClient,
+      },
+    });
 
     logger.info(
       'Oracle service initialized',
       {
         oracle: this.config.oracleAddress,
-        wallet: this.wallet.address,
+        wallet: this.walletAddress,
         chainId: this.config.chainId,
       },
       'OracleService'
@@ -84,9 +122,11 @@ export class OracleService {
    */
   private generateCommitment(outcome: boolean, salt: string): string {
     // keccak256(abi.encode(outcome, salt))
-    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-    const encoded = abiCoder.encode(['bool', 'bytes32'], [outcome, salt]);
-    return ethers.keccak256(encoded);
+    const encoded = encodeAbiParameters(parseAbiParameters('bool, bytes32'), [
+      outcome,
+      salt as Hex,
+    ]);
+    return keccak256(encoded);
   }
 
   /**
@@ -118,67 +158,42 @@ export class OracleService {
       createdAt: new Date(),
     });
 
-    // Call contract - verify method exists
-    if (!this.contract?.commitGame) {
-      throw new Error('commitGame not available on contract');
-    }
-
     // Verify contract has code at address
-    const code = await this.provider.getCode(this.config.oracleAddress);
+    const code = await this.publicClient.getBytecode({
+      address: this.config.oracleAddress as Address,
+    });
     if (!code || code === '0x' || code === '0x0') {
       throw new Error(
         `No contract code found at address ${this.config.oracleAddress}`
       );
     }
 
-    // Encode the function call to verify it works
-    const iface = this.contract.interface;
-    const data = iface.encodeFunctionData('commitGame', [
+    // Write to contract - use type assertion to handle viem's strict type checking
+    const txHash = await (
+      this.contract.write.commitGame as unknown as (
+        args: [string, bigint, string, Hex, string]
+      ) => Promise<Hex>
+    )([
       questionId,
-      questionNumber,
+      BigInt(questionNumber),
       question,
-      commitment,
+      commitment as Hex,
       category,
     ]);
-    if (!data || data === '0x') {
-      throw new Error(
-        'Failed to encode function call - method may not exist in contract ABI'
-      );
-    }
 
-    const tx = await this.contract.commitGame(
-      questionId,
-      questionNumber,
-      question,
-      commitment,
-      category,
-      {
-        gasLimit: 500000, // Reasonable limit for commit
-      }
-    );
-
-    logger.info(
-      `Transaction sent: ${tx.hash}`,
-      { questionId },
-      'OracleService'
-    );
+    logger.info(`Transaction sent: ${txHash}`, { questionId }, 'OracleService');
 
     // Wait for confirmation
-    const receipt = await tx.wait(this.config.confirmations);
+    const receipt = await this.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+      confirmations: this.config.confirmations,
+    });
 
-    // Parse event to get sessionId
-    const event = receipt.logs
-      .map((log: ethers.Log | ethers.EventLog) => {
-        return this.contract.interface.parseLog({
-          topics: log.topics,
-          data: log.data,
-        });
-      })
-      .find(
-        (e: ethers.LogDescription | null) => e && e.name === 'GameCommitted'
-      );
-
-    const sessionId = event?.args?.sessionId || ethers.ZeroHash;
+    // Parse event to get sessionId - look for GameCommitted event
+    // The sessionId will be in the first topic after the event signature
+    // Event signature: keccak256("GameCommitted(bytes32,string,uint256,uint256)")
+    const gameCommittedLog = receipt.logs.find((log) => log.topics.length > 1);
+    const sessionId = (gameCommittedLog?.topics[1] as Hash) || zeroHash;
 
     // Update stored commitment with sessionId
     const stored = await CommitmentStore.retrieve(questionId);
@@ -194,8 +209,8 @@ export class OracleService {
       {
         questionId,
         sessionId: sessionId.toString(),
-        txHash: receipt.hash,
-        blockNumber: receipt.blockNumber,
+        txHash: receipt.transactionHash,
+        blockNumber: Number(receipt.blockNumber),
         gasUsed: receipt.gasUsed.toString(),
       },
       'OracleService'
@@ -205,8 +220,8 @@ export class OracleService {
       sessionId: sessionId.toString(),
       questionId,
       commitment,
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber,
+      txHash: receipt.transactionHash,
+      blockNumber: Number(receipt.blockNumber),
       gasUsed: receipt.gasUsed.toString(),
     };
   }
@@ -238,29 +253,31 @@ export class OracleService {
     }
 
     // Call contract
-    if (!this.contract?.revealGame) {
-      throw new Error('revealGame not available on contract');
-    }
-    const tx = await this.contract.revealGame(
-      stored.sessionId,
-      outcome,
-      stored.salt,
-      '0x', // Empty TEE quote for now
-      winners,
-      totalPayout,
-      {
-        gasLimit: 800000, // Higher limit for reveal
-      }
+    const txHash = await this.contract.write.revealGame(
+      [
+        stored.sessionId as Hex,
+        outcome,
+        stored.salt as Hex,
+        '0x' as Hex, // Empty TEE quote for now
+        winners as Address[],
+        totalPayout,
+      ],
+      { account: this.account } as Parameters<
+        typeof this.contract.write.revealGame
+      >[1]
     );
 
     logger.info(
-      `Reveal transaction sent: ${tx.hash}`,
+      `Reveal transaction sent: ${txHash}`,
       { questionId, sessionId: stored.sessionId },
       'OracleService'
     );
 
     // Wait for confirmation
-    const receipt = await tx.wait(this.config.confirmations);
+    const receipt = await this.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+      confirmations: this.config.confirmations,
+    });
 
     // Cleanup stored commitment
     await CommitmentStore.delete(questionId);
@@ -271,8 +288,8 @@ export class OracleService {
         questionId,
         sessionId: stored.sessionId,
         outcome,
-        txHash: receipt.hash,
-        blockNumber: receipt.blockNumber,
+        txHash: receipt.transactionHash,
+        blockNumber: Number(receipt.blockNumber),
         gasUsed: receipt.gasUsed.toString(),
       },
       'OracleService'
@@ -282,8 +299,8 @@ export class OracleService {
       sessionId: stored.sessionId,
       questionId,
       outcome,
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber,
+      txHash: receipt.transactionHash,
+      blockNumber: Number(receipt.blockNumber),
       gasUsed: receipt.gasUsed.toString(),
     };
   }
@@ -342,58 +359,41 @@ export class OracleService {
       return { successful, failed };
     }
 
-    // Call batch contract method - verify method exists
-    if (!this.contract?.batchCommitGames) {
-      throw new Error('batchCommitGames not available on contract');
-    }
-
     // Verify contract has code at address
-    const code = await this.provider.getCode(this.config.oracleAddress);
+    const code = await this.publicClient.getBytecode({
+      address: this.config.oracleAddress as Address,
+    });
     if (!code || code === '0x' || code === '0x0') {
       throw new Error(
         `No contract code found at address ${this.config.oracleAddress}`
       );
     }
 
-    // Encode the function call to verify it works
-    const iface = this.contract.interface;
-    const data = iface.encodeFunctionData('batchCommitGames', [
-      questionIds,
-      questionNumbers,
-      questions,
-      commitments,
-      categories,
-    ]);
-    if (!data || data === '0x') {
-      throw new Error(
-        'Failed to encode function call - method may not exist in contract ABI'
-      );
-    }
-
-    const tx = await this.contract.batchCommitGames(
-      questionIds,
-      questionNumbers,
-      questions,
-      commitments,
-      categories,
-      {
-        gasLimit: 500000 * questionIds.length, // Scale with batch size
-      }
+    // Call batch contract method
+    const txHash = await this.contract.write.batchCommitGames(
+      [
+        questionIds,
+        questionNumbers.map((n) => BigInt(n)),
+        questions,
+        commitments as Hex[],
+        categories,
+      ],
+      { account: this.account } as Parameters<
+        typeof this.contract.write.batchCommitGames
+      >[1]
     );
 
-    const receipt = await tx.wait(this.config.confirmations);
+    const receipt = await this.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+      confirmations: this.config.confirmations,
+    });
 
     // Parse events to get session IDs
     const events = receipt.logs
-      .map((log: ethers.Log | ethers.EventLog) => {
-        return this.contract.interface.parseLog({
-          topics: log.topics,
-          data: log.data,
-        });
-      })
-      .filter(
-        (e: ethers.LogDescription | null) => e && e.name === 'GameCommitted'
-      );
+      .filter((log) => log.topics.length > 1)
+      .map((log) => ({
+        sessionId: log.topics[1] as Hash,
+      }));
 
     // Update stored commitments and build results
     // List all pending commitments before retrieval for monitoring
@@ -410,7 +410,7 @@ export class OracleService {
 
     for (let i = 0; i < questionIds.length; i++) {
       const event = events[i];
-      const sessionId = event?.args?.sessionId?.toString() || ethers.ZeroHash;
+      const sessionId = event?.sessionId?.toString() || zeroHash;
 
       const stored = await CommitmentStore.retrieve(questionIds[i]!);
       if (stored) {
@@ -434,8 +434,8 @@ export class OracleService {
         sessionId,
         questionId: questionIds[i]!,
         commitment: commitments[i]!,
-        txHash: receipt.hash,
-        blockNumber: receipt.blockNumber,
+        txHash: receipt.transactionHash,
+        blockNumber: Number(receipt.blockNumber),
         gasUsed: (receipt.gasUsed / BigInt(questionIds.length)).toString(),
       });
     }
@@ -443,7 +443,7 @@ export class OracleService {
     logger.info(
       `Batch commit successful: ${successful.length} games`,
       {
-        txHash: receipt.hash,
+        txHash: receipt.transactionHash,
         gasUsed: receipt.gasUsed.toString(),
       },
       'OracleService'
@@ -502,13 +502,10 @@ export class OracleService {
       return { successful, failed };
     }
 
-    // Call batch contract method - verify method exists
-    if (!this.contract?.batchRevealGames) {
-      throw new Error('batchRevealGames not available on contract');
-    }
-
     // Verify contract has code at address
-    const code = await this.provider.getCode(this.config.oracleAddress);
+    const code = await this.publicClient.getBytecode({
+      address: this.config.oracleAddress as Address,
+    });
     if (!code || code === '0x' || code === '0x0') {
       throw new Error(
         `No contract code found at address ${this.config.oracleAddress}`
@@ -518,44 +515,33 @@ export class OracleService {
     // Validate teeQuotes - ensure they're valid bytes
     const validTeeQuotes = teeQuotes.map((quote) => {
       if (!quote || quote === '') {
-        return '0x'; // Empty bytes
+        return '0x' as Hex; // Empty bytes
       }
       // Ensure it's a valid hex string
       if (!quote.startsWith('0x')) {
-        return `0x${quote}`;
+        return `0x${quote}` as Hex;
       }
-      return quote;
+      return quote as Hex;
     });
 
-    // Encode the function call to verify it works
-    const iface = this.contract.interface;
-    const data = iface.encodeFunctionData('batchRevealGames', [
-      sessionIds,
+    // Call batch contract method
+    const txHash = await (
+      this.contract.write.batchRevealGames as unknown as (
+        args: [Hex[], boolean[], Hex[], Hex[], Address[][], bigint[]]
+      ) => Promise<Hex>
+    )([
+      sessionIds as Hex[],
       outcomes,
-      salts,
+      salts as Hex[],
       validTeeQuotes,
-      winnersArrays,
+      winnersArrays as Address[][],
       totalPayouts,
     ]);
-    if (!data || data === '0x') {
-      throw new Error(
-        'Failed to encode function call - method may not exist in contract ABI'
-      );
-    }
 
-    const tx = await this.contract.batchRevealGames(
-      sessionIds,
-      outcomes,
-      salts,
-      validTeeQuotes,
-      winnersArrays,
-      totalPayouts,
-      {
-        gasLimit: 800000 * sessionIds.length, // Scale with batch size
-      }
-    );
-
-    const receipt = await tx.wait(this.config.confirmations);
+    const receipt = await this.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+      confirmations: this.config.confirmations,
+    });
 
     // Build results and cleanup
     for (let i = 0; i < questionIds.length; i++) {
@@ -565,8 +551,8 @@ export class OracleService {
         sessionId: sessionIds[i]!,
         questionId: questionIds[i]!,
         outcome: outcomes[i]!,
-        txHash: receipt.hash,
-        blockNumber: receipt.blockNumber,
+        txHash: receipt.transactionHash,
+        blockNumber: Number(receipt.blockNumber),
         gasUsed: (receipt.gasUsed / BigInt(sessionIds.length)).toString(),
       });
     }
@@ -574,7 +560,7 @@ export class OracleService {
     logger.info(
       `Batch reveal successful: ${successful.length} games`,
       {
-        txHash: receipt.hash,
+        txHash: receipt.transactionHash,
         gasUsed: receipt.gasUsed.toString(),
       },
       'OracleService'
@@ -587,10 +573,9 @@ export class OracleService {
    * Get game info from oracle
    */
   async getGameInfo(sessionId: string) {
-    if (!this.contract?.getCompleteGameInfo) {
-      throw new Error('getCompleteGameInfo not available on contract');
-    }
-    const info = await this.contract.getCompleteGameInfo(sessionId);
+    const info = await this.contract.read.getCompleteGameInfo([
+      sessionId as Hex,
+    ]);
     return info;
   }
 
@@ -598,14 +583,12 @@ export class OracleService {
    * Get oracle statistics
    */
   async getStatistics() {
-    if (!this.contract?.getStatistics) {
-      throw new Error('getStatistics not available on contract');
-    }
-    const stats = await this.contract.getStatistics();
+    const stats = await this.contract.read.getStatistics();
+    const [committed, revealed, pending] = stats as [bigint, bigint, bigint];
     return {
-      committed: stats.committed.toString(),
-      revealed: stats.revealed.toString(),
-      pending: stats.pending.toString(),
+      committed: committed.toString(),
+      revealed: revealed.toString(),
+      pending: pending.toString(),
     };
   }
 
@@ -614,8 +597,10 @@ export class OracleService {
    */
   async healthCheck(): Promise<{ healthy: boolean; error?: string }> {
     // Check contract is deployed
-    const code = await this.provider.getCode(this.config.oracleAddress);
-    if (code === '0x' || code === '0x0') {
+    const code = await this.publicClient.getBytecode({
+      address: this.config.oracleAddress as Address,
+    });
+    if (!code || code === '0x' || code === '0x0') {
       return {
         healthy: false,
         error: 'Oracle contract not deployed',
@@ -623,7 +608,9 @@ export class OracleService {
     }
 
     // Check wallet has balance
-    const balance = await this.provider.getBalance(this.wallet.address);
+    const balance = await this.publicClient.getBalance({
+      address: this.walletAddress,
+    });
     if (balance === BigInt(0)) {
       return {
         healthy: false,
@@ -632,9 +619,7 @@ export class OracleService {
     }
 
     // Try to read from contract
-    if (this.contract?.version) {
-      await this.contract.version();
-    }
+    await this.contract.read.version();
 
     return { healthy: true };
   }

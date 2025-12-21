@@ -313,13 +313,8 @@ export class UnruggableOrchestrator {
   async getStatus(): Promise<OrchestratorStatus> {
     const enclaveStatus = this.enclave?.getStatus();
 
-    // Fetch treasury balance
-    let balance = 0n;
-    try {
-      balance = await this.treasury.getBalance();
-    } catch {
-      // Ignore - might not be connected
-    }
+    // Fetch treasury balance (returns 0n if not connected)
+    const balance = await this.treasury.getBalance();
 
     return {
       phase: this.phase,

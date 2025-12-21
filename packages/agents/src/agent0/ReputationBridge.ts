@@ -63,36 +63,27 @@ export class ReputationBridge implements IReputationBridge {
       return { count: 0, averageScore: 0 };
     }
 
-    try {
-      const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client();
 
-      if (agent0Client.isAvailable()) {
-        return await agent0Client.getReputationSummary(agentId, tag1, tag2);
-      }
+    if (agent0Client.isAvailable()) {
+      return await agent0Client.getReputationSummary(agentId, tag1, tag2);
+    }
 
-      // Fallback to subgraph if Agent0Client is not available
-      const tokenId = this.extractTokenId(agentId);
-      if (tokenId === null) {
-        return { count: 0, averageScore: 0 };
-      }
-
-      const agent = await this.subgraphClient.getAgent(tokenId);
-      if (!agent || !agent.reputation) {
-        return { count: 0, averageScore: 0 };
-      }
-
-      return {
-        count: agent.reputation.totalBets || 0,
-        averageScore: (agent.reputation.trustScore || 0) / 100,
-      };
-    } catch (error) {
-      logger.error(
-        'Failed to get Agent0 reputation summary',
-        { error, agentId, tag1, tag2 },
-        'ReputationBridge'
-      );
+    // Fallback to subgraph if Agent0Client is not available
+    const tokenId = this.extractTokenId(agentId);
+    if (tokenId === null) {
       return { count: 0, averageScore: 0 };
     }
+
+    const agent = await this.subgraphClient.getAgent(tokenId);
+    if (!agent || !agent.reputation) {
+      return { count: 0, averageScore: 0 };
+    }
+
+    return {
+      count: agent.reputation.totalBets || 0,
+      averageScore: (agent.reputation.trustScore || 0) / 100,
+    };
   }
 
   /**
@@ -135,26 +126,22 @@ export class ReputationBridge implements IReputationBridge {
   private async getAgent0Reputation(tokenId: number): Promise<AgentReputation> {
     // Try Agent0Client first if available
     if (process.env.AGENT0_ENABLED === 'true') {
-      try {
-        const agent0Client = getAgent0Client();
+      const agent0Client = getAgent0Client();
 
-        if (agent0Client.isAvailable()) {
-          const chainId = agent0Client.getChainId();
-          const agentId = `${chainId}:${tokenId}`;
-          const summary = await agent0Client.getReputationSummary(agentId);
+      if (agent0Client.isAvailable()) {
+        const chainId = agent0Client.getChainId();
+        const agentId = `${chainId}:${tokenId}`;
+        const summary = await agent0Client.getReputationSummary(agentId);
 
-          return {
-            totalBets: summary.count,
-            winningBets: 0, // Not available in summary
-            accuracyScore: summary.averageScore / 100, // Convert 0-100 to 0-1
-            trustScore: summary.averageScore / 100,
-            totalVolume: '0',
-            profitLoss: 0,
-            isBanned: false,
-          };
-        }
-      } catch {
-        // Fallback to subgraph
+        return {
+          totalBets: summary.count,
+          winningBets: 0, // Not available in summary
+          accuracyScore: summary.averageScore / 100, // Convert 0-100 to 0-1
+          trustScore: summary.averageScore / 100,
+          totalVolume: '0',
+          profitLoss: 0,
+          isBanned: false,
+        };
       }
     }
 

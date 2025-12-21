@@ -112,7 +112,7 @@ export function useProfileForm({
   useEffect(() => {
     if (!showProfileModal) return;
 
-    const trimmedUsername = profileForm.username?.trim();
+    const trimmedUsername = profileForm.username.trim();
 
     if (!trimmedUsername || trimmedUsername.length < 3) {
       setUsernameStatus(null);
@@ -265,17 +265,17 @@ export function useProfileForm({
   const handleSaveProfile = useCallback(async () => {
     if (!userId) return;
 
-    const trimmedUsername = profileForm.username?.trim();
-    const trimmedDisplayName = profileForm.displayName?.trim();
-    const trimmedBio = profileForm.bio?.trim();
+    const trimmedUsername = profileForm.username.trim();
+    const trimmedDisplayName = profileForm.displayName.trim();
+    const trimmedBio = profileForm.bio.trim();
 
     const finalProfileImageUrl =
       uploadedProfileImage ||
-      profileForm.profileImageUrl?.trim() ||
+      profileForm.profileImageUrl.trim() ||
       `/assets/user-profiles/profile-${profilePictureIndex}.jpg`;
     const finalCoverImageUrl =
       uploadedBanner ||
-      profileForm.coverImageUrl?.trim() ||
+      profileForm.coverImageUrl.trim() ||
       `/assets/user-banners/banner-${bannerIndex}.jpg`;
 
     if (!trimmedUsername || !trimmedDisplayName) {
@@ -311,11 +311,12 @@ export function useProfileForm({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData?.error?.message ||
-            errorData?.message ||
-            'Failed to update profile'
-        );
+        const errorMessage =
+          (errorData as { error?: { message?: string }; message?: string })
+            .error?.message ||
+          (errorData as { message?: string }).message ||
+          'Failed to update profile';
+        throw new Error(errorMessage);
       }
 
       await refresh();

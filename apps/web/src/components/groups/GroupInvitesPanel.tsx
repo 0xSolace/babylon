@@ -16,7 +16,7 @@
  *
  * @returns Group invites panel element or null if no invites
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GroupInviteNotification } from './GroupInviteNotification';
 
 /**
@@ -40,28 +40,31 @@ interface GroupInvite {
   } | null;
 }
 
+interface GroupInvitesResponse {
+  data: {
+    invites: GroupInvite[];
+  };
+}
+
 export function GroupInvitesPanel() {
-  const [invites, setInvites] = useState<GroupInvite[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const loadInvites = useCallback(async () => {
-    const response = await fetch('/api/user-groups/invites');
-    const data = await response.json();
+  const { data: invites, isLoading } = useQuery({
+    queryKey: ['group-invites'],
+    queryFn: async (): Promise<GroupInvite[]> => {
+      const response = await fetch('/api/user-groups/invites');
+      const data: GroupInvitesResponse = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to load invites');
-    }
+      if (!response.ok) {
+        throw new Error('Failed to load invites');
+      }
 
-    setInvites(data.data.invites);
-    setIsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadInvites();
-  }, [loadInvites]);
+      return data.data.invites;
+    },
+  });
 
   const handleInviteResponse = () => {
-    loadInvites(); // Reload invites after response
+    queryClient.invalidateQueries({ queryKey: ['group-invites'] });
   };
 
   if (isLoading) {
@@ -74,7 +77,7 @@ export function GroupInvitesPanel() {
     );
   }
 
-  if (invites.length === 0) {
+  if (!invites || invites.length === 0) {
     return null; // Don't show anything if no invites
   }
 

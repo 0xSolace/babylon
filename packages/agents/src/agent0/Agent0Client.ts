@@ -22,7 +22,7 @@ import type {
 } from 'agent0-sdk';
 // Import SDK and types from agent0-sdk
 import { SDK } from 'agent0-sdk';
-import { Wallet } from 'ethers';
+import { privateKeyToAccount } from 'viem/accounts';
 import type { JsonValue } from '../types/common';
 
 /**
@@ -154,22 +154,18 @@ export class Agent0Client implements IAgent0Client {
 
         let registryOverrides: SDKConfig['registryOverrides'] | undefined;
         if (this.chainId === 31337) {
-          try {
-            const contracts = getContractAddresses();
-            if (
-              contracts.reputationSystem &&
-              contracts.reputationSystem !==
-                '0x0000000000000000000000000000000000000000'
-            ) {
-              registryOverrides = {
-                [this.chainId]: {
-                  REPUTATION: contracts.reputationSystem as `0x${string}`,
-                  IDENTITY: contracts.identityRegistry as `0x${string}`,
-                },
-              };
-            }
-          } catch {
-            // Ignore local contract lookup failures
+          const contracts = getContractAddresses();
+          if (
+            contracts.reputationSystem &&
+            contracts.reputationSystem !==
+              '0x0000000000000000000000000000000000000000'
+          ) {
+            registryOverrides = {
+              [this.chainId]: {
+                REPUTATION: contracts.reputationSystem as `0x${string}`,
+                IDENTITY: contracts.identityRegistry as `0x${string}`,
+              },
+            };
           }
         }
 
@@ -195,11 +191,8 @@ export class Agent0Client implements IAgent0Client {
           },
           'Agent0Client'
         );
-
+      } finally {
         this.initPromise = null;
-      } catch (error) {
-        this.initPromise = null;
-        throw error;
       }
     })();
 
@@ -574,50 +567,41 @@ export class Agent0Client implements IAgent0Client {
       'Agent0Client [loadAgent]'
     );
 
-    try {
-      const agent = await this.sdk!.loadAgent(agentId as `${number}:${number}`);
-      const registrationFile = agent.getRegistrationFile();
-      const parts = agentId.split(':');
-      const tokenId = Number.parseInt(parts[1] ?? '0', 10);
+    const agent = await this.sdk!.loadAgent(agentId as `${number}:${number}`);
+    const registrationFile = agent.getRegistrationFile();
+    const parts = agentId.split(':');
+    const tokenId = Number.parseInt(parts[1] ?? '0', 10);
 
-      const capabilities = this.parseCapabilities(
-        registrationFile.metadata as Record<string, JsonValue> | undefined
-      );
+    const capabilities = this.parseCapabilities(
+      registrationFile.metadata as Record<string, JsonValue> | undefined
+    );
 
-      return {
-        tokenId,
-        name: registrationFile.name,
-        walletAddress: registrationFile.walletAddress ?? '',
-        metadataCID: registrationFile.agentURI ?? agentId,
-        capabilities,
-        reputation: {
-          trustScore: 0,
-          accuracyScore: 0,
-        },
-        description: registrationFile.description,
-        image: registrationFile.image,
-        chainId: registrationFile.walletChainId,
-        owners: registrationFile.owners,
-        operators: registrationFile.operators,
-        endpoints: registrationFile.endpoints.map((ep) => ({
-          type: ep.type as 'MCP' | 'A2A' | 'ENS' | 'DID' | 'wallet' | 'OASF',
-          value: ep.value,
-          meta: ep.meta,
-        })),
-        trustModels: registrationFile.trustModels as string[],
-        active: registrationFile.active,
-        x402support: registrationFile.x402support,
-        metadata: registrationFile.metadata,
-        updatedAt: registrationFile.updatedAt,
-      };
-    } catch (error) {
-      logger.warn(
-        `Failed to load agent ${agentId}:`,
-        { error: error instanceof Error ? error.message : String(error) },
-        'Agent0Client [loadAgent]'
-      );
-      return null;
-    }
+    return {
+      tokenId,
+      name: registrationFile.name,
+      walletAddress: registrationFile.walletAddress ?? '',
+      metadataCID: registrationFile.agentURI ?? agentId,
+      capabilities,
+      reputation: {
+        trustScore: 0,
+        accuracyScore: 0,
+      },
+      description: registrationFile.description,
+      image: registrationFile.image,
+      chainId: registrationFile.walletChainId,
+      owners: registrationFile.owners,
+      operators: registrationFile.operators,
+      endpoints: registrationFile.endpoints.map((ep) => ({
+        type: ep.type as 'MCP' | 'A2A' | 'ENS' | 'DID' | 'wallet' | 'OASF',
+        value: ep.value,
+        meta: ep.meta,
+      })),
+      trustModels: registrationFile.trustModels as string[],
+      active: registrationFile.active,
+      x402support: registrationFile.x402support,
+      metadata: registrationFile.metadata,
+      updatedAt: registrationFile.updatedAt,
+    };
   }
 
   /**
@@ -827,8 +811,10 @@ export class Agent0Client implements IAgent0Client {
     // For system-level feedback, we need to sign authorization
     // The SDK's signer (from config.privateKey) is used to sign the authorization
     // The agent should have pre-authorized this client address during registration
-    const signerWallet = new Wallet(this.config.privateKey);
-    const signerAddress = signerWallet.address as `0x${string}`;
+    const signerAccount = privateKeyToAccount(
+      this.config.privateKey as `0x${string}`
+    );
+    const signerAddress = signerAccount.address;
 
     const auth = await this.sdk.signFeedbackAuth(
       agentId,

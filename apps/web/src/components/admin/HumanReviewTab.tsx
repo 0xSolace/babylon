@@ -19,8 +19,9 @@
 'use client';
 
 import { cn, type JsonValue } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, DollarSign } from 'lucide-react';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -51,54 +52,62 @@ interface Appeal {
 }
 
 export function HumanReviewTab() {
-  const [appeals, setAppeals] = useState<Appeal[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null);
   const [showActionModal, setShowActionModal] = useState(false);
 
-  const fetchAppeals = useCallback(async () => {
-    const response = await fetch('/api/admin/moderation/human-review');
-    if (!response.ok) {
-      toast.error('Failed to load appeals');
-      setLoading(false);
-      return;
-    }
-    const data = await response.json();
-    setAppeals(data.appeals || []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetchAppeals();
-  }, [fetchAppeals]);
-
-  const handleAction = async (
-    userId: string,
-    action: 'approve' | 'deny',
-    reasoning: string
-  ) => {
-    const response = await fetch(
-      `/api/admin/moderation/human-review/${userId}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, reasoning }),
+  const { data: appeals = [], isLoading } = useQuery<Appeal[]>({
+    queryKey: ['admin', 'human-review'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/moderation/human-review');
+      if (!response.ok) {
+        throw new Error('Failed to load appeals');
       }
-    );
+      const data = await response.json();
+      return data.appeals || [];
+    },
+  });
 
-    if (!response.ok) {
-      const error = await response.json();
-      toast.error(error.message || 'Failed to process appeal');
-      return;
-    }
+  const actionMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      action,
+      reasoning,
+    }: {
+      userId: string;
+      action: 'approve' | 'deny';
+      reasoning: string;
+    }) => {
+      const response = await fetch(
+        `/api/admin/moderation/human-review/${userId}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, reasoning }),
+        }
+      );
 
-    toast.success(
-      `Appeal ${action === 'approve' ? 'approved' : 'denied'} successfully`
-    );
-    setShowActionModal(false);
-    setSelectedAppeal(null);
-    fetchAppeals();
-  };
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to process appeal');
+      }
+
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      toast.success(
+        `Appeal ${variables.action === 'approve' ? 'approved' : 'denied'} successfully`
+      );
+      setShowActionModal(false);
+      setSelectedAppeal(null);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'human-review'] });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to process appeal'
+      );
+    },
+  });
 
   const formatDate = (date: Date | null) => {
     if (!date) return 'N/A';
@@ -111,7 +120,7 @@ export function HumanReviewTab() {
     });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
@@ -177,7 +186,9 @@ export function HumanReviewTab() {
                       <div className="text-muted-foreground">Stake Amount</div>
                       <div className="flex items-center gap-1 font-medium">
                         <DollarSign className="h-4 w-4" />
-                        {appeal.appealStakeAmount?.toFixed(2) || 'N/A'}
+                        {appeal.appealStakeAmount !== null
+                          ? appeal.appealStakeAmount.toFixed(2)
+                          : 'N/A'}
                       </div>
                     </div>
                     <div>
@@ -250,7 +261,10 @@ export function HumanReviewTab() {
             setShowActionModal(false);
             setSelectedAppeal(null);
           }}
-          onAction={handleAction}
+          onAction={(userId, action, reasoning) =>
+            actionMutation.mutate({ userId, action, reasoning })
+          }
+          isPending={actionMutation.isPending}
         />
       )}
     </div>
@@ -265,12 +279,18 @@ interface ActionModalProps {
     action: 'approve' | 'deny',
     reasoning: string
   ) => void;
+  isPending: boolean;
 }
 
-function ActionModal({ appeal, onAction, onClose }: ActionModalProps) {
+function ActionModal({
+  appeal,
+  onAction,
+  onClose,
+  isPending,
+}: ActionModalProps) {
   const [action, setAction] = useState<'approve' | 'deny'>('approve');
   const [reasoning, setReasoning] = useState('');
-  const [isSubmitting, startSubmit] = useTransition();
+  const [, startSubmit] = useTransition();
 
   const handleSubmit = () => {
     if (!reasoning.trim()) {
@@ -330,14 +350,14 @@ function ActionModal({ appeal, onAction, onClose }: ActionModalProps) {
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            disabled={isSubmitting}
+            disabled={isPending}
             className="flex-1 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || !reasoning.trim()}
+            disabled={isPending || !reasoning.trim()}
             className={cn(
               'flex-1 rounded-lg px-4 py-2 transition-colors',
               action === 'approve'
@@ -346,7 +366,7 @@ function ActionModal({ appeal, onAction, onClose }: ActionModalProps) {
               'disabled:opacity-50'
             )}
           >
-            {isSubmitting
+            {isPending
               ? 'Processing...'
               : action === 'approve'
                 ? 'Approve Appeal'

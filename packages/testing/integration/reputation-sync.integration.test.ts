@@ -196,26 +196,22 @@ describe('ERC-8004 Reputation Sync Integration', () => {
       return;
     }
 
-    try {
-      const response = await fetch(`${BASE_URL}/api/cron/reputation-sync`, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer development',
-          'Content-Type': 'application/json',
-        },
-      });
+    const response = await fetch(`${BASE_URL}/api/cron/reputation-sync`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer development',
+        'Content-Type': 'application/json',
+      },
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        expect(data.success).toBe(true);
-        expect(data.result).toBeDefined();
-        expect(data.result.total).toBeGreaterThanOrEqual(0);
-      } else {
-        // May require proper auth in production
-        console.log('⚠️  Cron endpoint requires authentication');
-      }
-    } catch (error) {
-      console.warn('⚠️  Cron endpoint test failed:', error);
+    if (response.ok) {
+      const data = await response.json();
+      expect(data.success).toBe(true);
+      expect(data.result).toBeDefined();
+      expect(data.result.total).toBeGreaterThanOrEqual(0);
+    } else {
+      // May require proper auth in production
+      console.log('⚠️  Cron endpoint requires authentication');
     }
   });
 });

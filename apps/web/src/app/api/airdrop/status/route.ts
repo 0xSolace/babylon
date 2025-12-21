@@ -205,9 +205,11 @@ export async function GET(): Promise<NextResponse> {
       };
     }
   } else {
-    const timeUntilNextDrip = allocation.lastDripTime
-      ? new Date(allocation.lastDripTime.getTime() + cooldownMs).getTime() - now
-      : 0;
+    if (!allocation.lastDripTime) {
+      throw new Error('lastDripTime is required when canDripNow is false');
+    }
+    const timeUntilNextDrip =
+      new Date(allocation.lastDripTime.getTime() + cooldownMs).getTime() - now;
     const hoursRemaining = Math.ceil(timeUntilNextDrip / (60 * 60 * 1000));
     action = {
       required: false,
@@ -226,7 +228,10 @@ export async function GET(): Promise<NextResponse> {
   );
 
   // Update action if engagement is required
-  if (action?.type === 'daily_drip' && !engagementStatus.qualifiedForDrip) {
+  if (!action) {
+    throw new Error('Action should be set before engagement check');
+  }
+  if (action.type === 'daily_drip' && !engagementStatus.qualifiedForDrip) {
     const socialNeeded =
       engagementStatus.socialTrack.required -
       engagementStatus.socialTrack.actionsComplete;

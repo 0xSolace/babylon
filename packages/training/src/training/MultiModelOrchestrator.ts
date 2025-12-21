@@ -66,9 +66,8 @@ export interface OrchestratorConfig {
   defaultTier: ModelTier;
   defaultQuantization: QuantizationMode;
   vllmBaseUrl?: string;
-  /** Fallback to Groq/OpenAI when vLLM unavailable */
-  fallbackApiKey?: string;
-  fallbackApiUrl?: string;
+  /** Jeju Compute endpoint (decentralized inference) */
+  jejuComputeUrl?: string;
   /** Timeout for inference in ms */
   inferenceTimeoutMs?: number;
 }
@@ -107,13 +106,13 @@ export class MultiModelOrchestrator {
 
   constructor(config: OrchestratorConfig) {
     this.config = {
-      vllmBaseUrl: process.env.VLLM_BASE_URL || 'http://localhost:9001',
+      vllmBaseUrl: process.env.VLLM_BASE_URL ?? 'http://localhost:9001',
       // Jeju Compute is the only fallback - no centralized providers
-      fallbackApiUrl:
-        process.env.JEJU_COMPUTE_API_URL ||
-        process.env.JEJU_COMPUTE_ENDPOINT ||
-        'http://localhost:4500',
-      fallbackApiKey: undefined, // No API key needed for Jeju Compute
+      jejuComputeUrl:
+        process.env.JEJU_COMPUTE_API_URL ??
+        process.env.JEJU_COMPUTE_ENDPOINT ??
+        process.env.JEJU_GATEWAY_URL ??
+        'http://localhost:4200',
       inferenceTimeoutMs: 30000,
       ...config,
     };
@@ -127,7 +126,7 @@ export class MultiModelOrchestrator {
         quantization: this.multiModelConfig.quantization,
         tier: this.multiModelConfig.modelTier,
         vllmUrl: this.config.vllmBaseUrl,
-        jejuComputeUrl: this.config.fallbackApiUrl,
+        jejuComputeUrl: this.config.jejuComputeUrl,
       },
       'MultiModelOrchestrator'
     );
@@ -376,39 +375,38 @@ export class MultiModelOrchestrator {
   }
 
   /**
-   * Call fallback API (Groq/OpenAI) for inference
+   * Call Jeju Compute Marketplace for inference
+   * NO FALLBACKS - Decentralized compute is required
    */
-  private async callFallbackApi(
+  private async callJejuCompute(
     prompt: string,
     systemPrompt: string,
     maxTokens: number,
     temperature: number
   ): Promise<CompletionResponse> {
-    if (!this.config.fallbackApiKey) {
-      throw new Error(
-        'No fallback API key configured. Set GROQ_API_KEY environment variable.'
-      );
-    }
-
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
       this.config.inferenceTimeoutMs
     );
 
-    // Use a fast model for fallback
-    const fallbackModel = 'llama-3.1-8b-instant';
+    // Use llama-8b alias - Jeju marketplace resolves to available provider
+    const model = 'llama-8b';
 
     const response = await fetch(
-      `${this.config.fallbackApiUrl}/chat/completions`,
+      `${this.config.jejuComputeUrl}/v1/chat/completions`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.fallbackApiKey}`,
+          // Jeju doesn't require API key - uses on-chain settlement
+          'x-jeju-address':
+            process.env.JEJU_USER_ADDRESS ??
+            process.env.AGENT_WALLET_ADDRESS ??
+            '0x0000000000000000000000000000000000000000',
         },
         body: JSON.stringify({
-          model: fallbackModel,
+          model,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: prompt },
@@ -425,7 +423,8 @@ export class MultiModelOrchestrator {
     if (!response.ok) {
       const error = await response.text();
       throw new Error(
-        `Fallback API request failed: ${response.status} - ${error}`
+        `Jeju Compute request failed: ${response.status} - ${error}. ` +
+          'Ensure Jeju is running: cd /path/to/jeju && bun run dev'
       );
     }
 
@@ -450,72 +449,51 @@ export class MultiModelOrchestrator {
     const maxTokens = request.maxTokens || 512;
     const temperature = request.temperature ?? 0.7;
 
-    try {
-      // Try vLLM first
-      const vllmAvailable = await this.checkVllmAvailability();
+    // Try vLLM first - fail fast if inference fails
+    const vllmAvailable = await this.checkVllmAvailability();
 
-      let completion: CompletionResponse;
+    let completion: CompletionResponse;
 
-      if (vllmAvailable) {
-        completion = await this.callVllm(
-          model.modelId,
-          request.prompt,
-          systemPrompt,
-          maxTokens,
-          temperature
-        );
-      } else {
-        // Fall back to Groq/OpenAI
-        completion = await this.callFallbackApi(
-          request.prompt,
-          systemPrompt,
-          maxTokens,
-          temperature
-        );
-      }
-
-      const latencyMs = Date.now() - startTime;
-      const response = completion.choices[0]?.message.content || '';
-      const tokensGenerated = completion.usage?.completion_tokens || 0;
-
-      logger.debug(
-        `Inference completed for ${request.archetype}`,
-        {
-          modelId: model.modelId,
-          latencyMs,
-          tokensGenerated,
-          usedVllm: vllmAvailable,
-        },
-        'MultiModelOrchestrator'
+    if (vllmAvailable) {
+      completion = await this.callVllm(
+        model.modelId,
+        request.prompt,
+        systemPrompt,
+        maxTokens,
+        temperature
       );
+    } else {
+      // Use Jeju Compute Marketplace (decentralized)
+      completion = await this.callJejuCompute(
+        request.prompt,
+        systemPrompt,
+        maxTokens,
+        temperature
+      );
+    }
 
-      return {
-        archetype: request.archetype,
-        response,
+    const latencyMs = Date.now() - startTime;
+    const response = completion.choices[0]?.message.content || '';
+    const tokensGenerated = completion.usage?.completion_tokens || 0;
+
+    logger.debug(
+      `Inference completed for ${request.archetype}`,
+      {
         modelId: model.modelId,
         latencyMs,
         tokensGenerated,
-      };
-    } catch (error) {
-      const latencyMs = Date.now() - startTime;
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+        usedVllm: vllmAvailable,
+      },
+      'MultiModelOrchestrator'
+    );
 
-      logger.error(
-        `Inference failed for ${request.archetype}`,
-        { error: errorMessage, latencyMs },
-        'MultiModelOrchestrator'
-      );
-
-      return {
-        archetype: request.archetype,
-        response: '',
-        modelId: model.modelId,
-        latencyMs,
-        tokensGenerated: 0,
-        error: errorMessage,
-      };
-    }
+    return {
+      archetype: request.archetype,
+      response,
+      modelId: model.modelId,
+      latencyMs,
+      tokensGenerated,
+    };
   }
 
   /**

@@ -120,8 +120,8 @@ export function FarcasterMiniAppProvider({
         logger.info(
           'Detected Farcaster Mini App context',
           {
-            fid: context.user?.fid,
-            username: context.user?.username,
+            fid: context.user ? context.user.fid : undefined,
+            username: context.user ? context.user.username : undefined,
           },
           'FarcasterMiniApp'
         );

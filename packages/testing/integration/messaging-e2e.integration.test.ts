@@ -300,15 +300,11 @@ describe('On-Chain Key Registry', () => {
     });
 
     // Try to get Alice's key (registered in previous test)
-    try {
-      const aliceKey = await client.getRecipientPublicKey(aliceAccount.address);
-      const aliceKeyHex = '0x' + Buffer.from(aliceKey).toString('hex');
-      // Key should be registered
-      expect(aliceKeyHex.startsWith('0x')).toBe(true);
-    } catch {
-      // Key may not be registered if previous test didn't run
-      console.log('Alice key not registered yet');
-    }
+    // Note: This may return empty if previous test didn't run - that's valid
+    const aliceKey = await client.getRecipientPublicKey(aliceAccount.address);
+    const aliceKeyHex = '0x' + Buffer.from(aliceKey).toString('hex');
+    // Key should be registered or empty (if previous test didn't run)
+    expect(aliceKeyHex.startsWith('0x')).toBe(true);
   });
 });
 

@@ -104,8 +104,12 @@ export const POST = withErrorHandling(
       .where(eq(users.id, canonicalUserId))
       .limit(1);
 
+    if (!user) {
+      throw new BusinessLogicError('User record not found', 'USER_NOT_FOUND');
+    }
+
     // VALIDATION 1: Check if user has linked Farcaster account
-    if (!user?.farcasterUsername && !user?.farcasterFid) {
+    if (!user.farcasterUsername && !user.farcasterFid) {
       throw new BusinessLogicError(
         'Please link your Farcaster account first to verify follow.',
         'FARCASTER_NOT_LINKED'
@@ -224,9 +228,9 @@ export const POST = withErrorHandling(
     if (!isFollowing) {
       return successResponse({
         verified: false,
-        message:
-          verificationError ||
-          'Could not verify follow. Please ensure you are following @playbabylon on Farcaster.',
+        message: verificationError
+          ? verificationError
+          : 'Could not verify follow. Please ensure you are following @playbabylon on Farcaster.',
         points: {
           awarded: 0,
           newTotal: 0,

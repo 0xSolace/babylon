@@ -52,7 +52,7 @@ function SidebarContent() {
   const shouldHideSidebar = isWaitlistMode && isHomePage;
 
   // Check if user is admin from the user object
-  const isAdmin = user?.isAdmin ?? false;
+  const isAdmin = user ? (user.isAdmin ?? false) : false;
 
   // All hooks must be called before any conditional returns
   // Close dropdown when clicking outside
@@ -100,7 +100,10 @@ function SidebarContent() {
 
       if (response.ok) {
         const data = await response.json();
-        setUnreadNotifications(data.unreadCount || 0);
+        if (typeof data.unreadCount !== 'number') {
+          throw new Error('Invalid unreadCount in notifications response');
+        }
+        setUnreadNotifications(data.unreadCount);
       }
     };
 
@@ -373,8 +376,8 @@ function SidebarContent() {
                   name={user.displayName || user.email || 'User'}
                   type="user"
                   size="md"
-                  src={user.profileImageUrl || undefined}
-                  imageUrl={user.profileImageUrl || undefined}
+                  src={user.profileImageUrl}
+                  imageUrl={user.profileImageUrl}
                 />
               </button>
             </div>

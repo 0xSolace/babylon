@@ -2,6 +2,7 @@
 
 import { useJejuAuth } from '@babylon/auth/client';
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Crown,
   Loader2,
@@ -43,6 +44,10 @@ interface GroupDetails {
   createdById: string;
 }
 
+interface GroupDetailsResponse {
+  group: GroupDetails;
+}
+
 /**
  * User structure for group management modal.
  */
@@ -51,6 +56,10 @@ interface User {
   displayName: string | null;
   username: string | null;
   profileImageUrl: string | null;
+}
+
+interface SearchUsersResponse {
+  users: User[];
 }
 
 /**
@@ -102,10 +111,7 @@ export function GroupManagementModal({
 }: GroupManagementModalProps) {
   const { getAccessToken } = useJejuAuth();
   const { user } = useAuthStore();
-  const [groupDetails, setGroupDetails] = useState<GroupDetails | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Add member state
   const [showAddMember, setShowAddMember] = useState(false);
@@ -120,18 +126,17 @@ export function GroupManagementModal({
     userName?: string;
   } | null>(null);
 
-  // Load group details
-  useEffect(() => {
-    if (!isOpen || !groupId) {
-      setGroupDetails(null);
-      setError(null);
-      setShowAddMember(false);
-      return;
-    }
+  // Action loading state (for specific member actions)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-    const loadGroupDetails = async () => {
-      setLoading(true);
-      setError(null);
+  // Load group details
+  const {
+    data: groupDetails,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['group-management', groupId],
+    queryFn: async (): Promise<GroupDetails> => {
       const token = await getAccessToken();
       const response = await fetch(`/api/groups/${groupId}`, {
         headers: {
@@ -140,19 +145,26 @@ export function GroupManagementModal({
       });
 
       if (!response.ok) {
-        setLoading(false);
         throw new Error('Failed to load group details');
       }
 
-      const data = await response.json();
-      setGroupDetails(data.group);
-      setLoading(false);
-    };
+      const data: GroupDetailsResponse = await response.json();
+      return data.group;
+    },
+    enabled: isOpen && !!groupId,
+  });
 
-    loadGroupDetails();
-  }, [isOpen, groupId, getAccessToken]);
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setShowAddMember(false);
+      setSearchQuery('');
+      setSearchResults([]);
+      setConfirmAction(null);
+    }
+  }, [isOpen]);
 
-  // Search for users to add
+  // Search for users to add with debounce
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
       setSearchResults([]);
@@ -172,13 +184,11 @@ export function GroupManagementModal({
       );
 
       if (response.ok) {
-        const data = await response.json();
+        const data: SearchUsersResponse = await response.json();
         // Filter out existing members
         const existingMemberIds = groupDetails?.members.map((m) => m.id) || [];
         setSearchResults(
-          (data.users || []).filter(
-            (u: User) => !existingMemberIds.includes(u.id)
-          )
+          (data.users || []).filter((u) => !existingMemberIds.includes(u.id))
         );
       }
       setSearching(false);
@@ -188,197 +198,178 @@ export function GroupManagementModal({
     return () => clearTimeout(debounce);
   }, [searchQuery, getAccessToken, groupDetails]);
 
-  const handleAddMember = async (userId: string) => {
-    if (!groupId) return;
+  const addMemberMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/groups/${groupId}/members`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId }),
+      });
 
-    setActionLoading(userId);
-    const token = await getAccessToken();
-    const response = await fetch(`/api/groups/${groupId}/members`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ userId }),
-    });
+      if (!response.ok) {
+        throw new Error('Failed to add member');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['group-management', groupId],
+      });
+      setSearchQuery('');
+      setSearchResults([]);
+      onGroupUpdated?.();
+    },
+    onSettled: () => {
+      setActionLoadingId(null);
+    },
+  });
 
-    if (!response.ok) {
-      setActionLoading(null);
-      throw new Error('Failed to add member');
-    }
+  const removeMemberMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `/api/groups/${groupId}/members?userId=${userId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (detailsResponse.ok) {
-      const data = await detailsResponse.json();
-      setGroupDetails(data.group);
-    }
+      if (!response.ok) {
+        throw new Error('Failed to remove member');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['group-management', groupId],
+      });
+      onGroupUpdated?.();
+    },
+    onSettled: () => {
+      setActionLoadingId(null);
+      setConfirmAction(null);
+    },
+  });
 
-    setSearchQuery('');
-    setSearchResults([]);
-    onGroupUpdated?.();
-    setActionLoading(null);
-  };
+  const promoteToAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/groups/${groupId}/admins`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId }),
+      });
 
-  const handleRemoveMember = async (userId: string) => {
-    if (!groupId) return;
+      if (!response.ok) {
+        throw new Error('Failed to promote member');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['group-management', groupId],
+      });
+      onGroupUpdated?.();
+    },
+    onSettled: () => {
+      setActionLoadingId(null);
+      setConfirmAction(null);
+    },
+  });
 
-    setActionLoading(userId);
-    const token = await getAccessToken();
-    const response = await fetch(
-      `/api/groups/${groupId}/members?userId=${userId}`,
-      {
+  const demoteAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `/api/groups/${groupId}/admins?userId=${userId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to remove admin status');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['group-management', groupId],
+      });
+      onGroupUpdated?.();
+    },
+    onSettled: () => {
+      setActionLoadingId(null);
+      setConfirmAction(null);
+    },
+  });
+
+  const deleteGroupMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/groups/${groupId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
         },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete group');
       }
-    );
-
-    if (!response.ok) {
-      setActionLoading(null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onGroupUpdated?.();
+      onClose();
+    },
+    onSettled: () => {
+      setActionLoadingId(null);
       setConfirmAction(null);
-      throw new Error('Failed to remove member');
-    }
+    },
+  });
 
-    // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (detailsResponse.ok) {
-      const data = await detailsResponse.json();
-      setGroupDetails(data.group);
-    }
+  const leaveGroupMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('User not authenticated');
+      const token = await getAccessToken();
+      const response = await fetch(
+        `/api/groups/${groupId}/members?userId=${user.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    onGroupUpdated?.();
-    setActionLoading(null);
-    setConfirmAction(null);
-  };
-
-  const handlePromoteToAdmin = async (userId: string) => {
-    if (!groupId) return;
-
-    setActionLoading(userId);
-    const token = await getAccessToken();
-    const response = await fetch(`/api/groups/${groupId}/admins`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ userId }),
-    });
-
-    if (!response.ok) {
-      setActionLoading(null);
-      setConfirmAction(null);
-      throw new Error('Failed to promote member');
-    }
-
-    // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (detailsResponse.ok) {
-      const data = await detailsResponse.json();
-      setGroupDetails(data.group);
-    }
-
-    onGroupUpdated?.();
-    setActionLoading(null);
-    setConfirmAction(null);
-  };
-
-  const handleDemoteAdmin = async (userId: string) => {
-    if (!groupId) return;
-
-    setActionLoading(userId);
-    const token = await getAccessToken();
-    const response = await fetch(
-      `/api/groups/${groupId}/admins?userId=${userId}`,
-      {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      if (!response.ok) {
+        throw new Error('Failed to leave group');
       }
-    );
-
-    if (!response.ok) {
-      setActionLoading(null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onGroupUpdated?.();
+      onClose();
+    },
+    onSettled: () => {
+      setActionLoadingId(null);
       setConfirmAction(null);
-      throw new Error('Failed to remove admin status');
-    }
+    },
+  });
 
-    // Reload group details
-    const detailsResponse = await fetch(`/api/groups/${groupId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (detailsResponse.ok) {
-      const data = await detailsResponse.json();
-      setGroupDetails(data.group);
-    }
-
-    onGroupUpdated?.();
-    setActionLoading(null);
-    setConfirmAction(null);
-  };
-
-  const handleDeleteGroup = async () => {
-    if (!groupId) return;
-
-    setActionLoading('delete');
-    const token = await getAccessToken();
-    const response = await fetch(`/api/groups/${groupId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      setActionLoading(null);
-      setConfirmAction(null);
-      throw new Error('Failed to delete group');
-    }
-
-    onGroupUpdated?.();
-    onClose();
-  };
-
-  const handleLeaveGroup = async () => {
-    if (!groupId || !user) return;
-
-    setActionLoading('leave');
-    const token = await getAccessToken();
-    const response = await fetch(
-      `/api/groups/${groupId}/members?userId=${user.id}`,
-      {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      setActionLoading(null);
-      setConfirmAction(null);
-      throw new Error('Failed to leave group');
-    }
-
-    onGroupUpdated?.();
-    onClose();
+  const handleAddMember = (userId: string) => {
+    setActionLoadingId(userId);
+    addMemberMutation.mutate(userId);
   };
 
   const handleConfirmAction = () => {
@@ -386,27 +377,46 @@ export function GroupManagementModal({
 
     switch (confirmAction.type) {
       case 'remove':
-        if (confirmAction.userId) handleRemoveMember(confirmAction.userId);
+        if (confirmAction.userId) {
+          setActionLoadingId(confirmAction.userId);
+          removeMemberMutation.mutate(confirmAction.userId);
+        }
         break;
       case 'promote':
-        if (confirmAction.userId) handlePromoteToAdmin(confirmAction.userId);
+        if (confirmAction.userId) {
+          setActionLoadingId(confirmAction.userId);
+          promoteToAdminMutation.mutate(confirmAction.userId);
+        }
         break;
       case 'demote':
-        if (confirmAction.userId) handleDemoteAdmin(confirmAction.userId);
+        if (confirmAction.userId) {
+          setActionLoadingId(confirmAction.userId);
+          demoteAdminMutation.mutate(confirmAction.userId);
+        }
         break;
       case 'delete':
-        handleDeleteGroup();
+        setActionLoadingId('delete');
+        deleteGroupMutation.mutate();
         break;
       case 'leave':
-        handleLeaveGroup();
+        setActionLoadingId('leave');
+        leaveGroupMutation.mutate();
         break;
     }
   };
 
+  const isAnyMutationPending =
+    addMemberMutation.isPending ||
+    removeMemberMutation.isPending ||
+    promoteToAdminMutation.isPending ||
+    demoteAdminMutation.isPending ||
+    deleteGroupMutation.isPending ||
+    leaveGroupMutation.isPending;
+
   if (!isOpen || !groupId) return null;
 
   const handleClose = () => {
-    if (actionLoading) return; // Prevent closing during actions
+    if (isAnyMutationPending) return; // Prevent closing during actions
     onClose();
   };
 
@@ -435,7 +445,7 @@ export function GroupManagementModal({
             <button
               onClick={handleClose}
               className="text-muted-foreground transition-colors hover:text-foreground"
-              disabled={!!actionLoading}
+              disabled={isAnyMutationPending}
             >
               <X className="h-5 w-5" />
             </button>
@@ -445,11 +455,11 @@ export function GroupManagementModal({
           <div className="flex-1 overflow-y-auto p-6">
             {error && (
               <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 p-3">
-                <p className="text-red-500 text-sm">{error}</p>
+                <p className="text-red-500 text-sm">{error.message}</p>
               </div>
             )}
 
-            {loading ? (
+            {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
@@ -461,7 +471,7 @@ export function GroupManagementModal({
                   {!groupDetails.isCreator && (
                     <button
                       onClick={() => setConfirmAction({ type: 'leave' })}
-                      disabled={!!actionLoading}
+                      disabled={isAnyMutationPending}
                       className="rounded-lg border border-yellow-600 px-4 py-2 font-medium text-sm text-yellow-600 transition-colors hover:bg-yellow-600/10 disabled:opacity-50"
                     >
                       <LogOut className="mr-2 inline h-4 w-4" />
@@ -473,7 +483,7 @@ export function GroupManagementModal({
                   {groupDetails.isAdmin && (
                     <button
                       onClick={() => setConfirmAction({ type: 'delete' })}
-                      disabled={!!actionLoading}
+                      disabled={isAnyMutationPending}
                       className="rounded-lg border border-red-500 px-4 py-2 font-medium text-red-500 text-sm transition-colors hover:bg-red-500/10 disabled:opacity-50"
                     >
                       <Trash2 className="mr-2 inline h-4 w-4" />
@@ -527,26 +537,32 @@ export function GroupManagementModal({
 
                       {searchResults.length > 0 && (
                         <div className="max-h-[150px] overflow-hidden overflow-y-auto rounded-lg border border-border bg-background">
-                          {searchResults.map((user) => (
+                          {searchResults.map((searchUser) => (
                             <button
-                              key={user.id}
-                              onClick={() => handleAddMember(user.id)}
-                              disabled={actionLoading === user.id}
+                              key={searchUser.id}
+                              onClick={() => handleAddMember(searchUser.id)}
+                              disabled={actionLoadingId === searchUser.id}
                               className="flex w-full items-center gap-2 p-2.5 text-left transition-colors hover:bg-sidebar disabled:opacity-50"
                             >
                               <Avatar
-                                imageUrl={user.profileImageUrl || undefined}
-                                name={user.username || user.displayName || '?'}
+                                imageUrl={
+                                  searchUser.profileImageUrl || undefined
+                                }
+                                name={
+                                  searchUser.username ||
+                                  searchUser.displayName ||
+                                  '?'
+                                }
                                 size="sm"
                               />
                               <div className="min-w-0 flex-1">
                                 <div className="truncate font-medium text-sm">
-                                  {user.displayName ||
-                                    user.username ||
+                                  {searchUser.displayName ||
+                                    searchUser.username ||
                                     'Unknown'}
                                 </div>
                               </div>
-                              {actionLoading === user.id && (
+                              {actionLoadingId === searchUser.id && (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               )}
                             </button>
@@ -606,7 +622,7 @@ export function GroupManagementModal({
                                         'this user',
                                     })
                                   }
-                                  disabled={!!actionLoading}
+                                  disabled={isAnyMutationPending}
                                   className="rounded-md p-2 transition-colors hover:bg-background disabled:opacity-50"
                                   title="Make Admin"
                                 >
@@ -624,7 +640,7 @@ export function GroupManagementModal({
                                         'this user',
                                     })
                                   }
-                                  disabled={!!actionLoading}
+                                  disabled={isAnyMutationPending}
                                   className="rounded-md p-2 transition-colors hover:bg-background disabled:opacity-50"
                                   title="Remove Admin"
                                 >
@@ -642,7 +658,7 @@ export function GroupManagementModal({
                                       'this user',
                                   })
                                 }
-                                disabled={!!actionLoading}
+                                disabled={isAnyMutationPending}
                                 className="rounded-md p-2 transition-colors hover:bg-background disabled:opacity-50"
                                 title="Remove Member"
                               >
@@ -666,7 +682,7 @@ export function GroupManagementModal({
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={(e) => {
-            if (e.target === e.currentTarget && !actionLoading) {
+            if (e.target === e.currentTarget && !isAnyMutationPending) {
               setConfirmAction(null);
             }
           }}
@@ -699,14 +715,14 @@ export function GroupManagementModal({
               <div className="flex gap-3">
                 <button
                   onClick={() => setConfirmAction(null)}
-                  disabled={!!actionLoading}
+                  disabled={isAnyMutationPending}
                   className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-2.5 transition-colors hover:bg-accent disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleConfirmAction}
-                  disabled={!!actionLoading}
+                  disabled={isAnyMutationPending}
                   className={cn(
                     'flex-1 rounded-lg px-4 py-2.5 font-medium transition-colors disabled:opacity-50',
                     confirmAction.type === 'delete' ||
@@ -717,7 +733,7 @@ export function GroupManagementModal({
                         : 'bg-primary text-primary-foreground hover:bg-primary/90'
                   )}
                 >
-                  {actionLoading ? (
+                  {isAnyMutationPending ? (
                     <Loader2 className="inline h-4 w-4 animate-spin" />
                   ) : (
                     'Confirm'

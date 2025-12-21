@@ -31,6 +31,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   BarChart,
@@ -50,7 +51,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AdminManagementTab } from '@/components/admin/AdminManagementTab';
 import { AgentsTab } from '@/components/admin/AgentsTab';
 import { AIModelsTab } from '@/components/admin/AIModelsTab';
@@ -102,53 +103,35 @@ export default function AdminDashboard() {
   const router = useRouter();
   const { authenticated, ready } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('stats');
-  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  const checkAdminAccess = useCallback(async () => {
-    if (!ready) {
-      setLoading(true);
-      return;
-    }
+  // Check if running on localhost to allow dev access
+  const isLocalhost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1');
 
-    if (!authenticated) {
-      // Don't redirect on localhost - let them see the login prompt
-      const isLocalhost =
-        typeof window !== 'undefined' &&
-        (window.location.hostname === 'localhost' ||
-          window.location.hostname === '127.0.0.1');
-
-      if (!isLocalhost) {
-        router.push('/');
-        return;
+  const { data: isAuthorized, isLoading: loading } = useQuery({
+    queryKey: ['admin', 'access'],
+    queryFn: async (): Promise<boolean> => {
+      if (!authenticated) {
+        if (!isLocalhost) {
+          router.push('/');
+        }
+        return false;
       }
 
-      setIsAuthorized(false);
-      setLoading(false);
-      return;
-    }
+      // Check if user is admin by trying to fetch admin stats
+      const response = await fetch('/api/admin/stats');
 
-    // Check if user is admin by trying to fetch admin stats
-    const response = await fetch('/api/admin/stats').catch((error: Error) => {
-      console.error('Admin access check failed:', error);
-      setIsAuthorized(false);
-      setLoading(false);
-      throw error;
-    });
+      if (!response.ok) {
+        return false;
+      }
 
-    if (!response.ok) {
-      setIsAuthorized(false);
-      setLoading(false);
-      return;
-    }
-
-    setIsAuthorized(true);
-    setLoading(false);
-  }, [authenticated, ready, router]);
-
-  useEffect(() => {
-    checkAdminAccess();
-  }, [checkAdminAccess]);
+      return true;
+    },
+    enabled: ready,
+    staleTime: 5 * 60 * 1000, // 5 minutes - admin status doesn't change often
+  });
 
   if (loading) {
     return (

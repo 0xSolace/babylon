@@ -5,7 +5,7 @@
  * This allows the RL model to learn from actual results, not just immediate actions.
  */
 
-import { and, db, eq, marketOutcomes, trajectories } from '@babylon/db';
+import { db } from '@babylon/db';
 import { logger } from '../utils/logger';
 import { MarketOutcomesTracker } from './MarketOutcomesTracker';
 import type { TrajectoryStep } from './types';
@@ -31,20 +31,9 @@ export class RewardBackpropagationService {
     }
 
     // Get all trajectories for this window
-    const trajectoriesResult = await db
-      .select({
-        id: trajectories.id,
-        trajectoryId: trajectories.trajectoryId,
-        stepsJson: trajectories.stepsJson,
-        totalReward: trajectories.totalReward,
-      })
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.windowId, windowId),
-          eq(trajectories.isTrainingData, true)
-        )
-      );
+    const trajectoriesResult = await db.trajectory.findMany({
+      where: { AND: [{ windowId }, { isTrainingData: true }] },
+    });
 
     let updated = 0;
 
@@ -116,13 +105,14 @@ export class RewardBackpropagationService {
 
       // Update trajectory if rewards changed
       if (hasUpdates) {
-        await db
-          .update(trajectories)
-          .set({
+        await db.trajectory.update({
+          where: { id: traj.id },
+          data: {
             stepsJson: JSON.stringify(steps),
             totalReward,
-          })
-          .where(eq(trajectories.id, traj.id));
+            updatedAt: new Date(),
+          },
+        });
         updated++;
       }
     }
@@ -141,13 +131,15 @@ export class RewardBackpropagationService {
    */
   async processPendingWindows(): Promise<number> {
     // Get all windows with outcomes
-    const windowsWithOutcomes = await db
-      .selectDistinct({ windowId: marketOutcomes.windowId })
-      .from(marketOutcomes);
+    const windowsWithOutcomes = await db.marketOutcome.groupBy({
+      by: ['windowId'],
+    });
 
     let processed = 0;
 
-    for (const { windowId } of windowsWithOutcomes) {
+    for (const row of windowsWithOutcomes) {
+      const windowId = row.windowId;
+      if (typeof windowId !== 'string') continue;
       const updated = await this.updateRewardsForWindow(windowId);
       if (updated > 0) {
         processed++;

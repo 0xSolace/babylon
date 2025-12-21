@@ -193,21 +193,28 @@ export async function GET(
     getAgentConfig(agentId),
   ]);
 
+  if (!agent) {
+    throw new Error(`Agent ${agentId} not found`);
+  }
+  if (!config) {
+    throw new Error(`Agent config not found for agent ${agentId}`);
+  }
+
   return NextResponse.json({
     success: true,
     agent: {
-      id: agent!.id,
-      username: agent!.username,
-      name: agent!.displayName,
-      description: agent!.bio,
-      profileImageUrl: agent!.profileImageUrl,
+      id: agent.id,
+      username: agent.username,
+      name: agent.displayName,
+      description: agent.bio,
+      profileImageUrl: agent.profileImageUrl,
       // Parse trading strategy from system prompt if it was appended
       system: (() => {
-        const system = config?.systemPrompt || '';
+        const system = config.systemPrompt || '';
         const tradingStrategyMatch = system.match(
           /\n\nTrading Strategy:\s*(.+)$/s
         );
-        if (tradingStrategyMatch && config?.tradingStrategy) {
+        if (tradingStrategyMatch && config.tradingStrategy) {
           // If trading strategy exists in DB and is also in system prompt, extract base system
           return system.replace(/\n\nTrading Strategy:\s*.+$/s, '').trim();
         }
@@ -215,7 +222,7 @@ export async function GET(
       })(),
       bio: (() => {
         // Use messageExamples (ElizaOS bio array) if available, otherwise fall back to bio string
-        if (config?.messageExamples) {
+        if (config.messageExamples) {
           const parsed =
             typeof config.messageExamples === 'string'
               ? JSON.parse(config.messageExamples)
@@ -224,13 +231,13 @@ export async function GET(
             return parsed.filter((b: string) => b && b.trim());
           }
         }
-        return agent!.bio ? agent!.bio.split('\n').filter((b) => b.trim()) : [];
+        return agent.bio ? agent.bio.split('\n').filter((b) => b.trim()) : [];
       })(),
       personality:
-        config?.personality ||
+        config.personality ||
         (() => {
           // If personality is not set but bio array exists, join it for display
-          if (config?.messageExamples) {
+          if (config.messageExamples) {
             const parsed =
               typeof config.messageExamples === 'string'
                 ? JSON.parse(config.messageExamples)
@@ -242,41 +249,41 @@ export async function GET(
           return '';
         })(),
       tradingStrategy:
-        config?.tradingStrategy ||
+        config.tradingStrategy ||
         (() => {
           // Extract trading strategy from system prompt if it was appended
-          const system = config?.systemPrompt || '';
+          const system = config.systemPrompt || '';
           const tradingStrategyMatch = system.match(
             /\n\nTrading Strategy:\s*(.+)$/s
           );
           return tradingStrategyMatch ? tradingStrategyMatch[1]!.trim() : '';
         })(),
-      pointsBalance: config?.pointsBalance ?? 0,
-      totalDeposited: config?.totalDeposited ?? 0,
-      totalWithdrawn: config?.totalWithdrawn ?? 0,
-      totalPointsSpent: config?.totalPointsSpent ?? 0,
-      isActive: config?.status === 'active',
-      autonomousEnabled: config?.autonomousTrading ?? false,
-      autonomousTrading: config?.autonomousTrading ?? false,
-      autonomousPosting: config?.autonomousPosting ?? false,
-      autonomousCommenting: config?.autonomousCommenting ?? false,
-      autonomousDMs: config?.autonomousDMs ?? false,
-      autonomousGroupChats: config?.autonomousGroupChats ?? false,
-      a2aEnabled: config?.a2aEnabled ?? false,
-      modelTier: config?.modelTier ?? 'lite',
-      status: config?.status ?? 'idle',
-      errorMessage: config?.errorMessage ?? null,
-      lifetimePnL: agent!.lifetimePnL.toString(),
+      pointsBalance: config.pointsBalance,
+      totalDeposited: config.totalDeposited,
+      totalWithdrawn: config.totalWithdrawn,
+      totalPointsSpent: config.totalPointsSpent,
+      isActive: config.status === 'active',
+      autonomousEnabled: config.autonomousTrading,
+      autonomousTrading: config.autonomousTrading,
+      autonomousPosting: config.autonomousPosting,
+      autonomousCommenting: config.autonomousCommenting,
+      autonomousDMs: config.autonomousDMs,
+      autonomousGroupChats: config.autonomousGroupChats,
+      a2aEnabled: config.a2aEnabled,
+      modelTier: config.modelTier,
+      status: config.status,
+      errorMessage: config.errorMessage,
+      lifetimePnL: agent.lifetimePnL.toString(),
       totalTrades: performance.totalTrades,
       profitableTrades: performance.profitableTrades,
       winRate: performance.winRate,
-      lastTickAt: config?.lastTickAt?.toISOString(),
-      lastChatAt: config?.lastChatAt?.toISOString(),
-      walletAddress: agent!.walletAddress,
-      agent0TokenId: agent!.agent0TokenId,
-      onChainRegistered: agent!.onChainRegistered,
-      createdAt: agent!.createdAt.toISOString(),
-      updatedAt: agent!.updatedAt.toISOString(),
+      lastTickAt: config.lastTickAt?.toISOString(),
+      lastChatAt: config.lastChatAt?.toISOString(),
+      walletAddress: agent.walletAddress,
+      agent0TokenId: agent.agent0TokenId,
+      onChainRegistered: agent.onChainRegistered,
+      createdAt: agent.createdAt.toISOString(),
+      updatedAt: agent.updatedAt.toISOString(),
     },
   });
 }
@@ -338,6 +345,9 @@ export async function PUT(
 
   const agent = await agentService.updateAgent(agentId, user.id, updates);
   const updatedConfig = await getAgentConfig(agentId);
+  if (!updatedConfig) {
+    throw new Error(`Agent config not found after updating agent ${agentId}`);
+  }
 
   logger.info(`Agent updated via API: ${agentId}`, undefined, 'AgentsAPI');
 
@@ -349,10 +359,10 @@ export async function PUT(
       name: agent.displayName,
       description: agent.bio,
       profileImageUrl: agent.profileImageUrl,
-      pointsBalance: updatedConfig?.pointsBalance ?? 0,
-      autonomousTrading: updatedConfig?.autonomousTrading ?? false,
-      autonomousPosting: updatedConfig?.autonomousPosting ?? false,
-      modelTier: updatedConfig?.modelTier ?? 'lite',
+      pointsBalance: updatedConfig.pointsBalance,
+      autonomousTrading: updatedConfig.autonomousTrading,
+      autonomousPosting: updatedConfig.autonomousPosting,
+      modelTier: updatedConfig.modelTier,
       updatedAt: agent.updatedAt.toISOString(),
     },
   });

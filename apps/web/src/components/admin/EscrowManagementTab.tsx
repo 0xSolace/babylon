@@ -1,6 +1,7 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   ArrowLeftRight,
@@ -10,7 +11,7 @@ import {
   RefreshCw,
   XCircle,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { Avatar } from '@/components/shared/Avatar';
@@ -99,109 +100,107 @@ type StatusFilter = 'all' | 'pending' | 'paid' | 'refunded' | 'expired';
  * @returns Escrow management tab element
  */
 export function EscrowManagementTab() {
-  const [escrows, setEscrows] = useState<Escrow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, startRefresh] = useTransition();
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [selectedEscrow, setSelectedEscrow] = useState<Escrow | null>(null);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refundTxHash, setRefundTxHash] = useState('');
   const [refundReason, setRefundReason] = useState('');
-  const [isRefunding, setIsRefunding] = useState(false);
 
-  const fetchEscrows = useCallback(
-    (showRefreshing = false) => {
-      const fetchLogic = async () => {
-        const token = getAuthToken();
-        const params = new URLSearchParams({
-          limit: '100',
-        });
-        if (statusFilter !== 'all') {
-          params.set('status', statusFilter);
-        }
-
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-        };
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        const response = await fetch(
-          `/api/admin/moderation-escrow/list?${params}`,
-          {
-            headers,
-          }
-        );
-        if (!response.ok) throw new Error('Failed to fetch escrows');
-        const data = await response.json();
-        const validation = z.array(EscrowSchema).safeParse(data.escrows);
-        if (!validation.success) {
-          throw new Error('Invalid escrow data structure');
-        }
-        setEscrows(validation.data || []);
-        setLoading(false);
-      };
-
-      if (showRefreshing) {
-        startRefresh(fetchLogic);
-      } else {
-        fetchLogic();
+  const {
+    data: escrows = [],
+    isLoading,
+    refetch,
+    isFetching,
+  } = useQuery<Escrow[]>({
+    queryKey: ['admin', 'escrows', statusFilter],
+    queryFn: async () => {
+      const token = getAuthToken();
+      const params = new URLSearchParams({
+        limit: '100',
+      });
+      if (statusFilter !== 'all') {
+        params.set('status', statusFilter);
       }
-    },
-    [statusFilter]
-  );
 
-  useEffect(() => {
-    fetchEscrows();
-  }, [fetchEscrows]);
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
 
-  const handleRefund = async () => {
-    if (!selectedEscrow || !refundTxHash.trim()) {
-      toast.error('Refund transaction hash is required');
-      return;
-    }
-
-    setIsRefunding(true);
-    const token = getAuthToken();
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch('/api/admin/moderation-escrow/refund', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        escrowId: selectedEscrow.id,
-        refundTxHash: refundTxHash.trim(),
-        reason: refundReason.trim() || undefined,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      setIsRefunding(false);
-      logger.error(
-        'Failed to refund escrow',
-        { error: data.error },
-        'EscrowManagementTab'
+      const response = await fetch(
+        `/api/admin/moderation-escrow/list?${params}`,
+        {
+          headers,
+        }
       );
-      toast.error(data.error || 'Failed to refund escrow');
-      return;
-    }
+      if (!response.ok) throw new Error('Failed to fetch escrows');
+      const data = await response.json();
+      const validation = z.array(EscrowSchema).safeParse(data.escrows);
+      if (!validation.success) {
+        throw new Error('Invalid escrow data structure');
+      }
+      return validation.data;
+    },
+  });
 
-    toast.success('Escrow refunded successfully');
-    setShowRefundModal(false);
-    setSelectedEscrow(null);
-    setRefundTxHash('');
-    setRefundReason('');
-    fetchEscrows(true);
-    setIsRefunding(false);
-  };
+  const refundMutation = useMutation({
+    mutationFn: async ({
+      escrowId,
+      txHash,
+      reason,
+    }: {
+      escrowId: string;
+      txHash: string;
+      reason?: string;
+    }) => {
+      const token = getAuthToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch('/api/admin/moderation-escrow/refund', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          escrowId,
+          refundTxHash: txHash,
+          reason: reason || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        logger.error(
+          'Failed to refund escrow',
+          { error: data.error },
+          'EscrowManagementTab'
+        );
+        throw new Error(data.error || 'Failed to refund escrow');
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Escrow refunded successfully');
+      setShowRefundModal(false);
+      setSelectedEscrow(null);
+      setRefundTxHash('');
+      setRefundReason('');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'escrows'] });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to refund escrow'
+      );
+    },
+  });
 
   const formatCurrency = (value: string | number) => {
     const num = typeof value === 'string' ? parseFloat(value) : value;
@@ -249,7 +248,7 @@ export function EscrowManagementTab() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
@@ -275,12 +274,12 @@ export function EscrowManagementTab() {
 
         <div className="flex gap-2">
           <button
-            onClick={() => fetchEscrows(true)}
-            disabled={isRefreshing}
+            onClick={() => refetch()}
+            disabled={isFetching}
             className="flex items-center gap-2 rounded bg-muted px-3 py-2 font-medium text-sm transition-colors hover:bg-muted/80 disabled:opacity-50"
           >
             <RefreshCw
-              className={cn('h-4 w-4', isRefreshing && 'animate-spin')}
+              className={cn('h-4 w-4', isFetching && 'animate-spin')}
             />
             Refresh
           </button>
@@ -494,17 +493,23 @@ export function EscrowManagementTab() {
                     setRefundTxHash('');
                     setRefundReason('');
                   }}
-                  disabled={isRefunding}
+                  disabled={refundMutation.isPending}
                   className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleRefund}
-                  disabled={isRefunding || !refundTxHash.trim()}
+                  onClick={() =>
+                    refundMutation.mutate({
+                      escrowId: selectedEscrow.id,
+                      txHash: refundTxHash.trim(),
+                      reason: refundReason.trim(),
+                    })
+                  }
+                  disabled={refundMutation.isPending || !refundTxHash.trim()}
                   className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
                 >
-                  {isRefunding ? (
+                  {refundMutation.isPending ? (
                     <>
                       <RefreshCw className="h-4 w-4 animate-spin" />
                       Processing...

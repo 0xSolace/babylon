@@ -247,7 +247,4 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Validation failed:', err);
-  process.exit(1);
-});
+main();

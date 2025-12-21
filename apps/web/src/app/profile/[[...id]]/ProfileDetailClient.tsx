@@ -11,17 +11,12 @@ import {
   type Organization,
   POST_TYPES,
 } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Coins, MessageCircle, Search } from 'lucide-react';
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { ArticleCard } from '@/components/articles/ArticleCard';
 import { FollowButton } from '@/components/interactions/FollowButton';
 import { ModerationMenu } from '@/components/moderation/ModerationMenu';
@@ -41,6 +36,36 @@ import { useAuth } from '@/hooks/useAuth';
 import { useErrorToasts } from '@/hooks/useErrorToasts';
 import { useGameStore } from '@/stores/gameStore';
 
+interface ApiPost {
+  id: string;
+  content: string;
+  author: string;
+  authorId: string;
+  timestamp: string;
+  authorName?: string;
+  authorUsername?: string | null;
+  authorProfileImageUrl?: string | null;
+  likeCount?: number;
+  commentCount?: number;
+  shareCount?: number;
+  isLiked?: boolean;
+  isShared?: boolean;
+  // Repost metadata
+  isRepost?: boolean;
+  isQuote?: boolean;
+  quoteComment?: string | null;
+  originalPostId?: string | null;
+  originalPost?: {
+    id: string;
+    content: string;
+    authorId: string;
+    authorName: string;
+    authorUsername: string | null;
+    authorProfileImageUrl: string | null;
+    timestamp: string;
+  } | null;
+}
+
 export default function ProfileDetailClient() {
   const params = useParams();
   const router = useRouter();
@@ -58,6 +83,7 @@ export default function ProfileDetailClient() {
       router.replace('/');
     }
   }, [identifier, router]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [tab, setTab] = useState<'posts' | 'replies' | 'trades'>('posts');
   const { allGames } = useGameStore();
@@ -119,43 +145,239 @@ export default function ProfileDetailClient() {
   // Enable error toast notifications
   useErrorToasts();
 
-  // Load actor/user info
-  const [actorInfo, setActorInfo] = useState<ProfileInfo | null>(null);
-  const [loading, setLoading] = useState(true);
   const [isCreatingDM, setIsCreatingDM] = useState(false);
   const [sendPointsModalOpen, setSendPointsModalOpen] = useState(false);
-  const [apiPosts, setApiPosts] = useState<
-    Array<{
-      id: string;
-      content: string;
-      author: string;
-      authorId: string;
-      timestamp: string;
-      authorName?: string;
-      authorUsername?: string | null;
-      authorProfileImageUrl?: string | null;
-      likeCount?: number;
-      commentCount?: number;
-      shareCount?: number;
-      isLiked?: boolean;
-      isShared?: boolean;
-      // Repost metadata
-      isRepost?: boolean;
-      isQuote?: boolean;
-      quoteComment?: string | null;
-      originalPostId?: string | null;
-      originalPost?: {
-        id: string;
-        content: string;
-        authorId: string;
-        authorName: string;
-        authorUsername: string | null;
-        authorProfileImageUrl: string | null;
-        timestamp: string;
-      } | null;
-    }>
-  >([]);
-  const [loadingPosts, setLoadingPosts] = useState(false);
+
+  // Query for actor/profile info
+  const {
+    data: actorInfo,
+    isLoading: loading,
+    refetch: loadActorInfo,
+  } = useQuery({
+    queryKey: ['profile', actorId],
+    queryFn: async (): Promise<ProfileInfo | null> => {
+      const token = await getAccessToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // First, always try to load as a user by ID
+      // This handles IDs like "testuser-53618432" or Privy IDs
+      const userResponse = await fetch(
+        `/api/users/${encodeURIComponent(actorId)}/profile`,
+        { headers }
+      ).catch((error: Error) => {
+        console.error('Error loading user by ID:', error);
+        return null;
+      });
+
+      if (userResponse?.ok) {
+        const userData = await userResponse.json();
+        if (userData.user) {
+          const fetchedUser = userData.user;
+          const profileInfo: ProfileInfo = {
+            id: fetchedUser.id,
+            name: fetchedUser.displayName || fetchedUser.username || 'User',
+            description: fetchedUser.bio || '',
+            role: fetchedUser.isActor ? 'Actor' : 'User',
+            type: fetchedUser.isActor ? 'actor' : ('user' as const),
+            isUser: true,
+            username: fetchedUser.username,
+            profileImageUrl: fetchedUser.profileImageUrl,
+            coverImageUrl: fetchedUser.coverImageUrl,
+            stats: fetchedUser.stats,
+          };
+
+          // Redirect to username-based URL if username exists and we're not already on it
+          if (fetchedUser.username && !isUsernameParam && !isOwnProfile) {
+            const cleanUsername = fetchedUser.username.startsWith('@')
+              ? fetchedUser.username.slice(1)
+              : fetchedUser.username;
+            router.replace(`/profile/${cleanUsername}`);
+          }
+
+          return profileInfo;
+        }
+      }
+
+      // If it's a username (starts with @) or looks like a username, try username lookup
+      if (
+        isUsernameParam ||
+        (!actorId.startsWith('did:privy:') &&
+          actorId.length <= 42 &&
+          !actorId.includes('-'))
+      ) {
+        const usernameLookupResponse = await fetch(
+          `/api/users/by-username/${encodeURIComponent(actorId)}`,
+          { headers }
+        ).catch((error: Error) => {
+          console.error('Error loading user by username:', error);
+          return null;
+        });
+
+        if (usernameLookupResponse?.ok) {
+          const usernameData = await usernameLookupResponse.json();
+          if (usernameData.user) {
+            const fetchedUser = usernameData.user;
+            const profileInfo: ProfileInfo = {
+              id: fetchedUser.id,
+              name: fetchedUser.displayName || fetchedUser.username || 'User',
+              description: fetchedUser.bio || '',
+              role: fetchedUser.isActor ? 'Actor' : 'User',
+              type: fetchedUser.isActor ? 'actor' : ('user' as const),
+              isUser: true,
+              username: fetchedUser.username,
+              profileImageUrl: fetchedUser.profileImageUrl,
+              coverImageUrl: fetchedUser.coverImageUrl,
+              stats: fetchedUser.stats,
+            };
+
+            // Redirect to username-based URL if we're on ID-based URL
+            if (!isUsernameParam && fetchedUser.username && !isOwnProfile) {
+              const cleanUsername = fetchedUser.username.startsWith('@')
+                ? fetchedUser.username.slice(1)
+                : fetchedUser.username;
+              router.replace(`/profile/${cleanUsername}`);
+            }
+
+            return profileInfo;
+          }
+        }
+      }
+
+      // Try to load from API endpoint (uses optimized server-side loader)
+      const response = await fetch('/api/actors');
+      if (!response.ok) throw new Error('Failed to load actors');
+
+      const actorsDb = (await response.json()) as {
+        actors?: Actor[];
+        organizations?: Organization[];
+      };
+
+      // Find actor
+      let actor = actorsDb.actors?.find((a) => a.id === actorId);
+      if (!actor) {
+        actor = actorsDb.actors?.find((a) => a.name === actorId);
+      }
+      if (actor) {
+        // Find which game this actor belongs to
+        let gameId: string | null = null;
+        for (const game of allGames) {
+          const allActors = [
+            ...(game.setup?.mainActors || []),
+            ...(game.setup?.supportingActors || []),
+            ...(game.setup?.extras || []),
+          ];
+          if (allActors.some((a) => a.id === actorId)) {
+            gameId = game.id;
+            break;
+          }
+        }
+
+        // Fetch actor stats from database
+        let stats = { followers: 0, following: 0, posts: 0 };
+        const statsResponse = await fetch(
+          `/api/actors/${encodeURIComponent(actor.id)}/stats`
+        ).catch((error: Error) => {
+          console.error('Failed to load actor stats:', error);
+          return null;
+        });
+
+        if (statsResponse?.ok) {
+          const statsData = await statsResponse.json();
+          if (statsData.stats) {
+            stats = {
+              followers: statsData.stats.followers || 0,
+              following: statsData.stats.following || 0,
+              posts: statsData.stats.posts || 0,
+            };
+          }
+        }
+
+        return {
+          id: actor.id,
+          name: actor.name,
+          description: actor.description,
+          profileDescription: actor.profileDescription,
+          tier: actor.tier,
+          domain: actor.domain,
+          personality: actor.personality,
+          affiliations: actor.affiliations,
+          role: actor.role || actor.tier || 'Actor',
+          type: 'actor' as const,
+          game: gameId ? { id: gameId } : undefined,
+          username: ('username' in actor
+            ? (actor.username as string)
+            : actor.id) as string | undefined,
+          stats,
+        };
+      }
+
+      // Find organization
+      let org = actorsDb.organizations?.find((o) => o.id === actorId);
+      if (!org) {
+        org = actorsDb.organizations?.find((o) => o.name === actorId);
+      }
+      if (org) {
+        // Fetch organization stats from database (orgs are also stored as actors)
+        let stats = { followers: 0, following: 0, posts: 0 };
+        const statsResponse = await fetch(
+          `/api/actors/${encodeURIComponent(org.id)}/stats`
+        ).catch((error: Error) => {
+          console.error('Failed to load organization stats:', error);
+          return null;
+        });
+
+        if (statsResponse?.ok) {
+          const statsData = await statsResponse.json();
+          if (statsData.stats) {
+            stats = {
+              followers: statsData.stats.followers || 0,
+              following: statsData.stats.following || 0,
+              posts: statsData.stats.posts || 0,
+            };
+          }
+        }
+
+        return {
+          id: org.id,
+          name: org.name,
+          description: org.description,
+          profileDescription: org.profileDescription,
+          type: 'organization' as const,
+          role: 'Organization',
+          stats,
+        };
+      }
+
+      // Not found
+      return null;
+    },
+    enabled: !!actorId,
+  });
+
+  // Query for posts
+  const { data: apiPosts = [] as ApiPost[], isLoading: loadingPosts } =
+    useQuery<ApiPost[]>({
+      queryKey: ['profilePosts', actorInfo?.id ?? actorId],
+      queryFn: async (): Promise<ApiPost[]> => {
+        const searchId = actorInfo?.id || actorId;
+        const response = await fetch(
+          `/api/posts?actorId=${encodeURIComponent(searchId)}&limit=100`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data.posts && Array.isArray(data.posts)) {
+            return data.posts as ApiPost[];
+          }
+        }
+        return [];
+      },
+      enabled: !!actorInfo?.id,
+    });
 
   // Handle creating DM with user
   const handleMessageClick = async () => {
@@ -174,230 +396,6 @@ export default function ProfileDetailClient() {
 
     setIsCreatingDM(false);
   };
-
-  const loadActorInfo = useCallback(async () => {
-    setLoading(true);
-
-    const token = await getAccessToken();
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    // First, always try to load as a user by ID
-    // This handles IDs like "testuser-53618432" or Privy IDs
-    const userResponse = await fetch(
-      `/api/users/${encodeURIComponent(actorId)}/profile`,
-      { headers }
-    ).catch((error: Error) => {
-      console.error('Error loading user by ID:', error);
-      return null;
-    });
-
-    if (userResponse?.ok) {
-      const userData = await userResponse.json();
-      if (userData.user) {
-        const user = userData.user;
-        setActorInfo({
-          id: user.id,
-          name: user.displayName || user.username || 'User',
-          description: user.bio || '',
-          role: user.isActor ? 'Actor' : 'User',
-          type: user.isActor ? 'actor' : ('user' as const),
-          isUser: true,
-          username: user.username,
-          profileImageUrl: user.profileImageUrl,
-          coverImageUrl: user.coverImageUrl,
-          stats: user.stats,
-        });
-
-        // Redirect to username-based URL if username exists and we're not already on it
-        if (user.username && !isUsernameParam && !isOwnProfile) {
-          const cleanUsername = user.username.startsWith('@')
-            ? user.username.slice(1)
-            : user.username;
-          router.replace(`/profile/${cleanUsername}`);
-          return;
-        }
-
-        setLoading(false);
-        return;
-      }
-    }
-
-    // If it's a username (starts with @) or looks like a username, try username lookup
-    if (
-      isUsernameParam ||
-      (!actorId.startsWith('did:privy:') &&
-        actorId.length <= 42 &&
-        !actorId.includes('-'))
-    ) {
-      const usernameLookupResponse = await fetch(
-        `/api/users/by-username/${encodeURIComponent(actorId)}`,
-        { headers }
-      ).catch((error: Error) => {
-        console.error('Error loading user by username:', error);
-        return null;
-      });
-
-      if (usernameLookupResponse?.ok) {
-        const usernameData = await usernameLookupResponse.json();
-        if (usernameData.user) {
-          const user = usernameData.user;
-          setActorInfo({
-            id: user.id,
-            name: user.displayName || user.username || 'User',
-            description: user.bio || '',
-            role: user.isActor ? 'Actor' : 'User',
-            type: user.isActor ? 'actor' : ('user' as const),
-            isUser: true,
-            username: user.username,
-            profileImageUrl: user.profileImageUrl,
-            coverImageUrl: user.coverImageUrl,
-            stats: user.stats,
-          });
-
-          // Redirect to username-based URL if we're on ID-based URL
-          if (!isUsernameParam && user.username && !isOwnProfile) {
-            const cleanUsername = user.username.startsWith('@')
-              ? user.username.slice(1)
-              : user.username;
-            router.replace(`/profile/${cleanUsername}`);
-            return;
-          }
-
-          setLoading(false);
-          return;
-        }
-      }
-    }
-
-    // Try to load from API endpoint (uses optimized server-side loader)
-    const response = await fetch('/api/actors');
-    if (!response.ok) throw new Error('Failed to load actors');
-
-    const actorsDb = (await response.json()) as {
-      actors?: Actor[];
-      organizations?: Organization[];
-    };
-
-    // Find actor
-    let actor = actorsDb.actors?.find((a) => a.id === actorId);
-    if (!actor) {
-      actor = actorsDb.actors?.find((a) => a.name === actorId);
-    }
-    if (actor) {
-      // Find which game this actor belongs to
-      let gameId: string | null = null;
-      for (const game of allGames) {
-        const allActors = [
-          ...(game.setup?.mainActors || []),
-          ...(game.setup?.supportingActors || []),
-          ...(game.setup?.extras || []),
-        ];
-        if (allActors.some((a) => a.id === actorId)) {
-          gameId = game.id;
-          break;
-        }
-      }
-
-      // Fetch actor stats from database
-      let stats = { followers: 0, following: 0, posts: 0 };
-      const statsResponse = await fetch(
-        `/api/actors/${encodeURIComponent(actor.id)}/stats`
-      ).catch((error: Error) => {
-        console.error('Failed to load actor stats:', error);
-        return null;
-      });
-
-      if (statsResponse?.ok) {
-        const statsData = await statsResponse.json();
-        if (statsData.stats) {
-          stats = {
-            followers: statsData.stats.followers || 0,
-            following: statsData.stats.following || 0,
-            posts: statsData.stats.posts || 0,
-          };
-        }
-      }
-
-      setActorInfo({
-        id: actor.id,
-        name: actor.name,
-        description: actor.description,
-        profileDescription: actor.profileDescription,
-        tier: actor.tier,
-        domain: actor.domain,
-        personality: actor.personality,
-        affiliations: actor.affiliations,
-        role: actor.role || actor.tier || 'Actor',
-        type: 'actor' as const,
-        game: gameId ? { id: gameId } : undefined,
-        username: ('username' in actor
-          ? (actor.username as string)
-          : actor.id) as string | undefined, // Use username if available, fallback to ID
-        stats,
-      });
-      setLoading(false);
-      return;
-    }
-
-    // Find organization
-    let org = actorsDb.organizations?.find((o) => o.id === actorId);
-    if (!org) {
-      org = actorsDb.organizations?.find((o) => o.name === actorId);
-    }
-    if (org) {
-      // Fetch organization stats from database (orgs are also stored as actors)
-      let stats = { followers: 0, following: 0, posts: 0 };
-      const statsResponse = await fetch(
-        `/api/actors/${encodeURIComponent(org.id)}/stats`
-      ).catch((error: Error) => {
-        console.error('Failed to load organization stats:', error);
-        return null;
-      });
-
-      if (statsResponse?.ok) {
-        const statsData = await statsResponse.json();
-        if (statsData.stats) {
-          stats = {
-            followers: statsData.stats.followers || 0,
-            following: statsData.stats.following || 0,
-            posts: statsData.stats.posts || 0,
-          };
-        }
-      }
-
-      setActorInfo({
-        id: org.id,
-        name: org.name,
-        description: org.description,
-        profileDescription: org.profileDescription,
-        type: 'organization' as const,
-        role: 'Organization',
-        stats,
-      });
-      setLoading(false);
-      return;
-    }
-
-    // Not found
-    setActorInfo(null);
-    setLoading(false);
-  }, [
-    actorId,
-    allGames,
-    isOwnProfile,
-    isUsernameParam,
-    router,
-    getAccessToken,
-  ]);
-
-  useEffect(() => {
-    loadActorInfo();
-  }, [loadActorInfo]);
 
   // Listen for profile updates (when user follows/unfollows someone)
   useEffect(() => {
@@ -426,32 +424,6 @@ export default function ProfileDetailClient() {
     }
     return undefined;
   }, [actorInfo, optimisticFollowerCount]);
-
-  useEffect(() => {
-    const loadPosts = async () => {
-      if (!actorId) return;
-
-      setLoadingPosts(true);
-      // If we have actorInfo with ID, use that; otherwise use actorId (could be username)
-      const searchId = actorInfo?.id || actorId;
-      // Fetch posts from API by authorId
-      const response = await fetch(
-        `/api/posts?actorId=${encodeURIComponent(searchId)}&limit=100`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        if (data.posts && Array.isArray(data.posts)) {
-          setApiPosts(data.posts);
-        }
-      }
-      setLoadingPosts(false);
-    };
-
-    // Load posts when actorInfo is available (has the correct ID)
-    if (actorInfo?.id) {
-      loadPosts();
-    }
-  }, [actorId, actorInfo?.id]);
 
   // Get posts for this actor from all games
   const gameStorePosts = useMemo(() => {
@@ -570,6 +542,11 @@ export default function ProfileDetailClient() {
       item.post.content?.toLowerCase().includes(query)
     );
   }, [tabFilteredPosts, searchQuery]);
+
+  // Don't render with missing identifier - redirect will happen via useEffect
+  if (!identifier) {
+    return null;
+  }
 
   // Loading or actor not found
   if (loading) {

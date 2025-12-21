@@ -92,43 +92,39 @@ describe('Admin Agents Reputation Integration', () => {
       return;
     }
 
-    try {
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
 
-      if (adminAccessToken) {
-        headers['Authorization'] = `Bearer ${adminAccessToken}`;
+    if (adminAccessToken) {
+      headers['Authorization'] = `Bearer ${adminAccessToken}`;
+    }
+
+    const response = await fetch(`${BASE_URL}/api/admin/agents`, {
+      headers,
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      expect(data.success).toBe(true);
+      expect(data.data).toBeDefined();
+      expect(data.data.agents).toBeInstanceOf(Array);
+
+      // Find our test agent
+      const testAgent = data.data.agents.find(
+        (a: { id: string }) => a.id === testAgentUserId
+      );
+
+      if (testAgent) {
+        expect(testAgent.reputationScore).toBeDefined();
+        expect(testAgent.reputationScore).toBeGreaterThanOrEqual(0);
+        expect(testAgent.reputationScore).toBeLessThanOrEqual(100);
+        expect(testAgent.averageFeedbackScore).toBeDefined();
+        expect(testAgent.totalFeedbackCount).toBeDefined();
       }
-
-      const response = await fetch(`${BASE_URL}/api/admin/agents`, {
-        headers,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        expect(data.success).toBe(true);
-        expect(data.data).toBeDefined();
-        expect(data.data.agents).toBeInstanceOf(Array);
-
-        // Find our test agent
-        const testAgent = data.data.agents.find(
-          (a: { id: string }) => a.id === testAgentUserId
-        );
-
-        if (testAgent) {
-          expect(testAgent.reputationScore).toBeDefined();
-          expect(testAgent.reputationScore).toBeGreaterThanOrEqual(0);
-          expect(testAgent.reputationScore).toBeLessThanOrEqual(100);
-          expect(testAgent.averageFeedbackScore).toBeDefined();
-          expect(testAgent.totalFeedbackCount).toBeDefined();
-        }
-      } else {
-        // May require proper auth
-        console.log('⚠️  API requires authentication or admin access');
-      }
-    } catch (error) {
-      console.warn('⚠️  API test failed:', error);
+    } else {
+      // May require proper auth
+      console.log('⚠️  API requires authentication or admin access');
     }
   });
 

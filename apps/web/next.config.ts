@@ -93,7 +93,6 @@ const nextConfig: NextConfig = {
     'ioredis', // Node.js Redis client - requires tls/net modules not available in edge runtime
   ],
   images: {
-    qualities: [100, 75],
     remotePatterns: [
       // Jeju IPFS gateway
       {
@@ -453,24 +452,10 @@ const sentryWebpackPluginOptions = {
   automaticVercelMonitors: true,
 };
 
-// Wrap Sentry config in async function to handle top-level await
+// Apply Sentry config wrapper
 async function getConfig(): Promise<NextConfig> {
-  let resolvedConfig: NextConfig = nextConfig;
-
-  try {
-    const { withSentryConfig } = await import('@sentry/nextjs');
-    resolvedConfig = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
-  } catch (error) {
-    const shouldLog = process.env.CI || process.env.NODE_ENV !== 'production';
-    if (shouldLog) {
-      console.warn(
-        '[next.config.ts] Sentry integration disabled. Falling back to base config.',
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-  }
-
-  return resolvedConfig;
+  const { withSentryConfig } = await import('@sentry/nextjs');
+  return withSentryConfig(nextConfig, sentryWebpackPluginOptions);
 }
 
 export default getConfig();

@@ -29,6 +29,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   AlertCircle,
@@ -37,7 +38,6 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 /**
  * Position structure for NPC portfolio.
@@ -92,31 +92,22 @@ export function NPCPortfolioCard({
   className = '',
   showPositions = true,
 }: NPCPortfolioCardProps) {
-  const [data, setData] = useState<PortfolioData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchPortfolio = async () => {
-      setLoading(true);
+  const { data, isLoading } = useQuery({
+    queryKey: ['npc', 'portfolio', actorId],
+    queryFn: async (): Promise<PortfolioData | null> => {
       const response = await fetch(
         `/api/npc/${encodeURIComponent(actorId)}/portfolio`
       );
-      const result = await response.json();
-
-      if (result.success) {
-        setData(result);
+      if (!response.ok) {
+        throw new Error('Failed to fetch portfolio');
       }
-      setLoading(false);
-    };
+      const result = await response.json();
+      return result.success ? result : null;
+    },
+    refetchInterval: 10000,
+  });
 
-    fetchPortfolio();
-
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchPortfolio, 10000);
-    return () => clearInterval(interval);
-  }, [actorId]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={cn('rounded-2xl bg-sidebar px-4 py-3', className)}>
         <div className="text-muted-foreground text-sm">

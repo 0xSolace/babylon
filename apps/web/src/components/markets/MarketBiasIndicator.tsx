@@ -28,8 +28,8 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Activity, Clock, TrendingDown, TrendingUp } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 /**
  * Bias adjustment structure for market bias indicator.
@@ -63,29 +63,23 @@ export function MarketBiasIndicator({
   className = '',
   maxDisplay = 10,
 }: MarketBiasIndicatorProps) {
-  const [data, setData] = useState<BiasData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchBiases = async () => {
-      setLoading(true);
+  const { data, isLoading } = useQuery({
+    queryKey: ['markets', 'bias', 'active'],
+    queryFn: async (): Promise<BiasData> => {
       const response = await fetch('/api/markets/bias/active');
-      const result = await response.json();
-
-      if (result.success) {
-        setData(result);
+      if (!response.ok) {
+        throw new Error('Failed to fetch market biases');
       }
-      setLoading(false);
-    };
+      const result = (await response.json()) as BiasData;
+      if (!result.success) {
+        throw new Error('Failed to fetch market biases');
+      }
+      return result;
+    },
+    refetchInterval: 30000,
+  });
 
-    fetchBiases();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchBiases, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={cn('rounded-lg bg-sidebar p-4', className)}>
         <div className="text-muted-foreground text-sm">

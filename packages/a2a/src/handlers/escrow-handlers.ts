@@ -4,18 +4,8 @@
  * Handlers for moderation escrow payment methods via A2A protocol
  */
 
-import {
-  and,
-  db,
-  eq,
-  lt,
-  moderationEscrows,
-  type SQL,
-  sql,
-  users,
-} from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
-import { parseEther } from 'ethers';
+import { db } from '@babylon/db';
+import { generateSnowflakeId, logger, parseEther } from '@babylon/shared';
 import { z } from 'zod';
 import { X402Manager } from '../payments/x402-manager';
 import type {
@@ -224,9 +214,8 @@ export async function handleCreateEscrowPayment(
 
   // Create escrow record
   const expiresAt = new Date(paymentRequest.expiresAt);
-  const [escrow] = await db
-    .insert(moderationEscrows)
-    .values({
+  const escrow = await db.moderationEscrow.create({
+    data: {
       id: await generateSnowflakeId(),
       recipientId: params.recipientId,
       adminId: agentId,
@@ -241,12 +230,8 @@ export async function handleCreateEscrowPayment(
         adminWalletAddress: adminCheck.walletAddress,
       },
       updatedAt: new Date(),
-    })
-    .returning();
-
-  if (!escrow) {
-    throw new Error('Failed to create escrow record');
-  }
+    },
+  });
 
   logger.info('A2A Escrow payment created', {
     agentId,
@@ -255,18 +240,23 @@ export async function handleCreateEscrowPayment(
     amountUSD: params.amountUSD,
   });
 
+  const escrowExpiresAt =
+    escrow.expiresAt instanceof Date
+      ? escrow.expiresAt.toISOString()
+      : String(escrow.expiresAt);
+
   return {
     jsonrpc: '2.0',
     result: {
       success: true,
       escrow: {
-        id: escrow.id,
-        recipientId: escrow.recipientId,
-        amountUSD: escrow.amountUSD.toString(),
-        status: escrow.status,
-        reason: escrow.reason,
-        paymentRequestId: escrow.paymentRequestId,
-        expiresAt: escrow.expiresAt.toISOString(),
+        id: String(escrow.id),
+        recipientId: String(escrow.recipientId),
+        amountUSD: String(escrow.amountUSD),
+        status: String(escrow.status),
+        reason: escrow.reason ? String(escrow.reason) : null,
+        paymentRequestId: String(escrow.paymentRequestId),
+        expiresAt: escrowExpiresAt,
       },
       paymentRequest: {
         requestId: paymentRequest.requestId,
@@ -605,103 +595,102 @@ export async function handleListEscrowPayments(
 
   // Auto-expire old pending escrows before querying
   const now = new Date();
-  await db
-    .update(moderationEscrows)
-    .set({ status: 'expired', updatedAt: new Date() })
-    .where(
-      and(
-        eq(moderationEscrows.status, 'pending'),
-        lt(moderationEscrows.expiresAt, now)
-      )
-    );
+  await db.moderationEscrow.updateMany({
+    where: {
+      status: 'pending',
+      expiresAt: { lt: now },
+    },
+    data: { status: 'expired', updatedAt: new Date() },
+  });
 
-  const whereConditions: SQL<unknown>[] = [];
-  if (params.recipientId)
-    whereConditions.push(eq(moderationEscrows.recipientId, params.recipientId));
-  if (params.adminId)
-    whereConditions.push(eq(moderationEscrows.adminId, params.adminId));
-  if (params.status)
-    whereConditions.push(eq(moderationEscrows.status, params.status));
-  const whereClause =
-    whereConditions.length > 0 ? and(...whereConditions) : undefined;
+  // Build where clause
+  const where: Record<string, unknown> = {};
+  if (params.recipientId) where.recipientId = params.recipientId;
+  if (params.adminId) where.adminId = params.adminId;
+  if (params.status) where.status = params.status;
 
-  const [escrowsRaw, totalResult] = await Promise.all([
-    db.query.moderationEscrows.findMany({
-      where: whereClause
-        ? (moderationEscrows, { eq, and: andFn }) => {
-            const conditions: SQL<unknown>[] = [];
-            if (params.recipientId)
-              conditions.push(
-                eq(moderationEscrows.recipientId, params.recipientId)
-              );
-            if (params.adminId)
-              conditions.push(eq(moderationEscrows.adminId, params.adminId));
-            if (params.status)
-              conditions.push(eq(moderationEscrows.status, params.status));
-            return conditions.length > 0 ? andFn(...conditions) : undefined;
-          }
-        : undefined,
-      orderBy: (moderationEscrows, { desc: descFn }) => [
-        descFn(moderationEscrows.createdAt),
-      ],
-      limit: params.limit,
-      offset: params.offset,
-      with: {
-        recipient: {
-          columns: {
-            id: true,
-            username: true,
-            displayName: true,
-            profileImageUrl: true,
-          },
-        },
-        admin: {
-          columns: {
-            id: true,
-            username: true,
-            displayName: true,
-          },
-        },
-        refundedByUser: {
-          columns: {
-            id: true,
-            username: true,
-            displayName: true,
-          },
-        },
-      },
+  const [escrowsRaw, total] = await Promise.all([
+    db.moderationEscrow.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: params.limit,
+      skip: params.offset,
     }),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(moderationEscrows)
-      .where(whereClause),
+    db.moderationEscrow.count({ where }),
   ]);
 
-  const total = Number(totalResult[0]?.count ?? 0);
+  // Fetch related user data for each escrow
+  const escrows = await Promise.all(
+    escrowsRaw.map(async (escrow) => {
+      const [recipient, adminUser, refundedByUser] = await Promise.all([
+        escrow.recipientId
+          ? db.user.findUnique({
+              where: { id: String(escrow.recipientId) },
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                profileImageUrl: true,
+              },
+            })
+          : null,
+        escrow.adminId
+          ? db.user.findUnique({
+              where: { id: String(escrow.adminId) },
+              select: { id: true, username: true, displayName: true },
+            })
+          : null,
+        escrow.refundedBy
+          ? db.user.findUnique({
+              where: { id: String(escrow.refundedBy) },
+              select: { id: true, username: true, displayName: true },
+            })
+          : null,
+      ]);
+
+      const createdAt =
+        escrow.createdAt instanceof Date
+          ? escrow.createdAt.toISOString()
+          : String(escrow.createdAt);
+      const expiresAt =
+        escrow.expiresAt instanceof Date
+          ? escrow.expiresAt.toISOString()
+          : String(escrow.expiresAt);
+      const refundedAt = escrow.refundedAt
+        ? escrow.refundedAt instanceof Date
+          ? escrow.refundedAt.toISOString()
+          : String(escrow.refundedAt)
+        : undefined;
+
+      return {
+        id: String(escrow.id),
+        recipientId: String(escrow.recipientId),
+        recipient,
+        adminId: String(escrow.adminId),
+        admin: adminUser,
+        amountUSD: String(escrow.amountUSD),
+        amountWei: String(escrow.amountWei),
+        status: String(escrow.status),
+        reason: escrow.reason ? String(escrow.reason) : null,
+        paymentRequestId: String(escrow.paymentRequestId),
+        paymentTxHash: escrow.paymentTxHash
+          ? String(escrow.paymentTxHash)
+          : null,
+        refundTxHash: escrow.refundTxHash ? String(escrow.refundTxHash) : null,
+        refundedBy: escrow.refundedBy ? String(escrow.refundedBy) : null,
+        refundedByUser,
+        refundedAt,
+        createdAt,
+        expiresAt,
+      };
+    })
+  );
 
   return {
     jsonrpc: '2.0',
     result: {
       success: true,
-      escrows: escrowsRaw.map((escrow) => ({
-        id: escrow.id,
-        recipientId: escrow.recipientId,
-        recipient: escrow.recipient,
-        adminId: escrow.adminId,
-        admin: escrow.admin,
-        amountUSD: escrow.amountUSD.toString(),
-        amountWei: escrow.amountWei,
-        status: escrow.status,
-        reason: escrow.reason,
-        paymentRequestId: escrow.paymentRequestId,
-        paymentTxHash: escrow.paymentTxHash,
-        refundTxHash: escrow.refundTxHash,
-        refundedBy: escrow.refundedBy,
-        refundedByUser: escrow.refundedByUser,
-        refundedAt: escrow.refundedAt?.toISOString(),
-        createdAt: escrow.createdAt.toISOString(),
-        expiresAt: escrow.expiresAt.toISOString(),
-      })),
+      escrows,
       pagination: {
         total,
         limit: params.limit,
@@ -876,18 +865,18 @@ export async function handleAppealBanWithEscrow(
   }
 
   // Update user appeal status (using escrow as stake)
-  await db
-    .update(users)
-    .set({
+  await db.user.update({
+    where: { id: agentId },
+    data: {
       appealCount: (user.appealCount || 0) + 1,
       appealStaked: true,
-      appealStakeAmount: escrow.amountUSD.toString(),
+      appealStakeAmount: String(escrow.amountUSD),
       appealStakeTxHash: params.escrowPaymentTxHash,
       appealStatus: 'lenient_review',
       appealSubmittedAt: new Date(),
       updatedAt: new Date(),
-    })
-    .where(eq(users.id, agentId));
+    },
+  });
 
   logger.info('A2A Ban appeal with escrow', {
     agentId,

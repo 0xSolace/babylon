@@ -1,7 +1,8 @@
 'use client';
 
 import type { PortfolioPnLSnapshot } from '@babylon/engine/client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
 // Re-export for components that import from this hook
@@ -36,6 +37,31 @@ function toNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
+interface BalanceApiResponse {
+  totalDeposited?: number | string;
+  totalWithdrawn?: number | string;
+  lifetimePnL?: number | string;
+  balance?: number | string;
+}
+
+interface PositionData {
+  unrealizedPnL?: number;
+}
+
+interface PositionsApiResponse {
+  perpetuals?: {
+    positions?: PositionData[];
+  };
+  predictions?: {
+    positions?: PositionData[];
+  };
+}
+
+interface PortfolioQueryData {
+  snapshot: PortfolioPnLSnapshot;
+  lastUpdated: number;
+}
+
 /**
  * Hook for fetching and managing portfolio profit and loss (PnL) data.
  *
@@ -47,8 +73,7 @@ function toNumber(value: unknown, fallback = 0): number {
  * - Available balance
  *
  * Automatically fetches data when the user is authenticated and refreshes
- * when the user changes. Supports manual refresh and cancellation of
- * in-flight requests.
+ * when the user changes.
  *
  * @returns Portfolio PnL state including loading status, error, data, and refresh function.
  *
@@ -69,108 +94,78 @@ function toNumber(value: unknown, fallback = 0): number {
  */
 export function usePortfolioPnL(): UsePortfolioPnLResult {
   const { user, authenticated } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<PortfolioPnLSnapshot | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['portfolioPnL', user?.id],
+    queryFn: async (): Promise<PortfolioQueryData> => {
+      const [balanceRes, positionsRes] = await Promise.all([
+        fetch(`/api/users/${encodeURIComponent(user!.id)}/balance`),
+        fetch(`/api/markets/positions/${encodeURIComponent(user!.id)}`),
+      ]);
+
+      const balanceJson = (await balanceRes.json()) as BalanceApiResponse;
+      const positionsJson = (await positionsRes.json()) as PositionsApiResponse;
+
+      const totalDeposited = toNumber(balanceJson.totalDeposited);
+      const totalWithdrawn = toNumber(balanceJson.totalWithdrawn);
+      const lifetimePnL = toNumber(balanceJson.lifetimePnL);
+      const availableBalance = toNumber(balanceJson.balance);
+
+      const perpUnrealized = (
+        positionsJson?.perpetuals?.positions ?? []
+      ).reduce(
+        (sum: number, position: PositionData) =>
+          sum + toNumber(position?.unrealizedPnL),
+        0
+      );
+
+      const predictionUnrealized = (
+        positionsJson?.predictions?.positions ?? []
+      ).reduce(
+        (sum: number, position: PositionData) =>
+          sum + toNumber(position?.unrealizedPnL),
+        0
+      );
+
+      const totalUnrealizedPnL = perpUnrealized + predictionUnrealized;
+      const totalPnL = lifetimePnL + totalUnrealizedPnL;
+      const netContributions = totalDeposited - totalWithdrawn;
+      const accountEquity = netContributions + totalPnL;
+
+      return {
+        snapshot: {
+          lifetimePnL,
+          netContributions,
+          totalDeposited,
+          totalWithdrawn,
+          availableBalance,
+          unrealizedPerpPnL: perpUnrealized,
+          unrealizedPredictionPnL: predictionUnrealized,
+          totalUnrealizedPnL,
+          totalPnL,
+          accountEquity,
+        },
+        lastUpdated: Date.now(),
+      };
+    },
+    enabled: authenticated && !!user?.id,
+    staleTime: 30000,
+  });
 
   const refresh = useCallback(async () => {
-    if (!authenticated || !user?.id) {
-      setData(null);
-      setLoading(false);
-      setError(null);
-      setLastUpdated(null);
-      return;
+    if (authenticated && user?.id) {
+      await queryClient.invalidateQueries({
+        queryKey: ['portfolioPnL', user.id],
+      });
     }
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    setLoading(true);
-    setError(null);
-
-    const [balanceRes, positionsRes] = await Promise.all([
-      fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, {
-        signal: abortController.signal,
-      }),
-      fetch(`/api/markets/positions/${encodeURIComponent(user.id)}`, {
-        signal: abortController.signal,
-      }),
-    ]);
-
-    // Check if request was aborted before parsing
-    if (abortController.signal.aborted) {
-      return;
-    }
-
-    const balanceJson = await balanceRes.json();
-    const positionsJson = await positionsRes.json();
-
-    // Check if request was aborted after parsing
-    if (abortController.signal.aborted) {
-      return;
-    }
-
-    const totalDeposited = toNumber(balanceJson.totalDeposited);
-    const totalWithdrawn = toNumber(balanceJson.totalWithdrawn);
-    const lifetimePnL = toNumber(balanceJson.lifetimePnL);
-    const availableBalance = toNumber(balanceJson.balance);
-
-    const perpUnrealized = (positionsJson?.perpetuals?.positions ?? []).reduce(
-      (sum: number, position: { unrealizedPnL?: number }) =>
-        sum + toNumber(position?.unrealizedPnL),
-      0
-    );
-
-    const predictionUnrealized = (
-      positionsJson?.predictions?.positions ?? []
-    ).reduce(
-      (sum: number, position: { unrealizedPnL?: number }) =>
-        sum + toNumber(position?.unrealizedPnL),
-      0
-    );
-
-    const totalUnrealizedPnL = perpUnrealized + predictionUnrealized;
-    const totalPnL = lifetimePnL + totalUnrealizedPnL;
-    const netContributions = totalDeposited - totalWithdrawn;
-    const accountEquity = netContributions + totalPnL;
-
-    setData({
-      lifetimePnL,
-      netContributions,
-      totalDeposited,
-      totalWithdrawn,
-      availableBalance,
-      unrealizedPerpPnL: perpUnrealized,
-      unrealizedPredictionPnL: predictionUnrealized,
-      totalUnrealizedPnL,
-      totalPnL,
-      accountEquity,
-    });
-    setLastUpdated(Date.now());
-    setLoading(false);
-  }, [authenticated, user?.id]);
-
-  useEffect(() => {
-    refresh();
-
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, [refresh]);
-
-  const memoizedData = useMemo(() => data, [data]);
+  }, [queryClient, authenticated, user?.id]);
 
   return {
-    loading,
-    error,
-    data: memoizedData,
+    loading: isLoading,
+    error: error ? (error as Error).message : null,
+    data: data?.snapshot ?? null,
     refresh,
-    lastUpdated,
+    lastUpdated: data?.lastUpdated ?? null,
   };
 }

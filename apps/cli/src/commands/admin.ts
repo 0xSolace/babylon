@@ -154,7 +154,11 @@ async function grantAdmin(identifier: string): Promise<void> {
     .from(users)
     .where(eq(users.id, user.id));
 
-  console.log(`  Verified: ${verification[0]?.isAdmin ? '✅' : '❌'}`);
+  if (verification.length === 0) {
+    throw new Error('Verification query returned no results');
+  }
+
+  console.log(`  Verified: ${verification[0]!.isAdmin ? '✅' : '❌'}`);
 }
 
 /**

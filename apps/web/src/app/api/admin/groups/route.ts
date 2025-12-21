@@ -106,7 +106,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Audit log the admin access
   logAdminView({
     adminId: admin.userId,
-    ipAddress: getClientIp(request.headers) ?? undefined,
+    ipAddress: getClientIp(request.headers) || undefined,
     resourceType: 'groups',
     metadata: { action: 'list_all_groups' },
   });

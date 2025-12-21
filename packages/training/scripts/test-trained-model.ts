@@ -196,14 +196,7 @@ async function main() {
     process.exit(1);
   }
 
-  try {
-    await testModel(config);
-  } catch (error) {
-    logger.error('Testing failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    process.exit(1);
-  }
+  await testModel(config);
 }
 
 main();

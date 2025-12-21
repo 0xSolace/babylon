@@ -497,9 +497,9 @@ export const useInteractionStore = create<InteractionStore>()(
 
         return {
           ...currentState,
-          postInteractions: new Map(persisted?.postInteractions || []),
-          commentInteractions: new Map(persisted?.commentInteractions || []),
-          favoritedProfiles: new Set(persisted?.favoritedProfiles || []),
+          postInteractions: new Map(persisted.postInteractions || []),
+          commentInteractions: new Map(persisted.commentInteractions || []),
+          favoritedProfiles: new Set(persisted.favoritedProfiles || []),
         };
       },
     }

@@ -278,6 +278,13 @@ export const POST = withErrorHandling(
         },
       });
 
+      if (!updatedChat) {
+        throw new BusinessLogicError(
+          'Chat not found after update',
+          'CHAT_NOT_FOUND'
+        );
+      }
+
       // Send notifications to invited users
       const inviterUser = await db.user.findUnique({
         where: { id: user.userId },
@@ -287,14 +294,17 @@ export const POST = withErrorHandling(
         },
       });
 
+      if (!inviterUser) {
+        throw new BusinessLogicError(
+          'Inviter user not found',
+          'USER_NOT_FOUND'
+        );
+      }
+
+      const chatName = updatedChat.name || 'a group chat';
       await Promise.all(
         newUsers.map((newUser) =>
-          notifyGroupChatInvite(
-            newUser.id,
-            user.userId,
-            chatId,
-            updatedChat?.name || 'a group chat'
-          )
+          notifyGroupChatInvite(newUser.id, user.userId, chatId, chatName)
         )
       );
 
@@ -311,8 +321,8 @@ export const POST = withErrorHandling(
       return {
         addedUsers: newUsers,
         inviterName:
-          inviterUser?.displayName || inviterUser?.username || 'Someone',
-        chatName: updatedChat?.name || 'Group Chat',
+          inviterUser.displayName || inviterUser.username || 'Someone',
+        chatName: updatedChat.name || 'Group Chat',
       };
     });
 

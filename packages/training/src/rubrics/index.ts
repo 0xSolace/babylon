@@ -36,6 +36,14 @@ import {
 } from './super-predictor';
 import { TRADER_PRIORITY_METRICS, TRADER_RUBRIC } from './trader';
 
+export interface JudgeRubric {
+  id: string;
+  name: string;
+  description: string;
+  criteria: string;
+  priorityMetrics: string[];
+}
+
 /**
  * Default rubric for unknown archetypes
  */

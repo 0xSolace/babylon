@@ -88,56 +88,28 @@ class InferenceClient {
       process.env.JEJU_RPC_URL ??
       'http://localhost:8545';
 
-    try {
-      // Query available inference providers from Jeju network
-      const response = await fetch(`${endpoint}/inference/models`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(10000),
-      });
+    // Query available inference providers from Jeju network
+    const response = await fetch(`${endpoint}/inference/models`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
 
-      if (response.ok) {
-        const data = (await response.json()) as { models: InferenceModel[] };
-        this.modelsCache = data.models ?? [];
-        this.modelsCacheExpiry = Date.now() + 60000; // 1 minute cache
-        return;
-      }
-    } catch (error) {
-      logger.warn(
-        '[Inference] Failed to fetch models from registry',
-        { error },
-        'Inference'
+    if (!response.ok) {
+      throw new Error(
+        `[Inference] Failed to fetch models: ${response.status} ${response.statusText}`
       );
     }
 
-    // Default models if registry unavailable in dev
-    if (process.env.NODE_ENV !== 'production') {
-      this.modelsCache = [
-        {
-          id: 'llama-3.2-70b',
-          name: 'Llama 3.2 70B',
-          provider: 'local',
-          endpoint:
-            process.env.JEJU_INFERENCE_ENDPOINT ?? 'http://localhost:8080',
-          pricePerInputToken: 0n,
-          pricePerOutputToken: 0n,
-          available: true,
-        },
-        {
-          id: 'qwen-2.5-72b',
-          name: 'Qwen 2.5 72B',
-          provider: 'local',
-          endpoint:
-            process.env.JEJU_INFERENCE_ENDPOINT ?? 'http://localhost:8080',
-          pricePerInputToken: 0n,
-          pricePerOutputToken: 0n,
-          available: true,
-        },
-      ];
-      this.modelsCacheExpiry = Date.now() + 60000;
+    const data = (await response.json()) as { models: InferenceModel[] };
+    if (!data.models) {
+      throw new Error('[Inference] Invalid response: missing models array');
     }
+
+    this.modelsCache = data.models;
+    this.modelsCacheExpiry = Date.now() + 60000; // 1 minute cache
   }
 
   async listModels(): Promise<InferenceModel[]> {
@@ -213,10 +185,15 @@ class InferenceClient {
       'Inference'
     );
 
+    const content = data.choices[0]?.message?.content;
+    if (content === undefined) {
+      throw new Error('[Inference] Invalid response: missing content');
+    }
+
     return {
       id: data.id,
       model: data.model,
-      content: data.choices[0]?.message?.content ?? '',
+      content,
       usage: {
         promptTokens: data.usage.prompt_tokens,
         completionTokens: data.usage.completion_tokens,

@@ -14,13 +14,16 @@
  *   --output      Output file path (default: merkle.json)
  */
 
-import { db, eq, gte, sql, users } from '@babylon/db';
+import { ElizaHolderAirdropService } from '@babylon/api';
+import { db, sql, users } from '@babylon/db';
 import { type Address, encodePacked, type Hex, keccak256 } from 'viem';
 import {
   AIRDROP_TOKENS,
   ELIZA_HOLDER_BONUS_MULTIPLIER,
   tokensToWei,
 } from '../src/config/tokenomics';
+
+const elizaService = new ElizaHolderAirdropService();
 
 // =============================================================================
 // TYPES
@@ -211,8 +214,11 @@ async function calculateAllocations(): Promise<UserAllocation[]> {
       totalAllocation = minAllocation;
     }
 
-    // TODO: Check ELIZA token holdings
-    const isElizaHolder = false;
+    // Check ELIZA token holdings via ElizaHolderAirdropService
+    const elizaBalance = await elizaService.getFullElizaBalance(
+      user.walletAddress as Address
+    );
+    const isElizaHolder = elizaBalance > 0n;
     const bonusMultiplier = isElizaHolder ? ELIZA_HOLDER_BONUS_MULTIPLIER : 100;
 
     // Apply bonus

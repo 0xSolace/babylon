@@ -309,7 +309,8 @@ describe('Referral Points Integration Tests', () => {
       }
 
       // Verify we have 10 unqualified referrals
-      const [countResult] = await db
+      type CountResult = { count: number };
+      const [countResult] = (await db
         .select({ count: count() })
         .from(referrals)
         .where(
@@ -319,7 +320,7 @@ describe('Referral Points Integration Tests', () => {
             isNull(referrals.qualifiedAt),
             eq(referrals.signupPointsAwarded, true)
           )
-        );
+        )) as unknown as CountResult[];
 
       expect(countResult?.count).toBe(10);
 

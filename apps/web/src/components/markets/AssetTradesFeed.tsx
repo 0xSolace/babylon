@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   ArrowUpDown,
@@ -147,25 +148,24 @@ interface AssetTradesFeedProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
+/**
+ * API response structure for trades endpoint.
+ */
+interface TradesApiResponse {
+  trades: Trade[];
+  hasMore: boolean;
+}
+
 export function AssetTradesFeed({
   marketType,
   assetId,
   containerRef,
 }: AssetTradesFeedProps) {
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
   const [isAtTop, setIsAtTop] = useState(true);
-  const [shouldPoll, setShouldPoll] = useState(true);
   const [needsRefresh, setNeedsRefresh] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null
-  );
+  const queryClient = useQueryClient();
 
   // Build API endpoint based on market type
   const apiEndpoint = useMemo(() => {
@@ -175,81 +175,62 @@ export function AssetTradesFeed({
     return `/api/markets/perps/trades/${assetId}`;
   }, [marketType, assetId]);
 
-  // Fetch trades from API
-  const fetchTrades = useCallback(
-    async (requestOffset: number, append = false) => {
-      setError(null);
+  // Use infinite query for paginated trades
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: ['markets', 'trades', marketType, assetId],
+    queryFn: async ({ pageParam = 0 }): Promise<TradesApiResponse> => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
-        offset: requestOffset.toString(),
+        offset: pageParam.toString(),
       });
 
       const response = await fetch(`${apiEndpoint}?${params.toString()}`);
       if (!response.ok) {
-        console.error(
-          'Failed to fetch trades:',
-          `Failed to load trades: ${response.status}`
-        );
-        setError(`Failed to load trades: ${response.status}`);
-        setLoading(false);
-        setLoadingMore(false);
-        return;
+        throw new Error(`Failed to load trades: ${response.status}`);
       }
 
-      const data = await response.json();
-      const newTrades = data.trades || [];
-
-      if (append) {
-        setTrades((prev) => {
-          // Deduplicate trades by ID
-          const existingIds = new Set(prev.map((t) => t.id));
-          const uniqueNewTrades = newTrades.filter(
-            (t: Trade) => !existingIds.has(t.id)
-          );
-          return [...prev, ...uniqueNewTrades];
-        });
-        setLoadingMore(false);
-      } else {
-        setTrades(newTrades);
-        setLoading(false);
-      }
-
-      setHasMore(data.hasMore || false);
-      setOffset(requestOffset + newTrades.length);
+      return response.json() as Promise<TradesApiResponse>;
     },
-    [apiEndpoint]
-  );
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage.hasMore) return undefined;
+      const totalLoaded = allPages.reduce(
+        (acc, page) => acc + page.trades.length,
+        0
+      );
+      return totalLoaded;
+    },
+    refetchInterval: isAtTop ? POLL_INTERVAL : false,
+    enabled: !!assetId,
+  });
 
-  // Refresh trades (used by polling)
-  const refreshTrades = useCallback(async () => {
-    // Silent refresh - don't show loading state
-    const params = new URLSearchParams({
-      limit: PAGE_SIZE.toString(),
-      offset: '0',
+  // Flatten paginated trades and deduplicate
+  const trades = useMemo(() => {
+    if (!data?.pages) return [];
+    const allTrades = data.pages.flatMap((page) => page.trades);
+    // Deduplicate by ID
+    const seen = new Set<string>();
+    return allTrades.filter((trade) => {
+      if (seen.has(trade.id)) return false;
+      seen.add(trade.id);
+      return true;
     });
+  }, [data?.pages]);
 
-    const response = await fetch(`${apiEndpoint}?${params.toString()}`);
-    if (!response.ok) return;
-
-    const data = await response.json();
-    const newTrades = data.trades || [];
-
-    // Only update if we have new trades
-    if (newTrades.length > 0) {
-      setTrades(newTrades);
-      setHasMore(data.hasMore || false);
-      setOffset(newTrades.length);
-    }
-  }, [apiEndpoint]);
-
-  // Initial load
-  useEffect(() => {
-    setOffset(0);
-    setHasMore(true);
-    setTrades([]);
-    setLoading(true);
-    fetchTrades(0, false);
-  }, [fetchTrades]);
+  // Refresh trades
+  const refreshTrades = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ['markets', 'trades', marketType, assetId],
+    });
+  }, [queryClient, marketType, assetId]);
 
   // Handle scroll to detect if user is at top
   useEffect(() => {
@@ -259,51 +240,21 @@ export function AssetTradesFeed({
     const handleScroll = () => {
       const scrollTop = container.scrollTop;
       const isNearTop = scrollTop <= SCROLL_THRESHOLD;
-
       setIsAtTop(isNearTop);
-      setShouldPoll(isNearTop);
     };
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
   }, [containerRef]);
 
-  // Polling: refresh when at top
-  useEffect(() => {
-    if (!shouldPoll || !isAtTop) {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-      return;
-    }
-
-    // Only poll if page is visible
-    const pollIfVisible = () => {
-      if (document.visibilityState === 'visible') {
-        refreshTrades();
-      }
-    };
-
-    pollingIntervalRef.current = setInterval(pollIfVisible, POLL_INTERVAL);
-
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-    };
-  }, [shouldPoll, isAtTop, refreshTrades]);
-
   // Infinite scroll observer
   useEffect(() => {
-    if (!loadMoreRef.current || !hasMore || loadingMore) return;
+    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setLoadingMore(true);
-          fetchTrades(offset, true);
+          void fetchNextPage();
         }
       },
       { threshold: 0.1 }
@@ -311,8 +262,9 @@ export function AssetTradesFeed({
 
     observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
-  }, [offset, hasMore, loadingMore, fetchTrades]);
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // Refresh when at top and needs refresh
   useEffect(() => {
     if (isAtTop && needsRefresh) {
       setNeedsRefresh(false);
@@ -364,7 +316,7 @@ export function AssetTradesFeed({
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-3">
         {[...Array(5)].map((_, i) => (
@@ -392,15 +344,9 @@ export function AssetTradesFeed({
         <p className="mb-2 font-medium text-foreground text-sm">
           Failed to load trades
         </p>
-        <p className="mb-4 text-muted-foreground text-xs">{error}</p>
+        <p className="mb-4 text-muted-foreground text-xs">{error.message}</p>
         <button
-          onClick={() => {
-            setLoading(true);
-            setError(null);
-            setOffset(0);
-            setHasMore(true);
-            fetchTrades(0, false);
-          }}
+          onClick={() => void refetch()}
           className="rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
         >
           Try Again
@@ -441,9 +387,9 @@ export function AssetTradesFeed({
       ))}
 
       {/* Load More Trigger */}
-      {hasMore && (
+      {hasNextPage && (
         <div ref={loadMoreRef} className="py-4">
-          {loadingMore && (
+          {isFetchingNextPage && (
             <div className="text-center">
               <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
             </div>
@@ -451,7 +397,7 @@ export function AssetTradesFeed({
         </div>
       )}
 
-      {!hasMore && trades.length > 0 && (
+      {!hasNextPage && trades.length > 0 && (
         <div className="py-4 text-center text-muted-foreground text-sm">
           No more trades to load
         </div>

@@ -89,7 +89,7 @@ async function main() {
     transport: http(SEPOLIA_RPC),
   });
 
-  const sepoliaWallet = createWalletClient({
+  const _sepoliaWallet = createWalletClient({
     chain: { ...hardhat, id: 11155111, name: 'Sepolia' },
     transport: http(SEPOLIA_RPC),
     account,
@@ -107,7 +107,7 @@ async function main() {
   try {
     jejuBlock = await jejuPublic.getBlockNumber();
     console.log(`  Jeju RPC connected (block: ${jejuBlock})`);
-  } catch (e) {
+  } catch (_e) {
     console.log(`  ERROR: Cannot connect to Jeju RPC at ${JEJU_RPC}`);
     console.log('  Start a local Hardhat node with: npx hardhat node');
     results.push({

@@ -2,25 +2,9 @@
  * ERC-8004 Reputation Sync Service
  *
  * Continuously syncs reputation scores to ERC-8004 via Agent0 SDK.
- *
- * Based on ERC-8004 spec (https://eips.ethereum.org/EIPS/eip-8004):
- * - Publishes reputation as feedback signals on-chain
- * - Uses pre-authorization (feedbackAuth) for feedback submission
- * - Supports tags for filtering and composability
- * - Optional off-chain file for detailed reputation data
- *
- * Inspired by Neynar Scores approach:
- * - Weekly recalculation for most users
- * - More frequent updates for new accounts
- * - Continuous reputation tracking
  */
 
-import { and, db, desc, eq, gte, isNotNull } from '@babylon/db';
-import {
-  agentPerformanceMetrics,
-  gameConfigs,
-  users,
-} from '@babylon/db/schema';
+import { db } from '@babylon/db';
 import { recalculateReputation } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import { generateSnowflakeId } from '../../shared/snowflake';
@@ -45,36 +29,44 @@ interface BatchSyncResult {
   results: ReputationSyncResult[];
 }
 
+interface UserWithMetrics {
+  id: string;
+  agent0TokenId: number | null;
+  username: string | null;
+  displayName: string | null;
+  isBanned: boolean;
+  isScammer: boolean;
+  isCSAM: boolean;
+  createdAt: Date;
+  AgentPerformanceMetrics: {
+    updatedAt: Date;
+    lastActivityAt: Date | null;
+    reputationScore: number;
+  } | null;
+}
+
 /**
  * Sync a single user's reputation to ERC-8004
- *
- * This publishes the reputation score as a feedback signal on-chain via Agent0 SDK.
- * According to ERC-8004, feedback requires pre-authorization from the agent.
- *
- * For system-level reputation (not user-submitted feedback), we use a special
- * "system" client address that agents pre-authorize during registration.
  */
 export async function syncUserReputationToERC8004(
   userId: string,
   forceRecalculate = false
 ): Promise<ReputationSyncResult> {
   // Get user data
-  const userResult = await db
-    .select({
-      id: users.id,
-      agent0TokenId: users.agent0TokenId,
-      username: users.username,
-      displayName: users.displayName,
-      isBanned: users.isBanned,
-      isScammer: users.isScammer,
-      isCSAM: users.isCSAM,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const user = userResult[0];
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      agent0TokenId: true,
+      username: true,
+      displayName: true,
+      isBanned: true,
+      isScammer: true,
+      isCSAM: true,
+      createdAt: true,
+      walletAddress: true,
+    },
+  });
 
   if (!user) {
     return {
@@ -86,7 +78,9 @@ export async function syncUserReputationToERC8004(
     };
   }
 
-  if (!user.agent0TokenId) {
+  const agent0TokenId = user.agent0TokenId ? Number(user.agent0TokenId) : null;
+
+  if (!agent0TokenId) {
     return {
       userId,
       agent0TokenId: null,
@@ -97,26 +91,50 @@ export async function syncUserReputationToERC8004(
   }
 
   // Get performance metrics separately
-  const metricsResult = await db
-    .select({
-      reputationScore: agentPerformanceMetrics.reputationScore,
-      updatedAt: agentPerformanceMetrics.updatedAt,
-      lastActivityAt: agentPerformanceMetrics.lastActivityAt,
-    })
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+  const metrics = await db.agentPerformanceMetrics.findUnique({
+    where: { userId },
+    select: {
+      reputationScore: true,
+      updatedAt: true,
+      lastActivityAt: true,
+    },
+  });
 
-  const userWithMetrics = {
-    ...user,
-    AgentPerformanceMetrics: metricsResult[0] ?? null,
+  const userWithMetrics: UserWithMetrics = {
+    id: String(user.id),
+    agent0TokenId,
+    username: user.username ? String(user.username) : null,
+    displayName: user.displayName ? String(user.displayName) : null,
+    isBanned: Boolean(user.isBanned),
+    isScammer: Boolean(user.isScammer),
+    isCSAM: Boolean(user.isCSAM),
+    createdAt:
+      user.createdAt instanceof Date
+        ? user.createdAt
+        : new Date(String(user.createdAt)),
+    AgentPerformanceMetrics: metrics
+      ? {
+          reputationScore: Number(metrics.reputationScore),
+          updatedAt:
+            metrics.updatedAt instanceof Date
+              ? metrics.updatedAt
+              : new Date(String(metrics.updatedAt)),
+          lastActivityAt: metrics.lastActivityAt
+            ? metrics.lastActivityAt instanceof Date
+              ? metrics.lastActivityAt
+              : new Date(String(metrics.lastActivityAt))
+            : null,
+        }
+      : null,
   };
 
   // Recalculate reputation if forced or if metrics are stale
   let reputationScore: number;
   if (forceRecalculate) {
-    const metrics = await recalculateReputation(userId);
-    reputationScore = metrics?.reputationScore ?? 50;
+    const recalcMetrics = await recalculateReputation(userId);
+    reputationScore = recalcMetrics?.reputationScore
+      ? Number(recalcMetrics.reputationScore)
+      : 50;
   } else {
     reputationScore = await getCachedAgent0ReputationScore(userId);
   }
@@ -174,26 +192,26 @@ export async function syncUserReputationToERC8004(
   );
 
   // Update local metrics with latest reputation (upsert pattern)
-  const existingMetrics = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+  const existingMetrics = await db.agentPerformanceMetrics.findUnique({
+    where: { userId },
+  });
 
-  if (existingMetrics[0]) {
-    await db
-      .update(agentPerformanceMetrics)
-      .set({
+  if (existingMetrics) {
+    await db.agentPerformanceMetrics.update({
+      where: { userId },
+      data: {
         reputationScore,
         updatedAt: new Date(),
-      })
-      .where(eq(agentPerformanceMetrics.userId, userId));
+      },
+    });
   } else {
-    await db.insert(agentPerformanceMetrics).values({
-      id: await generateSnowflakeId(),
-      userId,
-      reputationScore,
-      updatedAt: new Date(),
+    await db.agentPerformanceMetrics.create({
+      data: {
+        id: await generateSnowflakeId(),
+        userId,
+        reputationScore,
+        updatedAt: new Date(),
+      },
     });
   }
 
@@ -201,15 +219,10 @@ export async function syncUserReputationToERC8004(
   await recordReputationSync(userId, feedbackScore, tags);
 
   // Attempt to submit feedback to ERC-8004 via Agent0 SDK
-  // This requires:
-  // 1. Agent0 SDK configured with system wallet (AGENT0_FEEDBACK_PRIVATE_KEY or BABYLON_AGENT0_PRIVATE_KEY)
-  // 2. Agent to have pre-authorized system address during registration
-  // 3. Network connectivity and gas for transaction
   let onChainSubmitted = false;
   let onChainError: string | undefined;
 
   // Check if Agent0 SDK is configured for feedback submission
-  // Use default test key for localnet (first Hardhat account)
   const feedbackPrivateKey =
     process.env.AGENT0_FEEDBACK_PRIVATE_KEY ||
     process.env.BABYLON_AGENT0_PRIVATE_KEY ||
@@ -222,29 +235,22 @@ export async function syncUserReputationToERC8004(
       'Agent0 feedback private key not configured, skipping on-chain submission',
       {
         userId,
-        agent0TokenId: user.agent0TokenId,
+        agent0TokenId,
       },
       'ERC8004ReputationSync'
     );
     onChainError = 'Feedback private key not configured';
   } else {
-    // Get agent's wallet address for system feedback
-    // For system-level reputation, we use the agent's own wallet address
-    // The agent should pre-authorize this during registration
-    const agentUserResult = await db
-      .select({ walletAddress: users.walletAddress })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const walletAddress = user.walletAddress
+      ? String(user.walletAddress)
+      : null;
 
-    const agentUser = agentUserResult[0];
-
-    if (!agentUser?.walletAddress) {
+    if (!walletAddress) {
       logger.debug(
         'Agent has no wallet address, skipping on-chain submission',
         {
           userId,
-          agent0TokenId: user.agent0TokenId,
+          agent0TokenId,
         },
         'ERC8004ReputationSync'
       );
@@ -260,17 +266,16 @@ export async function syncUserReputationToERC8004(
           'Agent0Client not available for feedback submission',
           {
             userId,
-            agent0TokenId: user.agent0TokenId,
+            agent0TokenId,
           },
           'ERC8004ReputationSync'
         );
       } else {
         // Submit feedback via Agent0 SDK
-        // Convert 0-100 score to -5 to +5 scale (ERC-8004 uses -5 to +5)
         const rating = Math.round((feedbackScore / 100) * 10 - 5);
 
         await agent0Client.submitFeedback({
-          targetAgentId: userWithMetrics.agent0TokenId!,
+          targetAgentId: agent0TokenId,
           rating,
           comment: `System reputation update: ${feedbackScore}/100. Tags: ${tags.join(', ')}`,
           transactionId: `reputation-sync-${userId}-${Date.now()}`,
@@ -304,9 +309,6 @@ export async function syncUserReputationToERC8004(
 
 /**
  * Batch sync reputation for multiple users
- *
- * Processes users in batches to avoid overwhelming the system.
- * Prioritizes new accounts and recently active users.
  */
 export async function batchSyncReputationsToERC8004(
   options: {
@@ -324,24 +326,23 @@ export async function batchSyncReputationsToERC8004(
   } = options;
 
   // Query users with Agent0 token IDs
-  // Prioritize new accounts (created in last 7 days) if requested
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const whereCondition = prioritizeNew
-    ? and(isNotNull(users.agent0TokenId), gte(users.createdAt, sevenDaysAgo))
-    : isNotNull(users.agent0TokenId);
+    ? { agent0TokenId: { not: null }, createdAt: { gte: sevenDaysAgo } }
+    : { agent0TokenId: { not: null } };
 
-  const usersResult = await db
-    .select({
-      id: users.id,
-      agent0TokenId: users.agent0TokenId,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .where(whereCondition)
-    .orderBy(prioritizeNew ? desc(users.createdAt) : users.createdAt)
-    .limit(limit)
-    .offset(offset);
+  const usersResult = await db.user.findMany({
+    where: whereCondition,
+    select: {
+      id: true,
+      agent0TokenId: true,
+      createdAt: true,
+    },
+    orderBy: prioritizeNew ? { createdAt: 'desc' } : { createdAt: 'asc' },
+    take: limit,
+    skip: offset,
+  });
 
   logger.info(
     `Batch syncing ${usersResult.length} user reputations`,
@@ -358,8 +359,11 @@ export async function batchSyncReputationsToERC8004(
   let failed = 0;
   let skipped = 0;
 
-  for (const user of usersResult) {
-    const result = await syncUserReputationToERC8004(user.id, forceRecalculate);
+  for (const u of usersResult) {
+    const result = await syncUserReputationToERC8004(
+      String(u.id),
+      forceRecalculate
+    );
     results.push(result);
 
     if (result.synced) {
@@ -385,20 +389,9 @@ export async function batchSyncReputationsToERC8004(
 
 /**
  * Determine if reputation should be synced based on last sync time
- *
- * Similar to Neynar Scores:
- * - New accounts (< 7 days): Sync daily
- * - Active accounts: Sync weekly
- * - Inactive accounts: Sync monthly
  */
 function shouldSyncReputation(
-  user: {
-    createdAt: Date;
-    AgentPerformanceMetrics: {
-      updatedAt: Date;
-      lastActivityAt: Date | null;
-    } | null;
-  },
+  user: UserWithMetrics,
   lastSync: Date | null,
   forceRecalculate: boolean
 ): boolean {
@@ -438,14 +431,19 @@ function shouldSyncReputation(
  * Get last reputation sync timestamp for a user
  */
 async function getLastReputationSync(userId: string): Promise<Date | null> {
-  const syncResult = await db
-    .select({ createdAt: gameConfigs.createdAt })
-    .from(gameConfigs)
-    .where(eq(gameConfigs.key, `reputation_sync_${userId}`))
-    .orderBy(desc(gameConfigs.createdAt))
-    .limit(1);
+  const syncResult = await db.gameConfig.findMany({
+    where: { key: `reputation_sync_${userId}` },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+    select: { createdAt: true },
+  });
 
-  return syncResult[0]?.createdAt ?? null;
+  if (!syncResult[0]?.createdAt) {
+    return null;
+  }
+
+  const createdAt = syncResult[0].createdAt;
+  return createdAt instanceof Date ? createdAt : new Date(String(createdAt));
 }
 
 /**
@@ -463,36 +461,33 @@ async function recordReputationSync(
     syncedAt: new Date().toISOString(),
   };
 
-  const existing = await db
-    .select()
-    .from(gameConfigs)
-    .where(eq(gameConfigs.key, key))
-    .limit(1);
+  const existing = await db.gameConfig.findUnique({
+    where: { key },
+  });
 
-  if (existing[0]) {
-    await db
-      .update(gameConfigs)
-      .set({
+  if (existing) {
+    await db.gameConfig.update({
+      where: { key },
+      data: {
         value,
         updatedAt: new Date(),
-      })
-      .where(eq(gameConfigs.key, key));
+      },
+    });
   } else {
-    await db.insert(gameConfigs).values({
-      id: await generateSnowflakeId(),
-      key,
-      value,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    await db.gameConfig.create({
+      data: {
+        id: await generateSnowflakeId(),
+        key,
+        value,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     });
   }
 }
 
 /**
  * Sync all active user reputations
- *
- * This is the main entry point for cron jobs.
- * Processes users in batches to stay within execution time limits.
  */
 export async function syncAllReputationsToERC8004(): Promise<BatchSyncResult> {
   logger.info(
@@ -512,7 +507,7 @@ export async function syncAllReputationsToERC8004(): Promise<BatchSyncResult> {
     const batch = await batchSyncReputationsToERC8004({
       limit: batchSize,
       offset,
-      prioritizeNew: offset === 0, // Prioritize new accounts on first batch
+      prioritizeNew: offset === 0,
     });
 
     totalSynced += batch.synced;

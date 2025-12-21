@@ -101,8 +101,12 @@ export const POST = withErrorHandling(
       .where(eq(users.id, canonicalUserId))
       .limit(1);
 
+    if (!user) {
+      throw new BusinessLogicError('User record not found', 'USER_NOT_FOUND');
+    }
+
     // VALIDATION: Check if user has linked Twitter account
-    if (!user?.twitterUsername && !user?.twitterId) {
+    if (!user.twitterUsername && !user.twitterId) {
       throw new BusinessLogicError(
         'Please link your Twitter account first to claim this reward.',
         'TWITTER_NOT_LINKED'

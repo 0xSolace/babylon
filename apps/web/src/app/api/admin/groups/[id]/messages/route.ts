@@ -86,9 +86,10 @@ export const GET = withErrorHandling(
     const { id: chatId } = await context.params;
 
     // Audit log the admin access
+    const ipAddress = getClientIp(request.headers);
     logAdminView({
       adminId: admin.userId,
-      ipAddress: getClientIp(request.headers) ?? undefined,
+      ...(ipAddress && { ipAddress }),
       resourceType: 'group_messages',
       resourceId: chatId,
       metadata: { action: 'view_group_messages' },

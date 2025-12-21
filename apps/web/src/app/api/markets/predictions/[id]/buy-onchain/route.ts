@@ -137,8 +137,12 @@ export const POST = withErrorHandling(
       select: { walletAddress: true },
     });
 
+    if (!userRecord) {
+      throw new BusinessLogicError('User not found', 'USER_NOT_FOUND');
+    }
+
     if (
-      !userRecord?.walletAddress ||
+      !userRecord.walletAddress ||
       userRecord.walletAddress.toLowerCase() !== walletAddress.toLowerCase()
     ) {
       throw new BusinessLogicError(
@@ -166,7 +170,14 @@ export const POST = withErrorHandling(
     }
 
     // Verify transaction was to our Diamond contract
-    if (receipt.to?.toLowerCase() !== DIAMOND_ADDRESS.toLowerCase()) {
+    if (!receipt.to) {
+      throw new BusinessLogicError(
+        'Transaction has no recipient',
+        'INVALID_TRANSACTION'
+      );
+    }
+
+    if (receipt.to.toLowerCase() !== DIAMOND_ADDRESS.toLowerCase()) {
       throw new BusinessLogicError(
         'Transaction not to correct contract',
         'INVALID_CONTRACT'

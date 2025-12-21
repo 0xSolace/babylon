@@ -181,7 +181,7 @@ export async function POST(
     );
   }
 
-  if (!agentConfig?.a2aEnabled) {
+  if (!agentConfig || !agentConfig.a2aEnabled) {
     return NextResponse.json(
       {
         jsonrpc: '2.0',
@@ -400,7 +400,7 @@ export async function GET(
     );
   }
 
-  if (!config?.a2aEnabled) {
+  if (!config || !config.a2aEnabled) {
     return NextResponse.json(
       {
         error: 'A2A is not enabled for this agent',
@@ -414,9 +414,9 @@ export async function GET(
     displayName: agent.displayName,
     bio: agent.bio,
     profileImageUrl: agent.profileImageUrl,
-    systemPrompt: config?.systemPrompt ?? null,
-    personality: config?.personality ?? null,
-    tradingStrategy: config?.tradingStrategy ?? null,
+    systemPrompt: config.systemPrompt ?? null,
+    personality: config.personality ?? null,
+    tradingStrategy: config.tradingStrategy ?? null,
   });
 
   return NextResponse.json(

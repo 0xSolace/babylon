@@ -24,7 +24,6 @@
     "@babylon/db": "workspace:*",
     "@huggingface/hub": "^2.6.12",
     "@jejunetwork/kms": "workspace:*",
-    "ethers": "^6.16.0",
     "uuid": "^11.1.0"
   },
   "peerDependencies": {

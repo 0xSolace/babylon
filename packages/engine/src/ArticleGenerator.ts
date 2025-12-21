@@ -57,7 +57,12 @@
  * ```
  */
 
-import { generateSnowflakeId, type JsonValue, logger } from '@babylon/shared';
+import {
+  ArticleSchema,
+  generateSnowflakeId,
+  type JsonValue,
+  logger,
+} from '@babylon/shared';
 import type { BabylonLLMClient } from './llm/openai-client';
 import { biasedArticle, renderPrompt, validateArticle } from './prompts';
 import { characterMappingService } from './services/character-mapping-service';
@@ -650,6 +655,15 @@ export class ArticleGenerator {
       tags: tagsArray,
       publishedAt: new Date(),
     };
+
+    try {
+      ArticleSchema.parse(article);
+    } catch (error) {
+      logger.error('Article validation failed', { error }, 'ArticleGenerator');
+      throw new Error(
+        `Generated article failed validation: ${(error as Error).message}`
+      );
+    }
 
     return article;
   }

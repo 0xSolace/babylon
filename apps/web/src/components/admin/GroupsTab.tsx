@@ -1,6 +1,7 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, logger } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   Calendar,
   MessageCircle,
@@ -9,7 +10,7 @@ import {
   User as UserIcon,
   Users,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useState } from 'react';
 import { z } from 'zod';
 
 /**
@@ -78,23 +79,26 @@ type GroupChat = z.infer<typeof GroupChatSchema>;
  * @returns Groups tab element
  */
 export function GroupsTab() {
-  const [groups, setGroups] = useState<GroupChat[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<GroupChat | null>(null);
   const [sortBy, setSortBy] = useState<
     'createdAt' | 'memberCount' | 'messageCount'
   >('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [isRefreshing, startRefresh] = useTransition();
 
-  const fetchGroups = useCallback(async () => {
-    startRefresh(async () => {
-      setIsLoading(true);
+  const {
+    data: groups = [],
+    isLoading,
+    refetch,
+    isFetching,
+  } = useQuery<GroupChat[]>({
+    queryKey: ['admin', 'groups', sortBy, sortOrder],
+    queryFn: async () => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
       if (!token) {
+        logger.error('Not authenticated', undefined, 'GroupsTab');
         throw new Error('Not authenticated');
       }
 
@@ -116,18 +120,14 @@ export function GroupsTab() {
       if (!validation.success) {
         throw new Error('Invalid group data structure');
       }
-      setGroups(validation.data || []);
-      setIsLoading(false);
-    });
-  }, [sortBy, sortOrder]);
-
-  useEffect(() => {
-    fetchGroups();
-  }, [fetchGroups]);
+      return validation.data || [];
+    },
+  });
 
   const filteredGroups = groups.filter(
     (group) =>
-      group.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (group.name &&
+        group.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       group.creatorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       group.id.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -171,8 +171,8 @@ export function GroupsTab() {
           </span>
         </div>
         <button
-          onClick={fetchGroups}
-          disabled={isLoading || isRefreshing}
+          onClick={() => refetch()}
+          disabled={isLoading || isFetching}
           className={cn(
             'flex items-center gap-2 rounded-lg px-4 py-2',
             'bg-primary text-primary-foreground',
@@ -183,7 +183,7 @@ export function GroupsTab() {
           <RefreshCw
             className={cn(
               'h-4 w-4',
-              (isLoading || isRefreshing) && 'animate-spin'
+              (isLoading || isFetching) && 'animate-spin'
             )}
           />
           Refresh
@@ -254,7 +254,9 @@ export function GroupsTab() {
               className={cn(
                 'space-y-3 rounded-lg border border-border bg-card p-4',
                 'cursor-pointer transition-colors hover:border-primary',
-                selectedGroup?.id === group.id && 'border-primary'
+                selectedGroup &&
+                  selectedGroup.id === group.id &&
+                  'border-primary'
               )}
               onClick={() => setSelectedGroup(group)}
             >

@@ -29,6 +29,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   DollarSign,
@@ -36,7 +37,6 @@ import {
   TrendingUp,
   Trophy,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 /**
  * Performance metrics structure for NPC leaderboard.
@@ -86,31 +86,22 @@ export function NPCLeaderboard({
   minValue = 0,
   className = '',
 }: NPCLeaderboardProps) {
-  const [data, setData] = useState<LeaderboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchLeaderboard = async () => {
-      setLoading(true);
+  const { data, isLoading } = useQuery({
+    queryKey: ['npc', 'leaderboard', limit, minValue],
+    queryFn: async (): Promise<LeaderboardData | null> => {
       const response = await fetch(
         `/api/npc/performance/leaderboard?limit=${limit}&minValue=${minValue}`
       );
-      const result = await response.json();
-
-      if (result.success) {
-        setData(result);
+      if (!response.ok) {
+        throw new Error('Failed to fetch leaderboard');
       }
-      setLoading(false);
-    };
+      const result = await response.json();
+      return result.success ? result : null;
+    },
+    refetchInterval: 30000,
+  });
 
-    fetchLeaderboard();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchLeaderboard, 30000);
-    return () => clearInterval(interval);
-  }, [limit, minValue]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={cn('rounded-lg bg-sidebar p-4', className)}>
         <div className="text-muted-foreground text-sm">

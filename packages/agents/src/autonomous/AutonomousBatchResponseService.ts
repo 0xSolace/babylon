@@ -14,22 +14,7 @@
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import {
-  and,
-  chatParticipants,
-  chats,
-  comments,
-  db,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNull,
-  messages,
-  ne,
-  posts,
-  users,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
@@ -58,199 +43,205 @@ interface ResponseDecision {
 export class AutonomousBatchResponseService {
   /**
    * Gather all pending interactions that might need responses
-   *
-   * Collects comments on agent's posts, replies to agent's comments,
-   * and new chat messages that the agent hasn't responded to.
-   *
-   * @param agentUserId - Unique identifier for the agent
-   * @returns Array of pending interactions requiring potential responses
-   *
-   * @remarks
-   * - Limited to interactions from last 24 hours
-   * - Filters out interactions agent already responded to
-   * - Includes context for each interaction
    */
   async gatherPendingInteractions(
     agentUserId: string
   ): Promise<PendingInteraction[]> {
     const interactions: PendingInteraction[] = [];
-
-    // Get comments on agent's posts
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     // First get agent's posts
-    const agentPosts = await db
-      .select({ id: posts.id })
-      .from(posts)
-      .where(and(eq(posts.authorId, agentUserId), isNull(posts.deletedAt)));
-    const agentPostIds = agentPosts.map((p) => p.id);
+    const agentPosts = await db.post.findMany({
+      where: { authorId: agentUserId, deletedAt: null },
+      select: { id: true },
+    });
+    const agentPostIds = agentPosts.map((p) => String(p.id));
 
     if (agentPostIds.length > 0) {
-      const commentsOnPostsRaw = await db.query.comments.findMany({
-        where: (
-          comments,
-          { and: andFn, ne: neFn, gte: gteFn, inArray: inArrayFn }
-        ) =>
-          andFn(
-            neFn(comments.authorId, agentUserId),
-            gteFn(comments.createdAt, oneDayAgo),
-            inArrayFn(comments.postId, agentPostIds)
-          ),
-        with: {
-          author: {
-            columns: {
-              id: true,
-              username: true,
-              displayName: true,
-            },
-          },
-          post: {
-            columns: {
-              id: true,
-              content: true,
-            },
-          },
+      // Get comments on agent's posts
+      const commentsOnPosts = await db.comment.findMany({
+        where: {
+          authorId: { not: agentUserId },
+          createdAt: { gte: oneDayAgo },
+          postId: { in: agentPostIds },
         },
-        orderBy: (comments, { desc: descFn }) => [descFn(comments.createdAt)],
-        limit: 20,
+        orderBy: { createdAt: 'desc' },
+        take: 20,
       });
 
-      for (const comment of commentsOnPostsRaw) {
-        if (!comment.post) continue;
+      // Get post content for context
+      const postContents = await db.post.findMany({
+        where: { id: { in: agentPostIds } },
+        select: { id: true, content: true },
+      });
+      const postContentMap = new Map(
+        postContents.map((p) => [String(p.id), String(p.content)])
+      );
+
+      // Get author info
+      const authorIds = [
+        ...new Set(commentsOnPosts.map((c) => String(c.authorId))),
+      ];
+      const authors = await db.user.findMany({
+        where: { id: { in: authorIds } },
+        select: { id: true, username: true, displayName: true },
+      });
+      const authorMap = new Map(authors.map((a) => [String(a.id), a]));
+
+      for (const comment of commentsOnPosts) {
+        const postContent = postContentMap.get(String(comment.postId)) || '';
+        const author = authorMap.get(String(comment.authorId));
+        const createdAt =
+          comment.createdAt instanceof Date
+            ? comment.createdAt
+            : new Date(String(comment.createdAt));
+
         interactions.push({
           type: 'comment_on_post',
-          id: comment.id,
-          postId: comment.postId,
+          id: String(comment.id),
+          postId: String(comment.postId),
           author:
-            comment.author?.displayName ||
-            comment.author?.username ||
+            (author?.displayName ? String(author.displayName) : null) ||
+            (author?.username ? String(author.username) : null) ||
             'Unknown',
-          content: comment.content,
-          context: `Your post: "${comment.post.content}"`,
-          timestamp: comment.createdAt,
+          content: String(comment.content),
+          context: `Your post: "${postContent}"`,
+          timestamp: createdAt,
         });
       }
     }
 
     // Get replies to agent's comments
-    const myComments = await db
-      .select({ id: comments.id })
-      .from(comments)
-      .where(eq(comments.authorId, agentUserId))
-      .orderBy(desc(comments.createdAt))
-      .limit(50);
-    const myCommentIds = myComments.map((c) => c.id);
+    const myComments = await db.comment.findMany({
+      where: { authorId: agentUserId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { id: true },
+    });
+    const myCommentIds = myComments.map((c) => String(c.id));
 
     if (myCommentIds.length > 0) {
-      const repliesToCommentsRaw = await db
-        .select({
-          reply: comments,
-          author: {
-            id: users.id,
-            username: users.username,
-            displayName: users.displayName,
-          },
-        })
-        .from(comments)
-        .leftJoin(users, eq(comments.authorId, users.id))
-        .where(
-          and(
-            inArray(comments.parentCommentId, myCommentIds),
-            ne(comments.authorId, agentUserId),
-            gte(comments.createdAt, oneDayAgo)
-          )
-        )
-        .orderBy(desc(comments.createdAt))
-        .limit(20);
+      const repliesToComments = await db.comment.findMany({
+        where: {
+          parentCommentId: { in: myCommentIds },
+          authorId: { not: agentUserId },
+          createdAt: { gte: oneDayAgo },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      });
 
-      // Get parent comment content separately
+      // Get parent comment content
       const parentCommentIds = [
         ...new Set(
-          repliesToCommentsRaw
-            .map((r) => r.reply.parentCommentId)
-            .filter(Boolean)
+          repliesToComments
+            .map((r) => String(r.parentCommentId))
+            .filter((id) => id && id !== 'null')
         ),
-      ] as string[];
-      const parentComments =
-        parentCommentIds.length > 0
-          ? await db
-              .select({ id: comments.id, content: comments.content })
-              .from(comments)
-              .where(inArray(comments.id, parentCommentIds))
-          : [];
+      ];
+      const parentComments = await db.comment.findMany({
+        where: { id: { in: parentCommentIds } },
+        select: { id: true, content: true },
+      });
       const parentCommentMap = new Map(
-        parentComments.map((pc) => [pc.id, pc.content])
+        parentComments.map((pc) => [String(pc.id), String(pc.content)])
       );
 
-      for (const row of repliesToCommentsRaw) {
+      // Get author info
+      const replyAuthorIds = [
+        ...new Set(repliesToComments.map((r) => String(r.authorId))),
+      ];
+      const replyAuthors = await db.user.findMany({
+        where: { id: { in: replyAuthorIds } },
+        select: { id: true, username: true, displayName: true },
+      });
+      const replyAuthorMap = new Map(
+        replyAuthors.map((a) => [String(a.id), a])
+      );
+
+      for (const reply of repliesToComments) {
+        const author = replyAuthorMap.get(String(reply.authorId));
+        const parentContent =
+          parentCommentMap.get(String(reply.parentCommentId)) || '';
+        const createdAt =
+          reply.createdAt instanceof Date
+            ? reply.createdAt
+            : new Date(String(reply.createdAt));
+
         interactions.push({
           type: 'comment_on_comment',
-          id: row.reply.id,
-          commentId: row.reply.id,
-          parentCommentId: row.reply.parentCommentId || undefined,
-          author: row.author?.displayName || row.author?.username || 'Unknown',
-          content: row.reply.content,
-          context: `Your comment: "${parentCommentMap.get(row.reply.parentCommentId || '') || ''}"`,
-          timestamp: row.reply.createdAt,
+          id: String(reply.id),
+          commentId: String(reply.id),
+          parentCommentId: reply.parentCommentId
+            ? String(reply.parentCommentId)
+            : undefined,
+          author:
+            (author?.displayName ? String(author.displayName) : null) ||
+            (author?.username ? String(author.username) : null) ||
+            'Unknown',
+          content: String(reply.content),
+          context: `Your comment: "${parentContent}"`,
+          timestamp: createdAt,
         });
       }
     }
 
     // Get unread chat messages
-    const agentChats = await db
-      .select({
-        chatId: chatParticipants.chatId,
-        chat: chats,
-      })
-      .from(chatParticipants)
-      .leftJoin(chats, eq(chatParticipants.chatId, chats.id))
-      .where(eq(chatParticipants.userId, agentUserId));
+    const agentChats = await db.chatParticipant.findMany({
+      where: { userId: agentUserId },
+      select: { chatId: true },
+    });
 
     for (const chatParticipant of agentChats) {
-      const chat = chatParticipant.chat;
+      const chat = await db.chat.findUnique({
+        where: { id: String(chatParticipant.chatId) },
+      });
       if (!chat) continue;
 
       // Get recent messages from others in this chat
-      const chatMessages = await db
-        .select()
-        .from(messages)
-        .where(
-          and(
-            eq(messages.chatId, chat.id),
-            ne(messages.senderId, agentUserId),
-            gte(messages.createdAt, oneDayAgo)
-          )
-        )
-        .orderBy(desc(messages.createdAt))
-        .limit(3);
+      const chatMessages = await db.message.findMany({
+        where: {
+          chatId: String(chat.id),
+          senderId: { not: agentUserId },
+          createdAt: { gte: oneDayAgo },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      });
 
       if (chatMessages.length === 0) continue;
 
       // Get recent conversation context
-      const recentMessages = await db
-        .select()
-        .from(messages)
-        .where(eq(messages.chatId, chat.id))
-        .orderBy(desc(messages.createdAt))
-        .limit(5);
+      const recentMessages = await db.message.findMany({
+        where: { chatId: String(chat.id) },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      });
 
       const contextMessages = recentMessages
         .reverse()
         .map(
-          (m) => `${m.senderId === agentUserId ? 'You' : 'User'}: ${m.content}`
+          (m) =>
+            `${String(m.senderId) === agentUserId ? 'You' : 'User'}: ${String(m.content)}`
         )
         .join('\n');
 
       const latestMessage = chatMessages[0];
       if (latestMessage) {
+        const createdAt =
+          latestMessage.createdAt instanceof Date
+            ? latestMessage.createdAt
+            : new Date(String(latestMessage.createdAt));
+        const chatName = chat.name ? String(chat.name) : '';
+
         interactions.push({
           type: 'chat_message',
-          id: latestMessage.id,
-          chatId: chat.id,
-          author: 'User', // Simplified since we don't have sender relation
-          content: latestMessage.content,
-          context: `Chat: ${chat.name || (chat.isGroup ? 'Group' : 'DM')}\nRecent:\n${contextMessages}`,
-          timestamp: latestMessage.createdAt,
+          id: String(latestMessage.id),
+          chatId: String(chat.id),
+          author: 'User',
+          content: String(latestMessage.content),
+          context: `Chat: ${chatName || (chat.isGroup ? 'Group' : 'DM')}\nRecent:\n${contextMessages}`,
+          timestamp: createdAt,
         });
       }
     }
@@ -263,21 +254,6 @@ export class AutonomousBatchResponseService {
 
   /**
    * Evaluate which interactions warrant a response using AI
-   *
-   * Uses LLM to analyze pending interactions and determine which ones
-   * warrant a response based on agent personality and interaction quality.
-   *
-   * @param agentUserId - Unique identifier for the agent
-   * @param _runtime - Agent runtime (used for W&B model access)
-   * @param interactions - Array of pending interactions to evaluate
-   * @returns Array of response decisions (one per interaction)
-   * @throws Error if agent not found or LLM response parsing fails
-   *
-   * @remarks
-   * - Caps interactions at 30 to prevent context overflow
-   * - Uses small model for fast evaluation
-   * - Has 20 second timeout to prevent hanging
-   * - Returns boolean array indicating which interactions to respond to
    */
   async evaluateInteractions(
     agentUserId: string,
@@ -299,24 +275,22 @@ export class AutonomousBatchResponseService {
     }
     const evaluateInteractions = cappedInteractions;
 
-    const [agent] = await db
-      .select({
-        displayName: users.displayName,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+      select: { displayName: true },
+    });
 
     if (!agent) {
       throw new Error('Agent not found');
     }
 
     const config = await getAgentConfig(agentUserId);
+    const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
 
     // Build evaluation prompt
     const prompt = `${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
-You are ${agent.displayName}, an AI agent on Babylon. You need to decide which interactions warrant a response.
+You are ${displayName}, an AI agent on Babylon. You need to decide which interactions warrant a response.
 
 Guidelines:
 - Respond to direct questions or mentions
@@ -346,12 +320,11 @@ Example: [true, false, true, false, false, true, ...]
 
 Array:`;
 
-    // Ensure prompt fits within 32K context limit (W&B trained models)
+    // Ensure prompt fits within 32K context limit
     const estimatedTokens = countTokensSync(prompt);
     let finalPrompt = prompt;
 
     if (estimatedTokens > 30000) {
-      // 30K with 2K safety margin
       logger.warn(
         `Evaluation prompt too long: ${estimatedTokens} tokens, truncating`,
         undefined,
@@ -368,18 +341,17 @@ Array:`;
       );
     }
 
-    // Use large model for batch evaluation - better at consistent counting
-    // Add timeout to prevent hanging (30 seconds max for larger model)
+    // Use large model for batch evaluation
     const decisionText = await Promise.race([
       callJejuDirect({
         prompt: finalPrompt,
         system: config?.systemPrompt ?? undefined,
-        modelSize: 'large', // Large model: Better at structured outputs and counting
-        runtime: _runtime, // Pass runtime to access W&B trained models AND trajectory context
+        modelSize: 'large',
+        runtime: _runtime,
         temperature: 0.6,
         maxTokens: 16384,
         actionType: 'evaluate_interactions',
-        purpose: 'evaluation', // RLAIF: This is an evaluation/reasoning call
+        purpose: 'evaluation',
       }),
       new Promise<string>((resolve) => {
         setTimeout(() => {
@@ -388,8 +360,8 @@ Array:`;
             undefined,
             'AutonomousBatchResponse'
           );
-          resolve('[]'); // Empty array = no responses
-        }, 30000); // 30 second timeout (larger model needs more time)
+          resolve('[]');
+        }, 30000);
       }),
     ]);
 
@@ -403,7 +375,7 @@ Array:`;
 
     const decisionsRaw = JSON.parse(jsonMatch[0]) as boolean[];
 
-    // Ensure we have the right number of decisions (for capped interactions)
+    // Ensure we have the right number of decisions
     let decisions = decisionsRaw;
     if (decisionsRaw.length !== evaluateInteractions.length) {
       logger.warn(
@@ -413,7 +385,6 @@ Array:`;
       );
 
       if (decisionsRaw.length < evaluateInteractions.length) {
-        // Pad with false values for missing decisions (don't respond to remaining)
         const paddingNeeded = evaluateInteractions.length - decisionsRaw.length;
         decisions = [...decisionsRaw, ...Array(paddingNeeded).fill(false)];
         logger.info(
@@ -422,7 +393,6 @@ Array:`;
           'AutonomousBatchResponse'
         );
       } else {
-        // Truncate excess decisions
         const excessCount = decisionsRaw.length - evaluateInteractions.length;
         decisions = decisionsRaw.slice(0, evaluateInteractions.length);
         logger.info(
@@ -438,24 +408,6 @@ Array:`;
 
   /**
    * Generate and post responses for approved interactions
-   *
-   * Generates responses using LLM and posts them as comments or messages
-   * based on interaction type. Continues processing even if individual
-   * responses fail.
-   *
-   * @param agentUserId - Unique identifier for the agent
-   * @param _runtime - Agent runtime (used for W&B model access)
-   * @param interactions - Array of interactions to respond to
-   * @param decisions - Array of response decisions (from evaluateInteractions)
-   * @returns Number of responses successfully created
-   * @throws Error if agent not found
-   *
-   * @remarks
-   * - Only processes interactions marked with shouldRespond: true
-   * - Uses small model for fast response generation
-   * - Has 15 second timeout per response
-   * - Adds 1 second delay between responses to avoid spam
-   * - Continues processing even if individual responses fail
    */
   async executeResponses(
     agentUserId: string,
@@ -463,19 +415,17 @@ Array:`;
     interactions: PendingInteraction[],
     decisions: ResponseDecision[]
   ): Promise<number> {
-    const [agent] = await db
-      .select({
-        displayName: users.displayName,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+      select: { displayName: true },
+    });
 
     if (!agent) {
       throw new Error('Agent not found');
     }
 
     const respConfig = await getAgentConfig(agentUserId);
+    const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
 
     let responsesCreated = 0;
 
@@ -488,7 +438,7 @@ Array:`;
       // Generate response
       const responsePrompt = `${respConfig?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
-You are ${agent.displayName}, responding to an interaction.
+You are ${displayName}, responding to an interaction.
 
 Context: ${interaction.context}
 
@@ -500,7 +450,7 @@ Add value to the conversation.
 
 Generate ONLY the response text, nothing else.`;
 
-      // Truncate if needed (unlikely for individual responses but safe)
+      // Truncate if needed
       const respTokens = countTokensSync(responsePrompt);
       let finalRespPrompt = responsePrompt;
       if (respTokens > 30000) {
@@ -510,18 +460,17 @@ Generate ONLY the response text, nothing else.`;
         finalRespPrompt = truncated.text;
       }
 
-      // Use large model for response generation - better quality responses
-      // Add timeout to prevent hanging (20 seconds max)
+      // Use large model for response generation
       const responseContent = await Promise.race([
         callJejuDirect({
           prompt: finalRespPrompt,
           system: respConfig?.systemPrompt ?? undefined,
-          modelSize: 'large', // Large model: Higher quality responses
-          runtime: _runtime, // Pass runtime to access W&B trained models AND trajectory context
+          modelSize: 'large',
+          runtime: _runtime,
           temperature: 0.8,
           maxTokens: 16384,
           actionType: 'execute_response',
-          purpose: 'response', // RLAIF: This is a response generation call
+          purpose: 'response',
         }),
         new Promise<string>((resolve) => {
           setTimeout(() => {
@@ -530,8 +479,8 @@ Generate ONLY the response text, nothing else.`;
               undefined,
               'AutonomousBatchResponse'
             );
-            resolve(''); // Empty response = skip
-          }, 20000); // 20 second timeout (larger model needs more time)
+            resolve('');
+          }, 20000);
         }),
       ]);
 
@@ -548,14 +497,15 @@ Generate ONLY the response text, nothing else.`;
 
       // Post the response based on type
       if (interaction.type === 'comment_on_post' && interaction.postId) {
-        // Reply to comment on post
-        await db.insert(comments).values({
-          id: await generateSnowflakeId(),
-          content: cleanContent,
-          postId: interaction.postId,
-          authorId: agentUserId,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+        await db.comment.create({
+          data: {
+            id: await generateSnowflakeId(),
+            content: cleanContent,
+            postId: interaction.postId,
+            authorId: agentUserId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         });
         responsesCreated++;
         logger.info(
@@ -567,22 +517,22 @@ Generate ONLY the response text, nothing else.`;
         interaction.type === 'comment_on_comment' &&
         interaction.commentId
       ) {
-        // Reply to comment on comment
-        const [parentComment] = await db
-          .select({ postId: comments.postId })
-          .from(comments)
-          .where(eq(comments.id, interaction.commentId))
-          .limit(1);
+        const parentComment = await db.comment.findUnique({
+          where: { id: interaction.commentId },
+          select: { postId: true },
+        });
 
         if (parentComment) {
-          await db.insert(comments).values({
-            id: await generateSnowflakeId(),
-            content: cleanContent,
-            postId: parentComment.postId,
-            authorId: agentUserId,
-            parentCommentId: interaction.commentId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+          await db.comment.create({
+            data: {
+              id: await generateSnowflakeId(),
+              content: cleanContent,
+              postId: String(parentComment.postId),
+              authorId: agentUserId,
+              parentCommentId: interaction.commentId,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
           });
           responsesCreated++;
           logger.info(
@@ -592,13 +542,14 @@ Generate ONLY the response text, nothing else.`;
           );
         }
       } else if (interaction.type === 'chat_message' && interaction.chatId) {
-        // Send chat message
-        await db.insert(messages).values({
-          id: await generateSnowflakeId(),
-          chatId: interaction.chatId,
-          senderId: agentUserId,
-          content: cleanContent,
-          createdAt: new Date(),
+        await db.message.create({
+          data: {
+            id: await generateSnowflakeId(),
+            chatId: interaction.chatId,
+            senderId: agentUserId,
+            content: cleanContent,
+            createdAt: new Date(),
+          },
         });
         responsesCreated++;
         logger.info(
@@ -617,21 +568,6 @@ Generate ONLY the response text, nothing else.`;
 
   /**
    * Main entry point: Process all pending interactions in batch
-   *
-   * Orchestrates the complete batch response workflow:
-   * 1. Gathers all pending interactions
-   * 2. Evaluates which warrant responses
-   * 3. Executes responses for approved interactions
-   *
-   * @param agentUserId - Unique identifier for the agent
-   * @param _runtime - Agent runtime (used for W&B model access)
-   * @returns Number of responses successfully created
-   *
-   * @example
-   * ```typescript
-   * const count = await batchService.processBatch('agent-123', runtime);
-   * console.log(`Processed ${count} responses`);
-   * ```
    */
   async processBatch(
     agentUserId: string,

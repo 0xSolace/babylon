@@ -85,9 +85,13 @@ export async function POST(req: NextRequest) {
   const validation = VerifyEscrowPaymentSchema.safeParse(body);
 
   if (!validation.success) {
+    const firstIssue = validation.error.issues[0];
+    if (!firstIssue) {
+      throw new Error('Validation failed but no error details available');
+    }
     return NextResponse.json(
       {
-        error: validation.error.issues[0]?.message || 'Invalid request data',
+        error: firstIssue.message,
       },
       { status: 400 }
     );
@@ -191,10 +195,11 @@ export async function POST(req: NextRequest) {
       where: { id: escrowId },
     });
 
-    if (!currentEscrow || currentEscrow.status !== 'pending') {
-      throw new Error(
-        `Escrow is already ${currentEscrow?.status || 'not found'}`
-      );
+    if (!currentEscrow) {
+      throw new Error('Escrow not found');
+    }
+    if (currentEscrow.status !== 'pending') {
+      throw new Error(`Escrow is already ${currentEscrow.status}`);
     }
 
     if (!currentEscrow.paymentRequestId) {

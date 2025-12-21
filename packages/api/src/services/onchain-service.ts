@@ -33,9 +33,26 @@ import {
   createWalletClient,
   decodeEventLog,
   http,
-  type Log,
   type WalletClient,
 } from 'viem';
+
+/**
+ * Log type with topics for transaction receipt parsing.
+ * viem's base Log type from receipts doesn't always include topics in its type,
+ * so we define a concrete type that matches the actual runtime structure.
+ */
+type LogWithTopics = {
+  address: `0x${string}`;
+  blockHash: `0x${string}`;
+  blockNumber: bigint;
+  data: `0x${string}`;
+  logIndex: number;
+  transactionHash: `0x${string}`;
+  transactionIndex: number;
+  removed: boolean;
+  topics: [] | [`0x${string}`, ...`0x${string}`[]];
+};
+
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia, foundry } from 'viem/chains';
 
@@ -200,15 +217,13 @@ export async function processOnchainRegistration({
 
   let referrerId: string | null = null;
   if (referralCode) {
-    const [referrer] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.username, referralCode))
-      .limit(1);
+    const referrerByUsername = await db.user.findFirst({
+      where: { username: referralCode },
+    });
 
     // Prevent self-referral by username
-    if (referrer && referrer.id !== user.userId) {
-      referrerId = referrer.id;
+    if (referrerByUsername && referrerByUsername.id !== user.userId) {
+      referrerId = referrerByUsername.id;
       logger.info(
         'Valid referral code (username) found',
         { referralCode, referrerId },
@@ -216,11 +231,9 @@ export async function processOnchainRegistration({
       );
     } else {
       // Look up who owns this referral code
-      const [referralOwner] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.referralCode, referralCode))
-        .limit(1);
+      const referralOwner = await db.user.findFirst({
+        where: { referralCode },
+      });
 
       // Prevent self-referral by referral code
       if (referralOwner && referralOwner.id !== user.userId) {
@@ -231,7 +244,7 @@ export async function processOnchainRegistration({
           'OnboardingOnchain'
         );
       } else if (
-        referrer?.id === user.userId ||
+        referrerByUsername?.id === user.userId ||
         referralOwner?.id === user.userId
       ) {
         logger.warn(
@@ -243,126 +256,103 @@ export async function processOnchainRegistration({
     }
   }
 
-  let dbUser: {
+  type DbUserRecord = {
     id: string;
     username: string | null;
     walletAddress: string | null;
     onChainRegistered: boolean;
     nftTokenId: number | null;
     referredBy: string | null;
-  } | null = null;
+  };
+  let dbUser: DbUserRecord | null = null;
+
+  const toDbUserRecord = (u: {
+    id: string;
+    username: string | null;
+    walletAddress: string | null;
+    onChainRegistered: boolean;
+    nftTokenId: number | null;
+    referredBy: string | null;
+  }): DbUserRecord => ({
+    id: u.id,
+    username: u.username,
+    walletAddress: u.walletAddress,
+    onChainRegistered: u.onChainRegistered,
+    nftTokenId: u.nftTokenId,
+    referredBy: u.referredBy,
+  });
 
   if (user.isAgent) {
-    const [existingUser] = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        walletAddress: users.walletAddress,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
-        referredBy: users.referredBy,
-      })
-      .from(users)
-      .where(eq(users.username, user.userId))
-      .limit(1);
-    dbUser = existingUser ?? null;
+    const existingUser = await db.user.findFirst({
+      where: { username: user.userId },
+    });
 
-    if (!dbUser) {
+    if (existingUser) {
+      dbUser = toDbUserRecord(existingUser);
+    } else {
       const newId = await generateSnowflakeId();
-      const [createdUser] = await db
-        .insert(users)
-        .values({
+      const createdUser = await db.user.create({
+        data: {
           id: newId,
           oauth3Id: user.userId,
           username: user.userId,
-          displayName: displayName || username || user.userId,
-          bio: bio || `Autonomous AI agent: ${user.userId}`,
-          profileImageUrl: profileImageUrl || null,
-          coverImageUrl: coverImageUrl || null,
+          displayName: displayName ?? username ?? user.userId,
+          bio: bio ?? `Autonomous AI agent: ${user.userId}`,
+          profileImageUrl: profileImageUrl ?? null,
+          coverImageUrl: coverImageUrl ?? null,
           isActor: false,
           virtualBalance: '10000',
           totalDeposited: '10000',
           updatedAt: new Date(),
-        })
-        .returning({
-          id: users.id,
-          username: users.username,
-          walletAddress: users.walletAddress,
-          onChainRegistered: users.onChainRegistered,
-          nftTokenId: users.nftTokenId,
-          referredBy: users.referredBy,
-        });
-      dbUser = createdUser ?? null;
+        },
+      });
+      dbUser = toDbUserRecord(createdUser);
     }
   } else {
-    const [existingUser] = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        walletAddress: users.walletAddress,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
-        referredBy: users.referredBy,
-      })
-      .from(users)
-      .where(eq(users.id, user.userId))
-      .limit(1);
-    dbUser = existingUser ?? null;
+    const existingUser = await db.user.findUnique({
+      where: { id: user.userId },
+    });
 
-    if (!dbUser) {
-      const [createdUser] = await db
-        .insert(users)
-        .values({
+    if (!existingUser) {
+      const createdUser = await db.user.create({
+        data: {
           id: user.userId,
           oauth3Id: user.oauth3Id ?? user.userId,
           walletAddress: walletAddress?.toLowerCase() ?? null,
           username: finalUsername,
-          displayName: displayName || finalUsername,
-          bio: bio || '',
-          profileImageUrl: profileImageUrl || null,
-          coverImageUrl: coverImageUrl || null,
+          displayName: displayName ?? finalUsername,
+          bio: bio ?? '',
+          profileImageUrl: profileImageUrl ?? null,
+          coverImageUrl: coverImageUrl ?? null,
           isActor: false,
           virtualBalance: '0',
           totalDeposited: '0',
           referredBy: referrerId,
           updatedAt: new Date(),
-        })
-        .returning({
-          id: users.id,
-          username: users.username,
-          walletAddress: users.walletAddress,
-          onChainRegistered: users.onChainRegistered,
-          nftTokenId: users.nftTokenId,
-          referredBy: users.referredBy,
-        });
-      dbUser = createdUser ?? null;
+        },
+      });
+      dbUser = toDbUserRecord(createdUser);
     } else {
-      const [fullUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, dbUser.id))
-        .limit(1);
-      const [updatedUser] = await db
-        .update(users)
-        .set({
-          walletAddress: walletAddress?.toLowerCase() ?? dbUser.walletAddress,
-          username: finalUsername || dbUser.username,
-          displayName: displayName || finalUsername || fullUser?.displayName,
-          bio: bio || fullUser?.bio,
-          profileImageUrl: profileImageUrl ?? fullUser?.profileImageUrl,
-          coverImageUrl: coverImageUrl ?? fullUser?.coverImageUrl,
-          referredBy: referrerId ?? dbUser.referredBy ?? undefined,
-        })
-        .where(eq(users.id, dbUser.id))
-        .returning({
-          id: users.id,
-          username: users.username,
-          walletAddress: users.walletAddress,
-          onChainRegistered: users.onChainRegistered,
-          nftTokenId: users.nftTokenId,
-          referredBy: users.referredBy,
-        });
-      dbUser = updatedUser ?? null;
+      const resolvedUsername =
+        username ?? existingUser.username ?? finalUsername;
+      const resolvedDisplayName =
+        displayName ?? existingUser.displayName ?? resolvedUsername;
+
+      const updatedUser = await db.user.update({
+        where: { id: existingUser.id },
+        data: {
+          walletAddress:
+            walletAddress?.toLowerCase() ?? existingUser.walletAddress,
+          username: resolvedUsername,
+          displayName: resolvedDisplayName,
+          bio: bio ?? existingUser.bio ?? '',
+          profileImageUrl: profileImageUrl ?? existingUser.profileImageUrl,
+          coverImageUrl: coverImageUrl ?? existingUser.coverImageUrl,
+          referredBy: existingUser.referredBy ?? referrerId ?? null,
+          updatedAt: new Date(),
+        },
+      });
+      dbUser = toDbUserRecord(updatedUser);
     }
   }
 
@@ -409,12 +399,12 @@ export async function processOnchainRegistration({
       isRegistered = dbUser.onChainRegistered && dbUser.nftTokenId !== null;
     } else {
       // Contract exists - check blockchain for registration status
-      isRegistered = await publicClient.readContract({
+      isRegistered = (await publicClient.readContract({
         address: IDENTITY_REGISTRY,
         abi: identityRegistryAbi,
         functionName: 'isRegistered',
         args: [address],
-      });
+      } as Parameters<typeof publicClient.readContract>[0])) as boolean;
 
       if (isRegistered && !tokenId) {
         tokenId = Number(
@@ -423,7 +413,7 @@ export async function processOnchainRegistration({
             abi: identityRegistryAbi,
             functionName: 'getTokenId',
             args: [address],
-          })
+          } as Parameters<typeof publicClient.readContract>[0])
         );
       }
     }
@@ -432,13 +422,14 @@ export async function processOnchainRegistration({
   if (isRegistered && tokenId) {
     // User is already registered on-chain, sync the DB if needed
     if (!dbUser.onChainRegistered || dbUser.nftTokenId !== tokenId) {
-      await db
-        .update(users)
-        .set({
+      await db.user.update({
+        where: { id: dbUser.id },
+        data: {
           onChainRegistered: true,
           nftTokenId: tokenId,
-        })
-        .where(eq(users.id, dbUser.id));
+          updatedAt: new Date(),
+        },
+      });
       logger.info(
         'Synced on-chain registration status to database',
         { userId: dbUser.id, tokenId, wasRegistered: dbUser.onChainRegistered },
@@ -446,16 +437,14 @@ export async function processOnchainRegistration({
       );
     }
 
-    const [hasWelcomeBonus] = await db
-      .select({ id: balanceTransactions.id })
-      .from(balanceTransactions)
-      .where(
-        and(
-          eq(balanceTransactions.userId, dbUser.id),
-          eq(balanceTransactions.description, 'Welcome bonus - initial signup')
-        )
-      )
-      .limit(1);
+    const hasWelcomeBonus = await db.balanceTransaction.findFirst({
+      where: {
+        AND: [
+          { userId: dbUser.id },
+          { description: 'Welcome bonus - initial signup' },
+        ],
+      },
+    });
 
     logger.info(
       'User already registered on-chain, returning existing registration',
@@ -617,47 +606,50 @@ export async function processOnchainRegistration({
   }
 
   // Debug: log all events in receipt
+  // Cast logs to have the full Log type with topics
+  const receiptLogs = finalizedReceipt.logs as LogWithTopics[];
+
   logger.info(
     'Transaction receipt logs',
     {
       txHash: registrationTxHash ?? submittedTxHash,
-      totalLogs: finalizedReceipt.logs.length,
-      logAddresses: finalizedReceipt.logs.map((l: Log) => l.address),
+      totalLogs: receiptLogs.length,
+      logAddresses: receiptLogs.map((l) => l.address),
       identityRegistryAddress: IDENTITY_REGISTRY,
     },
     'processOnchainRegistration'
   );
 
   // Filter logs by contract address first to avoid decoding errors on Transfer events
-  const contractLogs = finalizedReceipt.logs.filter(
-    (log: Log) => log.address.toLowerCase() === IDENTITY_REGISTRY.toLowerCase()
+  const contractLogs = receiptLogs.filter(
+    (log) => log.address.toLowerCase() === IDENTITY_REGISTRY.toLowerCase()
   );
 
   logger.info(
     'Filtered contract logs',
     {
       contractLogsCount: contractLogs.length,
-      topics: contractLogs.map((l: Log) => l.topics),
+      topics: contractLogs.map((l) => l.topics),
     },
     'processOnchainRegistration'
   );
 
-  const agentRegisteredLog = contractLogs.find((log: Log) => {
+  const agentRegisteredLog = contractLogs.find((log) => {
     if (log.topics.length === 0) {
       return false;
     }
-    const decodedLog = decodeEventLog({
+    const decoded = decodeEventLog({
       abi: identityRegistryAbi,
       data: log.data,
       topics: log.topics,
       strict: false,
-    });
+    }) as { eventName: string; args: Record<string, unknown> };
     logger.info(
       'Decoded log event',
-      { eventName: decodedLog.eventName },
+      { eventName: decoded.eventName },
       'processOnchainRegistration'
     );
-    return decodedLog.eventName === 'AgentRegistered';
+    return decoded.eventName === 'AgentRegistered';
   });
 
   if (!agentRegisteredLog) {
@@ -665,11 +657,9 @@ export async function processOnchainRegistration({
       'AgentRegistered event not found in receipt',
       {
         txHash: registrationTxHash ?? submittedTxHash,
-        totalLogs: finalizedReceipt.logs.length,
+        totalLogs: receiptLogs.length,
         contractLogs: contractLogs.length,
-        allLogAddresses: finalizedReceipt.logs.map((l: Log) =>
-          l.address.toLowerCase()
-        ),
+        allLogAddresses: receiptLogs.map((l) => l.address.toLowerCase()),
         expectedAddress: IDENTITY_REGISTRY.toLowerCase(),
       }
     );
@@ -713,27 +703,38 @@ export async function processOnchainRegistration({
     );
   }
 
-  await db
-    .update(users)
-    .set({
-      onChainRegistered: true,
-      nftTokenId: tokenId,
-      registrationTxHash: registrationTxHash ?? submittedTxHash ?? null,
-      // Store registration blockchain metadata
-      registrationBlockNumber: BigInt(finalizedReceipt.blockNumber),
-      registrationGasUsed: BigInt(finalizedReceipt.gasUsed),
-      registrationTimestamp: new Date(),
-      username: user.isAgent ? user.userId : username || dbUser.username,
-      displayName: displayName || username || dbUser.username || user.userId,
-      bio:
-        bio ||
-        (user.isAgent ? `Autonomous AI agent: ${user.userId}` : undefined) ||
-        dbUser.username ||
-        null,
-      profileImageUrl: profileImageUrl ?? undefined,
-      coverImageUrl: coverImageUrl ?? undefined,
-    })
-    .where(eq(users.id, dbUser.id));
+  const registrationUpdate: {
+    onChainRegistered: boolean;
+    nftTokenId: number;
+    registrationTxHash: string | null;
+    registrationBlockNumber: bigint;
+    registrationGasUsed: bigint;
+    registrationTimestamp: Date;
+    updatedAt: Date;
+    profileImageUrl?: string;
+    coverImageUrl?: string;
+  } = {
+    onChainRegistered: true,
+    nftTokenId: tokenId,
+    registrationTxHash: registrationTxHash ?? submittedTxHash ?? null,
+    // Store registration blockchain metadata
+    registrationBlockNumber: BigInt(finalizedReceipt.blockNumber),
+    registrationGasUsed: BigInt(finalizedReceipt.gasUsed),
+    registrationTimestamp: new Date(),
+    updatedAt: new Date(),
+  };
+
+  if (profileImageUrl !== null && profileImageUrl !== undefined) {
+    registrationUpdate.profileImageUrl = profileImageUrl;
+  }
+  if (coverImageUrl !== null && coverImageUrl !== undefined) {
+    registrationUpdate.coverImageUrl = coverImageUrl;
+  }
+
+  await db.user.update({
+    where: { id: dbUser.id },
+    data: registrationUpdate,
+  });
 
   if (user.isAgent) {
     const agent0Client = getOnboardingServices().getAgent0Client();
@@ -1049,7 +1050,7 @@ export async function confirmOnchainProfileUpdate({
       abi: identityRegistryAbi,
       functionName: 'getTokenId',
       args: [walletAddress as Address],
-    })
+    } as Parameters<typeof publicClient.readContract>[0])
   );
 
   if (!expectedTokenId || Number.isNaN(expectedTokenId)) {
@@ -1066,7 +1067,10 @@ export async function confirmOnchainProfileUpdate({
   let capabilitiesHash =
     '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
 
-  for (const log of receipt.logs) {
+  // Cast logs to have the full Log type with topics
+  const profileReceiptLogs = receipt.logs as LogWithTopics[];
+
+  for (const log of profileReceiptLogs) {
     // Skip logs that aren't from our contract or don't have enough topics
     if (log.address.toLowerCase() !== IDENTITY_REGISTRY.toLowerCase()) {
       continue;
@@ -1080,12 +1084,19 @@ export async function confirmOnchainProfileUpdate({
       data: log.data,
       topics: log.topics,
       strict: false,
-    });
+    }) as { eventName: string; args: Record<string, unknown> };
 
     if (decoded.eventName === 'AgentUpdated') {
-      tokenId = Number(decoded.args.tokenId);
-      endpoint = decoded.args.endpoint ?? '';
-      capabilitiesHash = decoded.args.capabilitiesHash as `0x${string}`;
+      const decodedArgs = decoded.args as {
+        tokenId: bigint;
+        endpoint?: string;
+        capabilitiesHash?: `0x${string}`;
+      };
+      tokenId = Number(decodedArgs.tokenId);
+      endpoint = decodedArgs.endpoint ?? '';
+      capabilitiesHash =
+        decodedArgs.capabilitiesHash ??
+        ('0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`);
       break;
     }
   }
@@ -1117,7 +1128,7 @@ export async function confirmOnchainProfileUpdate({
     abi: IDENTITY_REGISTRY_ABI,
     functionName: 'getAgentProfile',
     args: [BigInt(tokenId)],
-  });
+  } as Parameters<typeof publicClient.readContract>[0]);
 
   // Profile is returned as a tuple from the contract - type assertion is safe based on ABI
   const profileArray = profile as [
@@ -1198,12 +1209,12 @@ export async function getOnchainRegistrationStatus(
       transport: http(getRpcUrl()),
     });
 
-    const onchainRegistered = await publicClient.readContract({
+    const onchainRegistered = (await publicClient.readContract({
       address: IDENTITY_REGISTRY,
       abi: identityRegistryAbi,
       functionName: 'isRegistered',
       args: [userRecord.walletAddress as Address],
-    });
+    } as Parameters<typeof publicClient.readContract>[0])) as boolean;
 
     if (onchainRegistered && !tokenId) {
       const queriedTokenId = await publicClient.readContract({
@@ -1211,7 +1222,7 @@ export async function getOnchainRegistrationStatus(
         abi: identityRegistryAbi,
         functionName: 'getTokenId',
         args: [userRecord.walletAddress as Address],
-      });
+      } as Parameters<typeof publicClient.readContract>[0]);
       tokenId = Number(queriedTokenId);
     }
 

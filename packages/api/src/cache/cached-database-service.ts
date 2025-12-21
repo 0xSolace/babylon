@@ -13,30 +13,7 @@
  * ```
  */
 
-import {
-  and,
-  asc,
-  comments,
-  count,
-  db,
-  desc,
-  eq,
-  follows,
-  getDbInstance,
-  inArray,
-  isNull,
-  lt,
-  lte,
-  markets,
-  type Post,
-  positions,
-  posts,
-  reactions,
-  tags,
-  trendingTags,
-  userActorFollows,
-  users,
-} from '@babylon/db';
+import { db, getDbInstance, type Post } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import {
@@ -127,10 +104,12 @@ class CachedDatabaseService {
       cacheKey,
       async () => {
         // First, filter out test users from followedIds
-        const testUsers = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(and(inArray(users.id, followedIds), eq(users.isTest, true)));
+        const testUsers =
+          followedIds.length > 0
+            ? await db.user.findMany({
+                where: { AND: [{ id: { in: followedIds } }, { isTest: true }] },
+              })
+            : [];
 
         // Get test actors from static registry
         const testActorIds = StaticDataRegistry.getAllActors()
@@ -147,33 +126,30 @@ class CachedDatabaseService {
           (id) => !testAuthorIds.has(id)
         );
 
+        if (nonTestFollowedIds.length === 0) {
+          return [];
+        }
+
         const cursor = isCursor ? (cursorOrOffset as string) : undefined;
         const offset =
           !isCursor && typeof cursorOrOffset === 'number' ? cursorOrOffset : 0;
 
         const now = new Date();
 
-        // Build conditions
-        const conditions = [
-          inArray(posts.authorId, nonTestFollowedIds),
-          isNull(posts.deletedAt),
-        ];
-
-        if (cursor) {
-          conditions.push(lt(posts.timestamp, new Date(cursor)));
-          conditions.push(lte(posts.timestamp, now));
-        } else {
-          conditions.push(lte(posts.timestamp, now));
-        }
-
         // Query posts from database (only from non-test users)
-        const result = await db
-          .select()
-          .from(posts)
-          .where(and(...conditions))
-          .orderBy(desc(posts.timestamp))
-          .limit(limit)
-          .offset(cursor ? 0 : offset);
+        const result = await db.post.findMany({
+          where: {
+            AND: [
+              { authorId: { in: nonTestFollowedIds } },
+              { deletedAt: null },
+              { timestamp: { lte: now } },
+              ...(cursor ? [{ timestamp: { lt: new Date(cursor) } }] : []),
+            ],
+          },
+          orderBy: { timestamp: 'desc' },
+          take: limit,
+          skip: cursor ? 0 : offset,
+        });
 
         return result;
       },
@@ -193,12 +169,7 @@ class CachedDatabaseService {
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        const result = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, userId))
-          .limit(1);
-        return result[0] ?? null;
+        return db.user.findUnique({ where: { id: userId } });
       },
       {
         namespace: CACHE_KEYS.USER,
@@ -228,17 +199,14 @@ class CachedDatabaseService {
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        const result = await db
-          .select({
-            virtualBalance: users.virtualBalance,
-            totalDeposited: users.totalDeposited,
-            totalWithdrawn: users.totalWithdrawn,
-            lifetimePnL: users.lifetimePnL,
-          })
-          .from(users)
-          .where(eq(users.id, userId))
-          .limit(1);
-        return result[0] ?? null;
+        const user = await db.user.findUnique({ where: { id: userId } });
+        if (!user) return null;
+        return {
+          virtualBalance: user.virtualBalance,
+          totalDeposited: user.totalDeposited,
+          totalWithdrawn: user.totalWithdrawn,
+          lifetimePnL: user.lifetimePnL,
+        };
       },
       {
         namespace: CACHE_KEYS.USER_BALANCE,
@@ -256,59 +224,31 @@ class CachedDatabaseService {
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        // Count followers (users following this user)
-        const followersResult = await db
-          .select({ count: count() })
-          .from(follows)
-          .where(eq(follows.followingId, userId));
-
-        // Count following (users this user follows)
-        const followingResult = await db
-          .select({ count: count() })
-          .from(follows)
-          .where(eq(follows.followerId, userId));
-
-        // Count actor follows
-        const actorFollowsResult = await db
-          .select({ count: count() })
-          .from(userActorFollows)
-          .where(eq(userActorFollows.userId, userId));
-
-        // Count positions
-        const positionsResult = await db
-          .select({ count: count() })
-          .from(positions)
-          .where(eq(positions.userId, userId));
-
-        // Count comments
-        const commentsResult = await db
-          .select({ count: count() })
-          .from(comments)
-          .where(eq(comments.authorId, userId));
-
-        // Count reactions
-        const reactionsResult = await db
-          .select({ count: count() })
-          .from(reactions)
-          .where(eq(reactions.userId, userId));
-
-        // Count posts
-        const postCountResult = await db
-          .select({ count: count() })
-          .from(posts)
-          .where(eq(posts.authorId, userId));
-
-        const followers = Number(followersResult[0]?.count ?? 0);
-        const following = Number(followingResult[0]?.count ?? 0);
-        const actorFollows = Number(actorFollowsResult[0]?.count ?? 0);
+        const [
+          followers,
+          following,
+          actorFollows,
+          positions,
+          comments,
+          reactions,
+          posts,
+        ] = await Promise.all([
+          db.follow.count({ where: { followingId: userId } }),
+          db.follow.count({ where: { followerId: userId } }),
+          db.userActorFollow.count({ where: { userId } }),
+          db.position.count({ where: { userId } }),
+          db.comment.count({ where: { authorId: userId } }),
+          db.reaction.count({ where: { userId } }),
+          db.post.count({ where: { authorId: userId } }),
+        ]);
 
         return {
           followers,
           following: following + actorFollows,
-          positions: Number(positionsResult[0]?.count ?? 0),
-          comments: Number(commentsResult[0]?.count ?? 0),
-          reactions: Number(reactionsResult[0]?.count ?? 0),
-          posts: Number(postCountResult[0]?.count ?? 0),
+          positions,
+          comments,
+          reactions,
+          posts,
         };
       },
       {
@@ -372,12 +312,10 @@ class CachedDatabaseService {
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        const result = await db
-          .select()
-          .from(markets)
-          .where(eq(markets.resolved, false))
-          .orderBy(desc(markets.createdAt));
-        return result;
+        return db.market.findMany({
+          where: { resolved: false },
+          orderBy: { createdAt: 'desc' },
+        });
       },
       {
         namespace: CACHE_KEYS.MARKETS_LIST,
@@ -395,26 +333,40 @@ class CachedDatabaseService {
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        const result = await db
-          .select({
-            id: trendingTags.id,
-            tagId: trendingTags.tagId,
-            rank: trendingTags.rank,
-            score: trendingTags.score,
-            postCount: trendingTags.postCount,
-            calculatedAt: trendingTags.calculatedAt,
-            tag: {
-              id: tags.id,
-              name: tags.name,
-              createdAt: tags.createdAt,
-              updatedAt: tags.updatedAt,
-            },
-          })
-          .from(trendingTags)
-          .leftJoin(tags, eq(trendingTags.tagId, tags.id))
-          .limit(limit)
-          .orderBy(asc(trendingTags.rank));
-        return result;
+        const trending = await db.trendingTag.findMany({
+          orderBy: { rank: 'asc' },
+          take: limit,
+        });
+
+        const tagIds = [...new Set(trending.map((t) => t.tagId))];
+        const tags =
+          tagIds.length > 0
+            ? await db.tag.findMany({
+                where: { id: { in: tagIds } },
+              })
+            : [];
+
+        const tagsById = new Map(tags.map((t) => [t.id, t]));
+
+        return trending.map((t) => {
+          const tag = tagsById.get(t.tagId);
+          return {
+            id: t.id,
+            tagId: t.tagId,
+            rank: t.rank,
+            score: t.score,
+            postCount: t.postCount,
+            calculatedAt: t.calculatedAt,
+            tag: tag
+              ? {
+                  id: tag.id,
+                  name: tag.name,
+                  createdAt: tag.createdAt,
+                  updatedAt: tag.updatedAt,
+                }
+              : null,
+          };
+        });
       },
       {
         namespace: CACHE_KEYS.TRENDING_TAGS,

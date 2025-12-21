@@ -1,8 +1,10 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, Plus, RefreshCw, X } from 'lucide-react';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { z } from 'zod';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -111,12 +113,9 @@ type Trade = z.infer<typeof TradeSchema>;
  * @returns Trading feed tab element
  */
 export function TradingFeedTab() {
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'all' | TradeType>('all');
-  const [isRefreshing, startRefresh] = useTransition();
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
   // Show/hide form fields based on trade type
@@ -128,7 +127,9 @@ export function TradingFeedTab() {
     const npcFields = document.getElementById('npcFields');
 
     const handleTradeTypeChange = () => {
-      if (!tradeTypeSelect || !balanceFields || !npcFields) return;
+      if (!tradeTypeSelect || !balanceFields || !npcFields) {
+        throw new Error('Trade form elements not found');
+      }
 
       if (tradeTypeSelect.value === 'balance') {
         balanceFields.classList.remove('hidden');
@@ -159,54 +160,72 @@ export function TradingFeedTab() {
       }
     };
 
-    tradeTypeSelect?.addEventListener('change', handleTradeTypeChange);
-    // Set initial state
-    handleTradeTypeChange();
+    if (tradeTypeSelect) {
+      tradeTypeSelect.addEventListener('change', handleTradeTypeChange);
+      // Set initial state
+      handleTradeTypeChange();
 
-    return () => {
-      tradeTypeSelect?.removeEventListener('change', handleTradeTypeChange);
-    };
+      return () => {
+        tradeTypeSelect.removeEventListener('change', handleTradeTypeChange);
+      };
+    }
   }, []);
 
-  const fetchAndSetTrades = useCallback(async () => {
-    const url =
-      filter === 'all'
-        ? '/api/admin/trades?limit=50'
-        : `/api/admin/trades?limit=50&type=${filter}`;
+  const {
+    data: trades = [],
+    isLoading,
+    refetch,
+    isFetching,
+  } = useQuery<Trade[]>({
+    queryKey: ['admin', 'trades', filter],
+    queryFn: async () => {
+      const url =
+        filter === 'all'
+          ? '/api/admin/trades?limit=50'
+          : `/api/admin/trades?limit=50&type=${filter}`;
 
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch trades');
-    const data = await response.json();
-    const validation = z.array(TradeSchema).safeParse(data.trades);
-    if (!validation.success) {
-      throw new Error('Invalid trade data structure');
-    }
-    setTrades(validation.data || []);
-    setLoading(false);
-  }, [filter]);
-
-  const fetchTrades = useCallback(
-    (showRefreshing = false) => {
-      if (showRefreshing) {
-        startRefresh(async () => {
-          await fetchAndSetTrades();
-        });
-      } else {
-        fetchAndSetTrades();
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch trades');
+      const data = await response.json();
+      const validation = z.array(TradeSchema).safeParse(data.trades);
+      if (!validation.success) {
+        throw new Error('Invalid trade data structure');
       }
+      return validation.data || [];
     },
-    [fetchAndSetTrades]
-  );
+    refetchInterval: 10000, // Refresh every 10 seconds
+  });
 
-  useEffect(() => {
-    fetchTrades();
-    const interval = setInterval(() => fetchTrades(), 10000); // Refresh every 10s
-    return () => clearInterval(interval);
-  }, [fetchTrades]);
+  const createTradeMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => {
+      const response = await fetch('/api/admin/trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create trade');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success('Trade created successfully');
+      setShowCreateForm(false);
+      setCreateError(null);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'trades'] });
+    },
+    onError: (error) => {
+      setCreateError(
+        error instanceof Error ? error.message : 'Failed to create trade'
+      );
+    },
+  });
 
   const handleCreateTrade = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setCreating(true);
     setCreateError(null);
 
     const formData = new FormData(e.currentTarget);
@@ -236,24 +255,7 @@ export function TradingFeedTab() {
       payload.reason = (formData.get('reason') as string) || undefined;
     }
 
-    const response = await fetch('/api/admin/trades', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      setCreating(false);
-      setCreateError(errorData.error || 'Failed to create trade');
-      return;
-    }
-
-    // Refresh trades and close form
-    await fetchAndSetTrades();
-    setShowCreateForm(false);
-    e.currentTarget.reset();
-    setCreating(false);
+    createTradeMutation.mutate(payload);
   };
 
   const formatCurrency = (value: string | number) => {
@@ -455,7 +457,7 @@ export function TradingFeedTab() {
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="w-full space-y-3">
@@ -503,12 +505,12 @@ export function TradingFeedTab() {
             Create Trade
           </button>
           <button
-            onClick={() => fetchTrades(true)}
-            disabled={isRefreshing}
+            onClick={() => refetch()}
+            disabled={isFetching}
             className="flex items-center gap-2 rounded bg-muted px-3 py-1.5 font-medium text-sm transition-colors hover:bg-muted/80 disabled:opacity-50"
           >
             <RefreshCw
-              className={cn('h-4 w-4', isRefreshing && 'animate-spin')}
+              className={cn('h-4 w-4', isFetching && 'animate-spin')}
             />
             Refresh
           </button>
@@ -748,10 +750,10 @@ export function TradingFeedTab() {
             <div className="flex gap-2">
               <button
                 type="submit"
-                disabled={creating}
+                disabled={createTradeMutation.isPending}
                 className="rounded-lg bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                {creating ? 'Creating...' : 'Create Trade'}
+                {createTradeMutation.isPending ? 'Creating...' : 'Create Trade'}
               </button>
               <button
                 type="button"

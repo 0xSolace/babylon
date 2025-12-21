@@ -159,10 +159,18 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const parsedProfile = profileData as OnboardingProfilePayload;
   const referralCode = rawReferralCode?.trim() || null;
 
-  const canonicalUserId = authUser.dbUserId ?? authUser.userId;
-  const oauth3Id = authUser.oauth3Id ?? authUser.userId;
+  if (!authUser.dbUserId && !authUser.userId) {
+    throw new Error('Database user ID not found in authentication');
+  }
+  const canonicalUserId = authUser.dbUserId || authUser.userId;
+  if (!authUser.oauth3Id && !authUser.userId) {
+    throw new Error('OAuth3 ID not found in authentication');
+  }
+  const oauth3Id = authUser.oauth3Id || authUser.userId;
   // Wallet address comes from OAuth3 session
-  const walletAddress = authUser.walletAddress?.toLowerCase() ?? null;
+  const walletAddress = authUser.walletAddress
+    ? authUser.walletAddress.toLowerCase()
+    : null;
 
   // Capture and hash IP address for self-referral detection
   const registrationIpHash = getHashedClientIp(request.headers);
@@ -297,7 +305,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         if (identityFarcasterUsername || importedFarcaster) {
           baseUserData.hasFarcaster = true;
           baseUserData.farcasterUsername =
-            parsedProfile.farcasterUsername ?? identityFarcasterUsername;
+            parsedProfile.farcasterUsername || identityFarcasterUsername;
           if (parsedProfile.farcasterFid) {
             baseUserData.farcasterFid = parsedProfile.farcasterFid;
           }
@@ -307,7 +315,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         if (identityTwitterUsername || importedTwitter) {
           baseUserData.hasTwitter = true;
           baseUserData.twitterUsername =
-            parsedProfile.twitterUsername ?? identityTwitterUsername;
+            parsedProfile.twitterUsername || identityTwitterUsername;
           if (parsedProfile.twitterId) {
             baseUserData.twitterId = parsedProfile.twitterId;
           }
@@ -327,7 +335,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
             .update(users)
             .set({
               ...baseUserData,
-              referredBy: resolvedReferrerId ?? existingUserRecord.referredBy,
+              referredBy: resolvedReferrerId
+                ? resolvedReferrerId
+                : existingUserRecord.referredBy,
               updatedAt: new Date(),
             })
             .where(eq(users.id, canonicalUserId))
@@ -520,7 +530,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   if (identityFarcasterUsername || importedFarcaster) {
     const farcasterUsername =
-      parsedProfile.farcasterUsername ?? identityFarcasterUsername;
+      parsedProfile.farcasterUsername || identityFarcasterUsername;
     if (farcasterUsername) {
       const pointsResult = await PointsService.awardFarcasterLink(
         result.user.id,
@@ -540,7 +550,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
   if (identityTwitterUsername || importedTwitter) {
     const twitterUsername =
-      parsedProfile.twitterUsername ?? identityTwitterUsername;
+      parsedProfile.twitterUsername || identityTwitterUsername;
     if (twitterUsername) {
       const pointsResult = await PointsService.awardTwitterLink(
         result.user.id,

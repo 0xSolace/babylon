@@ -2,6 +2,7 @@
 
 import { useJejuAuth } from '@babylon/auth/client';
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Crown,
   Edit2,
@@ -14,7 +15,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { Button } from '@/components/ui/button';
 
@@ -42,6 +43,10 @@ interface GroupDetails {
   createdAt: string;
   members: GroupMember[];
   isCurrentUserAdmin: boolean;
+}
+
+interface GroupDetailsResponse {
+  data: GroupDetails;
 }
 
 /**
@@ -98,252 +103,260 @@ export function GroupSettingsModal({
   currentUserId,
 }: GroupSettingsModalProps) {
   const { getAccessToken } = useJejuAuth();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('general');
-  const [group, setGroup] = useState<GroupDetails | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // General settings state
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
-  const [isSaving, setSaving] = useState(false);
 
-  // Delete state
+  // Confirm dialogs
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  // Leave state
   const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false);
-  const [isLeaving, setIsLeaving] = useState(false);
 
   // Member management state
   const [managingMemberId, setManagingMemberId] = useState<string | null>(null);
 
-  const loadGroupDetails = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const {
+    data: group,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['user-group-settings', groupId],
+    queryFn: async (): Promise<GroupDetails> => {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Authentication required');
 
-    const token = await getAccessToken();
-    if (!token) throw new Error('Authentication required');
+      const response = await fetch(`/api/user-groups/${groupId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    const response = await fetch(`/api/user-groups/${groupId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      if (!response.ok) {
+        throw new Error('Failed to load group details');
+      }
 
-    if (!response.ok) {
-      setLoading(false);
-      throw new Error('Failed to load group details');
-    }
+      const data: GroupDetailsResponse = await response.json();
+      return data.data;
+    },
+    enabled: isOpen && !!groupId,
+  });
 
-    const data = await response.json();
-    setGroup(data.data);
-    setEditedName(data.data.name);
-    setEditedDescription(data.data.description || '');
-    setLoading(false);
-  }, [groupId, getAccessToken]);
-
-  // Load group details
+  // Update local edit state when group data loads
   useEffect(() => {
-    if (isOpen && groupId) {
-      loadGroupDetails();
+    if (group) {
+      setEditedName(group.name);
+      setEditedDescription(group.description || '');
     }
-  }, [isOpen, groupId, loadGroupDetails]);
+  }, [group]);
 
-  const handleSaveDetails = async () => {
-    if (!group) return;
+  const updateGroupMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Authentication required');
 
-    setSaving(true);
-    setError(null);
+      const response = await fetch(`/api/user-groups/${groupId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: editedName,
+          description: editedDescription || null,
+        }),
+      });
 
-    const token = await getAccessToken();
-    if (!token) {
-      setSaving(false);
-      throw new Error('Authentication required');
-    }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update group');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['user-group-settings', groupId],
+      });
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      setIsEditing(false);
+      onGroupUpdated?.();
+    },
+  });
 
-    const response = await fetch(`/api/user-groups/${groupId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        name: editedName,
-        description: editedDescription || null,
-      }),
-    });
+  const deleteGroupMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Authentication required');
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      setSaving(false);
-      throw new Error(errorData.error || 'Failed to update group');
-    }
+      const response = await fetch(`/api/user-groups/${groupId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    // Reload group details
-    await loadGroupDetails();
-    setIsEditing(false);
-    onGroupUpdated?.();
-    setSaving(false);
-  };
-
-  const handleDeleteGroup = async () => {
-    setIsDeleting(true);
-    setError(null);
-
-    const token = await getAccessToken();
-    if (!token) {
-      setIsDeleting(false);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete group');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onGroupDeleted?.();
+      onClose();
+    },
+    onSettled: () => {
       setIsDeleteConfirmOpen(false);
-      throw new Error('Authentication required');
-    }
+    },
+  });
 
-    const response = await fetch(`/api/user-groups/${groupId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+  const leaveGroupMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Authentication required');
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      setIsDeleting(false);
-      setIsDeleteConfirmOpen(false);
-      throw new Error(errorData.error || 'Failed to delete group');
-    }
+      const response = await fetch(
+        `/api/user-groups/${groupId}/members/${currentUserId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    onGroupDeleted?.();
-    onClose();
-  };
-
-  const handleLeaveGroup = async () => {
-    setIsLeaving(true);
-    setError(null);
-
-    const token = await getAccessToken();
-    if (!token) {
-      setIsLeaving(false);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to leave group');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onGroupDeleted?.(); // Treat as deleted from user's perspective
+      onClose();
+    },
+    onSettled: () => {
       setIsLeaveConfirmOpen(false);
-      throw new Error('Authentication required');
-    }
+    },
+  });
 
-    const response = await fetch(
-      `/api/user-groups/${groupId}/members/${currentUserId}`,
-      {
-        method: 'DELETE',
+  const removeMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Authentication required');
+
+      const response = await fetch(
+        `/api/user-groups/${groupId}/members/${memberId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to remove member');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['user-group-settings', groupId],
+      });
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onGroupUpdated?.();
+    },
+    onSettled: () => {
+      setManagingMemberId(null);
+    },
+  });
+
+  const promoteMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Authentication required');
+
+      const response = await fetch(`/api/user-groups/${groupId}/admins`, {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ userId: memberId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to promote member');
       }
-    );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['user-group-settings', groupId],
+      });
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onGroupUpdated?.();
+    },
+    onSettled: () => {
+      setManagingMemberId(null);
+    },
+  });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      setIsLeaving(false);
-      setIsLeaveConfirmOpen(false);
-      throw new Error(errorData.error || 'Failed to leave group');
-    }
+  const demoteMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Authentication required');
 
-    onGroupDeleted?.(); // Treat as deleted from user's perspective
-    onClose();
+      const response = await fetch(
+        `/api/user-groups/${groupId}/admins/${memberId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to demote admin');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['user-group-settings', groupId],
+      });
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onGroupUpdated?.();
+    },
+    onSettled: () => {
+      setManagingMemberId(null);
+    },
+  });
+
+  const handleRemoveMember = (memberId: string) => {
+    setManagingMemberId(memberId);
+    removeMemberMutation.mutate(memberId);
   };
 
-  const handleRemoveMember = async (memberId: string) => {
+  const handlePromoteToAdmin = (memberId: string) => {
     setManagingMemberId(memberId);
-    setError(null);
-
-    const token = await getAccessToken();
-    if (!token) {
-      setManagingMemberId(null);
-      throw new Error('Authentication required');
-    }
-
-    const response = await fetch(
-      `/api/user-groups/${groupId}/members/${memberId}`,
-      {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      setManagingMemberId(null);
-      throw new Error(errorData.error || 'Failed to remove member');
-    }
-
-    await loadGroupDetails();
-    onGroupUpdated?.();
-    setManagingMemberId(null);
+    promoteMemberMutation.mutate(memberId);
   };
 
-  const handlePromoteToAdmin = async (memberId: string) => {
+  const handleDemoteFromAdmin = (memberId: string) => {
     setManagingMemberId(memberId);
-    setError(null);
-
-    const token = await getAccessToken();
-    if (!token) {
-      setManagingMemberId(null);
-      throw new Error('Authentication required');
-    }
-
-    const response = await fetch(`/api/user-groups/${groupId}/admins`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ userId: memberId }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      setManagingMemberId(null);
-      throw new Error(errorData.error || 'Failed to promote member');
-    }
-
-    await loadGroupDetails();
-    onGroupUpdated?.();
-    setManagingMemberId(null);
-  };
-
-  const handleDemoteFromAdmin = async (memberId: string) => {
-    setManagingMemberId(memberId);
-    setError(null);
-
-    const token = await getAccessToken();
-    if (!token) {
-      setManagingMemberId(null);
-      throw new Error('Authentication required');
-    }
-
-    const response = await fetch(
-      `/api/user-groups/${groupId}/admins/${memberId}`,
-      {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      setManagingMemberId(null);
-      throw new Error(errorData.error || 'Failed to demote admin');
-    }
-
-    await loadGroupDetails();
-    onGroupUpdated?.();
-    setManagingMemberId(null);
+    demoteMemberMutation.mutate(memberId);
   };
 
   const isCreator = group?.createdById === currentUserId;
   const isAdmin = group?.isCurrentUserAdmin;
+
+  const isSaving = updateGroupMutation.isPending;
+  const isDeleting = deleteGroupMutation.isPending;
+  const isLeaving = leaveGroupMutation.isPending;
 
   if (!isOpen) return null;
 
@@ -412,11 +425,11 @@ export function GroupSettingsModal({
           <div className="flex-1 overflow-y-auto p-6">
             {error && (
               <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 p-3">
-                <p className="text-red-500 text-sm">{error}</p>
+                <p className="text-red-500 text-sm">{error.message}</p>
               </div>
             )}
 
-            {loading ? (
+            {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
@@ -484,7 +497,7 @@ export function GroupSettingsModal({
                     {isEditing && isAdmin && (
                       <div className="flex gap-2">
                         <Button
-                          onClick={handleSaveDetails}
+                          onClick={() => updateGroupMutation.mutate()}
                           disabled={isSaving || !editedName.trim()}
                           className="flex-1"
                         >
@@ -677,7 +690,7 @@ export function GroupSettingsModal({
                   Cancel
                 </button>
                 <button
-                  onClick={handleDeleteGroup}
+                  onClick={() => deleteGroupMutation.mutate()}
                   disabled={isDeleting}
                   className="flex-1 rounded-lg bg-red-500 px-4 py-2.5 font-medium text-primary-foreground transition-colors hover:bg-red-600 disabled:opacity-50"
                 >
@@ -723,7 +736,7 @@ export function GroupSettingsModal({
                   Cancel
                 </button>
                 <button
-                  onClick={handleLeaveGroup}
+                  onClick={() => leaveGroupMutation.mutate()}
                   disabled={isLeaving}
                   className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                 >

@@ -47,8 +47,13 @@ export async function GET(request: NextRequest) {
   let userInfo: { id: string; username?: string; email?: string };
 
   if (provider === 'twitter') {
+    const twitterClientId = process.env.TWITTER_CLIENT_ID;
+    if (!twitterClientId) {
+      throw new Error('TWITTER_CLIENT_ID environment variable is required');
+    }
+
     const twitter = new TwitterOAuth({
-      clientId: process.env.TWITTER_CLIENT_ID ?? '',
+      clientId: twitterClientId,
     });
 
     const tokens = await twitter.exchangeCode(
@@ -58,8 +63,13 @@ export async function GET(request: NextRequest) {
     );
     userInfo = await twitter.getUserInfo(tokens.accessToken);
   } else if (provider === 'discord') {
+    const discordClientId = process.env.DISCORD_CLIENT_ID;
+    if (!discordClientId) {
+      throw new Error('DISCORD_CLIENT_ID environment variable is required');
+    }
+
     const discord = new DiscordOAuth({
-      clientId: process.env.DISCORD_CLIENT_ID ?? '',
+      clientId: discordClientId,
     });
 
     const tokens = await discord.exchangeCode(

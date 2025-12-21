@@ -230,7 +230,7 @@ export const POST = withErrorHandling(
     const prompt = `CRITICAL: You have only ${MAX_TOKENS} tokens. Your response MUST start with <response> immediately. No <think> tags. No reasoning.
 
 # System
-${agentConfig?.systemPrompt ?? 'You are a helpful AI assistant.'}
+${agentConfig.systemPrompt ?? 'You are a helpful AI assistant.'}
 
 # Conversation
 ${conversationHistory}
@@ -278,7 +278,7 @@ Generate ${agent.displayName}'s response. Stay in character.
       } | null;
 
       // Check if we got valid text
-      if (!parsed?.text || parsed.text.trim().length === 0) {
+      if (!parsed || !parsed.text || parsed.text.trim().length === 0) {
         logger.warn(
           'Failed to parse XML response',
           { agentId, attempt, raw: generated.substring(0, 300) },
@@ -423,7 +423,8 @@ export const GET = withErrorHandling(
     }
 
     const { searchParams } = new URL(req.url);
-    const limit = Number.parseInt(searchParams.get('limit')!);
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? Number.parseInt(limitParam, 10) : 50;
 
     const messages = await agentService.getChatHistory(agentId, limit);
 

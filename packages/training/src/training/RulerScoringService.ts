@@ -13,16 +13,7 @@
  * Based on: https://art.openpipe.ai/fundamentals/ruler
  */
 
-import {
-  and,
-  asc,
-  db,
-  eq,
-  inArray,
-  isNull,
-  not,
-  trajectories,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
 import { asUUID } from '@elizaos/core';
 import { v4 as uuidv4 } from 'uuid';
@@ -153,18 +144,9 @@ export class RulerScoringService {
       return null;
     }
 
-    const updatedResult = await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        aiJudgeReward: trajectories.aiJudgeReward,
-        aiJudgeReasoning: trajectories.aiJudgeReasoning,
-        judgedAt: trajectories.judgedAt,
-      })
-      .from(trajectories)
-      .where(eq(trajectories.trajectoryId, trajectoryId))
-      .limit(1);
-
-    const updated = updatedResult[0];
+    const updated = await db.trajectory.findUnique({
+      where: { trajectoryId },
+    });
 
     if (!updated || updated.aiJudgeReward === null) {
       return null;
@@ -173,8 +155,8 @@ export class RulerScoringService {
     return {
       trajectoryId: updated.trajectoryId,
       overallScore: updated.aiJudgeReward,
-      reasoning: updated.aiJudgeReasoning || '',
-      scoredAt: updated.judgedAt || new Date(),
+      reasoning: updated.aiJudgeReasoning ?? '',
+      scoredAt: updated.judgedAt ?? new Date(),
     };
   }
 
@@ -368,15 +350,16 @@ export class RulerScoringService {
 
       const trajectoryId = richTrajectories[i]!.traj.trajectoryId;
 
-      await db
-        .update(trajectories)
-        .set({
+      await db.trajectory.update({
+        where: { trajectoryId },
+        data: {
           aiJudgeReward: Math.max(0, Math.min(1, scoreData.score)),
           aiJudgeReasoning: scoreData.explanation,
           judgedAt: new Date(),
           isTrainingData: true,
-        })
-        .where(eq(trajectories.trajectoryId, trajectoryId));
+          updatedAt: new Date(),
+        },
+      });
 
       scored++;
     }
@@ -637,60 +620,59 @@ Return ONLY the JSON, no other text.`;
    */
   private async getTrajectoriesToScore(trajectoryIds?: string[]) {
     if (trajectoryIds && trajectoryIds.length > 0) {
-      return await db
-        .select({
-          trajectoryId: trajectories.trajectoryId,
-          stepsJson: trajectories.stepsJson,
-          scenarioId: trajectories.scenarioId,
-          finalPnL: trajectories.finalPnL,
-          episodeLength: trajectories.episodeLength,
-        })
-        .from(trajectories)
-        .where(
-          and(
-            inArray(trajectories.trajectoryId, trajectoryIds),
-            isNull(trajectories.aiJudgeReward)
-          )
-        );
+      const rows = await db.trajectory.findMany({
+        where: {
+          AND: [
+            { trajectoryId: { in: trajectoryIds } },
+            { aiJudgeReward: null },
+          ],
+        },
+      });
+      return rows.map((t) => ({
+        trajectoryId: t.trajectoryId,
+        stepsJson: t.stepsJson,
+        scenarioId: t.scenarioId,
+        finalPnL: t.finalPnL,
+        episodeLength: t.episodeLength,
+      }));
     }
 
     // Get all unscored trajectories
-    return await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        stepsJson: trajectories.stepsJson,
-        scenarioId: trajectories.scenarioId,
-        finalPnL: trajectories.finalPnL,
-        episodeLength: trajectories.episodeLength,
-      })
-      .from(trajectories)
-      .where(
-        and(
-          isNull(trajectories.aiJudgeReward),
-          eq(trajectories.isTrainingData, true),
-          not(eq(trajectories.stepsJson, 'null')),
-          not(eq(trajectories.stepsJson, '[]'))
-        )
-      )
-      .orderBy(asc(trajectories.startTime));
+    const rows = await db.trajectory.findMany({
+      where: {
+        AND: [
+          { aiJudgeReward: null },
+          { isTrainingData: true },
+          { stepsJson: { not: 'null' } },
+          { stepsJson: { not: '[]' } },
+        ],
+      },
+      orderBy: { startTime: 'asc' },
+    });
+    return rows.map((t) => ({
+      trajectoryId: t.trajectoryId,
+      stepsJson: t.stepsJson,
+      scenarioId: t.scenarioId,
+      finalPnL: t.finalPnL,
+      episodeLength: t.episodeLength,
+    }));
   }
 
   /**
    * Score all unscored trajectories in a time window
    */
   async scoreWindow(windowId: string): Promise<number> {
-    const trajectoriesResult = await db
-      .select({ trajectoryId: trajectories.trajectoryId })
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.windowId, windowId),
-          eq(trajectories.isTrainingData, true),
-          isNull(trajectories.aiJudgeReward),
-          not(eq(trajectories.stepsJson, 'null')),
-          not(eq(trajectories.stepsJson, '[]'))
-        )
-      );
+    const trajectoriesResult = await db.trajectory.findMany({
+      where: {
+        AND: [
+          { windowId },
+          { isTrainingData: true },
+          { aiJudgeReward: null },
+          { stepsJson: { not: 'null' } },
+          { stepsJson: { not: '[]' } },
+        ],
+      },
+    });
 
     if (trajectoriesResult.length === 0) {
       return 0;

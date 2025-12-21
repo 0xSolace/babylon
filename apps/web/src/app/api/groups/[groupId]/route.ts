@@ -213,7 +213,7 @@ export const GET = withErrorHandling(
           profileImageUrl: m.profileImageUrl,
           isAdmin: adminIds.includes(m.id),
           joinedAt:
-            groupMembers.find((gm) => gm.userId === m.id)?.joinedAt ||
+            groupMembers.find((gm) => gm.userId === m.id)?.joinedAt ??
             new Date(),
         })),
         isAdmin,

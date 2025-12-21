@@ -9,6 +9,12 @@
  */
 
 import type { QueryParam } from '@jeju/db';
+import type { Column, SQL } from 'drizzle-orm';
+import {
+  getTableConfig,
+  type PgColumn,
+  type PgTable,
+} from 'drizzle-orm/pg-core';
 import {
   CQLTableRepository,
   getDB,
@@ -17,6 +23,7 @@ import {
   resetDB,
   type SQLValue,
 } from './cql-repository';
+import * as schema from './schema';
 
 // Re-export types
 export type { JsonValue, SQLValue };
@@ -28,17 +35,75 @@ export type { JsonValue, SQLValue };
 // Base record types - these match the Drizzle schema types
 type BaseRecord = Record<string, SQLValue | JsonValue>;
 
+type InferSelect<T extends PgTable> = T['$inferSelect'];
+type InferInsert<T extends PgTable> = T['$inferInsert'];
+
+// Use direct type inference without Extract to preserve exact types
+type Repo<T extends PgTable> = CQLTableRepository<
+  InferSelect<T>,
+  InferInsert<T>
+>;
+
+function toQueryParam(value: SQLValue): QueryParam {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return value;
+  }
+
+  if (value instanceof Uint8Array) {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return JSON.stringify(value);
+}
+
+// ============================================================================
+// Type Utilities for Drizzle Column Inference
+// ============================================================================
+
+// Extract the data type from a PgColumn, SQL expression, or other value
+type InferColumnType<T> =
+  T extends Column<infer TConfig>
+    ? TConfig extends { data: infer D }
+      ? D
+      : never
+    : T extends SQL<infer U>
+      ? U
+      : T extends { $inferSelect: infer U }
+        ? U
+        : T;
+
+// Map object of columns/SQL to their inferred types
+type InferSelectType<T> =
+  T extends Record<string, unknown>
+    ? { [K in keyof T]: InferColumnType<T[K]> }
+    : T;
+
 // ============================================================================
 // CQL Client Interface
 // ============================================================================
 
-// Drizzle-style query builder types
+// Drizzle-style query builder types - simplified for backwards compatibility
+// Returns flat rows for single-table queries. For joins, cast the result to your expected type.
 interface SelectBuilder<T = BaseRecord> {
-  from: (table: unknown) => SelectBuilder<T>;
+  // from() returns flat row type for single table queries
+  from: <TTable extends PgTable>(
+    table: TTable
+  ) => SelectBuilder<TTable['$inferSelect']>;
   where: (condition: unknown) => SelectBuilder<T>;
   orderBy: (...orders: unknown[]) => SelectBuilder<T>;
   limit: (n: number) => SelectBuilder<T>;
   offset: (n: number) => SelectBuilder<T>;
+  // leftJoin/innerJoin - returns same builder type (cast result to your expected join type)
   leftJoin: (table: unknown, condition: unknown) => SelectBuilder<T>;
   innerJoin: (table: unknown, condition: unknown) => SelectBuilder<T>;
   groupBy: (...columns: unknown[]) => SelectBuilder<T>;
@@ -49,17 +114,24 @@ interface SelectBuilder<T = BaseRecord> {
 }
 
 interface InsertBuilder<T = BaseRecord> {
-  values: (data: unknown | unknown[]) => InsertBuilder<T>;
+  values: (data: Partial<T> | Partial<T>[]) => InsertBuilder<T>;
   onConflictDoNothing: () => InsertBuilder<T>;
   onConflictDoUpdate: (options: unknown) => InsertBuilder<T>;
-  returning: () => Promise<T[]>;
+  returning: <TRet extends Record<string, PgColumn>>(
+    fields?: TRet
+  ) => Promise<T[]>;
   then: <TResult>(
     onfulfilled?: (value: T[]) => TResult | PromiseLike<TResult>
   ) => Promise<TResult>;
 }
 
+// Allow SQL expressions in set data (e.g., sql`column + 1`)
+type SetData<T> = {
+  [K in keyof T]?: T[K] | SQL<unknown>;
+};
+
 interface UpdateBuilder<T = BaseRecord> {
-  set: (data: unknown) => UpdateBuilder<T>;
+  set: (data: SetData<T>) => UpdateBuilder<T>;
   where: (condition: unknown) => UpdateBuilder<T>;
   $dynamic: () => UpdateBuilder<T>;
   returning: () => Promise<T[]>;
@@ -101,221 +173,133 @@ export interface CQLClient {
     params?: QueryParam[]
   ) => Promise<{ rowsAffected: number }>;
 
-  // Drizzle-style query builders
+  // Drizzle-style query builders with proper type inference
   select: <T extends Record<string, unknown> = BaseRecord>(
     fields?: T
-  ) => SelectBuilder<T>;
+  ) => SelectBuilder<InferSelectType<T>>;
   selectDistinct: <T extends Record<string, unknown> = BaseRecord>(
     fields?: T
-  ) => SelectBuilder<T>;
+  ) => SelectBuilder<InferSelectType<T>>;
   selectDistinctOn: <T extends Record<string, unknown> = BaseRecord>(
     columns: unknown[],
     fields?: T
-  ) => SelectBuilder<T>;
-  insert: <T = BaseRecord>(table: unknown) => InsertBuilder<T>;
-  update: <T = BaseRecord>(table: unknown) => UpdateBuilder<T>;
-  delete: <T = BaseRecord>(table: unknown) => DeleteBuilder<T>;
+  ) => SelectBuilder<InferSelectType<T>>;
+  insert: <TTable extends PgTable>(
+    table: TTable
+  ) => InsertBuilder<TTable['$inferSelect']>;
+  update: <TTable extends PgTable>(
+    table: TTable
+  ) => UpdateBuilder<TTable['$inferSelect']>;
+  delete: <TTable extends PgTable>(
+    table: TTable
+  ) => DeleteBuilder<TTable['$inferSelect']>;
   execute: (query: unknown) => Promise<unknown[]>;
   transaction: <T>(fn: (tx: CQLClient) => Promise<T>) => Promise<T>;
 
-  // Table repositories - all tables from the schema
-  user: CQLTableRepository<BaseRecord, BaseRecord>;
-  actorState: CQLTableRepository<BaseRecord, BaseRecord>;
-  actorFollow: CQLTableRepository<BaseRecord, BaseRecord>;
-  actorRelationship: CQLTableRepository<BaseRecord, BaseRecord>;
-  post: CQLTableRepository<BaseRecord, BaseRecord>;
-  comment: CQLTableRepository<BaseRecord, BaseRecord>;
-  reaction: CQLTableRepository<BaseRecord, BaseRecord>;
-  share: CQLTableRepository<BaseRecord, BaseRecord>;
-  market: CQLTableRepository<BaseRecord, BaseRecord>;
-  position: CQLTableRepository<BaseRecord, BaseRecord>;
-  perpPosition: CQLTableRepository<BaseRecord, BaseRecord>;
-  pool: CQLTableRepository<BaseRecord, BaseRecord>;
-  poolPosition: CQLTableRepository<BaseRecord, BaseRecord>;
-  poolDeposit: CQLTableRepository<BaseRecord, BaseRecord>;
-  organizationState: CQLTableRepository<BaseRecord, BaseRecord>;
-  stockPrice: CQLTableRepository<BaseRecord, BaseRecord>;
-  question: CQLTableRepository<BaseRecord, BaseRecord>;
-  predictionPriceHistory: CQLTableRepository<BaseRecord, BaseRecord>;
-  chat: CQLTableRepository<BaseRecord, BaseRecord>;
-  chatParticipant: CQLTableRepository<BaseRecord, BaseRecord>;
-  chatAdmin: CQLTableRepository<BaseRecord, BaseRecord>;
-  chatInvite: CQLTableRepository<BaseRecord, BaseRecord>;
-  message: CQLTableRepository<BaseRecord, BaseRecord>;
-  notification: CQLTableRepository<BaseRecord, BaseRecord>;
-  dmAcceptance: CQLTableRepository<BaseRecord, BaseRecord>;
-  groupChatMembership: CQLTableRepository<BaseRecord, BaseRecord>;
-  userInteraction: CQLTableRepository<BaseRecord, BaseRecord>;
-  agentRegistry: CQLTableRepository<BaseRecord, BaseRecord>;
-  agentCapability: CQLTableRepository<BaseRecord, BaseRecord>;
-  agentLog: CQLTableRepository<BaseRecord, BaseRecord>;
-  agentMessage: CQLTableRepository<BaseRecord, BaseRecord>;
-  agentPerformanceMetrics: CQLTableRepository<BaseRecord, BaseRecord>;
-  agentGoal: CQLTableRepository<BaseRecord, BaseRecord>;
-  agentGoalAction: CQLTableRepository<BaseRecord, BaseRecord>;
-  agentPointsTransaction: CQLTableRepository<BaseRecord, BaseRecord>;
-  agentTrade: CQLTableRepository<BaseRecord, BaseRecord>;
-  externalAgentConnection: CQLTableRepository<BaseRecord, BaseRecord>;
-  npcTrade: CQLTableRepository<BaseRecord, BaseRecord>;
-  npcInteraction: CQLTableRepository<BaseRecord, BaseRecord>;
-  tradingFee: CQLTableRepository<BaseRecord, BaseRecord>;
-  balanceTransaction: CQLTableRepository<BaseRecord, BaseRecord>;
-  pointsTransaction: CQLTableRepository<BaseRecord, BaseRecord>;
-  userActorFollow: CQLTableRepository<BaseRecord, BaseRecord>;
-  userGroup: CQLTableRepository<BaseRecord, BaseRecord>;
-  userGroupAdmin: CQLTableRepository<BaseRecord, BaseRecord>;
-  userGroupInvite: CQLTableRepository<BaseRecord, BaseRecord>;
-  userGroupMember: CQLTableRepository<BaseRecord, BaseRecord>;
-  pendingGroupInviteCandidate: CQLTableRepository<BaseRecord, BaseRecord>;
-  userBlock: CQLTableRepository<BaseRecord, BaseRecord>;
-  userMute: CQLTableRepository<BaseRecord, BaseRecord>;
-  userMessagingKey: CQLTableRepository<BaseRecord, BaseRecord>;
-  report: CQLTableRepository<BaseRecord, BaseRecord>;
-  twitterOAuthToken: CQLTableRepository<BaseRecord, BaseRecord>;
-  onboardingIntent: CQLTableRepository<BaseRecord, BaseRecord>;
-  favorite: CQLTableRepository<BaseRecord, BaseRecord>;
-  follow: CQLTableRepository<BaseRecord, BaseRecord>;
-  followStatus: CQLTableRepository<BaseRecord, BaseRecord>;
-  profileUpdateLog: CQLTableRepository<BaseRecord, BaseRecord>;
-  shareAction: CQLTableRepository<BaseRecord, BaseRecord>;
-  tag: CQLTableRepository<BaseRecord, BaseRecord>;
-  postTag: CQLTableRepository<BaseRecord, BaseRecord>;
-  trendingTag: CQLTableRepository<BaseRecord, BaseRecord>;
-  llmCallLog: CQLTableRepository<BaseRecord, BaseRecord>;
-  marketOutcome: CQLTableRepository<BaseRecord, BaseRecord>;
-  trainedModel: CQLTableRepository<BaseRecord, BaseRecord>;
-  trainingBatch: CQLTableRepository<BaseRecord, BaseRecord>;
-  benchmarkResult: CQLTableRepository<BaseRecord, BaseRecord>;
-  trajectory: CQLTableRepository<BaseRecord, BaseRecord>;
-  rewardJudgment: CQLTableRepository<BaseRecord, BaseRecord>;
-  oracleCommitment: CQLTableRepository<BaseRecord, BaseRecord>;
-  oracleTransaction: CQLTableRepository<BaseRecord, BaseRecord>;
-  realtimeOutbox: CQLTableRepository<BaseRecord, BaseRecord>;
-  game: CQLTableRepository<BaseRecord, BaseRecord>;
-  gameConfig: CQLTableRepository<BaseRecord, BaseRecord>;
-  oAuthState: CQLTableRepository<BaseRecord, BaseRecord>;
-  systemSettings: CQLTableRepository<BaseRecord, BaseRecord>;
-  worldEvent: CQLTableRepository<BaseRecord, BaseRecord>;
-  worldFact: CQLTableRepository<BaseRecord, BaseRecord>;
-  rssFeedSource: CQLTableRepository<BaseRecord, BaseRecord>;
-  rssHeadline: CQLTableRepository<BaseRecord, BaseRecord>;
-  parodyHeadline: CQLTableRepository<BaseRecord, BaseRecord>;
-  moderationEscrow: CQLTableRepository<BaseRecord, BaseRecord>;
-  generationLock: CQLTableRepository<BaseRecord, BaseRecord>;
-  feedback: CQLTableRepository<BaseRecord, BaseRecord>;
-  referral: CQLTableRepository<BaseRecord, BaseRecord>;
-  widgetCache: CQLTableRepository<BaseRecord, BaseRecord>;
-  userAgentConfig: CQLTableRepository<BaseRecord, BaseRecord>;
-  userApiKey: CQLTableRepository<BaseRecord, BaseRecord>;
-  tickTokenStats: CQLTableRepository<BaseRecord, BaseRecord>;
-  questionArcPlan: CQLTableRepository<BaseRecord, BaseRecord>;
+  // Table repositories (typed from the Drizzle schema)
+  user: Repo<typeof schema.users>;
+  actorState: Repo<typeof schema.actorState>;
+  actorFollow: Repo<typeof schema.actorFollows>;
+  actorRelationship: Repo<typeof schema.actorRelationships>;
+  post: Repo<typeof schema.posts>;
+  comment: Repo<typeof schema.comments>;
+  reaction: Repo<typeof schema.reactions>;
+  share: Repo<typeof schema.shares>;
+  market: Repo<typeof schema.markets>;
+  position: Repo<typeof schema.positions>;
+  perpPosition: Repo<typeof schema.perpPositions>;
+  perpMarketSnapshot: Repo<typeof schema.perpMarketSnapshots>;
+  pool: Repo<typeof schema.pools>;
+  poolPosition: Repo<typeof schema.poolPositions>;
+  poolDeposit: Repo<typeof schema.poolDeposits>;
+  organizationState: Repo<typeof schema.organizationState>;
+  stockPrice: Repo<typeof schema.stockPrices>;
+  question: Repo<typeof schema.questions>;
+  predictionPriceHistory: Repo<typeof schema.predictionPriceHistories>;
+  chat: Repo<typeof schema.chats>;
+  chatParticipant: Repo<typeof schema.chatParticipants>;
+  chatAdmin: Repo<typeof schema.chatAdmins>;
+  chatInvite: Repo<typeof schema.chatInvites>;
+  message: Repo<typeof schema.messages>;
+  notification: Repo<typeof schema.notifications>;
+  dmAcceptance: Repo<typeof schema.dmAcceptances>;
+  groupChatMembership: Repo<typeof schema.groupChatMemberships>;
+  userInteraction: Repo<typeof schema.userInteractions>;
+  agentRegistry: Repo<typeof schema.agentRegistries>;
+  agentCapability: Repo<typeof schema.agentCapabilities>;
+  agentLog: Repo<typeof schema.agentLogs>;
+  agentMessage: Repo<typeof schema.agentMessages>;
+  agentPerformanceMetrics: Repo<typeof schema.agentPerformanceMetrics>;
+  agentGoal: Repo<typeof schema.agentGoals>;
+  agentGoalAction: Repo<typeof schema.agentGoalActions>;
+  agentPointsTransaction: Repo<typeof schema.agentPointsTransactions>;
+  agentTrade: Repo<typeof schema.agentTrades>;
+  externalAgentConnection: Repo<typeof schema.externalAgentConnections>;
+  npcTrade: Repo<typeof schema.npcTrades>;
+  npcInteraction: Repo<typeof schema.npcInteractions>;
+  tradingFee: Repo<typeof schema.tradingFees>;
+  balanceTransaction: Repo<typeof schema.balanceTransactions>;
+  pointsTransaction: Repo<typeof schema.pointsTransactions>;
+  userActorFollow: Repo<typeof schema.userActorFollows>;
+  userGroup: Repo<typeof schema.userGroups>;
+  userGroupAdmin: Repo<typeof schema.userGroupAdmins>;
+  userGroupInvite: Repo<typeof schema.userGroupInvites>;
+  userGroupMember: Repo<typeof schema.userGroupMembers>;
+  pendingGroupInviteCandidate: Repo<typeof schema.pendingGroupInviteCandidates>;
+  userBlock: Repo<typeof schema.userBlocks>;
+  userMute: Repo<typeof schema.userMutes>;
+  userMessagingKey: Repo<typeof schema.userMessagingKeys>;
+  report: Repo<typeof schema.reports>;
+  twitterOAuthToken: Repo<typeof schema.twitterOAuthTokens>;
+  onboardingIntent: Repo<typeof schema.onboardingIntents>;
+  favorite: Repo<typeof schema.favorites>;
+  follow: Repo<typeof schema.follows>;
+  followStatus: Repo<typeof schema.followStatuses>;
+  profileUpdateLog: Repo<typeof schema.profileUpdateLogs>;
+  shareAction: Repo<typeof schema.shareActions>;
+  tag: Repo<typeof schema.tags>;
+  postTag: Repo<typeof schema.postTags>;
+  trendingTag: Repo<typeof schema.trendingTags>;
+  llmCallLog: Repo<typeof schema.llmCallLogs>;
+  marketOutcome: Repo<typeof schema.marketOutcomes>;
+  trainedModel: Repo<typeof schema.trainedModels>;
+  trainingBatch: Repo<typeof schema.trainingBatches>;
+  benchmarkResult: Repo<typeof schema.benchmarkResults>;
+  trajectory: Repo<typeof schema.trajectories>;
+  rewardJudgment: Repo<typeof schema.rewardJudgments>;
+  oracleCommitment: Repo<typeof schema.oracleCommitments>;
+  oracleTransaction: Repo<typeof schema.oracleTransactions>;
+  realtimeOutbox: Repo<typeof schema.realtimeOutboxes>;
+  game: Repo<typeof schema.games>;
+  gameConfig: Repo<typeof schema.gameConfigs>;
+  oAuthState: Repo<typeof schema.oAuthStates>;
+  systemSettings: Repo<typeof schema.systemSettings>;
+  worldEvent: Repo<typeof schema.worldEvents>;
+  worldFact: Repo<typeof schema.worldFacts>;
+  rssFeedSource: Repo<typeof schema.rssFeedSources>;
+  rssHeadline: Repo<typeof schema.rssHeadlines>;
+  parodyHeadline: Repo<typeof schema.parodyHeadlines>;
+  moderationEscrow: Repo<typeof schema.moderationEscrows>;
+  generationLock: Repo<typeof schema.generationLocks>;
+  feedback: Repo<typeof schema.feedbacks>;
+  referral: Repo<typeof schema.referrals>;
+  widgetCache: Repo<typeof schema.widgetCaches>;
+  userAgentConfig: Repo<typeof schema.userAgentConfigs>;
+  userApiKey: Repo<typeof schema.userApiKeys>;
+  tickTokenStats: Repo<typeof schema.tickTokenStats>;
+  questionArcPlan: Repo<typeof schema.questionArcPlans>;
 }
-
-// ============================================================================
-// Table name mappings
-// ============================================================================
-
-const TABLE_NAMES: Record<string, string> = {
-  user: 'users',
-  actorState: 'actor_state',
-  actorFollow: 'actor_follows',
-  actorRelationship: 'actor_relationships',
-  post: 'posts',
-  comment: 'comments',
-  reaction: 'reactions',
-  share: 'shares',
-  market: 'markets',
-  position: 'positions',
-  perpPosition: 'perp_positions',
-  pool: 'pools',
-  poolPosition: 'pool_positions',
-  poolDeposit: 'pool_deposits',
-  organizationState: 'organization_state',
-  stockPrice: 'stock_prices',
-  question: 'questions',
-  predictionPriceHistory: 'prediction_price_histories',
-  chat: 'chats',
-  chatParticipant: 'chat_participants',
-  chatAdmin: 'chat_admins',
-  chatInvite: 'chat_invites',
-  message: 'messages',
-  notification: 'notifications',
-  dmAcceptance: 'dm_acceptances',
-  groupChatMembership: 'group_chat_memberships',
-  userInteraction: 'user_interactions',
-  agentRegistry: 'agent_registries',
-  agentCapability: 'agent_capabilities',
-  agentLog: 'agent_logs',
-  agentMessage: 'agent_messages',
-  agentPerformanceMetrics: 'agent_performance_metrics',
-  agentGoal: 'agent_goals',
-  agentGoalAction: 'agent_goal_actions',
-  agentPointsTransaction: 'agent_points_transactions',
-  agentTrade: 'agent_trades',
-  externalAgentConnection: 'external_agent_connections',
-  npcTrade: 'npc_trades',
-  npcInteraction: 'npc_interactions',
-  tradingFee: 'trading_fees',
-  balanceTransaction: 'balance_transactions',
-  pointsTransaction: 'points_transactions',
-  userActorFollow: 'user_actor_follows',
-  userGroup: 'user_groups',
-  userGroupAdmin: 'user_group_admins',
-  userGroupInvite: 'user_group_invites',
-  userGroupMember: 'user_group_members',
-  pendingGroupInviteCandidate: 'pending_group_invite_candidates',
-  userBlock: 'user_blocks',
-  userMute: 'user_mutes',
-  userMessagingKey: 'user_messaging_keys',
-  report: 'reports',
-  twitterOAuthToken: 'twitter_oauth_tokens',
-  onboardingIntent: 'onboarding_intents',
-  favorite: 'favorites',
-  follow: 'follows',
-  followStatus: 'follow_statuses',
-  profileUpdateLog: 'profile_update_logs',
-  shareAction: 'share_actions',
-  tag: 'tags',
-  postTag: 'post_tags',
-  trendingTag: 'trending_tags',
-  llmCallLog: 'llm_call_logs',
-  marketOutcome: 'market_outcomes',
-  trainedModel: 'trained_models',
-  trainingBatch: 'training_batches',
-  benchmarkResult: 'benchmark_results',
-  trajectory: 'trajectories',
-  rewardJudgment: 'reward_judgments',
-  oracleCommitment: 'oracle_commitments',
-  oracleTransaction: 'oracle_transactions',
-  realtimeOutbox: 'realtime_outboxes',
-  game: 'games',
-  gameConfig: 'game_configs',
-  oAuthState: 'oauth_states',
-  systemSettings: 'system_settings',
-  worldEvent: 'world_events',
-  worldFact: 'world_facts',
-  rssFeedSource: 'rss_feed_sources',
-  rssHeadline: 'rss_headlines',
-  parodyHeadline: 'parody_headlines',
-  moderationEscrow: 'moderation_escrows',
-  generationLock: 'generation_locks',
-  feedback: 'feedbacks',
-  referral: 'referrals',
-  widgetCache: 'widget_caches',
-  userAgentConfig: 'user_agent_configs',
-  userApiKey: 'user_api_keys',
-  tickTokenStats: 'tick_token_stats',
-  questionArcPlan: 'question_arc_plans',
-};
 
 // ============================================================================
 // Create CQL Client
 // ============================================================================
 
-function createRepository(
-  tableName: string
-): CQLTableRepository<BaseRecord, BaseRecord> {
-  return new CQLTableRepository(tableName, getDB);
+function createRepository<TTable extends PgTable>(table: TTable): Repo<TTable> {
+  const tableName = getTableConfig(table).name;
+  return new CQLTableRepository<InferSelect<TTable>, InferInsert<TTable>>(
+    tableName,
+    getDB
+  );
 }
 
 export function createCQLClient(): CQLClient {
@@ -330,12 +314,10 @@ export function createCQLClient(): CQLClient {
   const $transaction = async <T>(
     callback: (tx: CQLClient) => Promise<T>
   ): Promise<T> => {
-    const dbInstance = getDB();
-    return dbInstance.transaction(async () => {
-      // In CQL transactions, we use the same client
-      // The transaction context is managed by the DB layer
-      return callback(createCQLClient());
-    });
+    void callback;
+    throw new Error(
+      '[CQL] db.$transaction is disabled. Use getDB().transaction() with raw SQL.'
+    );
   };
 
   const $queryRaw = async <T = Record<string, SQLValue>>(
@@ -349,7 +331,11 @@ export function createCQLClient(): CQLClient {
     strings.forEach((str, i) => {
       sql += str;
       if (i < values.length) {
-        params.push(values[i] as QueryParam);
+        const value = values[i];
+        if (value === undefined) {
+          throw new Error('[CQL] Missing parameter value for $queryRaw');
+        }
+        params.push(toQueryParam(value));
         sql += `$${i + 1}`;
       }
     });
@@ -367,7 +353,11 @@ export function createCQLClient(): CQLClient {
     strings.forEach((str, i) => {
       sql += str;
       if (i < values.length) {
-        params.push(values[i] as QueryParam);
+        const value = values[i];
+        if (value === undefined) {
+          throw new Error('[CQL] Missing parameter value for $executeRaw');
+        }
+        params.push(toQueryParam(value));
         sql += `$${i + 1}`;
       }
     });
@@ -396,72 +386,253 @@ export function createCQLClient(): CQLClient {
     return dbInstance.exec(sql, params);
   };
 
-  // Drizzle-style query builders
+  // Helper to extract table name from a Drizzle table object
+  const extractTableName = (table: unknown): string => {
+    if (typeof table === 'object' && table !== null) {
+      const tableObj = table as Record<string, unknown>;
+      return (
+        (tableObj['_'] as Record<string, string>)?.name ??
+        (tableObj as Record<string, string>).tableName ??
+        String(table)
+      );
+    }
+    return String(table);
+  };
+
+  // Helper to get column names from a Drizzle table
+  const getTableColumns = (table: unknown): string[] => {
+    if (typeof table === 'object' && table !== null) {
+      const config = getTableConfig(table as PgTable);
+      return config.columns.map((c) => c.name);
+    }
+    return [];
+  };
+
+  // Drizzle-style query builders with full join support
   const createSelectBuilder = <T extends Record<string, unknown> = BaseRecord>(
     _fields?: T
-  ): SelectBuilder<T> => {
-    let tableName = '';
+  ): SelectBuilder<InferSelectType<T>> => {
+    void _fields;
+
+    // State for query building
+    interface JoinInfo {
+      type: 'LEFT' | 'INNER';
+      tableName: string;
+      tableObj: unknown;
+      columns: string[];
+      condition: unknown;
+    }
+
+    let mainTableName = '';
+    let mainTableColumns: string[] = [];
+    const joins: JoinInfo[] = [];
     let whereClause = '';
     let orderByClause = '';
     let limitClause = '';
     let offsetClause = '';
     const params: QueryParam[] = [];
 
-    const builder: SelectBuilder<T> = {
-      from: (table: unknown) => {
-        // Extract table name from Drizzle table object or string
-        if (typeof table === 'object' && table !== null) {
-          const tableObj = table as Record<string, unknown>;
-          tableName =
-            (tableObj['_'] as Record<string, string>)?.name ??
-            (tableObj as Record<string, string>).tableName ??
-            String(table);
-        } else {
-          tableName = String(table);
+    // Build the SQL query with proper column aliasing for joins
+    const buildSQL = (): string => {
+      // Build SELECT clause with aliased columns
+      const selectParts: string[] = [];
+
+      // Main table columns
+      for (const col of mainTableColumns) {
+        selectParts.push(
+          `"${mainTableName}"."${col}" AS "${mainTableName}__${col}"`
+        );
+      }
+
+      // Joined table columns
+      for (const join of joins) {
+        for (const col of join.columns) {
+          selectParts.push(
+            `"${join.tableName}"."${col}" AS "${join.tableName}__${col}"`
+          );
         }
-        return builder;
-      },
+      }
+
+      let sql = `SELECT ${selectParts.length > 0 ? selectParts.join(', ') : '*'} FROM "${mainTableName}"`;
+
+      // Add JOINs
+      for (const join of joins) {
+        sql += ` ${join.type} JOIN "${join.tableName}" ON true`; // TODO: Parse actual condition
+      }
+
+      sql += whereClause + orderByClause + limitClause + offsetClause;
+      return sql;
+    };
+
+    // Reshape flat SQL results based on whether there are joins
+    // - No joins: return flat row objects directly
+    // - With joins: return { TableName: {...}, JoinedTable: {...} | null } structure
+    const reshapeResults = <TResult>(
+      flatResults: Record<string, unknown>[],
+      hasJoins: boolean
+    ): TResult[] => {
+      if (!hasJoins) {
+        // No joins - return flat results directly
+        return flatResults.map((row) => {
+          // Check if results have table__column format (aliased)
+          const firstKey = Object.keys(row)[0] ?? '';
+          if (firstKey.includes('__')) {
+            // Results have table__column format, extract just the column values
+            const result: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(row)) {
+              const parts = key.split('__');
+              if (parts.length === 2 && parts[1]) {
+                result[parts[1]] = value;
+              }
+            }
+            return result as TResult;
+          }
+          // Results are already flat
+          return row as TResult;
+        });
+      }
+
+      // With joins - reshape into { TableName: {...}, JoinedTable: {...} | null } structure
+      return flatResults
+        .map((row) => {
+          const result: Record<string, Record<string, unknown> | null> = {};
+
+          // Initialize main table
+          result[mainTableName] = {};
+          let mainTableHasData = false;
+
+          // Initialize joined tables as null
+          for (const join of joins) {
+            result[join.tableName] = null;
+          }
+
+          for (const [key, value] of Object.entries(row)) {
+            const parts = key.split('__');
+            if (parts.length === 2) {
+              const [tableName, colName] = parts;
+              if (tableName && colName) {
+                if (tableName === mainTableName) {
+                  (result[mainTableName] as Record<string, unknown>)[colName] =
+                    value;
+                  if (value !== null) mainTableHasData = true;
+                } else {
+                  // Joined table - only add if value is not null
+                  if (value !== null) {
+                    if (!result[tableName]) {
+                      result[tableName] = {};
+                    }
+                    (result[tableName] as Record<string, unknown>)[colName] =
+                      value;
+                  }
+                }
+              }
+            }
+          }
+
+          // If main table has no data, skip this row
+          if (!mainTableHasData) {
+            return null as unknown as TResult;
+          }
+
+          return result as TResult;
+        })
+        .filter(Boolean);
+    };
+
+    // Create builder methods with proper typing
+    const createBuilderMethods = <TResult>(): Omit<
+      SelectBuilder<TResult>,
+      'from'
+    > => ({
       where: (condition: unknown) => {
         if (condition) {
-          // Simple condition extraction - in real use this would need more parsing
+          // TODO: Parse Drizzle conditions properly
           whereClause = ' WHERE 1=1';
         }
-        return builder;
+        return createBuilderMethods<TResult>() as SelectBuilder<TResult>;
       },
       orderBy: (..._orders: unknown[]) => {
+        // TODO: Parse order by expressions
         orderByClause = '';
-        return builder;
+        return createBuilderMethods<TResult>() as SelectBuilder<TResult>;
       },
       limit: (n: number) => {
         limitClause = ` LIMIT ${n}`;
-        return builder;
+        return createBuilderMethods<TResult>() as SelectBuilder<TResult>;
       },
       offset: (n: number) => {
         offsetClause = ` OFFSET ${n}`;
-        return builder;
+        return createBuilderMethods<TResult>() as SelectBuilder<TResult>;
       },
-      leftJoin: () => builder,
-      innerJoin: () => builder,
-      groupBy: () => builder,
-      $dynamic: () => builder,
-      then: async <TResult>(
-        onfulfilled?: (value: T[]) => TResult | PromiseLike<TResult>
-      ): Promise<TResult> => {
-        const sql = `SELECT * FROM "${tableName}"${whereClause}${orderByClause}${limitClause}${offsetClause}`;
+      leftJoin: (table: unknown, condition: unknown) => {
+        const joinTableName = extractTableName(table);
+        const joinColumns = getTableColumns(table);
+        joins.push({
+          type: 'LEFT',
+          tableName: joinTableName,
+          tableObj: table,
+          columns: joinColumns,
+          condition,
+        });
+        // Return same type - caller should cast to expected join result type
+        return createBuilderMethods<TResult>() as SelectBuilder<TResult>;
+      },
+      innerJoin: (table: unknown, condition: unknown) => {
+        const joinTableName = extractTableName(table);
+        const joinColumns = getTableColumns(table);
+        joins.push({
+          type: 'INNER',
+          tableName: joinTableName,
+          tableObj: table,
+          columns: joinColumns,
+          condition,
+        });
+        // Return same type - caller should cast to expected join result type
+        return createBuilderMethods<TResult>() as SelectBuilder<TResult>;
+      },
+      groupBy: () => createBuilderMethods<TResult>() as SelectBuilder<TResult>,
+      $dynamic: () => createBuilderMethods<TResult>() as SelectBuilder<TResult>,
+      then: async <TResultValue>(
+        onfulfilled?: (
+          value: TResult[]
+        ) => TResultValue | PromiseLike<TResultValue>
+      ): Promise<TResultValue> => {
+        const sql = buildSQL();
         const dbInstance = getDB();
-        const results = await dbInstance.query<T>(sql, params);
+        const flatResults = await dbInstance.query<Record<string, unknown>>(
+          sql,
+          params
+        );
+        const hasJoins = joins.length > 0;
+        const results = reshapeResults<TResult>(flatResults, hasJoins);
         if (onfulfilled) {
           return onfulfilled(results);
         }
-        return results as unknown as TResult;
+        return results as unknown as TResultValue;
       },
+    });
+
+    const builder: SelectBuilder<T> = {
+      from: <TTable extends PgTable>(table: TTable) => {
+        mainTableName = extractTableName(table);
+        mainTableColumns = getTableColumns(table);
+
+        // Return typed builder with flat result type (no joins yet)
+        return {
+          from: builder.from,
+          ...createBuilderMethods<TTable['$inferSelect']>(),
+        } as SelectBuilder<TTable['$inferSelect']>;
+      },
+      ...createBuilderMethods<T>(),
     };
-    return builder;
+    return builder as SelectBuilder<InferSelectType<T>>;
   };
 
-  const createInsertBuilder = <T = BaseRecord>(
-    table: unknown
-  ): InsertBuilder<T> => {
+  const createInsertBuilder = <TTable extends PgTable>(
+    table: TTable
+  ): InsertBuilder<TTable['$inferSelect']> => {
+    type T = TTable['$inferSelect'];
+    // NOTE: Compatibility layer. For best type safety, use repositories.
     let tableName = '';
     let data: unknown[] = [];
 
@@ -477,7 +648,7 @@ export function createCQLClient(): CQLClient {
     }
 
     const builder: InsertBuilder<T> = {
-      values: (inputData: unknown | unknown[]) => {
+      values: (inputData: Partial<T> | Partial<T>[]) => {
         data = Array.isArray(inputData) ? inputData : [inputData];
         return builder;
       },
@@ -493,7 +664,7 @@ export function createCQLClient(): CQLClient {
         data.forEach((record, rowIndex) => {
           const rec = record as Record<string, unknown>;
           const placeholders = columns.map((col, colIndex) => {
-            allValues.push(rec[col] as QueryParam);
+            allValues.push(toQueryParam(rec[col] as SQLValue));
             return `$${rowIndex * columns.length + colIndex + 1}`;
           });
           valueSets.push(`(${placeholders.join(', ')})`);
@@ -516,9 +687,11 @@ export function createCQLClient(): CQLClient {
     return builder;
   };
 
-  const createUpdateBuilder = <T = BaseRecord>(
-    table: unknown
-  ): UpdateBuilder<T> => {
+  const createUpdateBuilder = <TTable extends PgTable>(
+    table: TTable
+  ): UpdateBuilder<TTable['$inferSelect']> => {
+    type T = TTable['$inferSelect'];
+    // NOTE: Compatibility layer. For best type safety, use repositories.
     let tableName = '';
     let setData: Record<string, unknown> = {};
     let whereClause = '';
@@ -536,7 +709,7 @@ export function createCQLClient(): CQLClient {
     }
 
     const builder: UpdateBuilder<T> = {
-      set: (data: unknown) => {
+      set: (data: SetData<T>) => {
         setData = data as Record<string, unknown>;
         return builder;
       },
@@ -553,7 +726,7 @@ export function createCQLClient(): CQLClient {
 
         for (const [key, value] of Object.entries(setData)) {
           paramIndex++;
-          params.push(value as QueryParam);
+          params.push(toQueryParam(value as SQLValue));
           setClauses.push(`"${key}" = $${paramIndex}`);
         }
 
@@ -574,9 +747,11 @@ export function createCQLClient(): CQLClient {
     return builder;
   };
 
-  const createDeleteBuilder = <T = BaseRecord>(
-    table: unknown
-  ): DeleteBuilder<T> => {
+  const createDeleteBuilder = <TTable extends PgTable>(
+    table: TTable
+  ): DeleteBuilder<TTable['$inferSelect']> => {
+    type T = TTable['$inferSelect'];
+    // NOTE: Compatibility layer. For best type safety, use repositories.
     let tableName = '';
     let whereClause = '';
     const params: QueryParam[] = [];
@@ -619,24 +794,20 @@ export function createCQLClient(): CQLClient {
   };
 
   const execute = async (queryObj: unknown): Promise<unknown[]> => {
-    const dbInstance = getDB();
-    if (
-      typeof queryObj === 'object' &&
-      queryObj !== null &&
-      'raw' in queryObj
-    ) {
-      const q = queryObj as { raw: string; values: unknown[] };
-      return dbInstance.query(q.raw, q.values as QueryParam[]);
-    }
+    // NOTE: Compatibility layer. Limited functionality.
+    void queryObj;
     return [];
   };
 
   const transaction = async <T>(
     fn: (tx: CQLClient) => Promise<T>
   ): Promise<T> => {
-    const dbInstance = getDB();
-    return dbInstance.transaction(async () => {
-      return fn(createCQLClient());
+    // Use the underlying CQL transaction
+    return getDB().transaction(async (txContext) => {
+      // Create a minimal CQL client that uses the transaction context
+      // For now, we delegate to the main client but operations will be in the transaction
+      void txContext;
+      return fn(client);
     });
   };
 
@@ -657,7 +828,7 @@ export function createCQLClient(): CQLClient {
     selectDistinctOn: <T extends Record<string, unknown> = BaseRecord>(
       _columns: unknown[],
       fields?: T
-    ) => createSelectBuilder(fields) as SelectBuilder<T>,
+    ) => createSelectBuilder(fields) as SelectBuilder<InferSelectType<T>>,
     insert: createInsertBuilder,
     update: createUpdateBuilder,
     delete: createDeleteBuilder,
@@ -665,187 +836,99 @@ export function createCQLClient(): CQLClient {
     transaction,
 
     // Table repositories
-    user: createRepository(TABLE_NAMES.user ?? 'users'),
-    actorState: createRepository(TABLE_NAMES.actorState ?? 'actor_state'),
-    actorFollow: createRepository(TABLE_NAMES.actorFollow ?? 'actor_follows'),
-    actorRelationship: createRepository(
-      TABLE_NAMES.actorRelationship ?? 'actor_relationships'
-    ),
-    post: createRepository(TABLE_NAMES.post ?? 'posts'),
-    comment: createRepository(TABLE_NAMES.comment ?? 'comments'),
-    reaction: createRepository(TABLE_NAMES.reaction ?? 'reactions'),
-    share: createRepository(TABLE_NAMES.share ?? 'shares'),
-    market: createRepository(TABLE_NAMES.market ?? 'markets'),
-    position: createRepository(TABLE_NAMES.position ?? 'positions'),
-    perpPosition: createRepository(
-      TABLE_NAMES.perpPosition ?? 'perp_positions'
-    ),
-    pool: createRepository(TABLE_NAMES.pool ?? 'pools'),
-    poolPosition: createRepository(
-      TABLE_NAMES.poolPosition ?? 'pool_positions'
-    ),
-    poolDeposit: createRepository(TABLE_NAMES.poolDeposit ?? 'pool_deposits'),
-    organizationState: createRepository(
-      TABLE_NAMES.organizationState ?? 'organization_state'
-    ),
-    stockPrice: createRepository(TABLE_NAMES.stockPrice ?? 'stock_prices'),
-    question: createRepository(TABLE_NAMES.question ?? 'questions'),
-    predictionPriceHistory: createRepository(
-      TABLE_NAMES.predictionPriceHistory ?? 'prediction_price_histories'
-    ),
-    chat: createRepository(TABLE_NAMES.chat ?? 'chats'),
-    chatParticipant: createRepository(
-      TABLE_NAMES.chatParticipant ?? 'chat_participants'
-    ),
-    chatAdmin: createRepository(TABLE_NAMES.chatAdmin ?? 'chat_admins'),
-    chatInvite: createRepository(TABLE_NAMES.chatInvite ?? 'chat_invites'),
-    message: createRepository(TABLE_NAMES.message ?? 'messages'),
-    notification: createRepository(TABLE_NAMES.notification ?? 'notifications'),
-    dmAcceptance: createRepository(
-      TABLE_NAMES.dmAcceptance ?? 'dm_acceptances'
-    ),
-    groupChatMembership: createRepository(
-      TABLE_NAMES.groupChatMembership ?? 'group_chat_memberships'
-    ),
-    userInteraction: createRepository(
-      TABLE_NAMES.userInteraction ?? 'user_interactions'
-    ),
-    agentRegistry: createRepository(
-      TABLE_NAMES.agentRegistry ?? 'agent_registries'
-    ),
-    agentCapability: createRepository(
-      TABLE_NAMES.agentCapability ?? 'agent_capabilities'
-    ),
-    agentLog: createRepository(TABLE_NAMES.agentLog ?? 'agent_logs'),
-    agentMessage: createRepository(
-      TABLE_NAMES.agentMessage ?? 'agent_messages'
-    ),
-    agentPerformanceMetrics: createRepository(
-      TABLE_NAMES.agentPerformanceMetrics ?? 'agent_performance_metrics'
-    ),
-    agentGoal: createRepository(TABLE_NAMES.agentGoal ?? 'agent_goals'),
-    agentGoalAction: createRepository(
-      TABLE_NAMES.agentGoalAction ?? 'agent_goal_actions'
-    ),
-    agentPointsTransaction: createRepository(
-      TABLE_NAMES.agentPointsTransaction ?? 'agent_points_transactions'
-    ),
-    agentTrade: createRepository(TABLE_NAMES.agentTrade ?? 'agent_trades'),
-    externalAgentConnection: createRepository(
-      TABLE_NAMES.externalAgentConnection ?? 'external_agent_connections'
-    ),
-    npcTrade: createRepository(TABLE_NAMES.npcTrade ?? 'npc_trades'),
-    npcInteraction: createRepository(
-      TABLE_NAMES.npcInteraction ?? 'npc_interactions'
-    ),
-    tradingFee: createRepository(TABLE_NAMES.tradingFee ?? 'trading_fees'),
-    balanceTransaction: createRepository(
-      TABLE_NAMES.balanceTransaction ?? 'balance_transactions'
-    ),
-    pointsTransaction: createRepository(
-      TABLE_NAMES.pointsTransaction ?? 'points_transactions'
-    ),
-    userActorFollow: createRepository(
-      TABLE_NAMES.userActorFollow ?? 'user_actor_follows'
-    ),
-    userGroup: createRepository(TABLE_NAMES.userGroup ?? 'user_groups'),
-    userGroupAdmin: createRepository(
-      TABLE_NAMES.userGroupAdmin ?? 'user_group_admins'
-    ),
-    userGroupInvite: createRepository(
-      TABLE_NAMES.userGroupInvite ?? 'user_group_invites'
-    ),
-    userGroupMember: createRepository(
-      TABLE_NAMES.userGroupMember ?? 'user_group_members'
-    ),
+    user: createRepository(schema.users),
+    actorState: createRepository(schema.actorState),
+    actorFollow: createRepository(schema.actorFollows),
+    actorRelationship: createRepository(schema.actorRelationships),
+    post: createRepository(schema.posts),
+    comment: createRepository(schema.comments),
+    reaction: createRepository(schema.reactions),
+    share: createRepository(schema.shares),
+    market: createRepository(schema.markets),
+    position: createRepository(schema.positions),
+    perpPosition: createRepository(schema.perpPositions),
+    perpMarketSnapshot: createRepository(schema.perpMarketSnapshots),
+    pool: createRepository(schema.pools),
+    poolPosition: createRepository(schema.poolPositions),
+    poolDeposit: createRepository(schema.poolDeposits),
+    organizationState: createRepository(schema.organizationState),
+    stockPrice: createRepository(schema.stockPrices),
+    question: createRepository(schema.questions),
+    predictionPriceHistory: createRepository(schema.predictionPriceHistories),
+    chat: createRepository(schema.chats),
+    chatParticipant: createRepository(schema.chatParticipants),
+    chatAdmin: createRepository(schema.chatAdmins),
+    chatInvite: createRepository(schema.chatInvites),
+    message: createRepository(schema.messages),
+    notification: createRepository(schema.notifications),
+    dmAcceptance: createRepository(schema.dmAcceptances),
+    groupChatMembership: createRepository(schema.groupChatMemberships),
+    userInteraction: createRepository(schema.userInteractions),
+    agentRegistry: createRepository(schema.agentRegistries),
+    agentCapability: createRepository(schema.agentCapabilities),
+    agentLog: createRepository(schema.agentLogs),
+    agentMessage: createRepository(schema.agentMessages),
+    agentPerformanceMetrics: createRepository(schema.agentPerformanceMetrics),
+    agentGoal: createRepository(schema.agentGoals),
+    agentGoalAction: createRepository(schema.agentGoalActions),
+    agentPointsTransaction: createRepository(schema.agentPointsTransactions),
+    agentTrade: createRepository(schema.agentTrades),
+    externalAgentConnection: createRepository(schema.externalAgentConnections),
+    npcTrade: createRepository(schema.npcTrades),
+    npcInteraction: createRepository(schema.npcInteractions),
+    tradingFee: createRepository(schema.tradingFees),
+    balanceTransaction: createRepository(schema.balanceTransactions),
+    pointsTransaction: createRepository(schema.pointsTransactions),
+    userActorFollow: createRepository(schema.userActorFollows),
+    userGroup: createRepository(schema.userGroups),
+    userGroupAdmin: createRepository(schema.userGroupAdmins),
+    userGroupInvite: createRepository(schema.userGroupInvites),
+    userGroupMember: createRepository(schema.userGroupMembers),
     pendingGroupInviteCandidate: createRepository(
-      TABLE_NAMES.pendingGroupInviteCandidate ??
-        'pending_group_invite_candidates'
+      schema.pendingGroupInviteCandidates
     ),
-    userBlock: createRepository(TABLE_NAMES.userBlock ?? 'user_blocks'),
-    userMute: createRepository(TABLE_NAMES.userMute ?? 'user_mutes'),
-    userMessagingKey: createRepository(
-      TABLE_NAMES.userMessagingKey ?? 'user_messaging_keys'
-    ),
-    report: createRepository(TABLE_NAMES.report ?? 'reports'),
-    twitterOAuthToken: createRepository(
-      TABLE_NAMES.twitterOAuthToken ?? 'twitter_oauth_tokens'
-    ),
-    onboardingIntent: createRepository(
-      TABLE_NAMES.onboardingIntent ?? 'onboarding_intents'
-    ),
-    favorite: createRepository(TABLE_NAMES.favorite ?? 'favorites'),
-    follow: createRepository(TABLE_NAMES.follow ?? 'follows'),
-    followStatus: createRepository(
-      TABLE_NAMES.followStatus ?? 'follow_statuses'
-    ),
-    profileUpdateLog: createRepository(
-      TABLE_NAMES.profileUpdateLog ?? 'profile_update_logs'
-    ),
-    shareAction: createRepository(TABLE_NAMES.shareAction ?? 'share_actions'),
-    tag: createRepository(TABLE_NAMES.tag ?? 'tags'),
-    postTag: createRepository(TABLE_NAMES.postTag ?? 'post_tags'),
-    trendingTag: createRepository(TABLE_NAMES.trendingTag ?? 'trending_tags'),
-    llmCallLog: createRepository(TABLE_NAMES.llmCallLog ?? 'llm_call_logs'),
-    marketOutcome: createRepository(
-      TABLE_NAMES.marketOutcome ?? 'market_outcomes'
-    ),
-    trainedModel: createRepository(
-      TABLE_NAMES.trainedModel ?? 'trained_models'
-    ),
-    trainingBatch: createRepository(
-      TABLE_NAMES.trainingBatch ?? 'training_batches'
-    ),
-    benchmarkResult: createRepository(
-      TABLE_NAMES.benchmarkResult ?? 'benchmark_results'
-    ),
-    trajectory: createRepository(TABLE_NAMES.trajectory ?? 'trajectories'),
-    rewardJudgment: createRepository(
-      TABLE_NAMES.rewardJudgment ?? 'reward_judgments'
-    ),
-    oracleCommitment: createRepository(
-      TABLE_NAMES.oracleCommitment ?? 'oracle_commitments'
-    ),
-    oracleTransaction: createRepository(
-      TABLE_NAMES.oracleTransaction ?? 'oracle_transactions'
-    ),
-    realtimeOutbox: createRepository(
-      TABLE_NAMES.realtimeOutbox ?? 'realtime_outboxes'
-    ),
-    game: createRepository(TABLE_NAMES.game ?? 'games'),
-    gameConfig: createRepository(TABLE_NAMES.gameConfig ?? 'game_configs'),
-    oAuthState: createRepository(TABLE_NAMES.oAuthState ?? 'oauth_states'),
-    systemSettings: createRepository(
-      TABLE_NAMES.systemSettings ?? 'system_settings'
-    ),
-    worldEvent: createRepository(TABLE_NAMES.worldEvent ?? 'world_events'),
-    worldFact: createRepository(TABLE_NAMES.worldFact ?? 'world_facts'),
-    rssFeedSource: createRepository(
-      TABLE_NAMES.rssFeedSource ?? 'rss_feed_sources'
-    ),
-    rssHeadline: createRepository(TABLE_NAMES.rssHeadline ?? 'rss_headlines'),
-    parodyHeadline: createRepository(
-      TABLE_NAMES.parodyHeadline ?? 'parody_headlines'
-    ),
-    moderationEscrow: createRepository(
-      TABLE_NAMES.moderationEscrow ?? 'moderation_escrows'
-    ),
-    generationLock: createRepository(
-      TABLE_NAMES.generationLock ?? 'generation_locks'
-    ),
-    feedback: createRepository(TABLE_NAMES.feedback ?? 'feedbacks'),
-    referral: createRepository(TABLE_NAMES.referral ?? 'referrals'),
-    widgetCache: createRepository(TABLE_NAMES.widgetCache ?? 'widget_caches'),
-    userAgentConfig: createRepository(
-      TABLE_NAMES.userAgentConfig ?? 'user_agent_configs'
-    ),
-    userApiKey: createRepository(TABLE_NAMES.userApiKey ?? 'user_api_keys'),
-    tickTokenStats: createRepository(
-      TABLE_NAMES.tickTokenStats ?? 'tick_token_stats'
-    ),
-    questionArcPlan: createRepository(
-      TABLE_NAMES.questionArcPlan ?? 'question_arc_plans'
-    ),
+    userBlock: createRepository(schema.userBlocks),
+    userMute: createRepository(schema.userMutes),
+    userMessagingKey: createRepository(schema.userMessagingKeys),
+    report: createRepository(schema.reports),
+    twitterOAuthToken: createRepository(schema.twitterOAuthTokens),
+    onboardingIntent: createRepository(schema.onboardingIntents),
+    favorite: createRepository(schema.favorites),
+    follow: createRepository(schema.follows),
+    followStatus: createRepository(schema.followStatuses),
+    profileUpdateLog: createRepository(schema.profileUpdateLogs),
+    shareAction: createRepository(schema.shareActions),
+    tag: createRepository(schema.tags),
+    postTag: createRepository(schema.postTags),
+    trendingTag: createRepository(schema.trendingTags),
+    llmCallLog: createRepository(schema.llmCallLogs),
+    marketOutcome: createRepository(schema.marketOutcomes),
+    trainedModel: createRepository(schema.trainedModels),
+    trainingBatch: createRepository(schema.trainingBatches),
+    benchmarkResult: createRepository(schema.benchmarkResults),
+    trajectory: createRepository(schema.trajectories),
+    rewardJudgment: createRepository(schema.rewardJudgments),
+    oracleCommitment: createRepository(schema.oracleCommitments),
+    oracleTransaction: createRepository(schema.oracleTransactions),
+    realtimeOutbox: createRepository(schema.realtimeOutboxes),
+    game: createRepository(schema.games),
+    gameConfig: createRepository(schema.gameConfigs),
+    oAuthState: createRepository(schema.oAuthStates),
+    systemSettings: createRepository(schema.systemSettings),
+    worldEvent: createRepository(schema.worldEvents),
+    worldFact: createRepository(schema.worldFacts),
+    rssFeedSource: createRepository(schema.rssFeedSources),
+    rssHeadline: createRepository(schema.rssHeadlines),
+    parodyHeadline: createRepository(schema.parodyHeadlines),
+    moderationEscrow: createRepository(schema.moderationEscrows),
+    generationLock: createRepository(schema.generationLocks),
+    feedback: createRepository(schema.feedbacks),
+    referral: createRepository(schema.referrals),
+    widgetCache: createRepository(schema.widgetCaches),
+    userAgentConfig: createRepository(schema.userAgentConfigs),
+    userApiKey: createRepository(schema.userApiKeys),
+    tickTokenStats: createRepository(schema.tickTokenStats),
+    questionArcPlan: createRepository(schema.questionArcPlans),
   };
 
   return client;

@@ -506,7 +506,7 @@ export const PostCard = memo(function PostCard({
         // Regular post - Show content as normal
         <div className="post-content mb-4 w-full whitespace-pre-wrap break-words text-foreground leading-relaxed">
           <TaggedText
-            text={post.content || ''}
+            text={post.content}
             onTagClick={(tag) => {
               if (tag.startsWith('@')) {
                 // Handle @mentions - route to profile

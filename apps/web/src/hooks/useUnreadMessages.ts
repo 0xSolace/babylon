@@ -1,5 +1,5 @@
 import { useJejuAuth } from '@babylon/auth/client';
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 
 /**
@@ -9,6 +9,11 @@ interface UnreadCounts {
   /** Number of pending DM requests from anonymous users */
   pendingDMs: number;
   /** Whether there are new messages in existing chats */
+  hasNewMessages: boolean;
+}
+
+interface UnreadApiResponse {
+  pendingDMs: number;
   hasNewMessages: boolean;
 }
 
@@ -43,52 +48,46 @@ interface UnreadCounts {
 export function useUnreadMessages() {
   const { authenticated } = useAuth();
   const { getAccessToken } = useJejuAuth();
-  const [counts, setCounts] = useState<UnreadCounts>({
-    pendingDMs: 0,
-    hasNewMessages: false,
-  });
-  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    // Only poll if user is authenticated
-    if (!authenticated) {
-      setCounts({ pendingDMs: 0, hasNewMessages: false });
-      return;
-    }
+  const { data: counts = { pendingDMs: 0, hasNewMessages: false }, isLoading } =
+    useQuery({
+      queryKey: ['unreadMessages'],
+      queryFn: async (): Promise<UnreadCounts> => {
+        const token = await getAccessToken();
+        if (!token) {
+          return { pendingDMs: 0, hasNewMessages: false };
+        }
 
-    // Fetch unread counts
-    const fetchCounts = async () => {
-      const token = await getAccessToken();
-      if (!token) return;
+        const response = await fetch('/api/chats/unread-count', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-      const response = await fetch('/api/chats/unread-count', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch unread count: ${response.status}`);
+        }
 
-      if (!response.ok) {
-        setIsLoading(false);
-        return;
-      }
+        const data = (await response.json()) as UnreadApiResponse;
 
-      const data = await response.json();
-      setCounts({
-        pendingDMs: data.pendingDMs || 0,
-        hasNewMessages: data.hasNewMessages || false,
-      });
-      setIsLoading(false);
-    };
+        if (
+          typeof data.pendingDMs !== 'number' ||
+          typeof data.hasNewMessages !== 'boolean'
+        ) {
+          throw new Error(
+            'Invalid unread count response: missing required fields'
+          );
+        }
 
-    // Initial fetch
-    setIsLoading(true);
-    fetchCounts();
-
-    // Poll every 30 seconds
-    const interval = setInterval(fetchCounts, 30000);
-
-    return () => clearInterval(interval);
-  }, [authenticated, getAccessToken]);
+        return {
+          pendingDMs: data.pendingDMs,
+          hasNewMessages: data.hasNewMessages,
+        };
+      },
+      enabled: authenticated,
+      refetchInterval: 30000,
+      staleTime: 15000,
+    });
 
   return {
     ...counts,

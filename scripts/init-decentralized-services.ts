@@ -16,7 +16,6 @@
  */
 
 import { logger } from '@babylon/shared';
-import { $ } from 'bun';
 
 // Configuration
 const JEJU_GATEWAY_URL =
@@ -46,7 +45,10 @@ async function checkService(name: string, url: string): Promise<ServiceStatus> {
 
 async function checkJejuGateway(): Promise<boolean> {
   const status = await checkService('Jeju Gateway', JEJU_GATEWAY_URL);
-  return status.healthy;
+  if (!status.healthy) {
+    throw new Error('[Init] Jeju gateway not reachable');
+  }
+  return true;
 }
 
 async function initializeCQL(): Promise<void> {
@@ -62,8 +64,7 @@ async function initializeCQL(): Promise<void> {
   }).catch(() => null);
 
   if (!response?.ok) {
-    logger.warn('[Init] CQL not available, will use PostgreSQL fallback');
-    return;
+    throw new Error('[Init] CQL not available');
   }
 
   // Set environment variables for the app
@@ -84,8 +85,7 @@ async function initializeCache(): Promise<void> {
   }).catch(() => null);
 
   if (!response?.ok) {
-    logger.warn('[Init] Cache service not available, will use Redis fallback');
-    return;
+    throw new Error('[Init] Cache service not available');
   }
 
   process.env.JEJU_CACHE_SERVICE_URL = cacheUrl;
@@ -103,8 +103,7 @@ async function initializeStorage(): Promise<void> {
   }).catch(() => null);
 
   if (!response?.ok) {
-    logger.warn('[Init] Storage service not available');
-    return;
+    throw new Error('[Init] Storage service not available');
   }
 
   process.env.JEJU_STORAGE_SERVICE_URL = storageUrl;
@@ -122,8 +121,7 @@ async function initializeKMS(): Promise<void> {
   }).catch(() => null);
 
   if (!response?.ok) {
-    logger.warn('[Init] KMS service not available');
-    return;
+    throw new Error('[Init] KMS service not available');
   }
 
   process.env.JEJU_KMS_SERVICE_URL = kmsUrl;
@@ -204,18 +202,7 @@ async function main(): Promise<void> {
   console.log('[Jeju] Initializing decentralized services...');
 
   // Check if Jeju gateway is available
-  const gatewayAvailable = await checkJejuGateway();
-
-  if (!gatewayAvailable) {
-    console.log('');
-    console.log('⚠️  Jeju services not available');
-    console.log('');
-    console.log('To start Jeju:');
-    console.log('  cd /path/to/jeju && bun run dev');
-    console.log('');
-    console.log('Running with fallback services (PostgreSQL, Redis)...');
-    return;
-  }
+  await checkJejuGateway();
 
   // Initialize all services
   const services: ServiceStatus[] = [];

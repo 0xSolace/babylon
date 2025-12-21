@@ -21,7 +21,7 @@ import {
   hasBlocked,
   hasMuted,
 } from '@babylon/db';
-import { nanoid } from 'nanoid';
+import { v4 as uuidv4 } from 'uuid';
 
 let testUser1: User;
 let testUser2: User;
@@ -36,7 +36,7 @@ beforeAll(async () => {
     where: { username: 'mod-e2e-user1' },
     update: { updatedAt: new Date() },
     create: {
-      id: nanoid(),
+      id: uuidv4(),
       username: 'mod-e2e-user1',
       displayName: 'E2E Test User 1',
       walletAddress: '0xE2EUSER10000000000000000000000000000',
@@ -56,7 +56,7 @@ beforeAll(async () => {
     where: { username: 'mod-e2e-user2' },
     update: { updatedAt: new Date() },
     create: {
-      id: nanoid(),
+      id: uuidv4(),
       username: 'mod-e2e-user2',
       displayName: 'E2E Test User 2',
       walletAddress: '0xE2EUSER20000000000000000000000000000',
@@ -76,7 +76,7 @@ beforeAll(async () => {
     where: { username: 'mod-e2e-user3' },
     update: { updatedAt: new Date() },
     create: {
-      id: nanoid(),
+      id: uuidv4(),
       username: 'mod-e2e-user3',
       displayName: 'E2E Test User 3',
       walletAddress: '0xE2EUSER30000000000000000000000000000',
@@ -97,7 +97,7 @@ beforeAll(async () => {
     where: { username: 'mod-e2e-npc' },
     update: { updatedAt: new Date() },
     create: {
-      id: nanoid(),
+      id: uuidv4(),
       username: 'mod-e2e-npc',
       displayName: 'E2E Test NPC',
       walletAddress: '0xE2ENPC000000000000000000000000000000',
@@ -149,8 +149,8 @@ describe('Moderation Filters - Block/Mute User IDs', () => {
     // Block user2 and user3
     await db.userBlock.createMany({
       data: [
-        { id: nanoid(), blockerId: testUser1.id, blockedId: testUser2.id },
-        { id: nanoid(), blockerId: testUser1.id, blockedId: testUser3.id },
+        { id: uuidv4(), blockerId: testUser1.id, blockedId: testUser2.id },
+        { id: uuidv4(), blockerId: testUser1.id, blockedId: testUser3.id },
       ],
     });
 
@@ -173,7 +173,7 @@ describe('Moderation Filters - Block/Mute User IDs', () => {
 
     // Mute user2
     await db.userMute.create({
-      data: { id: nanoid(), muterId: testUser1.id, mutedId: testUser2.id },
+      data: { id: uuidv4(), muterId: testUser1.id, mutedId: testUser2.id },
     });
 
     const mutedIds = await getMutedUserIds(testUser1.id);
@@ -194,7 +194,7 @@ describe('Moderation Filters - Block/Mute User IDs', () => {
 
     // User3 blocks user1
     await db.userBlock.create({
-      data: { id: nanoid(), blockerId: testUser3.id, blockedId: testUser1.id },
+      data: { id: uuidv4(), blockerId: testUser3.id, blockedId: testUser1.id },
     });
 
     const blockedByIds = await getBlockedByUserIds(testUser1.id);
@@ -238,7 +238,7 @@ describe('NPC Moderation - Special Handling', () => {
     // Block the NPC
     const block = await db.userBlock.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         blockerId: testUser1.id,
         blockedId: testNPC.id,
         reason: "Don't want to be added to group chats",
@@ -264,7 +264,7 @@ describe('NPC Moderation - Special Handling', () => {
     // Mute the NPC
     const mute = await db.userMute.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         muterId: testUser1.id,
         mutedId: testNPC.id,
         reason: 'Too many posts',
@@ -282,7 +282,7 @@ describe('NPC Moderation - Special Handling', () => {
     // Create post from NPC
     const npcPost = await db.post.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         content: 'NPC post that should be filtered',
         authorId: testNPC.id,
         timestamp: new Date(),
@@ -314,7 +314,7 @@ describe('Feed Filtering - Integration', () => {
     // Create posts from blocked and non-blocked users
     const post1 = await db.post.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         content: 'Post from blocked user',
         authorId: testUser2.id, // Blocked by user1
         timestamp: new Date(),
@@ -323,7 +323,7 @@ describe('Feed Filtering - Integration', () => {
 
     const post2 = await db.post.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         content: 'Post from user who blocked me',
         authorId: testUser3.id, // Blocked user1
         timestamp: new Date(),
@@ -436,7 +436,7 @@ describe('Notification Filtering - Verification', () => {
     // User3 has blocked user1, so this should be filtered
     const notification = await db.notification.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         userId: testUser1.id,
         actorId: testUser3.id,
         type: 'follow',
@@ -469,7 +469,7 @@ describe('Share/Repost Blocking - Verification', () => {
     // Create a post from user1
     const post = await db.post.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         content: 'Post to be shared',
         authorId: testUser1.id,
         timestamp: new Date(),

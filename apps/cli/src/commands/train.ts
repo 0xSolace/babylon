@@ -74,8 +74,8 @@ async function configureLLMCaller() {
         fullPrompt,
         undefined,
         {
-          maxTokens: params.maxTokens || 1000,
-          temperature: params.temperature || 0.3,
+          maxTokens: params.maxTokens ?? 1000,
+          temperature: params.temperature ?? 0.3,
           format: 'json',
         }
       );
@@ -176,7 +176,11 @@ async function getArchetypeStats(): Promise<ArchetypeStats> {
       )
     );
 
-  const totalTrajectories = totalResult[0]?.count || 0;
+  if (totalResult.length === 0) {
+    throw new Error('Count query returned no results');
+  }
+
+  const totalTrajectories = totalResult[0]!.count;
 
   // Count unscored
   const unscoredResult = await db
@@ -191,7 +195,11 @@ async function getArchetypeStats(): Promise<ArchetypeStats> {
       )
     );
 
-  const unscoredTrajectories = unscoredResult[0]?.count || 0;
+  if (unscoredResult.length === 0) {
+    throw new Error('Count query returned no results');
+  }
+
+  const unscoredTrajectories = unscoredResult[0]!.count;
 
   return {
     totalTrajectories,
@@ -286,8 +294,8 @@ async function exportForTraining(
       trajectoryId: traj.trajectoryId,
       agentId: traj.agentId,
       stepsJson: traj.stepsJson,
-      scenarioId: traj.scenarioId ?? undefined,
-      finalPnL: traj.finalPnL ?? undefined,
+      scenarioId: traj.scenarioId,
+      finalPnL: traj.finalPnL,
     });
 
     const exportRecord = {
@@ -1243,7 +1251,7 @@ function processAction(
 
   switch (action.actionType) {
     case 'buy_prediction': {
-      const amount = (action.parameters.amount as number) || 100;
+      const amount = (action.parameters.amount as number) ?? 100;
       if (balance >= amount) {
         state.agentBalances.set(agentId, balance - amount);
         state.agentPositions.set(agentId, positions + 1);

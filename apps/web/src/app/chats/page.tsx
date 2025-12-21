@@ -204,7 +204,7 @@ export default function ChatsPage() {
               <div className="flex h-full flex-1 flex-col bg-background">
                 <ChatView
                   chatDetails={chatDetails}
-                  currentUserId={user?.id}
+                  currentUserId={user ? user.id : undefined}
                   authenticated={authenticated}
                   sseConnected={sseConnected}
                   loading={loadingChat}
@@ -278,7 +278,7 @@ export default function ChatsPage() {
                 >
                   <ChatView
                     chatDetails={chatDetails}
-                    currentUserId={user?.id}
+                    currentUserId={user ? user.id : undefined}
                     authenticated={authenticated}
                     sseConnected={sseConnected}
                     loading={loadingChat}

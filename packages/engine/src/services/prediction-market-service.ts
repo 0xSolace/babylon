@@ -6,15 +6,8 @@
  * - Recording and retrieving price history snapshots
  */
 
-import type { PredictionPriceHistory } from '@babylon/db';
-import {
-  Decimal,
-  db,
-  desc,
-  eq,
-  predictionPriceHistories,
-  type Transaction,
-} from '@babylon/db';
+import type { DbClient, PredictionPriceHistory } from '@babylon/db';
+import { Decimal, db, desc, eq, predictionPriceHistories } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 
 // =============================================================================
@@ -184,7 +177,7 @@ export class PredictionMarketService {
    */
   static async recordSnapshot(
     snapshot: PredictionPriceSnapshot,
-    tx?: Transaction
+    tx?: DbClient
   ): Promise<void> {
     const client = tx ?? db;
 

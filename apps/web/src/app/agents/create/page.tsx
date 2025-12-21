@@ -731,7 +731,7 @@ export default function CreateAgentPage() {
     );
   }
 
-  const totalPoints = user?.reputationPoints || 0;
+  const totalPoints = user ? user.reputationPoints : 0;
 
   if (!isInitialized) {
     return (

@@ -145,7 +145,7 @@ export const POST = withErrorHandling(
       id: true,
       isActor: true,
     });
-    const targetId = targetUser?.id ?? targetIdentifier;
+    const targetId = targetUser ? targetUser.id : targetIdentifier;
 
     // Prevent self-following
     if (targetUser && user.userId === targetId) {
@@ -234,15 +234,20 @@ export const POST = withErrorHandling(
       trackServerEvent(user.userId, 'user_followed', {
         targetUserId: targetId,
         targetType: 'user',
-        ...(targetUserDetails?.username && {
-          targetUsername: targetUserDetails.username,
-        }),
+        ...(targetUserDetails &&
+          targetUserDetails.username && {
+            targetUsername: targetUserDetails.username,
+          }),
       }).catch((error) => {
         logger.warn('Failed to track user_followed event', { error });
       });
 
       if (!newFollow) {
         throw new InternalServerError('Failed to create follow record');
+      }
+
+      if (!targetUserDetails) {
+        throw new InternalServerError('Failed to fetch target user details');
       }
 
       return successResponse(
@@ -317,14 +322,20 @@ export const POST = withErrorHandling(
     trackServerEvent(user.userId, 'user_followed', {
       targetUserId: targetId,
       targetType: 'actor',
-      ...(actorDetails?.name && { actorName: actorDetails.name }),
-      ...(actorDetails?.tier && { actorTier: actorDetails.tier }),
+      ...(actorDetails &&
+        actorDetails.name && { actorName: actorDetails.name }),
+      ...(actorDetails &&
+        actorDetails.tier && { actorTier: actorDetails.tier }),
     }).catch((error) => {
       logger.warn('Failed to track user_followed event', { error });
     });
 
     if (!createdFollow) {
       throw new InternalServerError('Failed to fetch created follow record');
+    }
+
+    if (!actorDetails) {
+      throw new InternalServerError('Failed to fetch actor details');
     }
 
     return successResponse(
@@ -366,7 +377,7 @@ export const DELETE = withErrorHandling(
       id: true,
       isActor: true,
     });
-    const targetId = targetUser?.id ?? targetIdentifier;
+    const targetId = targetUser ? targetUser.id : targetIdentifier;
 
     // If targetUser has isActor flag, treat as actor (not regular user)
     if (targetUser && !targetUser.isActor) {

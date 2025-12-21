@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { usePredictionMarketStream } from '@/hooks/usePredictionMarketStream';
@@ -40,6 +41,17 @@ interface UsePredictionHistoryOptions {
   seed?: SeedSnapshot;
 }
 
+interface HistoryApiPoint {
+  yesPrice: number;
+  noPrice: number;
+  liquidity?: number;
+  timestamp: string;
+}
+
+interface HistoryApiResponse {
+  history?: HistoryApiPoint[];
+}
+
 /**
  * Hook for fetching and managing prediction market price history.
  *
@@ -73,9 +85,12 @@ export function usePredictionHistory(
 ) {
   const limit = options?.limit ?? 200;
   const seedRef = useRef<SeedSnapshot | undefined>(options?.seed);
-  const [history, setHistory] = useState<PredictionHistoryPoint[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  // Local state for SSE-updated history
+  const [localHistory, setLocalHistory] = useState<PredictionHistoryPoint[]>(
+    []
+  );
 
   useEffect(() => {
     seedRef.current = options?.seed;
@@ -87,14 +102,7 @@ export function usePredictionHistory(
   ]);
 
   const formatHistory = useCallback(
-    (
-      points: Array<{
-        yesPrice: number;
-        noPrice: number;
-        liquidity?: number;
-        timestamp: string;
-      }>
-    ): PredictionHistoryPoint[] => {
+    (points: HistoryApiPoint[]): PredictionHistoryPoint[] => {
       let prevLiquidity: number | null = null;
       return points.map((point) => {
         const liquidity = Number(point.liquidity ?? prevLiquidity ?? 0);
@@ -115,7 +123,7 @@ export function usePredictionHistory(
     []
   );
 
-  const fallbackFromSeed = useCallback(() => {
+  const fallbackFromSeed = useCallback((): PredictionHistoryPoint[] => {
     const seed = seedRef.current;
     if (!seed) return [];
     const yesShares = seed.yesShares ?? 0;
@@ -133,33 +141,40 @@ export function usePredictionHistory(
     ];
   }, []);
 
-  const fetchHistory = useCallback(async () => {
-    if (!marketId) {
-      setHistory([]);
-      setLoading(false);
-      return;
-    }
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['predictionHistory', marketId, limit],
+    queryFn: async (): Promise<PredictionHistoryPoint[]> => {
+      const response = await fetch(
+        `/api/markets/predictions/${marketId}/history?limit=${limit}`
+      );
+      const responseData = (await response.json()) as HistoryApiResponse;
 
-    setLoading(true);
-    setError(null);
+      if (
+        response.ok &&
+        Array.isArray(responseData.history) &&
+        responseData.history.length > 0
+      ) {
+        return formatHistory(responseData.history);
+      }
+      return fallbackFromSeed();
+    },
+    enabled: !!marketId,
+    staleTime: 30000,
+  });
 
-    const response = await fetch(
-      `/api/markets/predictions/${marketId}/history?limit=${limit}`
-    );
-    const data = await response.json();
-
-    if (response.ok && Array.isArray(data.history) && data.history.length > 0) {
-      setHistory(formatHistory(data.history));
-    } else {
-      setHistory(fallbackFromSeed());
-    }
-
-    setLoading(false);
-  }, [marketId, limit, formatHistory, fallbackFromSeed]);
-
+  // Sync query data to local state when it changes
   useEffect(() => {
-    void fetchHistory();
-  }, [fetchHistory]);
+    if (data) {
+      setLocalHistory(data);
+    }
+  }, [data]);
+
+  // Clear history when marketId changes to null
+  useEffect(() => {
+    if (!marketId) {
+      setLocalHistory([]);
+    }
+  }, [marketId]);
 
   const appendPoint = useCallback(
     (
@@ -168,7 +183,7 @@ export function usePredictionHistory(
       liquidity: number | undefined,
       timestamp: number
     ) => {
-      setHistory((prev) => {
+      setLocalHistory((prev) => {
         const lastPoint = prev.length > 0 ? prev[prev.length - 1] : null;
         const normalizedLiquidity = Number.isFinite(liquidity)
           ? Number(liquidity)
@@ -208,10 +223,18 @@ export function usePredictionHistory(
     },
   });
 
+  const refresh = useCallback(() => {
+    if (marketId) {
+      void queryClient.invalidateQueries({
+        queryKey: ['predictionHistory', marketId, limit],
+      });
+    }
+  }, [queryClient, marketId, limit]);
+
   return {
-    history,
-    loading,
-    error,
-    refresh: fetchHistory,
+    history: localHistory,
+    loading: isLoading,
+    error: error ? (error as Error).message : null,
+    refresh,
   };
 }

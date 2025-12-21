@@ -418,7 +418,18 @@ export class AgentRegistryService {
       }
     }
 
-    const registrationsRaw = await db
+    // Define type for joined query result - Drizzle returns object with table names as keys
+    type AgentCapabilitySelect = typeof agentCapabilities.$inferSelect;
+    type ExternalAgentConnectionSelect =
+      typeof externalAgentConnections.$inferSelect;
+    type JoinedRegistryRow = {
+      AgentRegistry: AgentRegistry;
+      AgentCapability: AgentCapabilitySelect | null;
+      User: User | null;
+      ExternalAgentConnection: ExternalAgentConnectionSelect | null;
+    };
+
+    const registrationsRaw = (await db
       .select()
       .from(agentRegistries)
       .leftJoin(
@@ -436,24 +447,59 @@ export class AgentRegistryService {
         desc(agentRegistries.registeredAt)
       )
       .limit(limit)
-      .offset(offset);
+      .offset(offset)) as unknown as JoinedRegistryRow[];
 
     // Map to registry with relations format, getting Actor from static registry
-    const registrations: RegistryWithRelations[] = registrationsRaw.map(
-      (row) => {
-        const actorId = row.AgentRegistry.actorId;
+    const registrations: RegistryWithRelations[] = registrationsRaw
+      .filter((row) => row.AgentRegistry !== null)
+      .map((row) => {
+        const agentReg = row.AgentRegistry;
+        const actorId = agentReg.actorId;
         const staticActor = actorId
           ? StaticDataRegistry.getActor(actorId)
           : null;
         return {
-          ...row.AgentRegistry,
-          capabilities: row.AgentCapability,
-          User: row.User,
+          id: agentReg.id,
+          agentId: agentReg.agentId,
+          type: agentReg.type,
+          status: agentReg.status,
+          trustLevel: agentReg.trustLevel,
+          userId: agentReg.userId,
+          actorId: agentReg.actorId,
+          name: agentReg.name,
+          systemPrompt: agentReg.systemPrompt,
+          runtimeInstanceId: agentReg.runtimeInstanceId,
+          discoveryCardVersion: agentReg.discoveryCardVersion,
+          discoveryEndpointA2a: agentReg.discoveryEndpointA2a,
+          discoveryEndpointMcp: agentReg.discoveryEndpointMcp,
+          discoveryEndpointRpc: agentReg.discoveryEndpointRpc,
+          discoveryAuthRequired: agentReg.discoveryAuthRequired,
+          discoveryAuthMethods: agentReg.discoveryAuthMethods,
+          discoveryRateLimit: agentReg.discoveryRateLimit,
+          discoveryCostPerAction: agentReg.discoveryCostPerAction,
+          onChainTokenId: agentReg.onChainTokenId,
+          onChainTxHash: agentReg.onChainTxHash,
+          onChainServerWallet: agentReg.onChainServerWallet,
+          onChainReputationScore: agentReg.onChainReputationScore,
+          onChainChainId: agentReg.onChainChainId,
+          onChainIdentityRegistry: agentReg.onChainIdentityRegistry,
+          onChainReputationSystem: agentReg.onChainReputationSystem,
+          agent0TokenId: agentReg.agent0TokenId,
+          agent0MetadataCID: agentReg.agent0MetadataCID,
+          agent0SubgraphOwner: agentReg.agent0SubgraphOwner,
+          agent0SubgraphMetadataURI: agentReg.agent0SubgraphMetadataURI,
+          agent0SubgraphTimestamp: agentReg.agent0SubgraphTimestamp,
+          agent0DiscoveryEndpoint: agentReg.agent0DiscoveryEndpoint,
+          registeredAt: agentReg.registeredAt,
+          lastActiveAt: agentReg.lastActiveAt,
+          terminatedAt: agentReg.terminatedAt,
+          updatedAt: agentReg.updatedAt,
+          capabilities: row.AgentCapability ?? null,
+          User: row.User ?? null,
           Actor: staticActor,
-          externalConnection: row.ExternalAgentConnection,
+          externalConnection: row.ExternalAgentConnection ?? null,
         };
-      }
-    );
+      });
 
     // Filter by required capabilities if specified
     let filtered = registrations;
@@ -675,7 +721,7 @@ export class AgentRegistryService {
       .update(agentRegistries)
       .set({
         userId,
-        trustLevel: Math.max(registry.trustLevel, 1), // At least BASIC trust when linked
+        trustLevel: Math.max(Number(registry.trustLevel), 1), // At least BASIC trust when linked
       })
       .where(eq(agentRegistries.agentId, agentId));
 
@@ -708,17 +754,18 @@ export class AgentRegistryService {
       if (!agent.authCredentials) continue;
 
       // Decrypt and verify credentials - continue to next agent if this one fails
-      const decrypted = this.decryptCredentials(agent.authCredentials);
+      const decrypted = this.decryptCredentials(String(agent.authCredentials));
       const credentials = JSON.parse(decrypted) as { apiKeyHash?: string };
 
+      const externalId = String(agent.externalId);
       if (
         credentials?.apiKeyHash &&
         verifyApiKey(apiKey, credentials.apiKeyHash)
       ) {
-        const registry = await this.getRegistryWithRelations(agent.externalId);
+        const registry = await this.getRegistryWithRelations(externalId);
         if (!registry) {
           logger.warn(
-            `Valid key for external agent ${agent.externalId} but missing AgentRegistry link`,
+            `Valid key for external agent ${externalId} but missing AgentRegistry link`,
             undefined,
             'AgentRegistryService'
           );
@@ -737,7 +784,18 @@ export class AgentRegistryService {
   private async getRegistryWithRelations(
     agentId: string
   ): Promise<RegistryWithRelations | null> {
-    const [row] = await db
+    // Define type for joined query result - Drizzle returns object with table names as keys
+    type AgentCapabilitySelect = typeof agentCapabilities.$inferSelect;
+    type ExternalAgentConnectionSelect =
+      typeof externalAgentConnections.$inferSelect;
+    type JoinedRegistryRow = {
+      AgentRegistry: AgentRegistry;
+      AgentCapability: AgentCapabilitySelect | null;
+      User: User | null;
+      ExternalAgentConnection: ExternalAgentConnectionSelect | null;
+    };
+
+    const rows = (await db
       .select()
       .from(agentRegistries)
       .leftJoin(
@@ -750,20 +808,56 @@ export class AgentRegistryService {
         eq(externalAgentConnections.agentRegistryId, agentRegistries.id)
       )
       .where(eq(agentRegistries.agentId, agentId))
-      .limit(1);
+      .limit(1)) as unknown as JoinedRegistryRow[];
 
-    if (!row) return null;
+    const row = rows[0];
+    if (!row || !row.AgentRegistry) return null;
 
     // Get Actor from static registry
-    const actorId = row.AgentRegistry.actorId;
+    const agentReg = row.AgentRegistry;
+    const actorId = agentReg.actorId;
     const staticActor = actorId ? StaticDataRegistry.getActor(actorId) : null;
 
     return {
-      ...row.AgentRegistry,
-      capabilities: row.AgentCapability,
-      User: row.User,
+      id: agentReg.id,
+      agentId: agentReg.agentId,
+      type: agentReg.type,
+      status: agentReg.status,
+      trustLevel: agentReg.trustLevel,
+      userId: agentReg.userId,
+      actorId: agentReg.actorId,
+      name: agentReg.name,
+      systemPrompt: agentReg.systemPrompt,
+      runtimeInstanceId: agentReg.runtimeInstanceId,
+      discoveryCardVersion: agentReg.discoveryCardVersion,
+      discoveryEndpointA2a: agentReg.discoveryEndpointA2a,
+      discoveryEndpointMcp: agentReg.discoveryEndpointMcp,
+      discoveryEndpointRpc: agentReg.discoveryEndpointRpc,
+      discoveryAuthRequired: agentReg.discoveryAuthRequired,
+      discoveryAuthMethods: agentReg.discoveryAuthMethods,
+      discoveryRateLimit: agentReg.discoveryRateLimit,
+      discoveryCostPerAction: agentReg.discoveryCostPerAction,
+      onChainTokenId: agentReg.onChainTokenId,
+      onChainTxHash: agentReg.onChainTxHash,
+      onChainServerWallet: agentReg.onChainServerWallet,
+      onChainReputationScore: agentReg.onChainReputationScore,
+      onChainChainId: agentReg.onChainChainId,
+      onChainIdentityRegistry: agentReg.onChainIdentityRegistry,
+      onChainReputationSystem: agentReg.onChainReputationSystem,
+      agent0TokenId: agentReg.agent0TokenId,
+      agent0MetadataCID: agentReg.agent0MetadataCID,
+      agent0SubgraphOwner: agentReg.agent0SubgraphOwner,
+      agent0SubgraphMetadataURI: agentReg.agent0SubgraphMetadataURI,
+      agent0SubgraphTimestamp: agentReg.agent0SubgraphTimestamp,
+      agent0DiscoveryEndpoint: agentReg.agent0DiscoveryEndpoint,
+      registeredAt: agentReg.registeredAt,
+      lastActiveAt: agentReg.lastActiveAt,
+      terminatedAt: agentReg.terminatedAt,
+      updatedAt: agentReg.updatedAt,
+      capabilities: row.AgentCapability ?? null,
+      User: row.User ?? null,
       Actor: staticActor,
-      externalConnection: row.ExternalAgentConnection,
+      externalConnection: row.ExternalAgentConnection ?? null,
     };
   }
 

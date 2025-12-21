@@ -129,6 +129,92 @@ const categoryConfig = {
   },
 };
 
+/**
+ * Content component for rendering PnL data.
+ * Extracted to avoid unnecessary null checks on data.
+ */
+function CategoryPnLContent({ data }: { data: CategoryPnLData }) {
+  const pnl = data.unrealizedPnL;
+  const pnlIsPositive = pnl >= 0;
+
+  return (
+    <>
+      <div className="mt-6 flex items-center gap-3">
+        <div
+          className={cn(
+            'inline-flex items-center gap-3 rounded-full px-3 py-2 font-semibold text-sm',
+            pnlIsPositive
+              ? 'bg-emerald-500/20 text-emerald-400'
+              : 'bg-red-500/20 text-red-400'
+          )}
+        >
+          {pnlIsPositive ? (
+            <ArrowUpRight className="h-4 w-4" />
+          ) : (
+            <ArrowDownRight className="h-4 w-4" />
+          )}
+          {pnlIsPositive ? 'Profit' : 'Loss'}
+        </div>
+        <p className="font-bold text-4xl text-foreground sm:text-5xl">
+          {pnlIsPositive ? '+' : ''}
+          {formatCurrency(pnl)}
+        </p>
+      </div>
+
+      <dl className="mt-6 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+        <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
+          <dt className="text-foreground/70 text-xs uppercase">
+            Open Positions
+          </dt>
+          <dd className="font-semibold text-base text-foreground">
+            {data.positionCount}
+          </dd>
+        </div>
+        {data.totalValue !== undefined && (
+          <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
+            <dt className="text-foreground/70 text-xs uppercase">
+              Total Value
+            </dt>
+            <dd className="font-semibold text-base text-foreground">
+              {formatCurrency(data.totalValue)}
+            </dd>
+          </div>
+        )}
+        {data.categorySpecific?.openInterest !== undefined && (
+          <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
+            <dt className="text-foreground/70 text-xs uppercase">
+              Open Interest
+            </dt>
+            <dd className="font-semibold text-base text-foreground">
+              {formatCurrency(data.categorySpecific.openInterest)}
+            </dd>
+          </div>
+        )}
+        {data.categorySpecific?.totalShares !== undefined && (
+          <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
+            <dt className="text-foreground/70 text-xs uppercase">
+              Total Shares
+            </dt>
+            <dd className="font-semibold text-base text-foreground">
+              {data.categorySpecific.totalShares.toFixed(2)}
+            </dd>
+          </div>
+        )}
+        {data.categorySpecific?.totalInvested !== undefined && (
+          <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
+            <dt className="text-foreground/70 text-xs uppercase">
+              Total Invested
+            </dt>
+            <dd className="font-semibold text-base text-foreground">
+              {formatCurrency(data.categorySpecific.totalInvested)}
+            </dd>
+          </div>
+        )}
+      </dl>
+    </>
+  );
+}
+
 export function CategoryPnLCard({
   category,
   data,
@@ -139,8 +225,6 @@ export function CategoryPnLCard({
   lastUpdated,
 }: CategoryPnLCardProps) {
   const config = categoryConfig[category];
-  const pnl = data?.unrealizedPnL ?? 0;
-  const pnlIsPositive = pnl >= 0;
 
   return (
     <section
@@ -197,82 +281,7 @@ export function CategoryPnLCard({
           <p className="mt-1 text-foreground/80">{error}</p>
         </div>
       ) : (
-        data && (
-          <>
-            <div className="mt-6 flex items-center gap-3">
-              <div
-                className={cn(
-                  'inline-flex items-center gap-3 rounded-full px-3 py-2 font-semibold text-sm',
-                  pnlIsPositive
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : 'bg-red-500/20 text-red-400'
-                )}
-              >
-                {pnlIsPositive ? (
-                  <ArrowUpRight className="h-4 w-4" />
-                ) : (
-                  <ArrowDownRight className="h-4 w-4" />
-                )}
-                {pnlIsPositive ? 'Profit' : 'Loss'}
-              </div>
-              <p className="font-bold text-4xl text-foreground sm:text-5xl">
-                {pnlIsPositive ? '+' : ''}
-                {formatCurrency(pnl)}
-              </p>
-            </div>
-
-            <dl className="mt-6 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-              <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                <dt className="text-foreground/70 text-xs uppercase">
-                  Open Positions
-                </dt>
-                <dd className="font-semibold text-base text-foreground">
-                  {data.positionCount}
-                </dd>
-              </div>
-              {data.totalValue !== undefined && (
-                <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                  <dt className="text-foreground/70 text-xs uppercase">
-                    Total Value
-                  </dt>
-                  <dd className="font-semibold text-base text-foreground">
-                    {formatCurrency(data.totalValue)}
-                  </dd>
-                </div>
-              )}
-              {data.categorySpecific?.openInterest !== undefined && (
-                <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                  <dt className="text-foreground/70 text-xs uppercase">
-                    Open Interest
-                  </dt>
-                  <dd className="font-semibold text-base text-foreground">
-                    {formatCurrency(data.categorySpecific.openInterest)}
-                  </dd>
-                </div>
-              )}
-              {data.categorySpecific?.totalShares !== undefined && (
-                <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                  <dt className="text-foreground/70 text-xs uppercase">
-                    Total Shares
-                  </dt>
-                  <dd className="font-semibold text-base text-foreground">
-                    {data.categorySpecific.totalShares.toFixed(2)}
-                  </dd>
-                </div>
-              )}
-              {data.categorySpecific?.totalInvested !== undefined && (
-                <div className="rounded-lg border border-white/10 bg-white/10 p-3 backdrop-blur">
-                  <dt className="text-foreground/70 text-xs uppercase">
-                    Total Invested
-                  </dt>
-                  <dd className="font-semibold text-base text-foreground">
-                    {formatCurrency(data.categorySpecific.totalInvested)}
-                  </dd>
-                </div>
-              )}
-            </dl>
-          </>
-        )
+        data && <CategoryPnLContent data={data} />
       )}
     </section>
   );

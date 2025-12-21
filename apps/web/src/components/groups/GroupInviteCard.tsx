@@ -1,6 +1,7 @@
 'use client';
 
 import { useJejuAuth } from '@babylon/auth/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Loader2, Users, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -44,6 +45,10 @@ interface GroupInviteCardProps {
   onDeclined?: () => void;
 }
 
+interface AcceptInviteResponse {
+  chatId?: string;
+}
+
 export function GroupInviteCard({
   inviteId,
   groupId,
@@ -55,58 +60,59 @@ export function GroupInviteCard({
   onDeclined,
 }: GroupInviteCardProps) {
   const { getAccessToken } = useJejuAuth();
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<'pending' | 'accepted' | 'declined'>(
     'pending'
   );
-  const [error, setError] = useState<string | null>(null);
 
-  const handleAccept = async () => {
-    setLoading(true);
-    setError(null);
+  const acceptMutation = useMutation({
+    mutationFn: async (): Promise<AcceptInviteResponse> => {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/groups/invites/${inviteId}/accept`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    const token = await getAccessToken();
-    const response = await fetch(`/api/groups/invites/${inviteId}/accept`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to accept invite');
+      }
 
-    if (!response.ok) {
-      const data = await response.json();
-      setLoading(false);
-      throw new Error(data.error || 'Failed to accept invite');
-    }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setStatus('accepted');
+      queryClient.invalidateQueries({ queryKey: ['group-invites'] });
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onAccepted?.(groupId, data.chatId);
+    },
+  });
 
-    const data = await response.json();
-    setStatus('accepted');
-    onAccepted?.(groupId, data.chatId);
-    setLoading(false);
-  };
+  const declineMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/groups/invites/${inviteId}/decline`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-  const handleDecline = async () => {
-    setLoading(true);
-    setError(null);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to decline invite');
+      }
+    },
+    onSuccess: () => {
+      setStatus('declined');
+      queryClient.invalidateQueries({ queryKey: ['group-invites'] });
+      onDeclined?.();
+    },
+  });
 
-    const token = await getAccessToken();
-    const response = await fetch(`/api/groups/invites/${inviteId}/decline`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      setLoading(false);
-      throw new Error(data.error || 'Failed to decline invite');
-    }
-
-    setStatus('declined');
-    onDeclined?.();
-    setLoading(false);
-  };
+  const isLoading = acceptMutation.isPending || declineMutation.isPending;
 
   if (status === 'accepted') {
     return (
@@ -171,19 +177,23 @@ export function GroupInviteCard({
           </div>
         </div>
 
-        {error && (
+        {(acceptMutation.isError || declineMutation.isError) && (
           <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-2">
-            <p className="text-red-500 text-xs">{error}</p>
+            <p className="text-red-500 text-xs">
+              {acceptMutation.error?.message ||
+                declineMutation.error?.message ||
+                'An error occurred'}
+            </p>
           </div>
         )}
 
         <div className="flex gap-2">
           <button
-            onClick={handleAccept}
-            disabled={loading}
+            onClick={() => acceptMutation.mutate()}
+            disabled={isLoading}
             className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            {loading ? (
+            {acceptMutation.isPending ? (
               <Loader2 className="inline h-4 w-4 animate-spin" />
             ) : (
               <>
@@ -193,11 +203,11 @@ export function GroupInviteCard({
             )}
           </button>
           <button
-            onClick={handleDecline}
-            disabled={loading}
+            onClick={() => declineMutation.mutate()}
+            disabled={isLoading}
             className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-2.5 font-medium transition-colors hover:bg-accent disabled:opacity-50"
           >
-            {loading ? (
+            {declineMutation.isPending ? (
               <Loader2 className="inline h-4 w-4 animate-spin" />
             ) : (
               <>

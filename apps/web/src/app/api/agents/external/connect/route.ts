@@ -102,17 +102,28 @@ export async function POST(req: NextRequest) {
   const connectionWithRegistry = connection as ConnectionWithRegistry;
   const registry = connectionWithRegistry.agentRegistry;
 
+  if (!registry) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Agent registry not found',
+        message: 'Agent is registered but registry entry is missing',
+      },
+      { status: 500 }
+    );
+  }
+
   // Return agent status and capabilities
   return NextResponse.json(
     {
       success: true,
       agent: {
-        id: registry?.id,
+        id: registry.id,
         externalId: connection.externalId,
-        name: registry?.name || null,
-        status: registry?.status || 'unknown',
-        trustLevel: registry?.trustLevel || null,
-        capabilities: registry?.capabilities || [],
+        name: registry.name,
+        status: registry.status,
+        trustLevel: registry.trustLevel,
+        capabilities: registry.capabilities || [],
         endpoint: connection.endpoint,
         protocol: connection.protocol,
       },

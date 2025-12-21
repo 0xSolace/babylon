@@ -10,6 +10,16 @@ import { db, eq, generationLocks } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { randomBytes } from 'crypto';
 
+/** Safely convert a CQL date field to a Date object */
+function toDate(value: unknown): Date | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    return new Date(value);
+  }
+  return null;
+}
+
 export interface LockOptions {
   lockId: string;
   durationMs: number;
@@ -51,7 +61,8 @@ export class DistributedLockService {
 
     if (existingLock) {
       // Lock exists - check if it's expired
-      if (existingLock.expiresAt <= now) {
+      const existingExpiresAt = toDate(existingLock.expiresAt);
+      if (existingExpiresAt && existingExpiresAt <= now) {
         // Expired - try to recover atomically using conditional update
         await db
           .update(generationLocks)
@@ -86,18 +97,19 @@ export class DistributedLockService {
       }
 
       // Lock exists and is valid (or was just recovered by another process)
-      const ageMinutes = Math.round(
-        (now.getTime() - existingLock.lockedAt.getTime()) / 1000 / 60
-      );
+      const existingLockedAt = toDate(existingLock.lockedAt);
+      const ageMinutes = existingLockedAt
+        ? Math.round((now.getTime() - existingLockedAt.getTime()) / 1000 / 60)
+        : 0;
       logger.info(
         `Lock ${lockId} held by ${existingLock.lockedBy} - skipping`,
         {
           lockId,
           holder: existingLock.lockedBy,
           ageMinutes,
-          expiresIn: Math.round(
-            (existingLock.expiresAt.getTime() - now.getTime()) / 1000
-          ),
+          expiresIn: existingExpiresAt
+            ? Math.round((existingExpiresAt.getTime() - now.getTime()) / 1000)
+            : 0,
         },
         'DistributedLockService'
       );
@@ -200,8 +212,9 @@ export class DistributedLockService {
     if (!lock) return null;
 
     const now = new Date();
-    if (lock.expiresAt < now) {
-      return null; // Expired
+    const lockExpiresAt = toDate(lock.expiresAt);
+    if (!lockExpiresAt || lockExpiresAt < now) {
+      return null; // Expired or invalid
     }
 
     return lock;

@@ -283,9 +283,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     };
   };
 
-  if (!userData.data?.id || !userData.data?.username) {
+  if (!userData.data) {
+    logger.error('Missing Twitter user data', { userData }, 'TwitterCallback');
+    return NextResponse.redirect(
+      new URL(`${OAUTH_REDIRECT_PATH}?error=invalid_twitter_data`, baseUrl)
+    );
+  }
+
+  const twitterUser = userData.data;
+
+  if (!twitterUser.id || !twitterUser.username) {
     logger.error(
-      'Invalid Twitter user data received',
+      'Invalid Twitter user data - missing id or username',
       { userData },
       'TwitterCallback'
     );
@@ -294,7 +303,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  const twitterUser = userData.data;
   const twitterUsername = twitterUser.username;
   const twitterId = twitterUser.id;
 
@@ -320,7 +328,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       twitterUsername,
       hasTwitter: true,
       twitterAccessToken: accessToken, // Store encrypted in production
-      twitterRefreshToken: tokenData.refresh_token,
+      twitterRefreshToken: tokenData.refresh_token ?? null,
       twitterTokenExpiresAt: tokenData.expires_in
         ? new Date(Date.now() + tokenData.expires_in * 1000)
         : null,
@@ -336,7 +344,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Check if this qualifies a referral (award bonus to referrer)
   if (pointsResult.success) {
     await PointsService.checkAndQualifyReferral(userId).catch((error) => {
-      // Log error but don't fail the request if qualification check fails
       logger.warn(
         `Failed to check and qualify referral for user ${userId}`,
         { userId, error },

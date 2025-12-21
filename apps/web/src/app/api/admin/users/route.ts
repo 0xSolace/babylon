@@ -180,7 +180,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Determine sort order
   const sortFn = params.sortOrder === 'asc' ? asc : desc;
-  let orderByClause: SQL | undefined;
+  let orderByClause: SQL;
 
   if (params.sortBy === 'created') {
     orderByClause = sortFn(users.createdAt);
@@ -190,6 +190,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     orderByClause = sortFn(users.reputationPoints);
   } else if (params.sortBy === 'username') {
     orderByClause = sortFn(users.username);
+  } else {
+    orderByClause = desc(users.createdAt);
   }
 
   // Get users
@@ -221,16 +223,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     })
     .from(users)
     .where(whereClause)
-    .orderBy(orderByClause ?? desc(users.createdAt))
+    .orderBy(orderByClause)
     .limit(params.limit)
     .offset(params.offset);
 
-  // Get total count
+  // Get total count - count queries always return exactly one row
   const [totalResult] = await db
     .select({ count: count() })
     .from(users)
     .where(whereClause);
-  const total = totalResult?.count ?? 0;
+  const total = totalResult.count;
 
   // Get moderation counts per user (batched queries)
   const [

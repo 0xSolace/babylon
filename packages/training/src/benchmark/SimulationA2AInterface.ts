@@ -341,85 +341,80 @@ export class SimulationA2AInterface {
 
     const actionStart = Date.now();
 
-    try {
-      let result: A2AResponse;
+    let result: A2AResponse;
 
-      // Route to appropriate handler
-      switch (method) {
-        case 'a2a.getPredictions':
-          result = this.handleGetPredictions(params);
-          break;
+    // Route to appropriate handler
+    switch (method) {
+      case 'a2a.getPredictions':
+        result = this.handleGetPredictions(params);
+        break;
 
-        case 'a2a.buyShares':
-          result = await this.handleBuyShares(params);
-          break;
+      case 'a2a.buyShares':
+        result = await this.handleBuyShares(params);
+        break;
 
-        case 'a2a.sellShares':
-          result = await this.handleSellShares(params);
-          break;
+      case 'a2a.sellShares':
+        result = await this.handleSellShares(params);
+        break;
 
-        case 'a2a.getPerpetuals':
-          result = this.handleGetPerpetuals(params);
-          break;
+      case 'a2a.getPerpetuals':
+        result = this.handleGetPerpetuals(params);
+        break;
 
-        case 'a2a.openPosition':
-          result = await this.handleOpenPosition(params);
-          break;
+      case 'a2a.openPosition':
+        result = await this.handleOpenPosition(params);
+        break;
 
-        case 'a2a.closePosition':
-          result = await this.handleClosePosition(params);
-          break;
+      case 'a2a.closePosition':
+        result = await this.handleClosePosition(params);
+        break;
 
-        case 'a2a.getFeed':
-          result = this.handleGetFeed(params);
-          break;
+      case 'a2a.getFeed':
+        result = this.handleGetFeed(params);
+        break;
 
-        case 'a2a.createPost':
-          result = await this.handleCreatePost(params);
-          break;
+      case 'a2a.createPost':
+        result = await this.handleCreatePost(params);
+        break;
 
-        case 'a2a.getChats':
-          result = this.handleGetChats(params);
-          break;
+      case 'a2a.getChats':
+        result = this.handleGetChats(params);
+        break;
 
-        case 'a2a.joinGroup':
-          result = await this.handleJoinGroup(params);
-          break;
+      case 'a2a.joinGroup':
+        result = await this.handleJoinGroup(params);
+        break;
 
-        case 'a2a.getBalance':
-          result = this.handleGetBalance(params);
-          break;
+      case 'a2a.getBalance':
+        result = this.handleGetBalance(params);
+        break;
 
-        case 'a2a.getPortfolio':
-          result = this.handleGetPortfolio(params);
-          break;
+      case 'a2a.getPortfolio':
+        result = this.handleGetPortfolio(params);
+        break;
 
-        case 'a2a.getPositions':
-          result = this.handleGetPositions(params);
-          break;
+      case 'a2a.getPositions':
+        result = this.handleGetPositions(params);
+        break;
 
-        case 'a2a.getDashboard':
-          result = this.handleGetDashboard(params);
-          break;
+      case 'a2a.getDashboard':
+        result = this.handleGetDashboard(params);
+        break;
 
-        case 'a2a.getTrendingTags':
-          result = this.handleGetTrendingTags(params);
-          break;
+      case 'a2a.getTrendingTags':
+        result = this.handleGetTrendingTags(params);
+        break;
 
-        default:
-          throw new Error(`Unknown A2A method: ${method}`);
-      }
-
-      // This allows the agent to make multiple A2A calls within a single tick
-
-      const duration = Date.now() - actionStart;
-      logger.debug('Simulation A2A response', { method, duration });
-
-      return result;
-    } catch (error) {
-      logger.error('Simulation A2A error', { method, error });
-      throw error;
+      default:
+        throw new Error(`Unknown A2A method: ${method}`);
     }
+
+    // This allows the agent to make multiple A2A calls within a single tick
+
+    const duration = Date.now() - actionStart;
+    logger.debug('Simulation A2A response', { method, duration });
+
+    return result;
   }
 
   /**

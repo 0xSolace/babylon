@@ -45,20 +45,20 @@ const loadEnvFile = (filePath: string) => {
 loadEnvFile('.env.test');
 loadEnvFile('.env.local');
 
-// Check if LLM API keys are available for agent runtime (must be non-empty)
-const hasLLMKey = !!(
-  (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
+// Check if Jeju Compute is available for agent runtime
+const hasJejuCompute = !!(
+  (process.env.JEJU_GATEWAY_URL?.trim() ?? '') !== '' ||
+  (process.env.JEJU_COMPUTE_ENDPOINT?.trim() ?? '') !== ''
 );
 
-// CRITICAL: Agent tests require LLM API keys and MUST NOT skip
-const requireLLMKey = () => {
-  if (!hasLLMKey) {
+// CRITICAL: Agent tests require Jeju Compute and MUST NOT skip
+const requireJejuCompute = () => {
+  if (!hasJejuCompute) {
     throw new Error(
-      'AGENT PERSISTENCE TESTS REQUIRE LLM API KEY. ' +
-        'Set GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY to run these tests. ' +
-        'These tests validate actual agent functionality and MUST NOT be skipped.'
+      'AGENT PERSISTENCE TESTS REQUIRE JEJU COMPUTE. ' +
+        'Set JEJU_GATEWAY_URL or JEJU_COMPUTE_ENDPOINT to run these tests. ' +
+        'These tests validate actual agent functionality and MUST NOT be skipped. ' +
+        'Start Jeju with: cd /path/to/jeju && bun run dev'
     );
   }
 };
@@ -235,25 +235,19 @@ describe('Agent Actions Persistence Integration', () => {
 
     // Create a test market for trading
     testMarketId = await generateSnowflakeId();
-    try {
-      await db.market.create({
-        data: {
-          id: testMarketId,
-          question: 'Integration test: Will agents trade?',
-          yesShares: '100',
-          noShares: '100',
-          liquidity: '200', // Required field
-          resolved: false,
-          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      });
-    } catch (error) {
-      console.error('Failed to create test market:', error);
-      // Market creation failed, set to null to skip cleanup
-      testMarketId = '';
-    }
+    await db.market.create({
+      data: {
+        id: testMarketId,
+        question: 'Integration test: Will agents trade?',
+        yesShares: '100',
+        noShares: '100',
+        liquidity: '200', // Required field
+        resolved: false,
+        endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
 
     // Create a test post for commenting
     testPostId = await generateSnowflakeId();
@@ -338,7 +332,7 @@ describe('Agent Actions Persistence Integration', () => {
 
   test('should create Position records when agent trades', async () => {
     // LLM key is required - fail fast if not present
-    requireLLMKey();
+    requireJejuCompute();
 
     // Get initial position count
     const initialPositions = await db.position.count({
@@ -390,7 +384,7 @@ describe('Agent Actions Persistence Integration', () => {
 
   test('should create Post records when agent posts', async () => {
     // LLM key is required - fail fast if not present
-    requireLLMKey();
+    requireJejuCompute();
 
     // Get initial post count
     const initialPosts = await db.post.count({
@@ -432,7 +426,7 @@ describe('Agent Actions Persistence Integration', () => {
 
   test('should create Comment records when agent comments', async () => {
     // LLM key is required - fail fast if not present
-    requireLLMKey();
+    requireJejuCompute();
 
     // Get initial comment count
     const initialComments = await db.comment.count({
@@ -475,7 +469,7 @@ describe('Agent Actions Persistence Integration', () => {
 
   test('should update agent P&L when trades are executed', async () => {
     // LLM key is required - fail fast if not present
-    requireLLMKey();
+    requireJejuCompute();
 
     // Run agent tick - errors should fail the test, not skip
     const runtime = await agentRuntimeManager.getRuntime(testAgentId);

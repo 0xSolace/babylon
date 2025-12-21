@@ -7,18 +7,7 @@
  * 3. Performance of previous models
  */
 
-import {
-  and,
-  count,
-  db,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  not,
-  trainedModels,
-  trajectories,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import { logger } from '../utils/logger';
 
 export interface ModelSelectionResult {
@@ -192,19 +181,13 @@ export class ModelSelectionService {
    * non-null benchmark scores.
    */
   async getBestPerformingModel() {
-    const modelResult = await db
-      .select()
-      .from(trainedModels)
-      .where(
-        and(
-          inArray(trainedModels.status, ['ready', 'deployed']),
-          isNotNull(trainedModels.benchmarkScore)
-        )
-      )
-      .orderBy(desc(trainedModels.benchmarkScore))
-      .limit(1);
-
-    const model = modelResult[0];
+    const model = await db.trainedModel.findFirst({
+      where: {
+        status: { in: ['ready', 'deployed'] },
+        benchmarkScore: { not: null },
+      },
+      orderBy: { benchmarkScore: 'desc' },
+    });
 
     if (!model) {
       logger.warn(
@@ -241,20 +224,17 @@ export class ModelSelectionService {
    * @returns Number of available training bundles
    */
   async countTrainingBundles(): Promise<number> {
-    const result = await db
-      .select({ count: count() })
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.isTrainingData, true),
-          eq(trajectories.usedInTraining, false),
-          isNotNull(trajectories.aiJudgeReward),
-          not(eq(trajectories.stepsJson, 'null')),
-          not(eq(trajectories.stepsJson, '[]'))
-        )
-      );
-
-    return result[0]?.count || 0;
+    return db.trajectory.count({
+      where: {
+        AND: [
+          { isTrainingData: true },
+          { usedInTraining: false },
+          { aiJudgeReward: { not: null } },
+          { stepsJson: { not: 'null' } },
+          { stepsJson: { not: '[]' } },
+        ],
+      },
+    });
   }
 
   /**
@@ -274,12 +254,11 @@ export class ModelSelectionService {
    * Count existing trained models
    */
   private async countTrainedModels(): Promise<number> {
-    const result = await db
-      .select({ count: count() })
-      .from(trainedModels)
-      .where(inArray(trainedModels.status, ['training', 'ready', 'deployed']));
-
-    return result[0]?.count || 0;
+    return db.trainedModel.count({
+      where: {
+        status: { in: ['training', 'ready', 'deployed'] },
+      },
+    });
   }
 
   /**
@@ -318,25 +297,19 @@ export class ModelSelectionService {
    * - Valid stepsJson (not 'null' or '[]')
    */
   async getTrainingTrajectories(limit?: number | null) {
-    let query = db
-      .select()
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.isTrainingData, true),
-          eq(trajectories.usedInTraining, false),
-          isNotNull(trajectories.aiJudgeReward),
-          not(eq(trajectories.stepsJson, 'null')),
-          not(eq(trajectories.stepsJson, '[]'))
-        )
-      )
-      .orderBy(desc(trajectories.createdAt));
-
-    if (limit) {
-      query = query.limit(limit) as typeof query;
-    }
-
-    const result = await query;
+    const result = await db.trajectory.findMany({
+      where: {
+        AND: [
+          { isTrainingData: true },
+          { usedInTraining: false },
+          { aiJudgeReward: { not: null } },
+          { stepsJson: { not: 'null' } },
+          { stepsJson: { not: '[]' } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit ?? undefined,
+    });
 
     logger.info(
       `Retrieved ${result.length} trajectories for training`,

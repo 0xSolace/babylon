@@ -2,41 +2,93 @@
  * Records training cycles and state updates on-chain for audit and verification.
  */
 
+import { keccak256, stringToHex } from '@babylon/shared';
 import {
-  Contract,
-  type ContractTransactionResponse,
-  JsonRpcProvider,
-  keccak256,
-  toUtf8Bytes,
-  Wallet,
-} from 'ethers';
-import type { Address } from 'viem';
+  type Address,
+  createPublicClient,
+  createWalletClient,
+  type GetContractReturnType,
+  getContract,
+  type Hash,
+  type Hex,
+  http,
+  type PublicClient,
+  type WalletClient,
+} from 'viem';
+import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { logger } from '../utils/logger';
 
 const BABYLON_TREASURY_ABI = [
-  'function recordTraining(string datasetCID, bytes32 modelHash) external',
-  'function updateState(string cid, bytes32 hash) external',
-  'function heartbeat() external',
-  'function getGameState() view returns (string cid, bytes32 stateHash, uint256 version, uint256 keyVer, uint256 lastBeat, bool operatorActive)',
-  'function isOperatorActive() view returns (bool)',
-  'function operator() view returns (address)',
-  'function trainingEpoch() view returns (uint256)',
-  'function lastModelHash() view returns (bytes32)',
-];
-
-interface TreasuryContract {
-  recordTraining(
-    datasetCID: string,
-    modelHash: string
-  ): Promise<ContractTransactionResponse>;
-  updateState(cid: string, hash: string): Promise<ContractTransactionResponse>;
-  heartbeat(): Promise<ContractTransactionResponse>;
-  getGameState(): Promise<[string, string, bigint, bigint, bigint, boolean]>;
-  isOperatorActive(): Promise<boolean>;
-  operator(): Promise<string>;
-  trainingEpoch(): Promise<bigint>;
-  lastModelHash(): Promise<string>;
-}
+  {
+    type: 'function',
+    name: 'recordTraining',
+    inputs: [
+      { name: 'datasetCID', type: 'string' },
+      { name: 'modelHash', type: 'bytes32' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'updateState',
+    inputs: [
+      { name: 'cid', type: 'string' },
+      { name: 'hash', type: 'bytes32' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'heartbeat',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'getGameState',
+    inputs: [],
+    outputs: [
+      { name: 'cid', type: 'string' },
+      { name: 'stateHash', type: 'bytes32' },
+      { name: 'version', type: 'uint256' },
+      { name: 'keyVer', type: 'uint256' },
+      { name: 'lastBeat', type: 'uint256' },
+      { name: 'operatorActive', type: 'bool' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isOperatorActive',
+    inputs: [],
+    outputs: [{ type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'operator',
+    inputs: [],
+    outputs: [{ type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'trainingEpoch',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'lastModelHash',
+    inputs: [],
+    outputs: [{ type: 'bytes32' }],
+    stateMutability: 'view',
+  },
+] as const;
 
 export interface TreasuryConfig {
   rpcUrl: string;
@@ -52,29 +104,51 @@ export interface TrainingRecord {
   timestamp: number;
 }
 
+type TreasuryContract = GetContractReturnType<
+  typeof BABYLON_TREASURY_ABI,
+  { public: PublicClient; wallet: WalletClient }
+>;
+
 export class BabylonTreasuryClient {
-  private provider: JsonRpcProvider;
-  private signer: Wallet;
-  private treasury: TreasuryContract;
+  private publicClient: PublicClient;
+  private walletClient: WalletClient;
+  private account: PrivateKeyAccount;
+  private contract: TreasuryContract;
   private treasuryAddress: Address;
+  private signerAddress: Address;
   private validated = false;
 
   constructor(config: TreasuryConfig) {
-    this.provider = new JsonRpcProvider(config.rpcUrl);
-    this.signer = new Wallet(config.privateKey, this.provider);
+    this.account = privateKeyToAccount(config.privateKey as Hex);
+    this.signerAddress = this.account.address;
     this.treasuryAddress = config.treasuryAddress;
-    this.treasury = new Contract(
-      config.treasuryAddress,
-      BABYLON_TREASURY_ABI,
-      this.signer
-    ) as unknown as TreasuryContract;
+
+    this.publicClient = createPublicClient({
+      transport: http(config.rpcUrl),
+    });
+
+    this.walletClient = createWalletClient({
+      account: this.account,
+      transport: http(config.rpcUrl),
+    });
+
+    this.contract = getContract({
+      address: config.treasuryAddress,
+      abi: BABYLON_TREASURY_ABI,
+      client: {
+        public: this.publicClient,
+        wallet: this.walletClient,
+      },
+    });
   }
 
   async validateContract(): Promise<boolean> {
     if (this.validated) return true;
 
-    const code = await this.provider.getCode(this.treasuryAddress);
-    if (code === '0x' || code === '0x0') {
+    const code = await this.publicClient.getBytecode({
+      address: this.treasuryAddress,
+    });
+    if (!code || code === '0x' || code === '0x0') {
       logger.error('[Treasury] Contract not deployed at address', {
         address: this.treasuryAddress,
       });
@@ -83,7 +157,7 @@ export class BabylonTreasuryClient {
 
     // Verify it responds to our ABI by calling a view function
     try {
-      await this.treasury.trainingEpoch();
+      await this.contract.read.trainingEpoch();
       this.validated = true;
       logger.info('[Treasury] Contract validated', {
         address: this.treasuryAddress,
@@ -99,13 +173,14 @@ export class BabylonTreasuryClient {
   }
 
   async isActiveOperator(): Promise<boolean> {
-    const operator = await this.treasury.operator();
-    const signerAddress = await this.signer.getAddress();
-    return operator.toLowerCase() === signerAddress.toLowerCase();
+    const operator = await this.contract.read.operator();
+    return (
+      (operator as Address).toLowerCase() === this.signerAddress.toLowerCase()
+    );
   }
 
   async isOperatorActive(): Promise<boolean> {
-    return this.treasury.isOperatorActive();
+    return this.contract.read.isOperatorActive() as Promise<boolean>;
   }
 
   async recordTraining(
@@ -135,7 +210,7 @@ export class BabylonTreasuryClient {
       };
     }
 
-    const modelHash = keccak256(toUtf8Bytes(modelCID));
+    const modelHash = keccak256(stringToHex(modelCID));
 
     logger.info('[Treasury] Recording training on-chain', {
       datasetCID,
@@ -143,21 +218,26 @@ export class BabylonTreasuryClient {
       modelHash,
     });
 
-    const tx = await this.treasury.recordTraining(datasetCID, modelHash);
-    await tx.wait();
+    const txHash = await this.contract.write.recordTraining(
+      [datasetCID, modelHash as Hex],
+      { account: this.account } as Parameters<
+        typeof this.contract.write.recordTraining
+      >[1]
+    );
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    const epoch = await this.treasury.trainingEpoch();
+    const epoch = await this.contract.read.trainingEpoch();
 
     logger.info('[Treasury] Training recorded', {
       epoch: Number(epoch),
-      txHash: tx.hash,
+      txHash,
     });
 
     return {
-      epoch: Number(epoch),
+      epoch: Number(epoch as bigint),
       datasetCID,
       modelHash,
-      txHash: tx.hash,
+      txHash,
       timestamp: Date.now(),
     };
   }
@@ -170,21 +250,28 @@ export class BabylonTreasuryClient {
       return '';
     }
 
-    const stateHash = keccak256(toUtf8Bytes(stateCID));
-    const tx = await this.treasury.updateState(stateCID, stateHash);
-    await tx.wait();
+    const stateHash = keccak256(stringToHex(stateCID));
+    const txHash = await this.contract.write.updateState(
+      [stateCID, stateHash as Hex],
+      { account: this.account } as Parameters<
+        typeof this.contract.write.updateState
+      >[1]
+    );
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    logger.info('[Treasury] State updated', { stateCID, txHash: tx.hash });
-    return tx.hash;
+    logger.info('[Treasury] State updated', { stateCID, txHash });
+    return txHash;
   }
 
   async heartbeat(): Promise<string> {
     if (!(await this.validateContract())) return '';
     if (!(await this.isActiveOperator())) return '';
 
-    const tx = await this.treasury.heartbeat();
-    await tx.wait();
-    return tx.hash;
+    const txHash = await this.contract.write.heartbeat({
+      account: this.account,
+    } as Parameters<typeof this.contract.write.heartbeat>[0]);
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    return txHash;
   }
 
   async getGameState(): Promise<{
@@ -196,8 +283,15 @@ export class BabylonTreasuryClient {
     operatorActive: boolean;
   } | null> {
     if (!(await this.validateContract())) return null;
-    const [cid, hash, version, keyVer, lastBeat, active] =
-      await this.treasury.getGameState();
+    const result = await this.contract.read.getGameState();
+    const [cid, hash, version, keyVer, lastBeat, active] = result as [
+      string,
+      Hash,
+      bigint,
+      bigint,
+      bigint,
+      boolean,
+    ];
     return {
       stateCID: cid,
       stateHash: hash,
@@ -209,12 +303,12 @@ export class BabylonTreasuryClient {
   }
 
   async getTrainingEpoch(): Promise<number> {
-    const epoch = await this.treasury.trainingEpoch();
-    return Number(epoch);
+    const epoch = await this.contract.read.trainingEpoch();
+    return Number(epoch as bigint);
   }
 
   async getLastModelHash(): Promise<string> {
-    return this.treasury.lastModelHash();
+    return this.contract.read.lastModelHash() as Promise<string>;
   }
 }
 

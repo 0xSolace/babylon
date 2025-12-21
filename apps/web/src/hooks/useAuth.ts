@@ -139,7 +139,7 @@ export function useAuth(): UseAuthReturn {
         window as Window & { __oauth3AccessToken?: string | null }
       ).__oauth3AccessToken = token;
     }
-    return token ?? null;
+    return token;
   }, [authenticated, getAccessToken]);
 
   const fetchCurrentUser = useCallback(

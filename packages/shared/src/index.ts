@@ -66,6 +66,8 @@ export * from './utils/singleton';
 export * from './utils/snowflake';
 // UI utilities (cn function for Tailwind)
 export * from './utils/ui';
+// Viem helpers (wallet generation, crypto utilities)
+export * from './utils/viem-helpers';
 
 // =============================================================================
 // Error Classes (client-safe)

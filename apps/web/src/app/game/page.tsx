@@ -1,8 +1,8 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Activity } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
 import { PageContainer } from '@/components/shared/PageContainer';
 
 interface GameStats {
@@ -19,38 +19,37 @@ interface EngineStatus {
   lastTickAt?: string;
 }
 
+interface GameDataResponse {
+  stats: GameStats;
+  engineStatus: EngineStatus;
+}
+
 export default function GamePage() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<GameStats | null>(null);
-  const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const {
+    data,
+    isLoading: loading,
+    error: queryError,
+    isFetching: refreshing,
+    refetch,
+  } = useQuery({
+    queryKey: ['game', 'stats'],
+    queryFn: async (): Promise<GameDataResponse> => {
+      const response = await fetch('/api/stats');
+      if (!response.ok) {
+        throw new Error('Failed to load game data');
+      }
+      return (await response.json()) as GameDataResponse;
+    },
+    refetchInterval: 10000, // Refresh every 10 seconds
+  });
 
-  const loadGameData = useCallback(async () => {
-    setRefreshing(true);
-    const response = await fetch('/api/stats');
-    if (!response.ok) {
-      setError('Failed to load game data');
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-    const data = await response.json();
-    setStats(data.stats);
-    setEngineStatus(data.engineStatus);
-    setError(null);
-    setLoading(false);
-    setRefreshing(false);
-  }, []);
+  const stats = data?.stats || null;
+  const engineStatus = data?.engineStatus || null;
+  const error = queryError instanceof Error ? queryError.message : null;
 
-  // Initial load
-  useEffect(() => {
-    loadGameData();
-
-    // Refresh every 10 seconds
-    const interval = setInterval(loadGameData, 10000);
-    return () => clearInterval(interval);
-  }, [loadGameData]);
+  const loadGameData = () => {
+    void refetch();
+  };
 
   if (loading) {
     return (
@@ -164,7 +163,7 @@ export default function GamePage() {
                 Total Posts
               </div>
               <div className="font-bold text-2xl" style={{ color: '#0066FF' }}>
-                {stats?.totalPosts?.toLocaleString() || '0'}
+                {stats ? stats.totalPosts.toLocaleString() : '0'}
               </div>
             </div>
             <div>
@@ -172,7 +171,7 @@ export default function GamePage() {
                 Active Questions
               </div>
               <div className="font-bold text-2xl" style={{ color: '#0066FF' }}>
-                {stats?.activeQuestions || '0'}
+                {stats ? stats.activeQuestions : '0'}
               </div>
             </div>
             <div>
@@ -180,7 +179,7 @@ export default function GamePage() {
                 Companies
               </div>
               <div className="font-bold text-2xl" style={{ color: '#0066FF' }}>
-                {stats?.totalCompanies || '0'}
+                {stats ? stats.totalCompanies : '0'}
               </div>
             </div>
           </div>

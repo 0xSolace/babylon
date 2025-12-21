@@ -4,20 +4,7 @@
  * Persists benchmark results to the database for historical tracking and analysis.
  */
 
-import {
-  and,
-  type BenchmarkResult,
-  benchmarkResults,
-  db,
-  desc,
-  eq,
-  gte,
-  type JsonValue,
-  lte,
-  type NewBenchmarkResult,
-  type SQL,
-  sql,
-} from '@babylon/db';
+import { type BenchmarkResult, db, type JsonValue } from '@babylon/db';
 import { logger } from '../utils/logger';
 import { generateSnowflakeId } from '../utils/snowflake';
 import type { SimulationMetrics } from './SimulationEngine';
@@ -63,28 +50,28 @@ export class BenchmarkHistoryService {
   ): Promise<BenchmarkResult> {
     const id = await generateSnowflakeId();
 
-    const record: NewBenchmarkResult = {
-      id,
-      modelId: input.modelId,
-      benchmarkId: input.benchmarkId,
-      benchmarkPath: input.benchmarkPath,
-      runAt: new Date(),
-      totalPnl: input.metrics.totalPnl,
-      predictionAccuracy: input.metrics.predictionMetrics.accuracy,
-      perpWinRate: input.metrics.perpMetrics.winRate,
-      optimalityScore: input.metrics.optimalityScore,
-      detailedMetrics: JSON.parse(JSON.stringify(input.metrics)) as JsonValue,
-      baselinePnlDelta: input.baselineComparison?.pnlDelta ?? null,
-      baselineAccuracyDelta: input.baselineComparison?.accuracyDelta ?? null,
-      improved: input.baselineComparison?.improved ?? null,
-      duration: input.duration,
-      createdAt: new Date(),
-    };
-
-    const [result] = await db
-      .insert(benchmarkResults)
-      .values(record)
-      .returning();
+    const detailedMetrics = JSON.parse(
+      JSON.stringify(input.metrics)
+    ) as JsonValue;
+    const result = await db.benchmarkResult.create({
+      data: {
+        id,
+        modelId: input.modelId,
+        benchmarkId: input.benchmarkId,
+        benchmarkPath: input.benchmarkPath,
+        runAt: new Date(),
+        totalPnl: input.metrics.totalPnl,
+        predictionAccuracy: input.metrics.predictionMetrics.accuracy,
+        perpWinRate: input.metrics.perpMetrics.winRate,
+        optimalityScore: input.metrics.optimalityScore,
+        detailedMetrics,
+        baselinePnlDelta: input.baselineComparison?.pnlDelta ?? null,
+        baselineAccuracyDelta: input.baselineComparison?.accuracyDelta ?? null,
+        improved: input.baselineComparison?.improved ?? null,
+        duration: input.duration,
+        createdAt: new Date(),
+      },
+    });
 
     logger.info('Saved benchmark result', {
       id: result?.id,
@@ -92,10 +79,6 @@ export class BenchmarkHistoryService {
       benchmarkId: input.benchmarkId,
       totalPnl: input.metrics.totalPnl,
     });
-
-    if (!result) {
-      throw new Error('Failed to save benchmark result');
-    }
 
     return result;
   }
@@ -106,34 +89,18 @@ export class BenchmarkHistoryService {
   static async getResults(
     query: BenchmarkHistoryQuery
   ): Promise<BenchmarkResult[]> {
-    const conditions: SQL[] = [];
+    const clauses = [
+      query.modelId ? { modelId: query.modelId } : undefined,
+      query.benchmarkId ? { benchmarkId: query.benchmarkId } : undefined,
+      query.startDate ? { runAt: { gte: query.startDate } } : undefined,
+      query.endDate ? { runAt: { lte: query.endDate } } : undefined,
+    ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
-    if (query.modelId) {
-      conditions.push(eq(benchmarkResults.modelId, query.modelId));
-    }
-
-    if (query.benchmarkId) {
-      conditions.push(eq(benchmarkResults.benchmarkId, query.benchmarkId));
-    }
-
-    if (query.startDate) {
-      conditions.push(gte(benchmarkResults.runAt, query.startDate));
-    }
-
-    if (query.endDate) {
-      conditions.push(lte(benchmarkResults.runAt, query.endDate));
-    }
-
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-    const results = await db
-      .select()
-      .from(benchmarkResults)
-      .where(whereClause)
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(query.limit ?? 100);
-
-    return results;
+    return db.benchmarkResult.findMany({
+      where: clauses.length > 0 ? { AND: clauses } : undefined,
+      orderBy: { runAt: 'desc' },
+      take: query.limit ?? 100,
+    });
   }
 
   /**
@@ -142,14 +109,10 @@ export class BenchmarkHistoryService {
   static async getLatestResult(
     modelId: string
   ): Promise<BenchmarkResult | null> {
-    const [result] = await db
-      .select()
-      .from(benchmarkResults)
-      .where(eq(benchmarkResults.modelId, modelId))
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(1);
-
-    return result ?? null;
+    return db.benchmarkResult.findFirst({
+      where: { modelId },
+      orderBy: { runAt: 'desc' },
+    });
   }
 
   /**
@@ -159,22 +122,21 @@ export class BenchmarkHistoryService {
     modelId: string,
     limit = 20
   ): Promise<BenchmarkTrendData> {
-    const results = await db
-      .select()
-      .from(benchmarkResults)
-      .where(eq(benchmarkResults.modelId, modelId))
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(limit);
+    const results = await db.benchmarkResult.findMany({
+      where: { modelId },
+      orderBy: { runAt: 'desc' },
+      take: limit,
+    });
 
     // Reverse to get chronological order
     const chronological = results.reverse();
 
     return {
       modelId,
-      dates: chronological.map((r) => r.runAt),
-      pnlHistory: chronological.map((r) => r.totalPnl),
-      accuracyHistory: chronological.map((r) => r.predictionAccuracy),
-      optimalityHistory: chronological.map((r) => r.optimalityScore),
+      dates: chronological.map((r) => new Date(String(r.runAt))),
+      pnlHistory: chronological.map((r) => Number(r.totalPnl)),
+      accuracyHistory: chronological.map((r) => Number(r.predictionAccuracy)),
+      optimalityHistory: chronological.map((r) => Number(r.optimalityScore)),
     };
   }
 
@@ -188,18 +150,16 @@ export class BenchmarkHistoryService {
     const comparison = new Map<string, BenchmarkResult[]>();
 
     for (const modelId of modelIds) {
-      const conditions: SQL[] = [eq(benchmarkResults.modelId, modelId)];
+      const where =
+        benchmarkId !== undefined
+          ? { AND: [{ modelId }, { benchmarkId }] }
+          : { modelId };
 
-      if (benchmarkId) {
-        conditions.push(eq(benchmarkResults.benchmarkId, benchmarkId));
-      }
-
-      const results = await db
-        .select()
-        .from(benchmarkResults)
-        .where(and(...conditions))
-        .orderBy(desc(benchmarkResults.runAt))
-        .limit(10);
+      const results = await db.benchmarkResult.findMany({
+        where,
+        orderBy: { runAt: 'desc' },
+        take: 10,
+      });
 
       comparison.set(modelId, results);
     }
@@ -221,21 +181,39 @@ export class BenchmarkHistoryService {
       latestRun: Date;
     }>
   > {
-    const results = await db
-      .select({
-        modelId: benchmarkResults.modelId,
-        runCount: sql<number>`count(*)::int`,
-        avgPnl: sql<number>`avg(${benchmarkResults.totalPnl})`,
-        avgAccuracy: sql<number>`avg(${benchmarkResults.predictionAccuracy})`,
-        avgOptimality: sql<number>`avg(${benchmarkResults.optimalityScore})`,
-        bestPnl: sql<number>`max(${benchmarkResults.totalPnl})`,
-        latestRun: sql<Date>`max(${benchmarkResults.runAt})`,
-      })
-      .from(benchmarkResults)
-      .groupBy(benchmarkResults.modelId)
-      .orderBy(desc(sql`avg(${benchmarkResults.totalPnl})`));
+    const rows = await db.benchmarkResult.groupBy({
+      by: ['modelId'],
+      _count: true,
+      _avg: { totalPnl: true, predictionAccuracy: true, optimalityScore: true },
+      _max: { totalPnl: true, runAt: true },
+    });
 
-    return results;
+    const toNumber = (value: unknown): number => {
+      if (typeof value === 'number') return value;
+      if (typeof value === 'string') return Number(value) || 0;
+      if (typeof value === 'bigint') return Number(value);
+      return 0;
+    };
+
+    const toDate = (value: unknown): Date => {
+      if (value instanceof Date) return value;
+      if (typeof value === 'string') return new Date(value);
+      if (typeof value === 'number') return new Date(value);
+      if (typeof value === 'bigint') return new Date(Number(value));
+      return new Date(0);
+    };
+
+    return rows
+      .map((r) => ({
+        modelId: String(r.modelId),
+        runCount: toNumber(r._count),
+        avgPnl: toNumber(r._avg_totalPnl),
+        avgAccuracy: toNumber(r._avg_predictionAccuracy),
+        avgOptimality: toNumber(r._avg_optimalityScore),
+        bestPnl: toNumber(r._max_totalPnl),
+        latestRun: toDate(r._max_runAt),
+      }))
+      .sort((a, b) => b.avgPnl - a.avgPnl);
   }
 
   /**
@@ -251,40 +229,28 @@ export class BenchmarkHistoryService {
     baselinePnl: number;
     delta: number;
   } | null> {
-    const [modelResult] = await db
-      .select()
-      .from(benchmarkResults)
-      .where(
-        and(
-          eq(benchmarkResults.modelId, modelId),
-          eq(benchmarkResults.benchmarkId, benchmarkId)
-        )
-      )
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(1);
+    const modelResult = await db.benchmarkResult.findFirst({
+      where: { AND: [{ modelId }, { benchmarkId }] },
+      orderBy: { runAt: 'desc' },
+    });
 
-    const [baselineResult] = await db
-      .select()
-      .from(benchmarkResults)
-      .where(
-        and(
-          eq(benchmarkResults.modelId, baselineModelId),
-          eq(benchmarkResults.benchmarkId, benchmarkId)
-        )
-      )
-      .orderBy(desc(benchmarkResults.runAt))
-      .limit(1);
+    const baselineResult = await db.benchmarkResult.findFirst({
+      where: { AND: [{ modelId: baselineModelId }, { benchmarkId }] },
+      orderBy: { runAt: 'desc' },
+    });
 
     if (!modelResult || !baselineResult) {
       return null;
     }
 
-    const delta = modelResult.totalPnl - baselineResult.totalPnl;
+    const modelPnl = Number(modelResult.totalPnl);
+    const baselinePnl = Number(baselineResult.totalPnl);
+    const delta = modelPnl - baselinePnl;
 
     return {
       improved: delta > 0,
-      modelPnl: modelResult.totalPnl,
-      baselinePnl: baselineResult.totalPnl,
+      modelPnl,
+      baselinePnl,
       delta,
     };
   }

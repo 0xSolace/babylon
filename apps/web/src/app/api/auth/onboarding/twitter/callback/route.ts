@@ -216,9 +216,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   };
 
   // Validate required fields
-  if (!userData.data?.id || !userData.data?.username) {
+  if (!userData.data) {
     logger.error(
-      'Invalid Twitter user data',
+      'Missing Twitter user data',
       { userData },
       'TwitterOnboardingCallback'
     );
@@ -228,6 +228,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   const twitterUser = userData.data;
+
+  if (!twitterUser.id || !twitterUser.username) {
+    logger.error(
+      'Invalid Twitter user data - missing id or username',
+      { userData },
+      'TwitterOnboardingCallback'
+    );
+    return NextResponse.redirect(
+      new URL('/?error=invalid_twitter_data', request.url)
+    );
+  }
 
   // Check for duplicate Twitter account
   const existingUser = await db.user.findFirst({
@@ -252,8 +263,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const profileData = {
     platform: 'twitter',
     username: twitterUser.username,
-    displayName: twitterUser.name || twitterUser.username,
-    bio: twitterUser.description || '',
+    displayName: twitterUser.name ?? twitterUser.username,
+    bio: twitterUser.description ?? '',
     profileImageUrl: twitterUser.profile_image_url
       ? twitterUser.profile_image_url.replace('_normal', '_400x400') // Get higher resolution
       : null,

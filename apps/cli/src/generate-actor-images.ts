@@ -334,8 +334,8 @@ async function generateActorBanner(actor: Actor): Promise<string> {
     );
   }
 
-  const firstImage = result.data.images[0];
-  if (!firstImage?.url) {
+  const firstImage = result.data.images[0]!;
+  if (!firstImage.url) {
     throw new Error(
       `First image missing URL for ${actor.name} banner. Image data: ${JSON.stringify(firstImage)}`
     );
@@ -389,8 +389,8 @@ async function generateOrganizationImage(org: Organization): Promise<string> {
     );
   }
 
-  const firstImage = result.data.images[0];
-  if (!firstImage?.url) {
+  const firstImage = result.data.images[0]!;
+  if (!firstImage.url) {
     throw new Error(
       `First image missing URL for ${org.name}. Image data: ${JSON.stringify(firstImage)}`
     );
@@ -444,8 +444,8 @@ async function generateOrganizationBanner(org: Organization): Promise<string> {
     );
   }
 
-  const firstImage = result.data.images[0];
-  if (!firstImage?.url) {
+  const firstImage = result.data.images[0]!;
+  if (!firstImage.url) {
     throw new Error(
       `First image missing URL for ${org.name} banner. Image data: ${JSON.stringify(firstImage)}`
     );

@@ -1,21 +1,13 @@
 /**
  * Agent Decision Maker
  *
- * Uses LLM (Groq, Claude, or OpenAI) to make autonomous decisions based on context
- * Falls back through providers in order: Groq -> Claude -> OpenAI
+ * Uses Jeju Compute Marketplace for ALL LLM inference.
+ * NO FALLBACKS - Decentralized compute is required.
  */
-
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGroq } from '@ai-sdk/groq';
-import { createOpenAI } from '@ai-sdk/openai';
-
-// Use unknown for model type since AI SDK types vary by version
-// The actual type is LanguageModelV2 from @ai-sdk/provider but it's not exported in all versions
-type LanguageModelType = unknown;
 
 import type { A2APerpPosition } from '@babylon/a2a';
 import type { JsonValue } from '@babylon/shared';
-import { generateText } from 'ai';
+import type { Address } from 'viem';
 import type { MemoryEntry } from './memory';
 
 export interface PredictionMarket {
@@ -63,9 +55,10 @@ type Strategy = 'conservative' | 'balanced' | 'aggressive' | 'social';
 
 export interface DecisionMakerConfig {
   strategy: Strategy;
-  groqApiKey?: string;
-  anthropicApiKey?: string;
-  openaiApiKey?: string;
+  /** Jeju Gateway URL (defaults to JEJU_GATEWAY_URL env var) */
+  jejuGatewayUrl?: string;
+  /** User wallet address for billing (defaults to AGENT_WALLET_ADDRESS env var) */
+  userAddress?: Address;
 }
 
 const STRATEGY_INSTRUCTIONS: Record<Strategy, string> = {
@@ -82,41 +75,44 @@ const MAX_DISPLAY_ITEMS = 3;
 const MAX_CONTENT_LENGTH = 80;
 const MAX_RESULT_LENGTH = 60;
 
+interface JejuInferenceResponse {
+  id: string;
+  model: string;
+  choices: Array<{ message: { content: string } }>;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
+
 export class AgentDecisionMaker {
   private config: DecisionMakerConfig;
-  private model: LanguageModelType;
-  private providerName: string;
+  private gatewayUrl: string;
+  private userAddress: Address;
 
   constructor(config: DecisionMakerConfig) {
     this.config = config;
+    this.gatewayUrl =
+      config.jejuGatewayUrl ??
+      process.env.JEJU_GATEWAY_URL ??
+      process.env.JEJU_COMPUTE_ENDPOINT ??
+      'http://localhost:4200';
 
-    // Initialize provider in order: Groq -> Claude -> OpenAI
-    if (config.groqApiKey) {
-      const groq = createGroq({ apiKey: config.groqApiKey });
-      this.model = groq('llama-3.1-8b-instant'); // Free tier: Fast and efficient
-      this.providerName = 'Groq (llama-3.1-8b-instant)';
-    } else if (config.anthropicApiKey) {
-      const anthropic = createAnthropic({ apiKey: config.anthropicApiKey });
-      this.model = anthropic('claude-sonnet-4-5');
-      this.providerName = 'Claude (claude-sonnet-4-5)';
-    } else if (config.openaiApiKey) {
-      const openai = createOpenAI({ apiKey: config.openaiApiKey });
-      this.model = openai('gpt-5.1');
-      this.providerName = 'OpenAI (gpt-5.1)';
-    } else {
-      throw new Error(
-        'At least one LLM API key is required (GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY)'
-      );
-    }
+    this.userAddress =
+      config.userAddress ??
+      (process.env.AGENT_WALLET_ADDRESS as Address) ??
+      (process.env.JEJU_USER_ADDRESS as Address) ??
+      ('0x0000000000000000000000000000000000000000' as Address);
 
-    console.log(`🤖 Using LLM provider: ${this.providerName}`);
+    console.log(`🤖 Using Jeju Compute Marketplace: ${this.gatewayUrl}`);
   }
 
   /**
    * Get the current provider name
    */
   getProvider(): string {
-    return this.providerName;
+    return `Jeju Compute (${this.gatewayUrl})`;
   }
 
   /**
@@ -125,13 +121,29 @@ export class AgentDecisionMaker {
   async decide(context: DecisionContext): Promise<Decision> {
     const prompt = this.buildPrompt(context);
 
-    const { text } = await generateText({
-      // @ts-expect-error - model type compatibility between SDK versions
-      model: this.model,
-      prompt,
-      temperature: 0.7,
-      maxOutputTokens: 1000,
+    const response = await fetch(`${this.gatewayUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jeju-address': this.userAddress,
+      },
+      body: JSON.stringify({
+        model: 'llama-8b', // Will be resolved by marketplace
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 1000,
+      }),
     });
+
+    if (!response.ok) {
+      throw new Error(
+        `Jeju Compute error: ${response.status}. ` +
+          'Ensure Jeju is running: cd /path/to/jeju && bun run dev'
+      );
+    }
+
+    const data = (await response.json()) as JejuInferenceResponse;
+    const text = data.choices[0]?.message?.content ?? '';
 
     return this.parseDecision(text);
   }
@@ -211,9 +223,13 @@ Your decision (JSON only):`;
       throw new Error('No JSON found in LLM response');
     }
 
-    const decision = JSON.parse(jsonMatch[0]);
+    const decision = JSON.parse(jsonMatch[0]) as {
+      action?: Decision['action'];
+      params?: Record<string, JsonValue>;
+      reasoning?: string;
+    };
     return {
-      action: decision.action || 'HOLD',
+      action: decision.action ?? 'HOLD',
       params: decision.params,
       reasoning: decision.reasoning,
     };

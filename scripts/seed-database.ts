@@ -84,9 +84,6 @@ async function main(): Promise<void> {
     );
 
     logger.info('Seed complete!', undefined, 'SeedDatabase');
-  } catch (error) {
-    logger.error('Seed failed', { error }, 'SeedDatabase');
-    throw error;
   } finally {
     await closeDatabase();
   }

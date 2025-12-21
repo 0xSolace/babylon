@@ -5,7 +5,7 @@
  * Handles gradual rollout and rollback if needed.
  */
 
-import { db, eq, trainedModels, users } from '@babylon/db';
+import { db } from '@babylon/db';
 import { getAgentRuntimeManager } from '../dependencies';
 import { logger } from '../utils/logger';
 
@@ -34,13 +34,9 @@ export class ModelDeployer {
     });
 
     // Get model
-    const modelResult = await db
-      .select()
-      .from(trainedModels)
-      .where(eq(trainedModels.version, options.modelVersion))
-      .limit(1);
-
-    const model = modelResult[0];
+    const model = await db.trainedModel.findFirst({
+      where: { version: options.modelVersion },
+    });
 
     if (!model) {
       throw new Error(`Model ${options.modelVersion} not found`);
@@ -54,14 +50,15 @@ export class ModelDeployer {
     const deploymentId = `deploy-${Date.now()}`;
 
     // Update model status
-    await db
-      .update(trainedModels)
-      .set({
+    await db.trainedModel.update({
+      where: { modelId: model.modelId },
+      data: {
         status: 'deployed',
         deployedAt: new Date(),
         agentsUsing: targetAgents.length,
-      })
-      .where(eq(trainedModels.modelId, model.modelId));
+        updatedAt: new Date(),
+      },
+    });
 
     // Clear agent runtimes so they pick up the new model
     for (const agent of targetAgents) {
@@ -86,10 +83,9 @@ export class ModelDeployer {
    * Get target agents based on deployment strategy
    */
   private async getTargetAgents(options: DeploymentOptions) {
-    const agents = await db
-      .select({ id: users.id, displayName: users.displayName })
-      .from(users)
-      .where(eq(users.isAgent, true));
+    const agents = await db.user.findMany({
+      where: { isAgent: true },
+    });
 
     switch (options.strategy) {
       case 'immediate':
@@ -102,9 +98,7 @@ export class ModelDeployer {
 
       case 'test':
         if (options.testAgentIds) {
-          return agents.filter((a: (typeof agents)[number]) =>
-            options.testAgentIds!.includes(a.id)
-          );
+          return agents.filter((a) => options.testAgentIds!.includes(a.id));
         }
         return agents.slice(0, 1); // Just first agent
 

@@ -57,7 +57,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     select: { walletAddress: true },
   });
 
-  if (!senderUser?.walletAddress) {
+  if (!senderUser) {
+    throw new BusinessLogicError('User not found', 'USER_NOT_FOUND');
+  }
+
+  if (!senderUser.walletAddress) {
     throw new BusinessLogicError(
       'Sender wallet address not found',
       'WALLET_NOT_FOUND'

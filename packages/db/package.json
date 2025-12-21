@@ -41,17 +41,10 @@
   },
   "dependencies": {
     "@babylon/shared": "workspace:*",
-    "@jejunetwork/db": "workspace:*",
-    "drizzle-orm": "^0.44.7",
-    "postgres": "^3.4.7"
-  },
-  "peerDependencies": {
-    "drizzle-orm": "^0.44.7",
-    "postgres": "^3.4.7"
+    "@jejunetwork/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
-    "drizzle-kit": "^0.31.4",
     "typescript": "^5.9.3"
   }
 }

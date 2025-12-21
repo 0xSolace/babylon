@@ -5,8 +5,7 @@
  * Provides bidirectional sync between local database and blockchain.
  */
 
-import { and, db, desc, eq, isNotNull } from '@babylon/db';
-import { agentPerformanceMetrics, feedbacks, users } from '@babylon/db/schema';
+import { db } from '@babylon/db';
 import { getReputationBreakdown, recalculateReputation } from '@babylon/engine';
 import { logger } from '../../shared/logger';
 import { generateSnowflakeId } from '../../shared/snowflake';
@@ -81,55 +80,43 @@ export async function syncAfterAgent0Registration(
   if (!onChainRep) {
     logger.warn('No on-chain reputation data found', { agent0TokenId });
     // Initialize with default metrics using upsert pattern
-    const existing = await db
-      .select()
-      .from(agentPerformanceMetrics)
-      .where(eq(agentPerformanceMetrics.userId, userId))
-      .limit(1);
+    const existing = await db.agentPerformanceMetrics.findUnique({
+      where: { userId },
+    });
 
-    if (existing[0]) {
-      const updated = await db
-        .update(agentPerformanceMetrics)
-        .set({
+    if (existing) {
+      return await db.agentPerformanceMetrics.update({
+        where: { userId },
+        data: {
           onChainReputationSync: true,
           lastSyncedAt: new Date(),
-        })
-        .where(eq(agentPerformanceMetrics.userId, userId))
-        .returning();
-      return updated[0];
+        },
+      });
     }
-    const created = await db
-      .insert(agentPerformanceMetrics)
-      .values({
+    return await db.agentPerformanceMetrics.create({
+      data: {
         id: await generateSnowflakeId(),
         userId,
         onChainReputationSync: true,
         lastSyncedAt: new Date(),
         updatedAt: new Date(),
-      })
-      .returning();
-    return created[0];
+      },
+    });
   }
 
   // Get or create performance metrics
-  const metricsResult = await db
-    .select()
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
-
-  let metrics = metricsResult[0];
+  let metrics = await db.agentPerformanceMetrics.findUnique({
+    where: { userId },
+  });
 
   if (!metrics) {
-    const created = await db
-      .insert(agentPerformanceMetrics)
-      .values({
+    metrics = await db.agentPerformanceMetrics.create({
+      data: {
         id: await generateSnowflakeId(),
         userId,
         updatedAt: new Date(),
-      })
-      .returning();
-    metrics = created[0];
+      },
+    });
   }
 
   // Sync on-chain data to local database
@@ -158,20 +145,17 @@ export async function syncAfterAgent0Registration(
  * @returns Agent0 submission result
  */
 export async function submitFeedbackToAgent0(feedbackId: string) {
-  // Get feedback record with agent info using Drizzle
-  const feedbackResult = await db
-    .select({
-      id: feedbacks.id,
-      score: feedbacks.score,
-      comment: feedbacks.comment,
-      metadata: feedbacks.metadata,
-      toUserId: feedbacks.toUserId,
-    })
-    .from(feedbacks)
-    .where(eq(feedbacks.id, feedbackId))
-    .limit(1);
-
-  const feedback = feedbackResult[0];
+  // Get feedback record with agent info
+  const feedback = await db.feedback.findUnique({
+    where: { id: feedbackId },
+    select: {
+      id: true,
+      score: true,
+      comment: true,
+      metadata: true,
+      toUserId: true,
+    },
+  });
 
   if (!feedback) {
     throw new Error(`Feedback ${feedbackId} not found`);
@@ -182,23 +166,22 @@ export async function submitFeedbackToAgent0(feedbackId: string) {
   }
 
   // Get recipient user info
-  const recipientResult = await db
-    .select({
-      id: users.id,
-      agent0TokenId: users.agent0TokenId,
-      nftTokenId: users.nftTokenId,
-    })
-    .from(users)
-    .where(eq(users.id, feedback.toUserId))
-    .limit(1);
-
-  const recipientUser = recipientResult[0];
+  const recipientUser = await db.user.findUnique({
+    where: { id: String(feedback.toUserId) },
+    select: {
+      id: true,
+      agent0TokenId: true,
+      nftTokenId: true,
+    },
+  });
 
   if (!recipientUser) {
     throw new Error('Feedback has no recipient user');
   }
 
-  const agent0TokenId = recipientUser.agent0TokenId;
+  const agent0TokenId = recipientUser.agent0TokenId
+    ? Number(recipientUser.agent0TokenId)
+    : null;
 
   if (!agent0TokenId) {
     logger.warn('Agent has no Agent0 token ID, skipping submission', {
@@ -213,35 +196,41 @@ export async function submitFeedbackToAgent0(feedbackId: string) {
 
   // Convert 0-100 score to -5 to +5 scale for Agent0
   // 0-100 → -5 to +5 (0 = -5, 50 = 0, 100 = +5)
-  const agent0Rating = Math.round((feedback.score / 100) * 10 - 5);
+  const feedbackScore = Number(feedback.score);
+  const agent0Rating = Math.round((feedbackScore / 100) * 10 - 5);
 
   // Submit to Agent0 network
   await agent0Client.submitFeedback({
     targetAgentId: agent0TokenId,
     rating: agent0Rating,
-    comment: feedback.comment || 'Feedback from Babylon platform',
-    transactionId: feedback.id,
+    comment: feedback.comment
+      ? String(feedback.comment)
+      : 'Feedback from Babylon platform',
+    transactionId: String(feedback.id),
   });
 
   // Update feedback record to mark as submitted to Agent0
-  await db
-    .update(feedbacks)
-    .set({
+  const existingMetadata =
+    typeof feedback.metadata === 'object' && feedback.metadata !== null
+      ? (feedback.metadata as Record<string, unknown>)
+      : {};
+
+  await db.feedback.update({
+    where: { id: feedbackId },
+    data: {
       agent0TokenId: agent0TokenId,
       metadata: {
-        ...(typeof feedback.metadata === 'object' && feedback.metadata !== null
-          ? (feedback.metadata as Record<string, unknown>)
-          : {}),
+        ...existingMetadata,
         agent0Submitted: true,
         agent0SubmittedAt: new Date().toISOString(),
       },
-    })
-    .where(eq(feedbacks.id, feedbackId));
+    },
+  });
 
   logger.info('Feedback submitted to Agent0', {
     feedbackId,
     agent0TokenId,
-    score: feedback.score,
+    score: feedbackScore,
     agent0Rating,
   });
 
@@ -267,34 +256,29 @@ export async function periodicReputationSync(userId?: string) {
   const { syncOnChainReputation } = getBlockchainReputationFunctions();
 
   // Get users with Agent0 registration
-  const whereCondition = userId
-    ? and(isNotNull(users.agent0TokenId), eq(users.id, userId))
-    : isNotNull(users.agent0TokenId);
-
-  const usersResult = await db
-    .select({
-      id: users.id,
-      agent0TokenId: users.agent0TokenId,
-      nftTokenId: users.nftTokenId,
-    })
-    .from(users)
-    .where(whereCondition);
+  const usersResult = userId
+    ? await db.user.findMany({
+        where: { id: userId, agent0TokenId: { not: null } },
+        select: { id: true, agent0TokenId: true, nftTokenId: true },
+      })
+    : await db.user.findMany({
+        where: { agent0TokenId: { not: null } },
+        select: { id: true, agent0TokenId: true, nftTokenId: true },
+      });
 
   logger.info(`Found ${usersResult.length} agents to sync`, { userId });
 
   // Get performance metrics for these users
-  const userIds = usersResult.map((u) => u.id);
+  const userIds = usersResult.map((u) => String(u.id));
   const metricsResults =
-    userIds.length > 0
-      ? await db
-          .select({
-            userId: agentPerformanceMetrics.userId,
-            lastSyncedAt: agentPerformanceMetrics.lastSyncedAt,
-          })
-          .from(agentPerformanceMetrics)
-      : [];
+    userIds.length > 0 ? await db.agentPerformanceMetrics.findMany({}) : [];
 
-  const metricsMap = new Map(metricsResults.map((m) => [m.userId, m]));
+  const metricsMap = new Map(
+    metricsResults.map((m) => [
+      String(m.userId),
+      { lastSyncedAt: m.lastSyncedAt },
+    ])
+  );
 
   const results: Array<{
     userId: string;
@@ -306,33 +290,41 @@ export async function periodicReputationSync(userId?: string) {
   for (const user of usersResult) {
     if (!user.agent0TokenId) continue;
 
+    const userIdStr = String(user.id);
+    const agent0TokenIdNum = Number(user.agent0TokenId);
+
     // Skip if synced recently (within last hour)
-    const metrics = metricsMap.get(user.id);
+    const metrics = metricsMap.get(userIdStr);
     const lastSync = metrics?.lastSyncedAt;
-    if (lastSync && Date.now() - lastSync.getTime() < 3600000) {
+    const lastSyncDate = lastSync
+      ? lastSync instanceof Date
+        ? lastSync
+        : new Date(String(lastSync))
+      : null;
+    if (lastSyncDate && Date.now() - lastSyncDate.getTime() < 3600000) {
       logger.debug('Skipping recently synced user', {
-        userId: user.id,
-        lastSync,
+        userId: userIdStr,
+        lastSync: lastSyncDate,
       });
       continue;
     }
 
     // Sync on-chain reputation
-    await syncOnChainReputation(user.id, user.agent0TokenId);
+    await syncOnChainReputation(userIdStr, agent0TokenIdNum);
 
     // Recalculate local reputation
-    await recalculateReputation(user.id);
+    await recalculateReputation(userIdStr);
 
     results.push({
-      userId: user.id,
-      agent0TokenId: user.agent0TokenId,
+      userId: userIdStr,
+      agent0TokenId: agent0TokenIdNum,
       success: true,
       syncedAt: new Date(),
     });
 
     logger.info('User reputation synced', {
-      userId: user.id,
-      agent0TokenId: user.agent0TokenId,
+      userId: userIdStr,
+      agent0TokenId: agent0TokenIdNum,
     });
   }
 
@@ -398,16 +390,10 @@ export async function getReputationForAgent0Metadata(userId: string) {
 export async function syncUserReputationNow(userId: string) {
   const { syncOnChainReputation } = getBlockchainReputationFunctions();
 
-  const userResult = await db
-    .select({
-      agent0TokenId: users.agent0TokenId,
-      nftTokenId: users.nftTokenId,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const user = userResult[0];
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { agent0TokenId: true, nftTokenId: true },
+  });
 
   if (!user) {
     throw new Error(`User ${userId} not found`);
@@ -417,15 +403,17 @@ export async function syncUserReputationNow(userId: string) {
     throw new Error(`User ${userId} has no Agent0 token ID`);
   }
 
+  const agent0TokenIdNum = Number(user.agent0TokenId);
+
   // Sync on-chain reputation
-  const metrics = await syncOnChainReputation(userId, user.agent0TokenId);
+  const metrics = await syncOnChainReputation(userId, agent0TokenIdNum);
 
   // Recalculate local reputation
   await recalculateReputation(userId);
 
   logger.info('On-demand reputation sync completed', {
     userId,
-    agent0TokenId: user.agent0TokenId,
+    agent0TokenId: agent0TokenIdNum,
   });
 
   return metrics;
@@ -439,12 +427,12 @@ const REPUTATION_SYNC_INTERVAL_MS = 3 * 60 * 60 * 1000;
  * Uses the most recent lastSyncedAt timestamp from any user's performance metrics
  */
 async function shouldSyncReputation(): Promise<boolean> {
-  const lastSyncResult = await db
-    .select({ lastSyncedAt: agentPerformanceMetrics.lastSyncedAt })
-    .from(agentPerformanceMetrics)
-    .where(isNotNull(agentPerformanceMetrics.lastSyncedAt))
-    .orderBy(desc(agentPerformanceMetrics.lastSyncedAt))
-    .limit(1);
+  const lastSyncResult = await db.agentPerformanceMetrics.findMany({
+    where: { lastSyncedAt: { not: null } },
+    orderBy: { lastSyncedAt: 'desc' },
+    take: 1,
+    select: { lastSyncedAt: true },
+  });
 
   const lastSync = lastSyncResult[0];
 
@@ -452,7 +440,12 @@ async function shouldSyncReputation(): Promise<boolean> {
     return true; // Never synced before
   }
 
-  const timeSinceLastSync = Date.now() - lastSync.lastSyncedAt.getTime();
+  const lastSyncDate =
+    lastSync.lastSyncedAt instanceof Date
+      ? lastSync.lastSyncedAt
+      : new Date(String(lastSync.lastSyncedAt));
+
+  const timeSinceLastSync = Date.now() - lastSyncDate.getTime();
   return timeSinceLastSync >= REPUTATION_SYNC_INTERVAL_MS;
 }
 

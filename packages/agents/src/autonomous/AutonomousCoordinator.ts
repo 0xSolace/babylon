@@ -12,7 +12,7 @@
  * 5. Optional trajectory recording for RL training
  */
 
-import { and, db, eq, or, userAgentConfigs, users } from '@babylon/db';
+import { db } from '@babylon/db';
 import { trajectoryRecorder } from '@babylon/training';
 import type { IAgentRuntime } from '@elizaos/core';
 import type { BabylonRuntime } from '../plugins/babylon/types';
@@ -106,13 +106,11 @@ export class AutonomousCoordinator {
     );
 
     // Get agent user
-    const agentResult = await db
-      .select({ id: users.id, isAgent: users.isAgent })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+      select: { id: true, isAgent: true },
+    });
 
-    const agent = agentResult[0];
     if (!agent || !agent.isAgent) {
       throw new Error('Agent not found or not an agent');
     }
@@ -448,26 +446,40 @@ export class AutonomousCoordinator {
     errors: number;
   }> {
     // Get all agents with autonomous features enabled
-    // Join users with userAgentConfigs to filter by autonomous settings
-    const activeAgentResults = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-      })
-      .from(users)
-      .innerJoin(userAgentConfigs, eq(users.id, userAgentConfigs.userId))
-      .where(
-        and(
-          eq(users.isAgent, true),
-          or(
-            eq(userAgentConfigs.autonomousTrading, true),
-            eq(userAgentConfigs.autonomousPosting, true),
-            eq(userAgentConfigs.autonomousCommenting, true),
-            eq(userAgentConfigs.autonomousDMs, true),
-            eq(userAgentConfigs.autonomousGroupChats, true)
-          )
-        )
-      );
+    // First get all agent users, then filter by config
+    const agentUsers = await db.user.findMany({
+      where: { isAgent: true },
+      select: { id: true, displayName: true },
+    });
+
+    // Get configs for these agents to filter by autonomous settings
+    const activeAgentResults: { id: string; displayName: string }[] = [];
+    for (const agentUser of agentUsers) {
+      const config = await db.userAgentConfig.findUnique({
+        where: { userId: String(agentUser.id) },
+        select: {
+          autonomousTrading: true,
+          autonomousPosting: true,
+          autonomousCommenting: true,
+          autonomousDMs: true,
+          autonomousGroupChats: true,
+        },
+      });
+      if (
+        config?.autonomousTrading ||
+        config?.autonomousPosting ||
+        config?.autonomousCommenting ||
+        config?.autonomousDMs ||
+        config?.autonomousGroupChats
+      ) {
+        activeAgentResults.push({
+          id: String(agentUser.id),
+          displayName: agentUser.displayName
+            ? String(agentUser.displayName)
+            : 'Agent',
+        });
+      }
+    }
 
     logger.info(
       `Processing ${activeAgentResults.length} active agents`,
@@ -478,8 +490,11 @@ export class AutonomousCoordinator {
     let totalActions = 0;
     let errors = 0;
 
-    for (const agent of activeAgentResults) {
-      const tickResult = await this.executeAutonomousTick(agent.id, runtime);
+    for (const activeAgent of activeAgentResults) {
+      const tickResult = await this.executeAutonomousTick(
+        activeAgent.id,
+        runtime
+      );
 
       if (tickResult.success) {
         const actionCount = Object.values(tickResult.actionsExecuted).reduce(
@@ -489,7 +504,7 @@ export class AutonomousCoordinator {
         totalActions += actionCount;
 
         logger.info(
-          `Agent ${agent.displayName}: ${actionCount} actions in ${tickResult.duration}ms`,
+          `Agent ${activeAgent.displayName}: ${actionCount} actions in ${tickResult.duration}ms`,
           undefined,
           'AutonomousCoordinator'
         );
@@ -512,16 +527,10 @@ export class AutonomousCoordinator {
    * Capture current environment state for trajectory recording
    */
   private async captureEnvironmentState(agentUserId: string) {
-    const agentResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        lifetimePnL: users.lifetimePnL,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-
-    const agent = agentResult[0];
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+      select: { virtualBalance: true, lifetimePnL: true },
+    });
 
     // Get open positions count
     const positionsCount = await db.perpPosition.count({

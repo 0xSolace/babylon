@@ -46,8 +46,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       name: key.name,
       maskedKey: `bab_live_****${last4}`,
       createdAt: key.createdAt.toISOString(),
-      lastUsedAt: key.lastUsedAt?.toISOString() || null,
-      expiresAt: key.expiresAt?.toISOString() || null,
+      lastUsedAt: key.lastUsedAt ? key.lastUsedAt.toISOString() : null,
+      expiresAt: key.expiresAt ? key.expiresAt.toISOString() : null,
     };
   });
 

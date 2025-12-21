@@ -53,18 +53,19 @@ const loadEnvFile = (filePath: string) => {
 loadEnvFile('.env.test');
 loadEnvFile('.env.local');
 
-const hasLLMKey = !!(
-  (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
+// Check if Jeju Compute is available for inference
+const hasJejuCompute = !!(
+  (process.env.JEJU_GATEWAY_URL?.trim() ?? '') !== '' ||
+  (process.env.JEJU_COMPUTE_ENDPOINT?.trim() ?? '') !== ''
 );
 
-const requireLLMKey = () => {
-  if (!hasLLMKey) {
+const requireJejuCompute = () => {
+  if (!hasJejuCompute) {
     throw new Error(
-      'GAME QUALITY TESTS REQUIRE LLM API KEY. ' +
-        'Set GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY to run these tests. ' +
-        'These tests validate actual engine functionality and MUST NOT be skipped.'
+      'GAME QUALITY TESTS REQUIRE JEJU COMPUTE. ' +
+        'Set JEJU_GATEWAY_URL or JEJU_COMPUTE_ENDPOINT to run these tests. ' +
+        'These tests validate actual engine functionality and MUST NOT be skipped. ' +
+        'Start Jeju with: cd /path/to/jeju && bun run dev'
     );
   }
 };
@@ -74,23 +75,16 @@ describe('Game Quality Integration Tests', () => {
   let game: GeneratedGame | null = null;
 
   beforeAll(async () => {
-    requireLLMKey();
+    requireJejuCompute();
 
-    try {
-      logger.info(
-        'Generating shared game for all quality tests...',
-        undefined,
-        'QualityTest'
-      );
-      const generator = new GameGenerator();
-      game = await generator.generateCompleteGame();
-      logger.info('Game generated successfully', undefined, 'QualityTest');
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      // Game generation failure is a test failure, not a skip
-      throw new Error(`Game generation failed: ${errorMessage}`);
-    }
+    logger.info(
+      'Generating shared game for all quality tests...',
+      undefined,
+      'QualityTest'
+    );
+    const generator = new GameGenerator();
+    game = await generator.generateCompleteGame();
+    logger.info('Game generated successfully', undefined, 'QualityTest');
   });
 
   test('generated game has no undefined fields', async () => {

@@ -1,9 +1,9 @@
 'use client';
 
 import { getProfileUrl, POINTS } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Award, TrendingUp, UserPlus, Users } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 
@@ -78,40 +78,14 @@ interface RewardsWidgetProps {
   userId: string;
 }
 
-/**
- * Global fetch tracking to prevent duplicate calls.
- */
-let rewardsWidgetFetchInFlight = false;
-let rewardsWidgetIntervalId: ReturnType<typeof setInterval> | null = null;
-
 export function RewardsWidget({ userId }: RewardsWidgetProps) {
-  const [data, setData] = useState<ReferralWidgetData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const lastFetchedUserIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    // Don't refetch if userId hasn't changed
-    if (lastFetchedUserIdRef.current === userId) {
-      return;
-    }
-
-    const fetchData = async () => {
-      if (!userId) return;
-
-      // Prevent duplicate fetches globally
-      if (rewardsWidgetFetchInFlight) return;
-      rewardsWidgetFetchInFlight = true;
-
-      setLoading(true);
-
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['rewards', 'referrals', userId],
+    queryFn: async (): Promise<ReferralWidgetData | null> => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
       if (!token) {
-        setLoading(false);
-        rewardsWidgetFetchInFlight = false;
-        return;
+        return null;
       }
 
       const response = await fetch(
@@ -124,36 +98,14 @@ export function RewardsWidget({ userId }: RewardsWidgetProps) {
       );
 
       if (!response.ok) {
-        setLoading(false);
-        rewardsWidgetFetchInFlight = false;
         throw new Error('Failed to fetch referral data');
       }
 
-      const result = await response.json();
-      setData(result);
-      setLoading(false);
-      lastFetchedUserIdRef.current = userId;
-      rewardsWidgetFetchInFlight = false;
-    };
-
-    // Clear any existing interval
-    if (rewardsWidgetIntervalId) {
-      clearInterval(rewardsWidgetIntervalId);
-      rewardsWidgetIntervalId = null;
-    }
-
-    fetchData();
-
-    // Refresh every 30 seconds
-    rewardsWidgetIntervalId = setInterval(fetchData, 30000);
-
-    return () => {
-      if (rewardsWidgetIntervalId) {
-        clearInterval(rewardsWidgetIntervalId);
-        rewardsWidgetIntervalId = null;
-      }
-    };
-  }, [userId]);
+      return response.json() as Promise<ReferralWidgetData>;
+    },
+    enabled: !!userId,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
 
   if (loading) {
     return (

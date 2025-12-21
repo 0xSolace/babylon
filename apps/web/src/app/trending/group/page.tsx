@@ -1,9 +1,9 @@
 'use client';
 
 import { logger } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
 import { PostCard } from '@/components/posts/PostCard';
 import { PageContainer } from '@/components/shared/PageContainer';
 
@@ -28,49 +28,50 @@ interface TagInfo {
   category: string | null;
 }
 
+interface TrendingGroupResponse {
+  success: boolean;
+  posts: PostData[];
+  tags: TagInfo[];
+}
+
 export default function GroupedTrendingPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tagsParam = searchParams.get('tags') || '';
-  const [posts, setPosts] = useState<PostData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [tags, setTags] = useState<TagInfo[]>([]);
 
-  const fetchPosts = useCallback(async () => {
-    if (!tagsParam) {
-      setLoading(false);
-      return;
-    }
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['trending', 'group', tagsParam],
+    queryFn: async (): Promise<{ posts: PostData[]; tags: TagInfo[] }> => {
+      if (!tagsParam) {
+        return { posts: [], tags: [] };
+      }
 
-    setLoading(true);
-
-    const response = await fetch(
-      `/api/trending/group?tags=${tagsParam}&limit=50`
-    );
-
-    if (!response.ok) {
-      logger.warn(
-        'Failed to fetch grouped trending posts',
-        { tagsParam },
-        'GroupedTrendingPage'
+      const response = await fetch(
+        `/api/trending/group?tags=${tagsParam}&limit=50`
       );
-      setLoading(false);
-      return;
-    }
 
-    const data = await response.json();
+      if (!response.ok) {
+        logger.warn(
+          'Failed to fetch grouped trending posts',
+          { tagsParam },
+          'GroupedTrendingPage'
+        );
+        return { posts: [], tags: [] };
+      }
 
-    if (data.success) {
-      setPosts(data.posts || []);
-      setTags(data.tags || []);
-    }
+      const result = (await response.json()) as TrendingGroupResponse;
 
-    setLoading(false);
-  }, [tagsParam]);
+      if (result.success) {
+        return { posts: result.posts || [], tags: result.tags || [] };
+      }
 
-  useEffect(() => {
-    fetchPosts();
-  }, [fetchPosts]);
+      return { posts: [], tags: [] };
+    },
+    enabled: !!tagsParam,
+  });
+
+  const posts = data?.posts ?? [];
+  const tags = data?.tags ?? [];
 
   const handleBack = () => {
     router.back();

@@ -457,7 +457,14 @@ async function ollamaList(): Promise<void> {
   }
 
   const data = (await response.json()) as { models?: OllamaModel[] };
-  const models = data.models || [];
+
+  if (!data.models) {
+    throw new Error(
+      'Ollama API returned invalid response: models field missing'
+    );
+  }
+
+  const models = data.models;
 
   if (models.length === 0) {
     console.log('No models installed.\n');
@@ -593,7 +600,14 @@ async function ollamaStatus(): Promise<void> {
 
   if (response.ok) {
     const data = (await response.json()) as { models?: OllamaModel[] };
-    const modelCount = data.models?.length || 0;
+
+    if (!data.models) {
+      throw new Error(
+        'Ollama API returned invalid response: models field missing'
+      );
+    }
+
+    const modelCount = data.models.length;
 
     logger.success('Ollama is running');
     console.log(`\n  Models installed: ${modelCount}`);
@@ -605,7 +619,7 @@ async function ollamaStatus(): Promise<void> {
       'mistral:7b',
     ];
 
-    const modelNames = data.models?.map((m) => m.name) || [];
+    const modelNames = data.models.map((m) => m.name);
     console.log('\n  Recommended models:');
     for (const model of recommendedModels) {
       const installed = modelNames.some((m) =>

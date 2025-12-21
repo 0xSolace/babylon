@@ -57,7 +57,11 @@ export async function POST(): Promise<NextResponse> {
 
   const user = userResult[0];
 
-  if (!user?.walletAddress) {
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  if (!user.walletAddress) {
     return NextResponse.json({
       success: false,
       message: 'Please connect a wallet first',

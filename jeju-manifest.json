@@ -269,7 +269,6 @@
     "recoveryTarget": "1h"
   },
   "defaultEnv": {
-    "REQUIRE_DECENTRALIZED": "true",
     "CQL_BLOCK_PRODUCER_ENDPOINT": "http://localhost:4300",
     "CQL_DATABASE_ID": "babylon",
     "JEJU_CACHE_SERVICE_URL": "http://localhost:4015",

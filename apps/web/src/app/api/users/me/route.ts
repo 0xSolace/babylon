@@ -96,9 +96,17 @@ const userSelectFields = {
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   // oauth3Id is the primary identifier
-  const oauth3Id = authUser.oauth3Id ?? authUser.userId;
-  const canonicalUserId = authUser.dbUserId ?? authUser.userId;
-  const walletAddress = authUser.walletAddress?.toLowerCase() ?? null;
+  if (!authUser.oauth3Id && !authUser.userId) {
+    throw new Error('User ID not found in authentication');
+  }
+  const oauth3Id = authUser.oauth3Id || authUser.userId;
+  if (!authUser.dbUserId && !authUser.userId) {
+    throw new Error('Database user ID not found in authentication');
+  }
+  const canonicalUserId = authUser.dbUserId || authUser.userId;
+  const walletAddress = authUser.walletAddress
+    ? authUser.walletAddress.toLowerCase()
+    : null;
 
   // Extract referralCode from query params (passed from frontend)
   const { searchParams } = new URL(request.url);
@@ -354,7 +362,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     isActor: dbUser.isActor,
     createdAt: dbUser.createdAt.toISOString(),
     updatedAt: dbUser.updatedAt.toISOString(),
-    stats: stats || undefined,
+    stats: stats ? stats : undefined,
   };
 
   const needsOnboarding = !dbUser.profileComplete;

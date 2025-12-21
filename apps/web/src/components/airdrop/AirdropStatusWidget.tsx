@@ -11,6 +11,7 @@
  */
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowRightLeft,
   CheckCircle,
@@ -23,7 +24,7 @@ import {
   Timer,
   TrendingUp,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 interface AirdropStatus {
@@ -93,22 +94,21 @@ interface DripResponse {
 }
 
 export function AirdropStatusWidget() {
-  const [status, setStatus] = useState<AirdropStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [claiming, setClaiming] = useState(false);
+  const queryClient = useQueryClient();
   const [countdown, setCountdown] = useState<string | null>(null);
 
   // Fetch airdrop status
-  const fetchStatus = useCallback(async () => {
-    const res = await fetch('/api/airdrop/status');
-    const data = (await res.json()) as AirdropStatus;
-    setStatus(data);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetchStatus();
-  }, [fetchStatus]);
+  const {
+    data: status,
+    isLoading: loading,
+    refetch: fetchStatus,
+  } = useQuery({
+    queryKey: ['airdrop', 'status'],
+    queryFn: async (): Promise<AirdropStatus> => {
+      const res = await fetch('/api/airdrop/status');
+      return res.json() as Promise<AirdropStatus>;
+    },
+  });
 
   // Countdown timer
   useEffect(() => {
@@ -151,32 +151,36 @@ export function AirdropStatusWidget() {
     status?.drip,
   ]);
 
-  // Claim drip
-  const handleClaim = async () => {
-    setClaiming(true);
-
-    const res = await fetch('/api/airdrop/drip', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'visit' }),
-    });
-
-    const data = (await res.json()) as DripResponse;
-
-    if (data.success && data.canDrip) {
-      toast.success(data.message, {
-        icon: data.isInitialClaim ? '🚀' : '💧',
-        description: `${data.percentUnlocked}% of your airdrop is now unlocked!`,
+  // Claim drip mutation
+  const claimMutation = useMutation({
+    mutationFn: async (): Promise<DripResponse> => {
+      const res = await fetch('/api/airdrop/drip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'visit' }),
       });
-      fetchStatus();
-    } else {
-      toast.info(data.message, {
-        icon: '⏳',
-      });
-    }
+      return res.json() as Promise<DripResponse>;
+    },
+    onSuccess: (data) => {
+      if (data.success && data.canDrip) {
+        toast.success(data.message, {
+          icon: data.isInitialClaim ? '🚀' : '💧',
+          description: `${data.percentUnlocked}% of your airdrop is now unlocked!`,
+        });
+        queryClient.invalidateQueries({ queryKey: ['airdrop', 'status'] });
+      } else {
+        toast.info(data.message, {
+          icon: '⏳',
+        });
+      }
+    },
+  });
 
-    setClaiming(false);
+  const handleClaim = () => {
+    claimMutation.mutate();
   };
+
+  const claiming = claimMutation.isPending;
 
   if (loading) {
     return (
@@ -446,13 +450,14 @@ export function AirdropStatusWidget() {
  * Compact version for nav/header
  */
 export function AirdropStatusBadge() {
-  const [status, setStatus] = useState<AirdropStatus | null>(null);
-
-  useEffect(() => {
-    fetch('/api/airdrop/status')
-      .then((res) => res.json())
-      .then(setStatus);
-  }, []);
+  const { data: status } = useQuery({
+    queryKey: ['airdrop', 'status'],
+    queryFn: async (): Promise<AirdropStatus> => {
+      const res = await fetch('/api/airdrop/status');
+      return res.json() as Promise<AirdropStatus>;
+    },
+    staleTime: 30000, // Consider data stale after 30 seconds
+  });
 
   if (!status?.registered || !status.drip?.canDripNow) {
     return null;

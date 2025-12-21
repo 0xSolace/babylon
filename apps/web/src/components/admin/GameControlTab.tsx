@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   Clock,
@@ -11,11 +12,10 @@ import {
   Pause,
   Play,
   RefreshCw,
-  TrendingUp,
   Users,
   Zap,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { WorldFactsSection } from './WorldFactsSection';
 
@@ -122,54 +122,45 @@ interface GameStats {
  * @returns Game control tab element
  */
 export function GameControlTab() {
-  const [stats, setStats] = useState<GameStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  const fetchStats = useCallback(async () => {
-    const response = await fetch('/api/admin/game-stats');
-    if (!response.ok) {
-      setLoading(false);
-      setError('Failed to load stats');
-      return;
-    }
-    const data = await response.json();
-    setStats(data);
-    setError(null);
-    setLoading(false);
-  }, []);
+  const {
+    data: stats,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery<GameStats>({
+    queryKey: ['admin', 'game-stats'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/game-stats');
+      if (!response.ok) {
+        throw new Error('Failed to load stats');
+      }
+      return response.json();
+    },
+    refetchInterval: autoRefresh ? 5000 : false, // Refresh every 5 seconds if enabled
+  });
 
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+  const gameControlMutation = useMutation({
+    mutationFn: async (action: 'start' | 'pause') => {
+      const response = await fetch('/api/game/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
 
-  useEffect(() => {
-    if (!autoRefresh) return;
+      if (!response.ok) {
+        throw new Error(`Failed to ${action} game`);
+      }
 
-    const interval = setInterval(fetchStats, 5000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
-  }, [autoRefresh, fetchStats]);
-
-  const handleGameControl = async (action: 'start' | 'pause') => {
-    setActionLoading(true);
-    const response = await fetch('/api/game/control', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
-    });
-
-    if (!response.ok) {
-      setActionLoading(false);
-      setError(`Failed to ${action} game`);
-      return;
-    }
-
-    // Refresh stats immediately
-    await fetchStats();
-    setActionLoading(false);
-  };
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'game-stats'] });
+    },
+  });
 
   const formatUptime = (minutes: number) => {
     if (minutes < 1) return '< 1 min';
@@ -194,14 +185,12 @@ export function GameControlTab() {
     value,
     subValue,
     color = 'blue',
-    trend,
   }: {
     icon: React.ComponentType<{ className?: string }>;
     label: string;
     value: string | number;
     subValue?: string;
     color?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'yellow';
-    trend?: 'up' | 'down' | 'neutral';
   }) => {
     const colorClasses = {
       blue: 'text-blue-500 bg-blue-500/10',
@@ -222,18 +211,7 @@ export function GameControlTab() {
               className={cn('h-5 w-5', colorClasses[color].split(' ')[0])}
             />
           </div>
-          {trend && (
-            <TrendingUp
-              className={cn(
-                'h-4 w-4',
-                trend === 'up'
-                  ? 'text-green-500'
-                  : trend === 'down'
-                    ? 'text-red-500'
-                    : 'text-gray-400'
-              )}
-            />
-          )}
+          {/* Removed trend icon */}
         </div>
         <div className="mb-1 font-bold text-2xl">{value}</div>
         <div className="text-muted-foreground text-sm">{label}</div>
@@ -244,7 +222,7 @@ export function GameControlTab() {
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-24 w-full" />
@@ -256,7 +234,9 @@ export function GameControlTab() {
   if (error || !stats) {
     return (
       <div className="p-8 text-center text-red-500">
-        {error || 'Failed to load game statistics'}
+        {error instanceof Error
+          ? error.message
+          : 'Failed to load game statistics'}
       </div>
     );
   }
@@ -289,8 +269,8 @@ export function GameControlTab() {
               />
             </button>
             <button
-              onClick={() => fetchStats()}
-              disabled={actionLoading}
+              onClick={() => refetch()}
+              disabled={isFetching}
               className="rounded-lg bg-blue-500/20 px-4 py-2 text-blue-500 transition-colors hover:bg-blue-500/30 disabled:opacity-50"
             >
               Refresh Now
@@ -301,8 +281,8 @@ export function GameControlTab() {
         {/* Control Buttons */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <button
-            onClick={() => handleGameControl('start')}
-            disabled={actionLoading || gameState.isRunning}
+            onClick={() => gameControlMutation.mutate('start')}
+            disabled={gameControlMutation.isPending || gameState.isRunning}
             className={cn(
               'flex items-center justify-center gap-3 rounded-lg px-6 py-4 font-semibold transition-all',
               gameState.isRunning
@@ -324,8 +304,8 @@ export function GameControlTab() {
           </button>
 
           <button
-            onClick={() => handleGameControl('pause')}
-            disabled={actionLoading || !gameState.isRunning}
+            onClick={() => gameControlMutation.mutate('pause')}
+            disabled={gameControlMutation.isPending || !gameState.isRunning}
             className={cn(
               'flex items-center justify-center gap-3 rounded-lg px-6 py-4 font-semibold transition-all',
               !gameState.isRunning

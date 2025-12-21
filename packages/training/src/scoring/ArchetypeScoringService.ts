@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import { and, db, eq, inArray, isNull, not, trajectories } from '@babylon/db';
+import { db } from '@babylon/db';
 import { getLLMCaller } from '../dependencies';
 import { type BehavioralMetrics, trajectoryMetricsExtractor } from '../metrics';
 import { hasCustomRubric } from '../rubrics';
@@ -90,36 +90,23 @@ export class ArchetypeScoringService {
   ): Promise<ArchetypeScore | null> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
 
-    const trajResult = await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        agentId: trajectories.agentId,
-        archetype: trajectories.archetype,
-        stepsJson: trajectories.stepsJson,
-        scenarioId: trajectories.scenarioId,
-        finalPnL: trajectories.finalPnL,
-        episodeLength: trajectories.episodeLength,
-        totalReward: trajectories.totalReward,
-      })
-      .from(trajectories)
-      .where(eq(trajectories.trajectoryId, trajectoryId))
-      .limit(1);
-
-    const traj = trajResult[0];
+    const traj = await db.trajectory.findUnique({
+      where: { trajectoryId },
+    });
     if (!traj) {
       logger.warn('Trajectory not found', { trajectoryId }, 'ArchetypeScoring');
       return null;
     }
 
-    const archetype = traj.archetype || opts.archetype || 'default';
+    const archetype = traj.archetype ?? opts.archetype ?? 'default';
     const steps = JSON.parse(traj.stepsJson) as TrajectoryStep[];
 
     const metrics = trajectoryMetricsExtractor.extractFromRaw({
       trajectoryId: traj.trajectoryId,
       agentId: traj.agentId,
       stepsJson: traj.stepsJson,
-      scenarioId: traj.scenarioId || undefined,
-      finalPnL: traj.finalPnL || undefined,
+      scenarioId: traj.scenarioId ?? undefined,
+      finalPnL: traj.finalPnL ?? undefined,
     });
 
     if (!metrics) {
@@ -134,7 +121,7 @@ export class ArchetypeScoringService {
       archetype,
       steps,
       metrics,
-      finalPnL: traj.finalPnL || undefined,
+      finalPnL: traj.finalPnL ?? undefined,
       episodeLength: traj.episodeLength,
       totalReward: traj.totalReward,
     };
@@ -163,15 +150,16 @@ export class ArchetypeScoringService {
     };
 
     if (opts.saveToDatabase) {
-      await db
-        .update(trajectories)
-        .set({
+      await db.trajectory.update({
+        where: { trajectoryId },
+        data: {
           aiJudgeReward: score.score,
           aiJudgeReasoning: score.reasoning,
           judgedAt: score.scoredAt,
           isTrainingData: true,
-        })
-        .where(eq(trajectories.trajectoryId, trajectoryId));
+          updatedAt: new Date(),
+        },
+      });
     }
 
     logger.info(
@@ -211,19 +199,9 @@ export class ArchetypeScoringService {
       return [];
     }
 
-    const trajResults = await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        agentId: trajectories.agentId,
-        archetype: trajectories.archetype,
-        stepsJson: trajectories.stepsJson,
-        scenarioId: trajectories.scenarioId,
-        finalPnL: trajectories.finalPnL,
-        episodeLength: trajectories.episodeLength,
-        totalReward: trajectories.totalReward,
-      })
-      .from(trajectories)
-      .where(inArray(trajectories.trajectoryId, trajectoryIds));
+    const trajResults = await db.trajectory.findMany({
+      where: { trajectoryId: { in: trajectoryIds } },
+    });
 
     if (trajResults.length < this.minGroupSize) {
       logger.warn(
@@ -248,8 +226,8 @@ export class ArchetypeScoringService {
         trajectoryId: traj.trajectoryId,
         agentId: traj.agentId,
         stepsJson: traj.stepsJson,
-        scenarioId: traj.scenarioId || undefined,
-        finalPnL: traj.finalPnL || undefined,
+        scenarioId: traj.scenarioId ?? undefined,
+        finalPnL: traj.finalPnL ?? undefined,
       });
 
       if (!metrics) {
@@ -313,15 +291,16 @@ export class ArchetypeScoringService {
         scores.push(score);
 
         if (opts.saveToDatabase) {
-          await db
-            .update(trajectories)
-            .set({
+          await db.trajectory.update({
+            where: { trajectoryId: ctx.trajectoryId },
+            data: {
               aiJudgeReward: score.score,
               aiJudgeReasoning: score.reasoning,
               judgedAt: score.scoredAt,
               isTrainingData: true,
-            })
-            .where(eq(trajectories.trajectoryId, ctx.trajectoryId));
+              updatedAt: new Date(),
+            },
+          });
         }
       }
     }
@@ -381,18 +360,17 @@ export class ArchetypeScoringService {
     archetype: string = 'default',
     limit: number = 100
   ): Promise<{ scored: number; errors: number }> {
-    const unscoredResult = await db
-      .select({ trajectoryId: trajectories.trajectoryId })
-      .from(trajectories)
-      .where(
-        and(
-          isNull(trajectories.aiJudgeReward),
-          eq(trajectories.isTrainingData, true),
-          not(eq(trajectories.stepsJson, 'null')),
-          not(eq(trajectories.stepsJson, '[]'))
-        )
-      )
-      .limit(limit);
+    const unscoredResult = await db.trajectory.findMany({
+      where: {
+        AND: [
+          { aiJudgeReward: null },
+          { isTrainingData: true },
+          { stepsJson: { not: 'null' } },
+          { stepsJson: { not: '[]' } },
+        ],
+      },
+      take: limit,
+    });
 
     if (unscoredResult.length === 0) {
       logger.info('No unscored trajectories found', {}, 'ArchetypeScoring');

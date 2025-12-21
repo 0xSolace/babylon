@@ -6,21 +6,7 @@
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import {
-  agentLogs,
-  and,
-  db,
-  desc,
-  eq,
-  getDbInstance,
-  inArray,
-  isNull,
-  type JsonValue,
-  perpPositions,
-  positions,
-  sql,
-  users,
-} from '@babylon/db';
+import { db, type JsonValue } from '@babylon/db';
 import { StaticDataRegistry, type StaticOrganization } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
@@ -189,11 +175,9 @@ export class AutonomousPlanningCoordinator {
       'PlanningCoordinator'
     );
 
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
 
     if (!agent) {
       throw new Error('Agent not found');
@@ -207,7 +191,7 @@ export class AutonomousPlanningCoordinator {
 
     // Convert agent to PlanningAgent (null -> undefined for optional fields)
     const planningAgent: PlanningAgent = {
-      displayName: agent.displayName ?? 'Agent',
+      displayName: agent.displayName ? String(agent.displayName) : 'Agent',
       agentSystem: agentConfig?.systemPrompt ?? undefined,
       agentMaxActionsPerTick: agentConfig?.maxActionsPerTick ?? undefined,
       agentRiskTolerance: agentConfig?.riskTolerance ?? undefined,
@@ -311,14 +295,10 @@ export class AutonomousPlanningCoordinator {
       })) as AgentGoal[];
 
     // Get user and agent config
-    const [user] = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        lifetimePnL: users.lifetimePnL,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const user = await db.user.findUnique({
+      where: { id: agentUserId },
+      select: { virtualBalance: true, lifetimePnL: true },
+    });
 
     const config = await getAgentConfig(agentUserId);
 
@@ -340,24 +320,13 @@ export class AutonomousPlanningCoordinator {
     }
 
     // Get portfolio info
-    const [positionCountResult] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(positions)
-      .where(
-        and(eq(positions.userId, agentUserId), eq(positions.status, 'active'))
-      );
-    const positionsCount = positionCountResult?.count ?? 0;
+    const positionsCount = await db.position.count({
+      where: { userId: agentUserId, status: 'active' },
+    });
 
-    const [perpPositionCountResult] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, agentUserId),
-          isNull(perpPositions.closedAt)
-        )
-      );
-    const perpPositionsCount = perpPositionCountResult?.count ?? 0;
+    const perpPositionsCount = await db.perpPosition.count({
+      where: { userId: agentUserId, closedAt: null },
+    });
 
     // Get pending interactions
     const pendingInteractions =
@@ -366,17 +335,14 @@ export class AutonomousPlanningCoordinator {
       );
 
     // Get recent actions (last 10)
-    const recentLogs = await db
-      .select()
-      .from(agentLogs)
-      .where(
-        and(
-          eq(agentLogs.agentUserId, agentUserId),
-          inArray(agentLogs.type, ['trade', 'post', 'comment', 'dm'])
-        )
-      )
-      .orderBy(desc(agentLogs.createdAt))
-      .limit(10);
+    const recentLogs = await db.agentLog.findMany({
+      where: {
+        agentUserId,
+        type: { in: ['trade', 'post', 'comment', 'dm'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
 
     // Detect trading opportunities
     const tradingOpportunities = await detectTradingOpportunities(
@@ -417,8 +383,11 @@ export class AutonomousPlanningCoordinator {
         social: socialOpportunities,
       },
       recentActions: recentLogs.map((log) => ({
-        type: log.type,
-        timestamp: log.createdAt,
+        type: String(log.type),
+        timestamp:
+          log.createdAt instanceof Date
+            ? log.createdAt
+            : new Date(String(log.createdAt)),
         success: log.level !== 'error',
       })),
     };
@@ -987,9 +956,14 @@ async function detectTradingOpportunities(
   }
 
   // Get perp markets with significant price movement
-  const orgStates = await getDbInstance().getAllOrganizationStates();
+  const orgStates = await db.organizationState.findMany({
+    select: { id: true, currentPrice: true },
+  });
   const priceMap = new Map(
-    orgStates.map((s): [string, number | null] => [s.id, s.currentPrice])
+    orgStates.map((s): [string, number | null] => [
+      String(s.id),
+      s.currentPrice ? Number(s.currentPrice) : null,
+    ])
   );
   const perpMarkets = StaticDataRegistry.getAllOrganizations()
     .filter((o): o is StaticOrganization => o.type === 'company')
@@ -1067,25 +1041,33 @@ async function detectSocialOpportunities(
   }
 
   // Check for trending topics to post about
-  const trendingTagsRaw = await db.query.trendingTags.findMany({
-    orderBy: (trendingTags, { desc: descFn }) => [descFn(trendingTags.score)],
-    limit: 5,
-    with: {
-      tag: {
-        columns: {
-          name: true,
-          displayName: true,
-        },
-      },
-    },
+  const trendingTagsRaw = await db.trendingTag.findMany({
+    orderBy: { score: 'desc' },
+    take: 5,
+    select: { tagId: true, score: true },
   });
 
+  // Get tag details for the trending tags
+  const tagIds = trendingTagsRaw.map((t) => String(t.tagId));
+  const tags =
+    tagIds.length > 0
+      ? await db.tag.findMany({
+          where: { id: { in: tagIds } },
+          select: { id: true, name: true, displayName: true },
+        })
+      : [];
+  const tagMap = new Map(tags.map((t) => [String(t.id), t]));
+
   for (const trending of trendingTagsRaw) {
-    if (trending.tag) {
+    const tag = tagMap.get(String(trending.tagId));
+    if (tag) {
+      const tagDisplayName = tag.displayName
+        ? String(tag.displayName)
+        : String(tag.name);
       opportunities.push({
         type: 'post',
-        description: `Trending topic: ${trending.tag.displayName || trending.tag.name}`,
-        engagementScore: trending.score / 100, // Normalize score
+        description: `Trending topic: ${tagDisplayName}`,
+        engagementScore: Number(trending.score) / 100, // Normalize score
       });
     }
   }

@@ -142,63 +142,58 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
     // -5 → 0, 0 → 50, +5 → 100
     const score = Math.round((params.rating + 5) * 10);
 
-    try {
-      logger.info('Submitting feedback to Agent0', {
-        agentId,
-        targetAgentId: params.targetAgentId,
-        rating: params.rating,
-        score,
-        skill: params.skill,
+    logger.info('Submitting feedback to Agent0', {
+      agentId,
+      targetAgentId: params.targetAgentId,
+      rating: params.rating,
+      score,
+      skill: params.skill,
+    });
+
+    // Prepare feedback using SDK
+    const feedback = this.sdk.prepareFeedback(
+      agentId,
+      score,
+      params.tags || [],
+      params.comment || '',
+      params.capability, // capability
+      undefined, // name
+      params.skill, // skill being rated
+      params.task || 'game-interaction' // task type
+    );
+
+    // Submit on-chain (SDK will handle authorization)
+    const result = await this.sdk.giveFeedback(agentId, feedback);
+
+    logger.info('Feedback submitted successfully', {
+      agentId,
+      targetAgentId: params.targetAgentId,
+      rating: params.rating,
+    });
+
+    // Store locally for tracking if transactionId provided
+    if (params.transactionId) {
+      await db.insert(gameConfigs).values({
+        id: await generateSnowflakeId(),
+        key: `agent0_feedback_${params.transactionId}`,
+        value: {
+          agentId,
+          targetAgentId: params.targetAgentId,
+          rating: params.rating,
+          score,
+          skill: params.skill,
+          comment: params.comment,
+          tags: params.tags,
+          transactionId: params.transactionId,
+          submittedAt: new Date().toISOString(),
+        } as JsonValue,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
-
-      // Prepare feedback using SDK
-      const feedback = this.sdk.prepareFeedback(
-        agentId,
-        score,
-        params.tags || [],
-        params.comment || '',
-        params.capability, // capability
-        undefined, // name
-        params.skill, // skill being rated
-        params.task || 'game-interaction' // task type
-      );
-
-      // Submit on-chain (SDK will handle authorization)
-      const result = await this.sdk.giveFeedback(agentId, feedback);
-
-      logger.info('Feedback submitted successfully', {
-        agentId,
-        targetAgentId: params.targetAgentId,
-        rating: params.rating,
-      });
-
-      // Store locally for tracking if transactionId provided
-      if (params.transactionId) {
-        await db.insert(gameConfigs).values({
-          id: await generateSnowflakeId(),
-          key: `agent0_feedback_${params.transactionId}`,
-          value: {
-            agentId,
-            targetAgentId: params.targetAgentId,
-            rating: params.rating,
-            score,
-            skill: params.skill,
-            comment: params.comment,
-            tags: params.tags,
-            transactionId: params.transactionId,
-            submittedAt: new Date().toISOString(),
-          } as JsonValue,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      }
-
-      // Map SDK Feedback to Agent0Feedback
-      return this.mapSdkFeedback(result);
-    } catch (error) {
-      logger.error('Failed to submit feedback', { error, params });
-      throw error;
     }
+
+    // Map SDK Feedback to Agent0Feedback
+    return this.mapSdkFeedback(result);
   }
 
   /**
@@ -209,33 +204,23 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
     clientAddress: string,
     feedbackIndex: number
   ): Promise<Agent0Feedback> {
-    try {
-      // Try Agent0Client first
-      const agent0Client = getAgent0Client();
-      if (agent0Client.isAvailable()) {
-        return await agent0Client.getFeedback(
-          agentId,
-          clientAddress,
-          feedbackIndex
-        );
-      }
-
-      // Fallback to SDK
-      const feedback = await this.sdk.getFeedback(
+    // Try Agent0Client first
+    const agent0Client = getAgent0Client();
+    if (agent0Client.isAvailable()) {
+      return await agent0Client.getFeedback(
         agentId,
         clientAddress,
         feedbackIndex
       );
-      return this.mapSdkFeedback(feedback);
-    } catch (error) {
-      logger.error('Failed to get feedback', {
-        error,
-        agentId,
-        clientAddress,
-        feedbackIndex,
-      });
-      throw error;
     }
+
+    // Fallback to SDK
+    const feedback = await this.sdk.getFeedback(
+      agentId,
+      clientAddress,
+      feedbackIndex
+    );
+    return this.mapSdkFeedback(feedback);
   }
 
   /**
@@ -245,28 +230,23 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
     agentId: string,
     params?: Partial<Agent0FeedbackSearchParams>
   ): Promise<Agent0Feedback[]> {
-    try {
-      // Try Agent0Client first
-      const agent0Client = getAgent0Client();
-      if (agent0Client.isAvailable()) {
-        return await agent0Client.searchFeedback(agentId, params);
-      }
-
-      // Fallback to SDK
-      const feedbacks = await this.sdk.searchFeedback(
-        agentId,
-        params?.tags,
-        params?.capabilities,
-        params?.skills,
-        params?.minScore,
-        params?.maxScore
-      );
-
-      return feedbacks.map((f) => this.mapSdkFeedback(f));
-    } catch (error) {
-      logger.error('Failed to search feedback', { error, agentId, params });
-      return [];
+    // Try Agent0Client first
+    const agent0Client = getAgent0Client();
+    if (agent0Client.isAvailable()) {
+      return await agent0Client.searchFeedback(agentId, params);
     }
+
+    // Fallback to SDK
+    const feedbacks = await this.sdk.searchFeedback(
+      agentId,
+      params?.tags,
+      params?.capabilities,
+      params?.skills,
+      params?.minScore,
+      params?.maxScore
+    );
+
+    return feedbacks.map((f) => this.mapSdkFeedback(f));
   }
 
   /**
@@ -276,31 +256,22 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
     agentId: string,
     feedbackIndex: number
   ): Promise<string> {
-    try {
-      // Try Agent0Client first
-      const agent0Client = getAgent0Client();
-      if (agent0Client.isAvailable()) {
-        return await agent0Client.revokeFeedback(agentId, feedbackIndex);
-      }
-
-      // Fallback to SDK
-      const txHash = await this.sdk.revokeFeedback(agentId, feedbackIndex);
-
-      logger.info('Feedback revoked successfully', {
-        agentId,
-        feedbackIndex,
-        txHash,
-      });
-
-      return txHash;
-    } catch (error) {
-      logger.error('Failed to revoke feedback', {
-        error,
-        agentId,
-        feedbackIndex,
-      });
-      throw error;
+    // Try Agent0Client first
+    const agent0Client = getAgent0Client();
+    if (agent0Client.isAvailable()) {
+      return await agent0Client.revokeFeedback(agentId, feedbackIndex);
     }
+
+    // Fallback to SDK
+    const txHash = await this.sdk.revokeFeedback(agentId, feedbackIndex);
+
+    logger.info('Feedback revoked successfully', {
+      agentId,
+      feedbackIndex,
+      txHash,
+    });
+
+    return txHash;
   }
 
   /**
@@ -313,44 +284,34 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
     responseUri: string,
     responseHash: string
   ): Promise<string> {
-    try {
-      // Try Agent0Client first
-      const agent0Client = getAgent0Client();
-      if (agent0Client.isAvailable()) {
-        return await agent0Client.appendFeedbackResponse(
-          agentId,
-          clientAddress,
-          feedbackIndex,
-          responseUri,
-          responseHash
-        );
-      }
-
-      // Fallback to SDK
-      const txHash = await this.sdk.appendResponse(
+    // Try Agent0Client first
+    const agent0Client = getAgent0Client();
+    if (agent0Client.isAvailable()) {
+      return await agent0Client.appendFeedbackResponse(
         agentId,
         clientAddress,
         feedbackIndex,
-        { uri: responseUri, hash: responseHash }
+        responseUri,
+        responseHash
       );
-
-      logger.info('Response appended to feedback successfully', {
-        agentId,
-        clientAddress,
-        feedbackIndex,
-        txHash,
-      });
-
-      return txHash;
-    } catch (error) {
-      logger.error('Failed to append response', {
-        error,
-        agentId,
-        clientAddress,
-        feedbackIndex,
-      });
-      throw error;
     }
+
+    // Fallback to SDK
+    const txHash = await this.sdk.appendResponse(
+      agentId,
+      clientAddress,
+      feedbackIndex,
+      { uri: responseUri, hash: responseHash }
+    );
+
+    logger.info('Response appended to feedback successfully', {
+      agentId,
+      clientAddress,
+      feedbackIndex,
+      txHash,
+    });
+
+    return txHash;
   }
 
   /**
@@ -361,28 +322,18 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
     tag1?: string,
     tag2?: string
   ): Promise<Agent0ReputationSummary> {
-    try {
-      // Try Agent0Client first
-      const agent0Client = getAgent0Client();
-      if (agent0Client.isAvailable()) {
-        return await agent0Client.getReputationSummary(agentId, tag1, tag2);
-      }
-
-      // Fallback to SDK
-      const summary = await this.sdk.getReputationSummary(agentId, tag1, tag2);
-      return {
-        count: summary.count,
-        averageScore: summary.averageScore,
-      };
-    } catch (error) {
-      logger.error('Failed to get reputation summary', {
-        error,
-        agentId,
-        tag1,
-        tag2,
-      });
-      return { count: 0, averageScore: 0 };
+    // Try Agent0Client first
+    const agent0Client = getAgent0Client();
+    if (agent0Client.isAvailable()) {
+      return await agent0Client.getReputationSummary(agentId, tag1, tag2);
     }
+
+    // Fallback to SDK
+    const summary = await this.sdk.getReputationSummary(agentId, tag1, tag2);
+    return {
+      count: summary.count,
+      averageScore: summary.averageScore,
+    };
   }
 
   /**

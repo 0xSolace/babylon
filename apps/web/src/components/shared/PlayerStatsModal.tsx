@@ -1,6 +1,6 @@
 'use client';
 
-import { logger } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   Calendar,
   FileText,
@@ -14,7 +14,6 @@ import {
   X,
 } from 'lucide-react';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 interface UserProfile {
@@ -41,6 +40,10 @@ interface UserProfile {
   };
 }
 
+interface UserProfileResponse {
+  user: UserProfile | null;
+}
+
 interface PlayerStatsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -52,55 +55,25 @@ export function PlayerStatsModal({
   onClose,
   userId,
 }: PlayerStatsModalProps) {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen || !userId) {
-      setProfile(null);
-      setError(null);
-      return;
-    }
-
-    const fetchProfile = async () => {
-      setLoading(true);
-      setError(null);
-
+  const {
+    data: profile,
+    isLoading: loading,
+    error,
+  } = useQuery({
+    queryKey: ['playerStats', 'profile', userId],
+    queryFn: async (): Promise<UserProfile> => {
       const response = await fetch(`/api/users/${userId}/profile`);
-
       if (!response.ok) {
-        const errorMessage = 'Failed to fetch profile';
-        setError(errorMessage);
-        logger.error(
-          'Failed to fetch user profile',
-          { userId, status: response.status },
-          'PlayerStatsModal'
-        );
-        setLoading(false);
-        return;
+        throw new Error('Failed to fetch profile');
       }
-
-      const data = await response.json();
-
+      const data: UserProfileResponse = await response.json();
       if (!data.user) {
-        const errorMessage = 'User not found';
-        setError(errorMessage);
-        logger.error(
-          'User not found in profile response',
-          { userId },
-          'PlayerStatsModal'
-        );
-        setLoading(false);
-        return;
+        throw new Error('User not found');
       }
-
-      setProfile(data.user);
-      setLoading(false);
-    };
-
-    fetchProfile();
-  }, [isOpen, userId]);
+      return data.user;
+    },
+    enabled: isOpen && !!userId,
+  });
 
   if (!isOpen) return null;
 
@@ -128,7 +101,9 @@ export function PlayerStatsModal({
 
           {error && (
             <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
-              <p className="mb-3 text-red-500 text-sm">{error}</p>
+              <p className="mb-3 text-red-500 text-sm">
+                {error instanceof Error ? error.message : 'An error occurred'}
+              </p>
               <button
                 onClick={onClose}
                 className="min-h-[44px] touch-manipulation rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground text-sm transition-colors hover:bg-primary/90"

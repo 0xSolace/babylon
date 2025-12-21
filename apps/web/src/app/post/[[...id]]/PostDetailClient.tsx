@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, MessageCircle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -10,57 +11,56 @@ import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useInteractionStore } from '@/stores/interactionStore';
 
+interface PostData {
+  id: string;
+  type?: string;
+  content: string;
+  fullContent?: string | null;
+  articleTitle?: string | null;
+  byline?: string | null;
+  biasScore?: number | null;
+  sentiment?: string | null;
+  slant?: string | null;
+  category?: string | null;
+  authorId: string;
+  authorName: string;
+  authorUsername?: string | null;
+  authorProfileImageUrl?: string | null;
+  timestamp: string;
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+  isLiked: boolean;
+  isShared: boolean;
+  // Repost metadata (new clean structure)
+  isRepost?: boolean;
+  isQuote?: boolean;
+  quoteComment?: string | null;
+  originalPostId?: string | null;
+  originalPost?: {
+    id: string;
+    content: string;
+    authorId: string;
+    authorName: string;
+    authorUsername: string | null;
+    authorProfileImageUrl: string | null;
+    timestamp: string;
+  } | null;
+}
+
 export default function PostDetailClient() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   // Catch-all route: params.id is string[] or undefined
   const idParam = params.id;
-  const postId = (Array.isArray(idParam) ? idParam[0] : idParam) ?? '';
+  const postId = Array.isArray(idParam) ? idParam[0] : idParam;
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
 
   // Function to open comment modal when comment button is clicked
   const handleCommentClick = () => {
     setIsCommentModalOpen(true);
   };
-
-  const [post, setPost] = useState<{
-    id: string;
-    type?: string;
-    content: string;
-    fullContent?: string | null;
-    articleTitle?: string | null;
-    byline?: string | null;
-    biasScore?: number | null;
-    sentiment?: string | null;
-    slant?: string | null;
-    category?: string | null;
-    authorId: string;
-    authorName: string;
-    authorUsername?: string | null;
-    authorProfileImageUrl?: string | null;
-    timestamp: string;
-    likeCount: number;
-    commentCount: number;
-    shareCount: number;
-    isLiked: boolean;
-    isShared: boolean;
-    // Repost metadata (new clean structure)
-    isRepost?: boolean;
-    isQuote?: boolean;
-    quoteComment?: string | null;
-    originalPostId?: string | null;
-    originalPost?: {
-      id: string;
-      content: string;
-      authorId: string;
-      authorName: string;
-      authorUsername: string | null;
-      authorProfileImageUrl: string | null;
-      timestamp: string;
-    } | null;
-  } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Redirect to feed if no post ID provided
   useEffect(() => {
@@ -69,24 +69,29 @@ export default function PostDetailClient() {
     }
   }, [postId, router]);
 
-  useEffect(() => {
-    if (!postId) return;
-    const loadPost = async () => {
-      setIsLoading(true);
-      setError(null);
+  // Don't render with missing postId - redirect will happen via useEffect
+  if (!postId) {
+    return null;
+  }
 
+  const {
+    data: post,
+    isLoading,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: async () => {
       const response = await fetch(`/api/posts/${postId}`);
       const result = await response.json();
-
       const postData = result.data || result;
 
       // If this is an article-type post, redirect to /article/[id]
       if (postData.type === 'article' && postData.fullContent) {
         router.replace(`/article/${postId}`);
-        return;
+        throw new Error('Redirecting to article');
       }
 
-      setPost({
+      const formattedPost: PostData = {
         id: postData.id,
         type: postData.type || 'post',
         content: postData.content,
@@ -113,7 +118,7 @@ export default function PostDetailClient() {
         quoteComment: postData.quoteComment || null,
         originalPostId: postData.originalPostId || null,
         originalPost: postData.originalPost || null,
-      });
+      };
 
       // Update the interaction store with fresh API data
       // For reposts, use the original post ID to match InteractionBar's behavior
@@ -140,45 +145,49 @@ export default function PostDetailClient() {
         useInteractionStore.setState({ postInteractions: updatedInteractions });
       }
 
-      setIsLoading(false);
-    };
+      return formattedPost;
+    },
+    enabled: !!postId,
+  });
 
-    loadPost();
-  }, [postId, router.replace]);
+  const error = queryError?.message ?? null;
 
-  // Subscribe to interaction store changes and update post state
+  // Subscribe to interaction store changes and update query data
   useEffect(() => {
     const unsubscribe = useInteractionStore.subscribe((state) => {
       const storeData = state.postInteractions.get(postId);
       if (storeData) {
-        setPost((prev) => {
-          if (!prev) return null;
+        queryClient.setQueryData(
+          ['post', postId],
+          (prev: PostData | undefined) => {
+            if (!prev) return undefined;
 
-          // Only update if values actually changed to avoid unnecessary re-renders
-          if (
-            prev.likeCount === storeData.likeCount &&
-            prev.commentCount === storeData.commentCount &&
-            prev.shareCount === storeData.shareCount &&
-            prev.isLiked === storeData.isLiked &&
-            prev.isShared === storeData.isShared
-          ) {
-            return prev;
+            // Only update if values actually changed to avoid unnecessary re-renders
+            if (
+              prev.likeCount === storeData.likeCount &&
+              prev.commentCount === storeData.commentCount &&
+              prev.shareCount === storeData.shareCount &&
+              prev.isLiked === storeData.isLiked &&
+              prev.isShared === storeData.isShared
+            ) {
+              return prev;
+            }
+
+            return {
+              ...prev,
+              likeCount: storeData.likeCount,
+              commentCount: storeData.commentCount,
+              shareCount: storeData.shareCount,
+              isLiked: storeData.isLiked,
+              isShared: storeData.isShared,
+            };
           }
-
-          return {
-            ...prev,
-            likeCount: storeData.likeCount,
-            commentCount: storeData.commentCount,
-            shareCount: storeData.shareCount,
-            isLiked: storeData.isLiked,
-            isShared: storeData.isShared,
-          };
-        });
+        );
       }
     });
 
     return () => unsubscribe();
-  }, [postId]);
+  }, [postId, queryClient]);
 
   if (isLoading) {
     return (

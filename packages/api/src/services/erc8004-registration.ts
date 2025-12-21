@@ -571,32 +571,27 @@ export class ERC8004RegistrationService {
     const node =
       `0x${Buffer.from(name).toString('hex').padEnd(64, '0')}` as Hex;
 
-    try {
-      // Check if name is registered
-      const owner = await publicClient.readContract({
-        address: this.config.jnsRegistryAddress,
-        abi,
-        functionName: 'owner',
-        args: [node],
-      });
+    // Check if name is registered
+    const owner = await publicClient.readContract({
+      address: this.config.jnsRegistryAddress,
+      abi,
+      functionName: 'owner',
+      args: [node],
+    });
 
-      if (owner === '0x0000000000000000000000000000000000000000') {
-        return null;
-      }
-
-      // Get endpoint URL
-      const endpoint = await publicClient.readContract({
-        address: this.config.jnsRegistryAddress,
-        abi,
-        functionName: 'getText',
-        args: [node, 'url'],
-      });
-
-      return endpoint || null;
-    } catch (err) {
-      logger.debug('[ERC8004] Failed to resolve JNS name', { name, err });
+    if (owner === '0x0000000000000000000000000000000000000000') {
       return null;
     }
+
+    // Get endpoint URL
+    const endpoint = await publicClient.readContract({
+      address: this.config.jnsRegistryAddress,
+      abi,
+      functionName: 'getText',
+      args: [node, 'url'],
+    });
+
+    return endpoint || null;
   }
 }
 

@@ -5,8 +5,8 @@
  *
  * Commands:
  *   local     - Deploy contracts to local Hardhat
- *   testnet   - Deploy contracts to Base Sepolia testnet
- *   mainnet   - Deploy contracts to Base mainnet
+ *   testnet   - Deploy contracts to Jeju testnet
+ *   mainnet   - Deploy contracts to Jeju mainnet
  *   setup     - Post-deployment testnet setup
  */
 
@@ -19,26 +19,26 @@ import { logger } from '../lib/logger.js';
 // Path to contracts package (foundry.toml location)
 const CONTRACTS_DIR = join(process.cwd(), 'packages', 'contracts');
 
-// Network configurations
+// Network configurations (Jeju only – no centralized/base fallbacks)
 const NETWORKS = {
   local: {
     rpcUrl: 'http://localhost:8545',
     chainId: 31337,
     privateKey:
       '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
-    name: 'Hardhat Local',
+    name: 'Hardhat Local (for unit/local only)',
   },
   testnet: {
-    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
-    chainId: 84532,
+    rpcUrl: process.env.JEJU_TESTNET_RPC_URL || process.env.JEJU_RPC_URL || '',
+    chainId: 420690,
     privateKey: process.env.DEPLOYER_PRIVATE_KEY || '',
-    name: 'Base Sepolia',
+    name: 'Jeju Testnet',
   },
   mainnet: {
-    rpcUrl: process.env.BASE_MAINNET_RPC_URL || 'https://mainnet.base.org',
-    chainId: 8453,
+    rpcUrl: process.env.JEJU_MAINNET_RPC_URL || '',
+    chainId: 420691,
     privateKey: process.env.DEPLOYER_PRIVATE_KEY || '',
-    name: 'Base Mainnet',
+    name: 'Jeju Mainnet',
   },
 } as const;
 
@@ -53,8 +53,8 @@ USAGE:
 
 COMMANDS:
   local       Deploy to local Hardhat node
-  testnet     Deploy to Base Sepolia testnet
-  mainnet     Deploy to Base mainnet
+  testnet     Deploy to Jeju testnet
+  mainnet     Deploy to Jeju mainnet
   setup       Post-deployment testnet setup
 
 OPTIONS:
@@ -63,13 +63,13 @@ OPTIONS:
 
 ENVIRONMENT:
   DEPLOYER_PRIVATE_KEY    Private key for deployment (testnet/mainnet)
-  BASE_SEPOLIA_RPC_URL    RPC URL for testnet
-  BASE_MAINNET_RPC_URL    RPC URL for mainnet
+  JEJU_TESTNET_RPC_URL    RPC URL for Jeju testnet (chain 420690)
+  JEJU_MAINNET_RPC_URL    RPC URL for Jeju mainnet (chain 420691)
   ETHERSCAN_API_KEY       API key for contract verification
 
 EXAMPLES:
   babylon deploy local              Deploy to local Hardhat
-  babylon deploy testnet            Deploy to Base Sepolia
+  babylon deploy testnet            Deploy to Jeju testnet
   babylon deploy mainnet --force    Force mainnet deployment
   babylon deploy setup              Run testnet setup after deploy
 `);
@@ -226,7 +226,10 @@ async function runTestnetSetup(): Promise<void> {
     process.exit(1);
   }
 
-  const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
+  const rpcUrl =
+    process.env.JEJU_TESTNET_RPC_URL ||
+    process.env.JEJU_RPC_URL ||
+    'http://localhost:9545';
 
   logger.step('Initializing game state...');
 

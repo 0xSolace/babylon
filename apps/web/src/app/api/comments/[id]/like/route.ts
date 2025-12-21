@@ -227,7 +227,12 @@ export const POST = withErrorHandling(
       .where(
         and(eq(reactions.commentId, commentId), eq(reactions.type, 'like'))
       );
-    const likeCount = Number(likeCountResult?.count ?? 0);
+
+    if (!likeCountResult) {
+      throw new Error('Failed to get like count');
+    }
+
+    const likeCount = Number(likeCountResult.count);
 
     logger.info(
       'Comment liked successfully',
@@ -304,7 +309,12 @@ export const DELETE = withErrorHandling(
       .where(
         and(eq(reactions.commentId, commentId), eq(reactions.type, 'like'))
       );
-    const likeCount = Number(likeCountResult?.count ?? 0);
+
+    if (!likeCountResult) {
+      throw new Error('Failed to get like count');
+    }
+
+    const likeCount = Number(likeCountResult.count);
 
     logger.info(
       'Comment unliked successfully',

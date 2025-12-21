@@ -26,7 +26,7 @@ interface WalletBalanceProps {
   refreshTrigger?: number; // Timestamp or counter to force refresh
 }
 
-export function WalletBalance({ refreshTrigger }: WalletBalanceProps = {}) {
+export function WalletBalance({ refreshTrigger }: WalletBalanceProps) {
   const { user, authenticated } = useAuth();
   const { balance, lifetimePnL, loading, refresh } = useWalletBalance(
     user?.id,

@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 /**
  * Represents wallet balance state.
@@ -25,12 +26,17 @@ const defaultState: WalletBalanceState = {
   lifetimePnL: 0,
 };
 
+interface BalanceApiResponse {
+  balance: number | string;
+  lifetimePnL: number | string;
+}
+
 /**
  * Hook for fetching and managing user wallet balance.
  *
  * Loads the current balance and lifetime PnL for a user's wallet. Automatically
  * refreshes when the userId changes and polls every 30 seconds to keep balance
- * up-to-date. Supports cancellation of in-flight requests and error handling.
+ * up-to-date.
  *
  * @param userId - The user ID to fetch balance for, or null/undefined to clear balance
  * @param options - Configuration options including enabled flag
@@ -61,78 +67,48 @@ export function useWalletBalance(
   options: UseWalletBalanceOptions = {}
 ) {
   const { enabled = true } = options;
-  const [state, setState] = useState<WalletBalanceState>(defaultState);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
+  const queryClient = useQueryClient();
 
-  const refresh = useCallback(async () => {
-    if (!userId || !enabled) {
-      setState(defaultState);
-      setLoading(false);
-      setError(null);
-      return;
+  const {
+    data = defaultState,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['walletBalance', userId],
+    queryFn: async (): Promise<WalletBalanceState> => {
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(userId!)}/balance`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch wallet balance');
+      }
+
+      const data = (await response.json()) as BalanceApiResponse;
+
+      return {
+        balance: Number(data.balance) || 0,
+        lifetimePnL: Number(data.lifetimePnL) || 0,
+      };
+    },
+    enabled: enabled && !!userId,
+    refetchInterval: 30000,
+    staleTime: 10000,
+  });
+
+  const refresh = useCallback(() => {
+    if (userId && enabled) {
+      void queryClient.invalidateQueries({
+        queryKey: ['walletBalance', userId],
+      });
     }
-
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-
-    setLoading(true);
-    setError(null);
-
-    const response = await fetch(
-      `/api/users/${encodeURIComponent(userId)}/balance`,
-      { signal: controller.signal }
-    );
-
-    if (controller.signal.aborted) return;
-
-    if (!response.ok) {
-      setLoading(false);
-      setError(new Error('Failed to fetch wallet balance'));
-      return;
-    }
-
-    const data = await response.json();
-
-    if (controller.signal.aborted) return;
-
-    setState({
-      balance: Number(data.balance) || 0,
-      lifetimePnL: Number(data.lifetimePnL) || 0,
-    });
-
-    setLoading(false);
-  }, [userId, enabled]);
-
-  useEffect(() => {
-    if (enabled && userId) {
-      void refresh();
-    } else {
-      setState(defaultState);
-      setLoading(false);
-      setError(null);
-    }
-
-    return () => {
-      controllerRef.current?.abort();
-    };
-  }, [refresh, userId, enabled]);
-
-  useEffect(() => {
-    if (!enabled || !userId) return;
-    const interval = setInterval(() => {
-      void refresh();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [enabled, userId, refresh]);
+  }, [queryClient, userId, enabled]);
 
   return {
-    balance: state.balance,
-    lifetimePnL: state.lifetimePnL,
-    loading,
-    error,
+    balance: data.balance,
+    lifetimePnL: data.lifetimePnL,
+    loading: isLoading,
+    error: error as Error | null,
     refresh,
   };
 }

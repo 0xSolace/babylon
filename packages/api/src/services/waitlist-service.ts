@@ -23,7 +23,7 @@ import {
   users,
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
-import { nanoid } from 'nanoid';
+import { v4 as uuidv4 } from 'uuid';
 import { PointsService } from './points-service';
 import { getOrCreateReferralCode } from './referral-service';
 
@@ -55,7 +55,8 @@ export class WaitlistService {
    * Generate a unique invite code
    */
   static generateInviteCode(): string {
-    return nanoid(8).toUpperCase();
+    // Use first 8 chars of uuid without dashes
+    return uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase();
   }
 
   /**
@@ -399,7 +400,7 @@ export class WaitlistService {
     // Users with more invites are closer to the front
     const userJoinedAt = user.waitlistJoinedAt || new Date();
 
-    const [usersAheadResult] = await db
+    const [usersAheadResult] = (await db
       .select({ count: count() })
       .from(users)
       .where(
@@ -415,9 +416,9 @@ export class WaitlistService {
             )
           )
         )
-      );
+      )) as unknown as { count: number }[];
 
-    const usersAhead = usersAheadResult?.count ?? 0;
+    const usersAhead = Number(usersAheadResult?.count ?? 0);
 
     // Calculate leaderboard rank (actual position in line)
     const leaderboardRank = usersAhead + 1;
@@ -513,14 +514,14 @@ export class WaitlistService {
    * Get total waitlist count
    */
   static async getTotalWaitlistCount(): Promise<number> {
-    const [result] = await db
+    const [result] = (await db
       .select({ count: count() })
       .from(users)
       .where(
         and(ne(users.waitlistPosition, 0), eq(users.isWaitlistActive, true))
-      );
+      )) as unknown as { count: number }[];
 
-    return result?.count ?? 0;
+    return Number(result?.count ?? 0);
   }
 
   /**

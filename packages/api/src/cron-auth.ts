@@ -35,8 +35,6 @@ export interface CronAuthOptions {
   jobName?: string;
   /** Allow unauthenticated requests in development */
   allowDevUnauthenticated?: boolean;
-  /** Allow Vercel Cron user-agent as auth (for GET endpoints) */
-  allowVercelCronUserAgent?: boolean;
 }
 
 interface ComputeProof {
@@ -162,29 +160,9 @@ export async function verifyCronAuth(
   request: NextRequest,
   options: CronAuthOptions = {}
 ): Promise<boolean> {
-  const {
-    jobName = 'Cron',
-    allowDevUnauthenticated = true,
-    allowVercelCronUserAgent = false,
-  } = options;
+  const { jobName = 'Cron', allowDevUnauthenticated = true } = options;
 
-  // Check for Vercel Cron user-agent (for backwards compatibility)
-  if (allowVercelCronUserAgent) {
-    const userAgent = request.headers.get('user-agent')?.toLowerCase() || '';
-    const isVercelCron = userAgent.includes('vercel-cron');
-    const hasVercelHeader = request.headers.has('x-vercel-id');
-
-    if (isVercelCron || hasVercelHeader) {
-      logger.info(
-        'Cron request authorized via Vercel headers',
-        { userAgent, hasVercelHeader },
-        jobName
-      );
-      return true;
-    }
-  }
-
-  // Check for Jeju compute proof first (preferred)
+  // Check for Jeju compute proof first (preferred - decentralized)
   const computeProof = extractComputeProof(request);
   if (computeProof) {
     const valid = await verifyComputeProof(computeProof);

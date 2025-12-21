@@ -43,6 +43,7 @@ export {
 export {
   DecentralizedDB,
   type DeleteOptions,
+  type DrizzleTransactionContext,
   getDB,
   type InsertOptions,
   initializeDB,
@@ -53,6 +54,12 @@ export {
   type UpdateOptions,
   type WhereCondition,
 } from './db';
+// Drizzle compatibility layer
+export {
+  createDrizzleTransaction,
+  DrizzleTransaction,
+  type TransactionExecutor,
+} from './drizzle-compat';
 
 // Types
 export type {

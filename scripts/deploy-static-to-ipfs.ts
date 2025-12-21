@@ -30,12 +30,6 @@ const STORAGE_URL =
   process.env.JEJU_STORAGE_SERVICE_URL || 'http://localhost:5004';
 const SHOULD_PIN = process.env.IPFS_PIN !== 'false';
 
-interface UploadResult {
-  path: string;
-  cid: string;
-  size: number;
-}
-
 async function checkStorageHealth(): Promise<boolean> {
   try {
     const response = await fetch(`${STORAGE_URL}/api/v0/id`, {
@@ -46,28 +40,6 @@ async function checkStorageHealth(): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function uploadFile(filePath: string): Promise<UploadResult> {
-  const file = Bun.file(filePath);
-  const formData = new FormData();
-  formData.append('file', await file.arrayBuffer(), filePath);
-
-  const response = await fetch(`${STORAGE_URL}/api/v0/add?pin=${SHOULD_PIN}`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  return {
-    path: filePath,
-    cid: result.Hash || result.cid,
-    size: result.Size || (await file.size()),
-  };
 }
 
 async function uploadDirectory(dirPath: string): Promise<string> {

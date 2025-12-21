@@ -7,6 +7,7 @@
  * View benchmarks, compare models, trigger training, and manage the system.
  */
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   AlertCircle,
@@ -16,7 +17,7 @@ import {
   RefreshCw,
   TrendingUp,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -92,102 +93,177 @@ interface TrainingStatus {
   };
 }
 
+interface ModelsApiResponse {
+  models?: ModelInfo[];
+}
+
+interface BenchmarkApiResponse {
+  summary?: BenchmarkSummary;
+}
+
+interface ModelSelectionApiResponse {
+  success: boolean;
+  summary?: ModelSelection['summary'];
+  selection?: ModelSelection['selection'];
+  selectionError?: string | null;
+}
+
+interface TrainingTriggerResponse {
+  success?: boolean;
+  error?: string;
+  ready?: boolean;
+  reason?: string;
+  stats?: TrainingStatus['stats'];
+  benchmark?: {
+    benchmarkScore: number;
+  };
+}
+
 export default function RLTrainingDashboard() {
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [benchmarkSummary, setBenchmarkSummary] =
-    useState<BenchmarkSummary | null>(null);
-  const [modelSelection, setModelSelection] = useState<ModelSelection | null>(
-    null
-  );
-  const [trainingStatus, setTrainingStatus] = useState<TrainingStatus | null>(
-    null
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [actionStatus, setActionStatus] = useState<string | null>(null);
 
-  // Fetch all data
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // Fetch models
+  const { data: models = [], isLoading: modelsLoading } = useQuery({
+    queryKey: ['admin', 'training', 'models'],
+    queryFn: async (): Promise<ModelInfo[]> => {
+      const res = await fetch('/api/admin/training/models');
+      const data = (await res.json()) as ModelsApiResponse;
+      if (!data.models) {
+        throw new Error('Invalid models response: missing models array');
+      }
+      return data.models;
+    },
+    refetchInterval: 30000,
+  });
 
-    // Fetch models
-    const modelsRes = await fetch('/api/admin/training/models');
-    const modelsData = await modelsRes.json();
-    if (modelsData.models) {
-      setModels(modelsData.models);
-    }
+  // Fetch benchmark summary
+  const { data: benchmarkSummary } = useQuery({
+    queryKey: ['admin', 'training', 'benchmark'],
+    queryFn: async (): Promise<BenchmarkSummary | null> => {
+      const res = await fetch('/api/admin/training/benchmark');
+      const data = (await res.json()) as BenchmarkApiResponse;
+      return data.summary ?? null;
+    },
+    refetchInterval: 30000,
+  });
 
-    // Fetch benchmark summary
-    const benchmarkRes = await fetch('/api/admin/training/benchmark');
-    const benchmarkData = await benchmarkRes.json();
-    if (benchmarkData.summary) {
-      setBenchmarkSummary(benchmarkData.summary);
-    }
+  // Fetch model selection
+  const { data: modelSelection } = useQuery({
+    queryKey: ['admin', 'training', 'model-selection'],
+    queryFn: async (): Promise<ModelSelection | null> => {
+      const res = await fetch('/api/admin/training/model-selection');
+      const data = (await res.json()) as ModelSelectionApiResponse;
+      if (!data.success) {
+        return null;
+      }
+      if (!data.summary) {
+        throw new Error('Invalid model selection response: missing summary');
+      }
+      return {
+        summary: data.summary,
+        selection: data.selection ?? null,
+        selectionError: data.selectionError ?? null,
+      };
+    },
+    refetchInterval: 30000,
+  });
 
-    // Fetch model selection
-    const selectionRes = await fetch('/api/admin/training/model-selection');
-    const selectionData = await selectionRes.json();
-    if (selectionData.success) {
-      setModelSelection(selectionData);
-    }
+  // Fetch training status
+  const { data: trainingStatus } = useQuery({
+    queryKey: ['admin', 'training', 'status'],
+    queryFn: async (): Promise<TrainingStatus | null> => {
+      const res = await fetch('/api/admin/training/trigger');
+      const data = (await res.json()) as TrainingTriggerResponse;
+      if (!data) {
+        return null;
+      }
+      if (data.ready === undefined || !data.stats) {
+        throw new Error(
+          'Invalid training status response: missing required fields'
+        );
+      }
+      return {
+        ready: data.ready,
+        reason: data.reason ?? '',
+        stats: data.stats,
+      };
+    },
+    refetchInterval: 30000,
+  });
 
-    // Fetch training status
-    const statusRes = await fetch('/api/admin/training/trigger');
-    const statusData = await statusRes.json();
-    if (statusData) {
-      setTrainingStatus(statusData);
-    }
+  const loading = modelsLoading;
+  const error = null; // Errors handled by individual queries
 
-    setLoading(false);
-  }, []);
-
-  // Trigger training
-  const triggerTraining = async (force = false) => {
-    setActionStatus('Triggering training...');
-    const res = await fetch('/api/admin/training/trigger', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ force }),
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      setActionStatus('✅ Training triggered successfully!');
-      setTimeout(() => fetchData(), 2000);
-    } else {
-      setActionStatus(`❌ ${data.error || 'Failed to trigger training'}`);
-    }
-    setTimeout(() => setActionStatus(null), 5000);
+  const fetchData = () => {
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'training'] });
   };
 
-  // Benchmark a model
-  const benchmarkModel = async (modelId: string) => {
-    setActionStatus(`Benchmarking ${modelId}...`);
-    const res = await fetch('/api/admin/training/benchmark', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ modelId, compare: true }),
-    });
-    const data = await res.json();
+  // Trigger training mutation
+  const trainingMutation = useMutation({
+    mutationFn: async (force: boolean) => {
+      const res = await fetch('/api/admin/training/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
+      });
+      return (await res.json()) as TrainingTriggerResponse;
+    },
+    onMutate: () => {
+      setActionStatus('Triggering training...');
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        setActionStatus('✅ Training triggered successfully!');
+        setTimeout(() => fetchData(), 2000);
+      } else {
+        setActionStatus(`❌ ${data.error || 'Failed to trigger training'}`);
+      }
+      setTimeout(() => setActionStatus(null), 5000);
+    },
+    onError: () => {
+      setActionStatus('❌ Failed to trigger training');
+      setTimeout(() => setActionStatus(null), 5000);
+    },
+  });
 
-    if (data.success) {
-      setActionStatus(
-        `✅ Benchmark complete! Score: ${data.benchmark.benchmarkScore.toFixed(3)}`
-      );
-      setTimeout(() => fetchData(), 2000);
-    } else {
-      setActionStatus(`❌ ${data.error || 'Benchmarking failed'}`);
-    }
-    setTimeout(() => setActionStatus(null), 8000);
+  // Benchmark model mutation
+  const benchmarkMutation = useMutation({
+    mutationFn: async (modelId: string) => {
+      const res = await fetch('/api/admin/training/benchmark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelId, compare: true }),
+      });
+      return (await res.json()) as TrainingTriggerResponse;
+    },
+    onMutate: (modelId) => {
+      setActionStatus(`Benchmarking ${modelId}...`);
+    },
+    onSuccess: (data) => {
+      if (data.success && data.benchmark) {
+        setActionStatus(
+          `✅ Benchmark complete! Score: ${data.benchmark.benchmarkScore.toFixed(3)}`
+        );
+        setTimeout(() => fetchData(), 2000);
+      } else {
+        setActionStatus(`❌ ${data.error || 'Benchmarking failed'}`);
+      }
+      setTimeout(() => setActionStatus(null), 8000);
+    },
+    onError: () => {
+      setActionStatus('❌ Benchmarking failed');
+      setTimeout(() => setActionStatus(null), 8000);
+    },
+  });
+
+  const triggerTraining = (force = false) => {
+    trainingMutation.mutate(force);
   };
 
-  useEffect(() => {
-    fetchData();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  const benchmarkModel = (modelId: string) => {
+    benchmarkMutation.mutate(modelId);
+  };
 
   return (
     <div className="container mx-auto space-y-6 p-6">

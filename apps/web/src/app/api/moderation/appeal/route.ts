@@ -538,8 +538,12 @@ async function restoreAccount(userId: string, reasoning: string) {
     select: { falsePositiveHistory: true },
   });
 
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const falsePositiveHistory =
-    (user?.falsePositiveHistory as Array<Record<string, unknown>> | null) || [];
+    (user.falsePositiveHistory as Array<Record<string, unknown>> | null) || [];
   falsePositiveHistory.push({
     date: new Date().toISOString(),
     reason: reasoning,
@@ -567,7 +571,11 @@ async function restoreAccount(userId: string, reasoning: string) {
     select: { appealStaked: true, appealStakeAmount: true },
   });
 
-  if (updatedUser?.appealStaked && updatedUser.appealStakeAmount) {
+  if (
+    updatedUser &&
+    updatedUser.appealStaked &&
+    updatedUser.appealStakeAmount
+  ) {
     await refundAppealStake(userId, Number(updatedUser.appealStakeAmount));
   }
 
@@ -619,7 +627,11 @@ async function verifyStakeTransaction(
     select: { walletAddress: true },
   });
 
-  if (!user?.walletAddress) {
+  if (!user) {
+    return { verified: false, error: 'User not found' };
+  }
+
+  if (!user.walletAddress) {
     return { verified: false, error: 'User has no wallet address' };
   }
 

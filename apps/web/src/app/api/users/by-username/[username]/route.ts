@@ -203,11 +203,11 @@ export const GET = withErrorHandling(
         twitterUsername: dbUser.twitterUsername,
         createdAt: dbUser.createdAt.toISOString(),
         stats: {
-          positions: Number(positionCount?.count || 0),
-          comments: Number(commentCount?.count || 0),
-          reactions: Number(reactionCount?.count || 0),
-          followers: Number(followerCount?.count || 0),
-          following: Number(followingCount?.count || 0),
+          positions: Number(positionCount.count),
+          comments: Number(commentCount.count),
+          reactions: Number(reactionCount.count),
+          followers: Number(followerCount.count),
+          following: Number(followingCount.count),
         },
       },
     });

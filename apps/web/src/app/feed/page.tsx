@@ -72,7 +72,7 @@ function FeedPageContent() {
   const calculateBannerInterval = () => {
     if (!user) return Math.floor(Math.random() * 51) + 50;
 
-    const referralCount = user.referralCount ?? 0;
+    const referralCount = user.referralCount || 0;
 
     // Check if recently dismissed (within 7 days)
     const dismissKey = `banner_dismiss_time_${user.id}`;
@@ -197,8 +197,8 @@ function FeedPageContent() {
 
         // Sort by timestamp
         const deduped = Array.from(unique.values()).sort((a, b) => {
-          const aTime = new Date(a.timestamp ?? 0).getTime();
-          const bTime = new Date(b.timestamp ?? 0).getTime();
+          const aTime = new Date(a.timestamp).getTime();
+          const bTime = new Date(b.timestamp).getTime();
           return bTime - aTime;
         });
 
@@ -419,8 +419,8 @@ function FeedPageContent() {
 
     // Convert back to array and sort by timestamp
     return Array.from(postMap.values()).sort((a, b) => {
-      const aTime = new Date(a.timestamp ?? 0).getTime();
-      const bTime = new Date(b.timestamp ?? 0).getTime();
+      const aTime = new Date(a.timestamp).getTime();
+      const bTime = new Date(b.timestamp).getTime();
       return bTime - aTime;
     });
   }, [tab, localPosts, apiPosts]);
@@ -529,8 +529,7 @@ function FeedPageContent() {
                         ('articleTitle' in post ? post.articleTitle : null) ||
                         null,
                       byline: ('byline' in post ? post.byline : null) || null,
-                      biasScore:
-                        ('biasScore' in post ? post.biasScore : null) ?? null,
+                      biasScore: 'biasScore' in post ? post.biasScore : null,
                       category:
                         ('category' in post ? post.category : null) || null,
                       authorId,

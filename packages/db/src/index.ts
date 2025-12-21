@@ -12,11 +12,7 @@
  * raw Drizzle transaction methods.
  */
 
-import { sql } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import { createDrizzleClient, type DrizzleClient } from './client';
+import type { DrizzleClient } from './client';
 import * as schema from './schema';
 
 // ============================================================================
@@ -38,8 +34,11 @@ export {
   resetDB,
 } from './cql-repository';
 
+// Re-export transaction context types
+export { type DrizzleTransactionContext } from './decentralized/db';
+
 // Import CQL db for runtime
-import { db as cqlDatabase } from './cql-client';
+import { type CQLClient, db as cqlDatabase } from './cql-client';
 export { cqlDatabase as cqlDb };
 
 // ============================================================================
@@ -78,150 +77,23 @@ export { isUniqueConstraintError, toDatabaseErrorType } from './types';
 // Types
 // ============================================================================
 
-export type Database = PostgresJsDatabase<typeof schema>;
-export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type DbClient = CQLClient;
+export type Database = CQLClient;
+
+// Transaction uses DrizzleTransactionContext for compatibility with Drizzle-style methods
+import { type DrizzleTransactionContext as DrizzleTxCtx } from './decentralized/db';
+export type Transaction = DrizzleTxCtx;
+
+/** Main database instance (CQL; decentralized). */
+export const db: DbClient = cqlDatabase;
 
 // ============================================================================
-// Connection Management
+// Legacy Drizzle/Postgres helpers (disabled)
 // ============================================================================
 
-const globalForDb = globalThis as typeof globalThis & {
-  postgresClient: ReturnType<typeof postgres> | undefined;
-  drizzleDb: Database | undefined;
-  db: DrizzleClient | undefined;
-};
-
-const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build';
-
-function isTestEnvironment(): boolean {
-  return (
-    process.env.NODE_ENV === 'test' ||
-    process.env.BUN_ENV === 'test' ||
-    (typeof process !== 'undefined' && process.argv?.join(' ').includes('test'))
-  );
-}
-
-function getConnectionUrl(): string {
-  // Support both PostgreSQL and CQL endpoints
-  // DATABASE_URL for PostgreSQL (legacy, for transactions)
-  // CQL_BLOCK_PRODUCER_ENDPOINT for CQL (new, for decentralized ops)
-  return process.env.DATABASE_URL || 'postgresql://localhost:5432/babylon';
-}
-
-function createPostgresClient(): ReturnType<typeof postgres> {
-  const url = getConnectionUrl();
-  const isTest = isTestEnvironment();
-  const isProd = process.env.NODE_ENV === 'production';
-  const isLocalhost = url.includes('localhost') || url.includes('127.0.0.1');
-  const hasExplicitSSL =
-    url.includes('sslmode=require') || url.includes('ssl=true');
-  const isCloudProvider =
-    url.includes('neon.tech') ||
-    url.includes('supabase.co') ||
-    url.includes('pooler.supabase') ||
-    url.includes('db.bit.io') ||
-    url.includes('.postgres.database.azure.com') ||
-    url.includes('.rds.amazonaws.com');
-
-  const sslMode: 'require' | false =
-    hasExplicitSSL || (!isLocalhost && (isProd || isCloudProvider))
-      ? 'require'
-      : false;
-
-  return postgres(url, {
-    max: isProd ? 50 : isTest ? 5 : 10,
-    idle_timeout: isProd ? 30 : 20,
-    connect_timeout: 10,
-    ssl: sslMode,
-    transform: { undefined: null },
-    onnotice: () => {},
-  });
-}
-
-function getPostgresClient(): ReturnType<typeof postgres> | null {
-  if (isBuildTime && !isTestEnvironment()) {
-    return null;
-  }
-
-  if (!globalForDb.postgresClient) {
-    const url = getConnectionUrl();
-    if (!url || url === 'postgresql://localhost:5432/babylon') {
-      if (isTestEnvironment()) {
-        throw new Error('DATABASE_URL is required in test environment');
-      }
-      return null;
-    }
-
-    globalForDb.postgresClient = createPostgresClient();
-  }
-
-  return globalForDb.postgresClient;
-}
-
-function getDrizzleInstance(): Database | null {
-  if (!globalForDb.drizzleDb) {
-    const client = getPostgresClient();
-    if (!client) return null;
-
-    globalForDb.drizzleDb = drizzle(client, {
-      schema,
-      logger: process.env.NODE_ENV === 'development',
-    });
-  }
-
-  return globalForDb.drizzleDb;
-}
-
-function getDbClient(): DrizzleClient | null {
-  if (!globalForDb.db) {
-    const drizzleInstance = getDrizzleInstance();
-    if (!drizzleInstance) return null;
-
-    globalForDb.db = createDrizzleClient(drizzleInstance);
-  }
-
-  return globalForDb.db;
-}
-
-// ============================================================================
-// Database Export
-// ============================================================================
-
-function createModeAwareDbProxy(): DrizzleClient {
-  const handler: ProxyHandler<DrizzleClient> = {
-    get(_target, prop: string | symbol) {
-      const client = getDbClient();
-      if (!client) {
-        if (isBuildTime) {
-          return new Proxy(
-            {},
-            {
-              get() {
-                return () => Promise.resolve(null);
-              },
-            }
-          );
-        }
-        throw new Error(
-          'Database not initialized. Set DATABASE_URL environment variable.'
-        );
-      }
-      return client[prop as keyof DrizzleClient];
-    },
-  };
-
-  const proxyTarget: Partial<DrizzleClient> = {};
-  return new Proxy(proxyTarget, handler) as DrizzleClient;
-}
-
-/** Main database instance */
-export const db: DrizzleClient = createModeAwareDbProxy();
-
-/** Get raw Drizzle instance for advanced operations (e.g., transactions) */
-export function getRawDrizzle(): Database {
-  const instance = getDrizzleInstance();
-  if (!instance) throw new Error('Database not initialized');
-  return instance;
+/** @deprecated PostgreSQL/Drizzle is disabled in decentralized mode. */
+export function getRawDrizzle(): never {
+  throw new Error('[DB] getRawDrizzle() is disabled in decentralized mode');
 }
 
 // ============================================================================
@@ -267,9 +139,8 @@ export type { SelectedFields } from 'drizzle-orm/pg-core';
 export async function withTransaction<T>(
   fn: (tx: Transaction) => Promise<T>
 ): Promise<T> {
-  const drizzleInstance = getDrizzleInstance();
-  if (!drizzleInstance) throw new Error('Database not initialized');
-  return drizzleInstance.transaction(fn);
+  await initializeDB();
+  return getDB().transaction(fn);
 }
 
 /** User identifier - can be a string ID or an object with userId property */
@@ -280,7 +151,7 @@ export type UserIdOrUser = string | { userId: string };
  */
 export async function asUser<T>(
   userIdOrUser: UserIdOrUser,
-  operation: (database: DrizzleClient) => Promise<T>
+  operation: (database: DbClient) => Promise<T>
 ): Promise<T> {
   const userId =
     typeof userIdOrUser === 'string' ? userIdOrUser : userIdOrUser.userId;
@@ -300,36 +171,21 @@ export async function asUser<T>(
     throw new Error(`Invalid userId format: ${userId}`);
   }
 
-  const drizzleInstance = getDrizzleInstance();
-  if (!drizzleInstance) throw new Error('Database not initialized');
-
-  return drizzleInstance.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT set_config('app.current_user_id', ${userId}, true)`
-    );
-    const txClient = createDrizzleClient(tx as Database);
-    return operation(txClient);
-  });
+  // CovenantSQL doesn't currently support Postgres RLS/session variables.
+  // We keep the helper for call-site compatibility.
+  void userId;
+  return operation(db);
 }
 
 /**
  * Execute as system (bypass RLS)
  */
 export async function asSystem<T>(
-  operation: (database: DrizzleClient) => Promise<T>,
+  operation: (database: DbClient) => Promise<T>,
   operationName?: string
 ): Promise<T> {
   const startTime = Date.now();
-  const drizzleInstance = getDrizzleInstance();
-  if (!drizzleInstance) throw new Error('Database not initialized');
-
-  const result = await drizzleInstance.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT set_config('app.current_user_id', 'system', true)`
-    );
-    const txClient = createDrizzleClient(tx as Database);
-    return operation(txClient);
-  });
+  const result = await operation(db);
 
   if (operationName && process.env.NODE_ENV === 'development') {
     console.log(
@@ -344,16 +200,9 @@ export async function asSystem<T>(
  * Execute as public (unauthenticated)
  */
 export async function asPublic<T>(
-  operation: (database: DrizzleClient) => Promise<T>
+  operation: (database: DbClient) => Promise<T>
 ): Promise<T> {
-  const drizzleInstance = getDrizzleInstance();
-  if (!drizzleInstance) throw new Error('Database not initialized');
-
-  return drizzleInstance.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.current_user_id', '', true)`);
-    const txClient = createDrizzleClient(tx as Database);
-    return operation(txClient);
-  });
+  return operation(db);
 }
 
 // ============================================================================
@@ -370,7 +219,7 @@ import {
   saveJsonSnapshot,
 } from './json-storage';
 
-export type StorageMode = 'cql' | 'postgres' | 'json' | 'memory';
+export type StorageMode = 'cql' | 'json' | 'memory';
 
 let currentStorageMode: StorageMode = 'cql';
 let jsonClient: DrizzleClient | null = null;
@@ -472,12 +321,6 @@ export async function initializeDatabase(): Promise<void> {
     );
   }
   await initializeDB();
-
-  // Initialize Drizzle for legacy transaction support (optional)
-  // Only needed if DATABASE_URL is configured for backwards compatibility
-  if (process.env.DATABASE_URL) {
-    getDrizzleInstance();
-  }
 }
 
 export async function checkDatabaseHealth(): Promise<boolean> {
@@ -488,23 +331,10 @@ export async function checkDatabaseHealth(): Promise<boolean> {
     return false;
   }
 
-  // Check Drizzle if configured (optional, for legacy support)
-  if (process.env.DATABASE_URL) {
-    const drizzleInstance = getDrizzleInstance();
-    if (!drizzleInstance) return false;
-  }
-
   return true;
 }
 
 export async function closeDatabase(): Promise<void> {
   // Close CQL
   resetDB();
-  // Close Drizzle
-  if (globalForDb.postgresClient) {
-    await globalForDb.postgresClient.end();
-    globalForDb.postgresClient = undefined;
-    globalForDb.drizzleDb = undefined;
-    globalForDb.db = undefined;
-  }
 }

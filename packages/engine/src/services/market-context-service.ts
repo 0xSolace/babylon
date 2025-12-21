@@ -125,11 +125,12 @@ export class MarketContextService {
 
     // Group messages by chat
     for (const msg of messagesData) {
-      const existing = groupChatMessages.get(msg.chatId) || [];
+      const msgChatId = String(msg.chatId);
+      const existing = groupChatMessages.get(msgChatId) || [];
       if (existing.length < 50) {
         // Max 50 per chat
         existing.push(msg);
-        groupChatMessages.set(msg.chatId, existing);
+        groupChatMessages.set(msgChatId, existing);
       }
     }
 
@@ -194,23 +195,28 @@ export class MarketContextService {
       // Filter group chats this NPC is a member of (based on chat participants)
       const npcGroupChats: GroupChatContext[] = [];
       for (const chat of groupChats) {
-        const chatMsgs = groupChatMessages.get(chat.id) || [];
+        const chatId = String(chat.id);
+        const chatName = chat.name ? String(chat.name) : 'Group Chat';
+        const chatMsgs = groupChatMessages.get(chatId) || [];
         // Check if NPC has sent messages or chat name includes NPC name
         const isRelevant =
-          chatMsgs.some((msg) => msg.senderId === npc.id) ||
-          chat.name
-            ?.toLowerCase()
+          chatMsgs.some((msg) => String(msg.senderId) === npc.id) ||
+          chatName
+            .toLowerCase()
             .includes(npc.name.toLowerCase().split(' ')[0] ?? '');
 
         if (isRelevant) {
           for (const msg of chatMsgs) {
+            const msgCreatedAt = msg.createdAt
+              ? new Date(String(msg.createdAt))
+              : new Date();
             npcGroupChats.push({
-              chatId: chat.id,
-              chatName: chat.name || 'Group Chat',
-              from: msg.senderId,
-              fromName: msg.senderId,
-              message: msg.content,
-              timestamp: msg.createdAt.toISOString(),
+              chatId,
+              chatName,
+              from: String(msg.senderId),
+              fromName: String(msg.senderId),
+              message: String(msg.content ?? ''),
+              timestamp: msgCreatedAt.toISOString(),
             });
           }
         }
@@ -218,36 +224,46 @@ export class MarketContextService {
 
       // Fetch positions for this NPC (poolId = actorId for backward compatibility)
       const npcPositions = positionsByNpc.get(npc.id) || [];
-      const currentPositions: NPCPosition[] = npcPositions.map((pos) => ({
-        id: pos.id,
-        marketType: pos.marketType as 'perp' | 'prediction',
-        ticker: pos.ticker || undefined,
-        marketId: pos.marketId || undefined,
-        side: pos.side,
-        entryPrice: Number.parseFloat(pos.entryPrice.toString()),
-        currentPrice: Number.parseFloat(pos.currentPrice.toString()),
-        size: Number.parseFloat(pos.size.toString()),
-        shares: pos.shares
-          ? Number.parseFloat(pos.shares.toString())
-          : undefined,
-        unrealizedPnL: Number.parseFloat(pos.unrealizedPnL.toString()),
-        openedAt: pos.openedAt.toISOString(),
-      }));
+      const currentPositions: NPCPosition[] = npcPositions.map((pos) => {
+        const posOpenedAt = pos.openedAt
+          ? new Date(String(pos.openedAt))
+          : new Date();
+        return {
+          id: String(pos.id),
+          marketType: String(pos.marketType) as 'perp' | 'prediction',
+          ticker: pos.ticker ? String(pos.ticker) : undefined,
+          marketId: pos.marketId ? String(pos.marketId) : undefined,
+          side: String(pos.side),
+          entryPrice: Number(pos.entryPrice),
+          currentPrice: Number(pos.currentPrice),
+          size: Number(pos.size),
+          shares: pos.shares ? Number(pos.shares) : undefined,
+          unrealizedPnL: Number(pos.unrealizedPnL),
+          openedAt: posOpenedAt.toISOString(),
+        };
+      });
 
       // Get relationships for this NPC
-      const npcRelationships = allRelationships
-        .filter((rel) => rel.actor1Id === npc.id || rel.actor2Id === npc.id)
+      const npcRelationships: RelationshipContext[] = allRelationships
+        .filter(
+          (rel) =>
+            String(rel.actor1Id) === npc.id || String(rel.actor2Id) === npc.id
+        )
         .map((rel) => {
-          const isActor1 = rel.actor1Id === npc.id;
-          const otherActorId = isActor1 ? rel.actor2Id : rel.actor1Id;
+          const relActor1Id = String(rel.actor1Id);
+          const relActor2Id = String(rel.actor2Id);
+          const isActor1 = relActor1Id === npc.id;
+          const otherActorId = isActor1 ? relActor2Id : relActor1Id;
 
           return {
             actorId: otherActorId,
             actorName: otherActorId,
-            relationshipType: rel.relationshipType,
-            sentiment: rel.sentiment || 0,
-            strength: rel.strength || 0.5,
-            history: rel.history || undefined,
+            relationshipType: rel.relationshipType
+              ? String(rel.relationshipType)
+              : 'acquaintance',
+            sentiment: Number(rel.sentiment ?? 0),
+            strength: Number(rel.strength ?? 0.5),
+            history: rel.history ? String(rel.history) : undefined,
           };
         });
 
@@ -402,16 +418,20 @@ export class MarketContextService {
       );
 
     return relationshipsList.map((rel) => {
-      const isActor1 = rel.actor1Id === npcId;
-      const otherActorId = isActor1 ? rel.actor2Id : rel.actor1Id;
+      const relActor1Id = String(rel.actor1Id);
+      const relActor2Id = String(rel.actor2Id);
+      const isActor1 = relActor1Id === npcId;
+      const otherActorId = isActor1 ? relActor2Id : relActor1Id;
 
       return {
         actorId: otherActorId,
         actorName: otherActorId,
-        relationshipType: rel.relationshipType,
-        sentiment: rel.sentiment || 0,
-        strength: rel.strength || 0.5,
-        history: rel.history || undefined,
+        relationshipType: rel.relationshipType
+          ? String(rel.relationshipType)
+          : 'acquaintance',
+        sentiment: Number(rel.sentiment ?? 0),
+        strength: Number(rel.strength ?? 0.5),
+        history: rel.history ? String(rel.history) : undefined,
       };
     });
   }
@@ -437,7 +457,7 @@ export class MarketContextService {
       .from(chatParticipants)
       .where(eq(chatParticipants.userId, npcId));
 
-    const participantChatIds = participantRecords.map((p) => p.chatId);
+    const participantChatIds = participantRecords.map((p) => String(p.chatId));
 
     if (participantChatIds.length === 0) {
       return [];
@@ -453,28 +473,36 @@ export class MarketContextService {
     const result: GroupChatContext[] = [];
 
     for (const chat of groupChats) {
+      const insiderChatId = String(chat.id);
+      const insiderChatName = chat.name ? String(chat.name) : 'Group Chat';
+
       const chatMessages = await db
         .select()
         .from(messages)
-        .where(eq(messages.chatId, chat.id))
+        .where(eq(messages.chatId, insiderChatId))
         .orderBy(desc(messages.createdAt))
         .limit(20);
 
       for (const msg of chatMessages.slice(0, 15)) {
         // Truncate long messages
         const maxMsgLength = 120;
+        const msgContent = String(msg.content ?? '');
         const message =
-          msg.content.length > maxMsgLength
-            ? msg.content.slice(0, maxMsgLength) + '...'
-            : msg.content;
+          msgContent.length > maxMsgLength
+            ? msgContent.slice(0, maxMsgLength) + '...'
+            : msgContent;
+
+        const msgCreatedAt = msg.createdAt
+          ? new Date(String(msg.createdAt))
+          : new Date();
 
         result.push({
-          chatId: chat.id,
-          chatName: chat.name || 'Group Chat',
-          from: msg.senderId,
-          fromName: msg.senderId,
+          chatId: insiderChatId,
+          chatName: insiderChatName,
+          from: String(msg.senderId),
+          fromName: String(msg.senderId),
           message,
-          timestamp: msg.createdAt.toISOString(),
+          timestamp: msgCreatedAt.toISOString(),
         });
       }
     }
@@ -507,22 +535,30 @@ export class MarketContextService {
     return postList.map((post) => {
       // Truncate long posts to save tokens
       const maxContentLength = 200;
+      const postContent = String(post.content ?? '');
       const content =
-        post.content.length > maxContentLength
-          ? post.content.slice(0, maxContentLength) + '...'
-          : post.content;
+        postContent.length > maxContentLength
+          ? postContent.slice(0, maxContentLength) + '...'
+          : postContent;
 
       const maxTitleLength = 80;
+      const postArticleTitle = post.articleTitle
+        ? String(post.articleTitle)
+        : '';
       const articleTitle =
-        post.articleTitle && post.articleTitle.length > maxTitleLength
-          ? post.articleTitle.slice(0, maxTitleLength) + '...'
-          : post.articleTitle;
+        postArticleTitle.length > maxTitleLength
+          ? postArticleTitle.slice(0, maxTitleLength) + '...'
+          : postArticleTitle;
+
+      const postCreatedAt = post.createdAt
+        ? new Date(String(post.createdAt))
+        : new Date();
 
       return {
-        author: post.authorId,
-        authorName: post.authorId,
+        author: String(post.authorId),
+        authorName: String(post.authorId),
         content,
-        timestamp: post.createdAt.toISOString(),
+        timestamp: postCreatedAt.toISOString(),
         articleTitle: articleTitle || undefined,
       };
     });
@@ -553,18 +589,29 @@ export class MarketContextService {
     return eventList.map((event) => {
       // Truncate long descriptions
       const maxDescLength = 150;
+      const eventDescription = String(event.description ?? '');
       const description =
-        event.description.length > maxDescLength
-          ? event.description.slice(0, maxDescLength) + '...'
-          : event.description;
+        eventDescription.length > maxDescLength
+          ? eventDescription.slice(0, maxDescLength) + '...'
+          : eventDescription;
+
+      const eventTimestamp = event.timestamp
+        ? new Date(String(event.timestamp))
+        : new Date();
 
       return {
-        type: event.eventType,
+        type: String(event.eventType),
         description,
-        actors: event.actors as string[] | undefined,
-        timestamp: event.timestamp.toISOString(),
-        relatedQuestion: event.relatedQuestion || undefined,
-        pointsToward: event.pointsToward || undefined,
+        actors: Array.isArray(event.actors)
+          ? (event.actors as string[])
+          : undefined,
+        timestamp: eventTimestamp.toISOString(),
+        relatedQuestion: event.relatedQuestion
+          ? Number(event.relatedQuestion)
+          : undefined,
+        pointsToward: event.pointsToward
+          ? String(event.pointsToward)
+          : undefined,
       };
     });
   }
@@ -601,35 +648,49 @@ export class MarketContextService {
 
     // Filter events where NPC is in the actors array or mentioned in description
     const npcEvents = eventList.filter((event) => {
-      const actorsArray = event.actors || [];
+      const actorsArray = Array.isArray(event.actors)
+        ? (event.actors as string[])
+        : [];
+      const eventDescription = String(event.description ?? '');
       const isInActors =
         actorsArray.includes(npcId) ||
         actorsArray.some(
-          (a) =>
+          (a: string) =>
             a.toLowerCase().includes(npcName.toLowerCase()) ||
             npcName.toLowerCase().includes(a.toLowerCase())
         );
       const isMentioned =
-        event.description.toLowerCase().includes(npcName.toLowerCase()) ||
-        event.description.includes(npcId);
+        eventDescription.toLowerCase().includes(npcName.toLowerCase()) ||
+        eventDescription.includes(npcId);
 
       return isInActors || isMentioned;
     });
 
     return npcEvents.slice(0, 15).map((event) => {
       const maxDescLength = 200;
+      const eventDescription = String(event.description ?? '');
       const description =
-        event.description.length > maxDescLength
-          ? event.description.slice(0, maxDescLength) + '...'
-          : event.description;
+        eventDescription.length > maxDescLength
+          ? eventDescription.slice(0, maxDescLength) + '...'
+          : eventDescription;
+
+      const eventTimestamp = event.timestamp
+        ? new Date(String(event.timestamp))
+        : new Date();
 
       return {
-        type: event.eventType,
+        type: String(event.eventType),
         description,
-        actors: event.actors as string[] | undefined,
-        timestamp: event.timestamp.toISOString(),
-        relatedQuestion: event.relatedQuestion || undefined,
-        pointsToward: event.pointsToward || undefined,
+        actors: Array.isArray(event.actors)
+          ? (event.actors as string[])
+          : undefined,
+        timestamp: eventTimestamp.toISOString(),
+        relatedQuestion: event.relatedQuestion
+          ? Number(event.relatedQuestion)
+          : undefined,
+        pointsToward: event.pointsToward
+          ? String(event.pointsToward)
+          : undefined,
       };
     });
   }
@@ -661,17 +722,22 @@ export class MarketContextService {
 
     return npcPosts.map((post) => {
       const maxContentLength = 200;
+      const postContent = String(post.content ?? '');
       const content =
-        post.content.length > maxContentLength
-          ? post.content.slice(0, maxContentLength) + '...'
-          : post.content;
+        postContent.length > maxContentLength
+          ? postContent.slice(0, maxContentLength) + '...'
+          : postContent;
+
+      const postCreatedAt = post.createdAt
+        ? new Date(String(post.createdAt))
+        : new Date();
 
       return {
-        author: post.authorId,
-        authorName: post.authorId,
+        author: String(post.authorId),
+        authorName: String(post.authorId),
         content,
-        timestamp: post.createdAt.toISOString(),
-        articleTitle: post.articleTitle || undefined,
+        timestamp: postCreatedAt.toISOString(),
+        articleTitle: post.articleTitle ? String(post.articleTitle) : undefined,
       };
     });
   }

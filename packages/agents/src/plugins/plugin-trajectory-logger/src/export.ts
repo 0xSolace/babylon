@@ -7,18 +7,7 @@
  * NOTE: Requires trajectory schema that's not yet in main schema
  */
 
-import {
-  and,
-  db,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  lte,
-  sql,
-  trajectories,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import { shuffleArray } from '@babylon/engine';
 import type { JsonValue } from '../../../types/common';
 import type { Trajectory } from './types';
@@ -58,36 +47,22 @@ export interface ExportResult {
 export async function exportToHuggingFace(
   options: ExportOptions
 ): Promise<ExportResult> {
-  // Build where conditions
-  const conditions = buildWhereConditions(options);
+  // Build CQL where conditions
+  const whereConditions = buildCQLWhereConditions(options);
 
-  // Fetch trajectories using Drizzle
-  const result = await db
-    .select({
-      trajectoryId: trajectories.trajectoryId,
-      agentId: trajectories.agentId,
-      episodeId: trajectories.episodeId,
-      scenarioId: trajectories.scenarioId,
-      startTime: trajectories.startTime,
-      durationMs: trajectories.durationMs,
-      stepsJson: trajectories.stepsJson,
-      metricsJson: trajectories.metricsJson,
-      metadataJson: trajectories.metadataJson,
-      totalReward: trajectories.totalReward,
-      finalStatus: trajectories.finalStatus,
-      finalPnL: trajectories.finalPnL,
-      aiJudgeReward: trajectories.aiJudgeReward,
-      aiJudgeReasoning: trajectories.aiJudgeReasoning,
-    })
-    .from(trajectories)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(trajectories.startTime))
-    .limit(options.maxTrajectories || 10000);
+  // Fetch trajectories using CQL repository
+  const result = await db.trajectory.findMany({
+    where: whereConditions,
+    orderBy: { startTime: 'desc' },
+    take: options.maxTrajectories || 10000,
+  });
 
   console.log(`Exporting ${result.length} trajectories...`);
 
-  // Transform to training format
-  const dataset = result.map((traj) => transformForTraining(traj));
+  // Transform to training format with proper type casting
+  const dataset = result.map((record) =>
+    transformForTraining(castTrajectoryRecord(record))
+  );
 
   // Split into train/validation/test
   const splits = splitDataset(dataset, options.splitRatio);
@@ -98,6 +73,53 @@ export async function exportToHuggingFace(
   } else {
     return await exportToJSONL<TrainingTrajectory>(splits, options);
   }
+}
+
+/**
+ * Cast a CQL record to TrajectoryRecord with explicit type conversions
+ */
+function castTrajectoryRecord(
+  record: Record<string, unknown>
+): TrajectoryRecord {
+  return {
+    trajectoryId: String(record.trajectoryId),
+    agentId: String(record.agentId),
+    episodeId: record.episodeId != null ? String(record.episodeId) : null,
+    scenarioId: record.scenarioId != null ? String(record.scenarioId) : null,
+    startTime:
+      record.startTime instanceof Date
+        ? record.startTime
+        : new Date(String(record.startTime)),
+    durationMs: Number(record.durationMs),
+    stepsJson: String(record.stepsJson),
+    metricsJson: String(record.metricsJson),
+    metadataJson: String(record.metadataJson),
+    totalReward: Number(record.totalReward),
+    finalStatus: String(record.finalStatus),
+    finalPnL: record.finalPnL != null ? Number(record.finalPnL) : null,
+    aiJudgeReward:
+      record.aiJudgeReward != null ? Number(record.aiJudgeReward) : null,
+    aiJudgeReasoning:
+      record.aiJudgeReasoning != null ? String(record.aiJudgeReasoning) : null,
+  };
+}
+
+/**
+ * Cast a CQL record to FullTrajectoryRecord with explicit type conversions
+ */
+function castFullTrajectoryRecord(
+  record: Record<string, unknown>
+): FullTrajectoryRecord {
+  return {
+    ...castTrajectoryRecord(record),
+    batchId: record.batchId != null ? String(record.batchId) : null,
+    endTime:
+      record.endTime instanceof Date
+        ? record.endTime
+        : new Date(String(record.endTime)),
+    rewardComponentsJson: String(record.rewardComponentsJson ?? '{}'),
+    isTrainingData: Boolean(record.isTrainingData),
+  };
 }
 
 /**
@@ -118,6 +140,13 @@ interface TrajectoryRecord {
   finalPnL: number | null;
   aiJudgeReward: number | null;
   aiJudgeReasoning: string | null;
+}
+
+interface FullTrajectoryRecord extends TrajectoryRecord {
+  batchId: string | null;
+  endTime: Date;
+  rewardComponentsJson: string;
+  isTrainingData: boolean;
 }
 
 interface TrajectoryStep {
@@ -405,47 +434,39 @@ export async function exportGroupedByScenario(
   const exportDir = path.resolve(process.cwd(), 'exports', 'scenarios');
   await fs.mkdir(exportDir, { recursive: true });
 
-  // Build conditions
-  const baseConditions = buildWhereConditions(options);
-  baseConditions.push(isNotNull(trajectories.scenarioId));
+  // Build base conditions and add scenarioId not null
+  const baseConditions = buildCQLWhereConditions(options);
+  const conditionsWithScenario = {
+    ...baseConditions,
+    scenarioId: { not: null },
+  };
 
-  // Get distinct scenario IDs
-  const scenarioResults = await db
-    .selectDistinct({ scenarioId: trajectories.scenarioId })
-    .from(trajectories)
-    .where(baseConditions.length > 0 ? and(...baseConditions) : undefined);
+  // Get distinct scenario IDs using raw SQL
+  const scenarioResults = await db.query<{ scenarioId: string }>(
+    `SELECT DISTINCT "scenarioId" FROM "trajectories" WHERE "scenarioId" IS NOT NULL AND "isTrainingData" = true`
+  );
 
   let totalExported = 0;
 
-  for (const { scenarioId } of scenarioResults) {
+  for (const row of scenarioResults) {
+    const scenarioId = String(row.scenarioId);
     if (!scenarioId) continue;
 
     // Get all trajectories for this scenario
-    const trajResults = await db
-      .select()
-      .from(trajectories)
-      .where(and(eq(trajectories.scenarioId, scenarioId), ...baseConditions))
-      .orderBy(trajectories.startTime);
+    const trajResults = await db.trajectory.findMany({
+      where: {
+        ...conditionsWithScenario,
+        scenarioId,
+      },
+      orderBy: { startTime: 'asc' },
+    });
 
     if (trajResults.length < 2) continue; // Need at least 2 for comparison
 
-    const transformed = trajResults.map((traj) =>
-      transformForTraining({
-        trajectoryId: traj.trajectoryId,
-        agentId: traj.agentId,
-        episodeId: traj.episodeId,
-        scenarioId: traj.scenarioId,
-        startTime: traj.startTime,
-        durationMs: traj.durationMs,
-        stepsJson: traj.stepsJson,
-        metricsJson: traj.metricsJson,
-        metadataJson: traj.metadataJson,
-        totalReward: traj.totalReward,
-        finalStatus: traj.finalStatus,
-        finalPnL: traj.finalPnL,
-        aiJudgeReward: traj.aiJudgeReward,
-        aiJudgeReasoning: traj.aiJudgeReasoning,
-      })
+    const transformed = trajResults.map((record) =>
+      transformForTraining(
+        castTrajectoryRecord(record as Record<string, unknown>)
+      )
     );
 
     const filePath = path.join(exportDir, `scenario-${scenarioId}.jsonl`);
@@ -480,16 +501,16 @@ export async function exportForOpenPipeART(
 
   const { toARTTrajectory } = await import('./art-format');
 
-  const conditions = buildWhereConditions(options);
+  const whereConditions = buildCQLWhereConditions(options);
 
-  const trajResults = await db
-    .select()
-    .from(trajectories)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .limit(options.maxTrajectories || 10000)
-    .orderBy(trajectories.startTime);
+  const trajResults = await db.trajectory.findMany({
+    where: whereConditions,
+    take: options.maxTrajectories || 10000,
+    orderBy: { startTime: 'asc' },
+  });
 
-  const artFormat = trajResults.map((traj) => {
+  const artFormat = trajResults.map((record) => {
+    const traj = castFullTrajectoryRecord(record as Record<string, unknown>);
     const steps = JSON.parse(traj.stepsJson);
     const metrics = JSON.parse(traj.metricsJson);
     const metadata = JSON.parse(traj.metadataJson);
@@ -554,43 +575,23 @@ export async function exportGroupedForGRPO(
   const MAX_TRAJECTORIES = options.maxTrajectories || 2000; // Default hard limit
   const MAX_TRAJECTORIES_PER_SCENARIO = 50; // Limit per scenario to prevent huge files
 
-  const baseConditions = buildWhereConditions(options);
+  const baseConditions = buildCQLWhereConditions(options);
 
   // Get scenarios with counts using raw SQL for groupBy
-  const scenarioCountsRaw = await db.execute(sql`
-      SELECT "scenarioId", COUNT(*) as count 
-      FROM trajectories 
-      WHERE "scenarioId" IS NOT NULL AND "isTrainingData" = true
-      GROUP BY "scenarioId"
-    `);
+  const scenarioCountsRaw = await db.query<{
+    scenarioId: string;
+    count: string;
+  }>(
+    `SELECT "scenarioId", COUNT(*) as count 
+     FROM "trajectories" 
+     WHERE "scenarioId" IS NOT NULL AND "isTrainingData" = true
+     GROUP BY "scenarioId"`
+  );
 
-  // Type for raw SQL scenario count row with index signature for compatibility
-  interface ScenarioCountRow {
-    scenarioId: string | null;
-    count: string | number;
-    [key: string]: string | number | null;
-  }
-
-  // Type guard for scenario count row
-  function isScenarioCountRow(row: object): row is ScenarioCountRow {
-    return 'scenarioId' in row && 'count' in row;
-  }
-
-  // Validate and type the raw SQL result
-  if (!Array.isArray(scenarioCountsRaw)) {
-    throw new Error('Invalid scenario counts result from database');
-  }
-  const scenarioCounts: Array<{ scenarioId: string; count: string }> = (
-    scenarioCountsRaw as object[]
-  )
-    .filter(
-      (row): row is ScenarioCountRow =>
-        row !== null && typeof row === 'object' && isScenarioCountRow(row)
-    )
-    .map((row) => ({
-      scenarioId: String(row.scenarioId),
-      count: String(row.count),
-    }));
+  const scenarioCounts = scenarioCountsRaw.map((row) => ({
+    scenarioId: String(row.scenarioId),
+    count: String(row.count),
+  }));
 
   const fs = await import('node:fs/promises');
   const path = await import('node:path');
@@ -611,29 +612,34 @@ export async function exportGroupedForGRPO(
       remainingQuota
     );
 
-    const trajResults = await db
-      .select()
-      .from(trajectories)
-      .where(and(eq(trajectories.scenarioId, scenarioId), ...baseConditions))
-      .orderBy(trajectories.startTime)
-      .limit(takeForScenario);
+    const trajResults = await db.trajectory.findMany({
+      where: {
+        ...baseConditions,
+        scenarioId,
+      },
+      orderBy: { startTime: 'asc' },
+      take: takeForScenario,
+    });
 
     // Convert to trajectory objects
-    const trajObjects = trajResults.map((traj, index) => ({
-      trajectoryId: traj.trajectoryId,
-      agentId:
-        traj.agentId as `${string}-${string}-${string}-${string}-${string}`,
-      scenarioId: traj.scenarioId,
-      groupIndex: index,
-      startTime: traj.startTime.getTime(),
-      endTime: traj.endTime.getTime(),
-      durationMs: traj.durationMs,
-      steps: JSON.parse(traj.stepsJson),
-      totalReward: traj.totalReward,
-      rewardComponents: JSON.parse(traj.rewardComponentsJson),
-      metrics: JSON.parse(traj.metricsJson),
-      metadata: JSON.parse(traj.metadataJson),
-    }));
+    const trajObjects = trajResults.map((record, index) => {
+      const traj = castFullTrajectoryRecord(record as Record<string, unknown>);
+      return {
+        trajectoryId: traj.trajectoryId,
+        agentId:
+          traj.agentId as `${string}-${string}-${string}-${string}-${string}`,
+        scenarioId: traj.scenarioId,
+        groupIndex: index,
+        startTime: traj.startTime.getTime(),
+        endTime: traj.endTime.getTime(),
+        durationMs: traj.durationMs,
+        steps: JSON.parse(traj.stepsJson),
+        totalReward: traj.totalReward,
+        rewardComponents: JSON.parse(traj.rewardComponentsJson),
+        metrics: JSON.parse(traj.metricsJson),
+        metadata: JSON.parse(traj.metadataJson),
+      };
+    });
 
     const groups = groupTrajectories(trajObjects as Trajectory[]);
 
@@ -669,31 +675,52 @@ export async function exportGroupedForGRPO(
 }
 
 /**
- * Build Drizzle where conditions from export options
+ * Build CQL where conditions from export options
  */
-function buildWhereConditions(options: ExportOptions) {
-  const conditions = [eq(trajectories.isTrainingData, true)];
+interface CQLWhereConditions {
+  isTrainingData?: boolean;
+  startTime?: { gte?: Date; lte?: Date };
+  agentId?: { in: string[] };
+  scenarioId?: { in?: string[]; not?: null };
+  totalReward?: { gte?: number; lte?: number };
+  aiJudgeReward?: { not: null };
+}
 
-  if (options.startDate) {
-    conditions.push(gte(trajectories.startTime, options.startDate));
+function buildCQLWhereConditions(options: ExportOptions): CQLWhereConditions {
+  const conditions: CQLWhereConditions = {
+    isTrainingData: true,
+  };
+
+  if (options.startDate || options.endDate) {
+    conditions.startTime = {};
+    if (options.startDate) {
+      conditions.startTime.gte = options.startDate;
+    }
+    if (options.endDate) {
+      conditions.startTime.lte = options.endDate;
+    }
   }
-  if (options.endDate) {
-    conditions.push(lte(trajectories.startTime, options.endDate));
-  }
+
   if (options.agentIds && options.agentIds.length > 0) {
-    conditions.push(inArray(trajectories.agentId, options.agentIds));
+    conditions.agentId = { in: options.agentIds };
   }
+
   if (options.scenarioIds && options.scenarioIds.length > 0) {
-    conditions.push(inArray(trajectories.scenarioId, options.scenarioIds));
+    conditions.scenarioId = { in: options.scenarioIds };
   }
-  if (options.minReward !== undefined) {
-    conditions.push(gte(trajectories.totalReward, options.minReward));
+
+  if (options.minReward !== undefined || options.maxReward !== undefined) {
+    conditions.totalReward = {};
+    if (options.minReward !== undefined) {
+      conditions.totalReward.gte = options.minReward;
+    }
+    if (options.maxReward !== undefined) {
+      conditions.totalReward.lte = options.maxReward;
+    }
   }
-  if (options.maxReward !== undefined) {
-    conditions.push(lte(trajectories.totalReward, options.maxReward));
-  }
+
   if (options.includeJudged) {
-    conditions.push(isNotNull(trajectories.aiJudgeReward));
+    conditions.aiJudgeReward = { not: null };
   }
 
   return conditions;

@@ -268,9 +268,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     users: usersWithReputation,
     pagination: {
       total: totalCount,
-      limit: filters.limit || 100,
-      offset: filters.offset || 0,
-      hasMore: (filters.offset || 0) + users.length < totalCount,
+      limit: filters.limit,
+      offset: filters.offset,
+      hasMore: filters.offset + users.length < totalCount,
     },
   });
 });

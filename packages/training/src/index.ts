@@ -63,10 +63,15 @@ export * from './utils';
 // DECENTRALIZED TRAINING INFRASTRUCTURE
 // =============================================================================
 
+// Jeju RLAIF Integration
+export {
+  BabylonJejuAdapter,
+  createBabylonJejuAdapter,
+  trainWithJejuRLAIF,
+} from './compute/jeju-rlaif-adapter';
 // MPC Configuration
 export * from './mpc';
 // Encrypted Storage
 export * from './storage';
-
 // TEE Training Workers
 export * from './tee';

@@ -98,52 +98,35 @@ export class AgentDiscoveryService implements IAgentDiscoveryService {
 
     // Search Agent0 network if enabled
     if (filters.includeExternal && process.env.AGENT0_ENABLED === 'true') {
-      try {
-        const agent0Client = getAgent0Client();
+      const agent0Client = getAgent0Client();
 
-        if (agent0Client.isAvailable()) {
-          const searchResponse = await agent0Client.searchAgents(
-            {
-              skills: filters.skills,
-              strategies: filters.strategies,
-              markets: filters.markets,
-              minReputation: filters.minReputation,
-              active: filters.active,
-              x402Support: filters.x402Support,
-              chains: filters.chains,
-              mcp: filters.mcp,
-              a2a: filters.a2a,
-            },
-            options
-          );
-
-          for (const agent0Data of searchResponse.items) {
-            const profile = await this.transformAgent0SearchResult(
-              agent0Data,
-              this.reputationBridge
-            );
-            results.push(profile);
-          }
-
-          nextCursor = searchResponse.nextCursor;
-        } else {
-          // Fallback to subgraph client
-          const externalAgents = await this.subgraphClient.searchAgents({
+      if (agent0Client.isAvailable()) {
+        const searchResponse = await agent0Client.searchAgents(
+          {
+            skills: filters.skills,
             strategies: filters.strategies,
             markets: filters.markets,
-            minTrustScore: filters.minReputation,
-          });
+            minReputation: filters.minReputation,
+            active: filters.active,
+            x402Support: filters.x402Support,
+            chains: filters.chains,
+            mcp: filters.mcp,
+            a2a: filters.a2a,
+          },
+          options
+        );
 
-          for (const agent0Data of externalAgents) {
-            const profile = await this.transformAgent0Profile(
-              agent0Data,
-              this.reputationBridge
-            );
-            results.push(profile);
-          }
+        for (const agent0Data of searchResponse.items) {
+          const profile = await this.transformAgent0SearchResult(
+            agent0Data,
+            this.reputationBridge
+          );
+          results.push(profile);
         }
-      } catch {
-        // Fallback to subgraph client on error
+
+        nextCursor = searchResponse.nextCursor;
+      } else {
+        // Fallback to subgraph client when Agent0 client not available
         const externalAgents = await this.subgraphClient.searchAgents({
           strategies: filters.strategies,
           markets: filters.markets,
@@ -179,35 +162,31 @@ export class AgentDiscoveryService implements IAgentDiscoveryService {
       return { items: [] };
     }
 
-    try {
-      const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client();
 
-      if (!agent0Client.isAvailable()) {
-        return { items: [] };
-      }
-
-      const searchResponse = await agent0Client.searchAgentsByReputation(
-        params,
-        options
-      );
-
-      const profiles: AgentProfile[] = [];
-      for (const agent0Data of searchResponse.items) {
-        const profile = await this.transformAgent0SearchResult(
-          agent0Data,
-          this.reputationBridge
-        );
-        profiles.push(profile);
-      }
-
-      return {
-        items: profiles,
-        nextCursor: searchResponse.nextCursor,
-        meta: searchResponse.meta,
-      };
-    } catch {
+    if (!agent0Client.isAvailable()) {
       return { items: [] };
     }
+
+    const searchResponse = await agent0Client.searchAgentsByReputation(
+      params,
+      options
+    );
+
+    const profiles: AgentProfile[] = [];
+    for (const agent0Data of searchResponse.items) {
+      const profile = await this.transformAgent0SearchResult(
+        agent0Data,
+        this.reputationBridge
+      );
+      profiles.push(profile);
+    }
+
+    return {
+      items: profiles,
+      nextCursor: searchResponse.nextCursor,
+      meta: searchResponse.meta,
+    };
   }
 
   /**
@@ -338,34 +317,30 @@ export class AgentDiscoveryService implements IAgentDiscoveryService {
 
       // Try Agent0Client first
       if (process.env.AGENT0_ENABLED === 'true') {
-        try {
-          const agent0Client = getAgent0Client();
-          if (agent0Client.isAvailable()) {
-            const profile = await agent0Client.getAgentProfile(tokenId);
-            if (profile) {
-              return {
-                agentId: `agent0-${profile.tokenId}`,
-                tokenId: profile.tokenId,
-                address: profile.walletAddress,
-                name: profile.name,
-                endpoint:
-                  profile.endpoints?.find((e) => e.type === 'A2A')?.value || '',
-                capabilities: profile.capabilities,
-                reputation: {
-                  totalBets: 0,
-                  winningBets: 0,
-                  accuracyScore: profile.reputation.accuracyScore,
-                  trustScore: profile.reputation.trustScore,
-                  totalVolume: '0',
-                  profitLoss: 0,
-                  isBanned: false,
-                },
-                isActive: profile.active ?? true,
-              };
-            }
+        const agent0Client = getAgent0Client();
+        if (agent0Client.isAvailable()) {
+          const profile = await agent0Client.getAgentProfile(tokenId);
+          if (profile) {
+            return {
+              agentId: `agent0-${profile.tokenId}`,
+              tokenId: profile.tokenId,
+              address: profile.walletAddress,
+              name: profile.name,
+              endpoint:
+                profile.endpoints?.find((e) => e.type === 'A2A')?.value || '',
+              capabilities: profile.capabilities,
+              reputation: {
+                totalBets: 0,
+                winningBets: 0,
+                accuracyScore: profile.reputation.accuracyScore,
+                trustScore: profile.reputation.trustScore,
+                totalVolume: '0',
+                profitLoss: 0,
+                isBanned: false,
+              },
+              isActive: profile.active ?? true,
+            };
           }
-        } catch {
-          // Fallback to subgraph
         }
       }
 

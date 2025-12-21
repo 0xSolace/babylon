@@ -6,6 +6,7 @@ import {
   getReferralUrl,
   POINTS,
 } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Award,
   Check,
@@ -21,7 +22,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AirdropStatusWidget } from '@/components/airdrop';
 import { LoginButton } from '@/components/auth/LoginButton';
@@ -83,9 +84,7 @@ export default function RewardsPage() {
   const { ready, authenticated, getAccessToken, login, refresh } = useAuth();
   const { user } = useAuthStore();
   const searchParams = useSearchParams();
-  const [referralData, setReferralData] = useState<ReferralData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [showLinkSocialModal, setShowLinkSocialModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -126,47 +125,44 @@ export default function RewardsPage() {
     }
   }, [searchParams, refresh]);
 
-  const fetchReferralData = useCallback(async () => {
-    if (!user?.id || !authenticated) return;
-
-    setLoading(true);
-    setError(null);
-
-    const token = await getAccessToken();
-    if (!token) {
-      console.error('Failed to get access token');
-      setError('Authentication required');
-      setLoading(false);
-      return;
-    }
-
-    const response = await fetch(
-      `/api/users/${encodeURIComponent(user.id)}/referrals`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+  const {
+    data: referralData,
+    isLoading: queryLoading,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['referralData', user?.id],
+    queryFn: async (): Promise<ReferralData> => {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication required');
       }
-    );
 
-    if (!response.ok) {
-      setLoading(false);
-      setError('Failed to fetch referral data');
-      return;
-    }
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(user!.id)}/referrals`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    const data = await response.json();
-    setReferralData(data);
-    setLoading(false);
-  }, [user?.id, authenticated, getAccessToken]);
+      if (!response.ok) {
+        throw new Error('Failed to fetch referral data');
+      }
 
-  useEffect(() => {
-    if (ready && authenticated && user?.id) {
-      fetchReferralData();
-    } else if (ready && !authenticated) {
-      setLoading(false);
-    }
-  }, [user?.id, ready, authenticated, fetchReferralData]);
+      return (await response.json()) as ReferralData;
+    },
+    enabled: ready && authenticated && !!user?.id,
+  });
+
+  const loading = !ready || (authenticated && queryLoading);
+  const error = queryError ? (queryError as Error).message : null;
+
+  const fetchReferralData = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ['referralData', user?.id],
+    });
+  };
 
   const handleCopyUrl = async () => {
     if (!referralData?.user.referralCode) return;

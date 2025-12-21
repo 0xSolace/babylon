@@ -14,6 +14,7 @@ import {
   publicKeyToHex,
   serializeEncryptedMessage,
 } from '@babylon/messaging';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface DecentralizedMessage {
@@ -68,6 +69,23 @@ interface UseDecentralizedDMReturn {
   publicKey: string | null;
 }
 
+interface KeysApiResponse {
+  publicKey: string;
+}
+
+interface SendApiResponse {
+  messageId: string;
+  timestamp: number;
+}
+
+interface InboxApiResponse {
+  messages: RawMessage[];
+}
+
+interface ErrorApiResponse {
+  error?: string;
+}
+
 /**
  * Hook for decentralized direct messaging
  */
@@ -76,79 +94,121 @@ export function useDecentralizedDM(
 ): UseDecentralizedDMReturn {
   const { recipientAddress, autoInit = false } = options;
   const { userId, walletAddress: userWalletAddress } = useJejuAuth();
+  const queryClient = useQueryClient();
 
   const keyPairRef = useRef<EncryptionKeyPair | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<DecentralizedMessage[]>([]);
   const [publicKey, setPublicKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Recipient's public key (fetched from API)
   const recipientKeyRef = useRef<Uint8Array | null>(null);
 
-  // Initialize encryption keys
-  const initializeKeys = useCallback(async () => {
-    if (!userId) {
-      setError('User not authenticated');
-      return;
+  // Query for recipient's public key
+  const { data: recipientKeyData, isLoading: isLoadingRecipientKey } = useQuery(
+    {
+      queryKey: ['recipientKey', recipientAddress],
+      queryFn: async (): Promise<Uint8Array | null> => {
+        const response = await fetch(`/api/messaging/keys/${recipientAddress}`);
+        if (!response.ok) {
+          return null;
+        }
+
+        const responseData = (await response.json()) as KeysApiResponse;
+
+        const hex = responseData.publicKey.startsWith('0x')
+          ? responseData.publicKey.slice(2)
+          : responseData.publicKey;
+        const bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < bytes.length; i++) {
+          bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+        }
+
+        recipientKeyRef.current = bytes;
+        return bytes;
+      },
+      enabled: !!recipientAddress && isInitialized,
+      staleTime: 300000, // 5 minutes
     }
+  );
 
-    setIsLoading(true);
-    setError(null);
+  // Query for inbox messages
+  const {
+    data: messagesData,
+    isLoading: isLoadingMessages,
+    refetch: refetchMessages,
+  } = useQuery({
+    queryKey: ['decentralizedMessages'],
+    queryFn: async (): Promise<DecentralizedMessage[]> => {
+      if (!keyPairRef.current) {
+        return [];
+      }
 
-    // Generate key pair
-    const keyPair = generateKeyPair();
-    keyPairRef.current = keyPair;
+      const response = await fetch('/api/messaging/inbox');
+      if (!response.ok) {
+        throw new Error('Failed to fetch messages');
+      }
 
-    const pubKeyHex = '0x' + publicKeyToHex(keyPair.publicKey);
-    setPublicKey(pubKeyHex);
+      const responseData = (await response.json()) as InboxApiResponse;
 
-    // Register key with API
-    const response = await fetch('/api/messaging/keys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey: pubKeyHex }),
-    });
+      const decrypted: DecentralizedMessage[] = [];
 
-    if (!response.ok) {
-      const data = await response.json();
-      setError(data.error ?? 'Failed to register keys');
-      setIsLoading(false);
-      return;
-    }
+      for (const msg of responseData.messages) {
+        const content = decryptMessageToString(
+          msg.encryptedContent,
+          keyPairRef.current
+        );
 
-    setIsInitialized(true);
-    setIsLoading(false);
-  }, [userId]);
+        decrypted.push({
+          id: msg.id,
+          from: msg.from,
+          to: msg.to,
+          content,
+          timestamp: new Date(msg.timestamp),
+          status: 'delivered',
+          isDecentralized: true,
+        });
+      }
 
-  // Fetch recipient's public key
-  const fetchRecipientKey = useCallback(async () => {
-    if (!recipientAddress) return null;
+      return decrypted;
+    },
+    enabled: isInitialized && !!keyPairRef.current,
+    staleTime: 30000,
+  });
 
-    const response = await fetch(`/api/messaging/keys/${recipientAddress}`);
-    if (!response.ok) {
-      return null;
-    }
+  // Mutation for initializing keys
+  const initKeysMutation = useMutation({
+    mutationFn: async (): Promise<void> => {
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
 
-    const data = (await response.json()) as { publicKey: string };
+      const keyPair = generateKeyPair();
+      keyPairRef.current = keyPair;
 
-    // Convert hex to Uint8Array
-    const hex = data.publicKey.startsWith('0x')
-      ? data.publicKey.slice(2)
-      : data.publicKey;
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-    }
+      const pubKeyHex = '0x' + publicKeyToHex(keyPair.publicKey);
+      setPublicKey(pubKeyHex);
 
-    recipientKeyRef.current = bytes;
-    return bytes;
-  }, [recipientAddress]);
+      const response = await fetch('/api/messaging/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey: pubKeyHex }),
+      });
 
-  // Send encrypted message
-  const sendMessage = useCallback(
-    async (content: string): Promise<string> => {
+      if (!response.ok) {
+        const responseData = (await response.json()) as ErrorApiResponse;
+        throw new Error(responseData.error ?? 'Failed to register keys');
+      }
+
+      setIsInitialized(true);
+    },
+    onError: (err) => {
+      setError((err as Error).message);
+    },
+  });
+
+  // Mutation for sending messages
+  const sendMessageMutation = useMutation({
+    mutationFn: async (content: string): Promise<string> => {
       if (!keyPairRef.current) {
         throw new Error('Keys not initialized');
       }
@@ -156,21 +216,15 @@ export function useDecentralizedDM(
         throw new Error('No recipient address');
       }
 
-      setIsLoading(true);
-      setError(null);
-
-      // Ensure we have recipient's key
       let recipientKey = recipientKeyRef.current;
       if (!recipientKey) {
-        recipientKey = await fetchRecipientKey();
+        recipientKey = recipientKeyData ?? null;
         if (!recipientKey) {
-          setError('Recipient has not registered encryption keys');
-          setIsLoading(false);
-          throw new Error('Recipient key not found');
+          throw new Error('Recipient has not registered encryption keys');
         }
+        recipientKeyRef.current = recipientKey;
       }
 
-      // Encrypt message
       const encrypted = encryptMessage(
         content,
         recipientKey,
@@ -179,7 +233,6 @@ export function useDecentralizedDM(
 
       const encryptedContent = serializeEncryptedMessage(encrypted);
 
-      // Send to API
       const response = await fetch('/api/messaging/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -190,97 +243,84 @@ export function useDecentralizedDM(
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        setError(data.error ?? 'Failed to send message');
-        setIsLoading(false);
-        throw new Error(data.error ?? 'Failed to send');
+        const responseData = (await response.json()) as ErrorApiResponse;
+        throw new Error(responseData.error ?? 'Failed to send message');
       }
 
-      const result = (await response.json()) as {
-        messageId: string;
-        timestamp: number;
-      };
-
-      // Add to local messages (optimistic update)
-      const newMessage: DecentralizedMessage = {
-        id: result.messageId,
-        from: userWalletAddress ?? '',
-        to: recipientAddress,
-        content,
-        timestamp: new Date(result.timestamp),
-        status: 'pending',
-        isDecentralized: true,
-      };
-
-      setMessages((prev) => [...prev, newMessage]);
-      setIsLoading(false);
+      const result = (await response.json()) as SendApiResponse;
 
       return result.messageId;
     },
-    [recipientAddress, fetchRecipientKey, userWalletAddress]
+    onSuccess: (messageId, content) => {
+      if (!userWalletAddress) {
+        throw new Error(
+          'Cannot record sent message: user wallet address is missing'
+        );
+      }
+      // Optimistically add the message
+      queryClient.setQueryData<DecentralizedMessage[]>(
+        ['decentralizedMessages'],
+        (old) => [
+          ...(old ?? []),
+          {
+            id: messageId,
+            from: userWalletAddress,
+            to: recipientAddress!,
+            content,
+            timestamp: new Date(),
+            status: 'pending',
+            isDecentralized: true,
+          },
+        ]
+      );
+    },
+    onError: (err) => {
+      setError((err as Error).message);
+    },
+  });
+
+  const initializeKeys = useCallback(async () => {
+    setError(null);
+    await initKeysMutation.mutateAsync();
+  }, [initKeysMutation]);
+
+  const sendMessage = useCallback(
+    async (content: string): Promise<string> => {
+      setError(null);
+      return sendMessageMutation.mutateAsync(content);
+    },
+    [sendMessageMutation]
   );
 
-  // Fetch and decrypt messages
   const fetchMessages = useCallback(async () => {
-    if (!keyPairRef.current) {
-      return;
-    }
-
-    setIsLoading(true);
     setError(null);
-
-    const response = await fetch('/api/messaging/inbox');
-    if (!response.ok) {
-      setError('Failed to fetch messages');
-      setIsLoading(false);
-      return;
-    }
-
-    const data = (await response.json()) as { messages: RawMessage[] };
-
-    // Decrypt messages
-    const decrypted: DecentralizedMessage[] = [];
-
-    for (const msg of data.messages) {
-      const content = decryptMessageToString(
-        msg.encryptedContent,
-        keyPairRef.current
-      );
-
-      decrypted.push({
-        id: msg.id,
-        from: msg.from,
-        to: msg.to,
-        content,
-        timestamp: new Date(msg.timestamp),
-        status: 'delivered',
-        isDecentralized: true,
-      });
-    }
-
-    setMessages(decrypted);
-    setIsLoading(false);
-  }, []);
+    await refetchMessages();
+  }, [refetchMessages]);
 
   // Auto-initialize if requested
   useEffect(() => {
-    if (autoInit && userId && !isInitialized && !isLoading) {
-      initializeKeys();
+    if (autoInit && userId && !isInitialized && !initKeysMutation.isPending) {
+      void initializeKeys();
     }
-  }, [autoInit, userId, isInitialized, isLoading, initializeKeys]);
+  }, [
+    autoInit,
+    userId,
+    isInitialized,
+    initKeysMutation.isPending,
+    initializeKeys,
+  ]);
 
-  // Fetch recipient key when address changes
-  useEffect(() => {
-    if (recipientAddress && isInitialized) {
-      fetchRecipientKey();
-    }
-  }, [recipientAddress, isInitialized, fetchRecipientKey]);
+  const isLoading =
+    initKeysMutation.isPending ||
+    sendMessageMutation.isPending ||
+    isLoadingMessages ||
+    isLoadingRecipientKey;
 
   return {
     isInitialized,
     isLoading,
     error,
-    messages,
+    messages: messagesData ?? [],
     initializeKeys,
     sendMessage,
     fetchMessages,

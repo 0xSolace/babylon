@@ -212,8 +212,12 @@ export const PATCH = withErrorHandling(
         .where(eq(comments.parentCommentId, commentId)),
     ]);
 
-    const likeCount = Number(likeCountResult?.count ?? 0);
-    const replyCount = Number(replyCountResult?.count ?? 0);
+    if (!likeCountResult || !replyCountResult) {
+      throw new Error('Failed to get comment counts');
+    }
+
+    const likeCount = Number(likeCountResult.count);
+    const replyCount = Number(replyCountResult.count);
 
     logger.info(
       'Comment updated successfully',
@@ -274,7 +278,12 @@ export const DELETE = withErrorHandling(
       .select({ count: count() })
       .from(comments)
       .where(eq(comments.parentCommentId, commentId));
-    const repliesCount = Number(replyCountResult?.count ?? 0);
+
+    if (!replyCountResult) {
+      throw new Error('Failed to get reply count');
+    }
+
+    const repliesCount = Number(replyCountResult.count);
 
     // Delete reactions on replies first
     const replies = await db

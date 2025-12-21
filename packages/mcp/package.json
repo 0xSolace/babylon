@@ -27,8 +27,6 @@
     "@babylon/engine": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@babylon/a2a": "workspace:*",
-    "drizzle-orm": "^0.44.7",
-    "ethers": "^6.15.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {

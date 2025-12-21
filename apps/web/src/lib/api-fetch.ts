@@ -57,7 +57,7 @@ export async function apiFetch(
     ...init,
     credentials: isCrossOrigin(url)
       ? 'include'
-      : (init?.credentials ?? 'same-origin'),
+      : init?.credentials || 'same-origin',
   };
 
   if (typeof input === 'string' || input instanceof URL) {
@@ -97,7 +97,7 @@ export function setupGlobalFetch(): void {
       ...init,
       credentials: isCrossOrigin(rewrittenUrl)
         ? 'include'
-        : (init?.credentials ?? 'same-origin'),
+        : init?.credentials || 'same-origin',
     };
 
     if (typeof input === 'string' || input instanceof URL) {

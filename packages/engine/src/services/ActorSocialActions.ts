@@ -120,14 +120,17 @@ export class ActorSocialActions {
         // Check if there's already a DM chat between this actor and user
         let hasExistingDM = false;
         if (userId && actor.id) {
-          const dmChats = await db
+          type ChatParticipantRow = { chatId: string; participants: string };
+          const dmChats = (await db
             .select({
               chatId: chats.id,
               participants: chatParticipants.userId,
             })
             .from(chats)
             .innerJoin(chatParticipants, eq(chatParticipants.chatId, chats.id))
-            .where(eq(chats.isGroup, false));
+            .where(
+              eq(chats.isGroup, false)
+            )) as unknown as ChatParticipantRow[];
 
           // Group by chat to check for DM between these two users
           const chatParticipantMap = new Map<string, string[]>();
@@ -187,8 +190,8 @@ export class ActorSocialActions {
             .limit(1);
 
           if (existingChat) {
-            chatId = existingChat.id;
-            chatName = existingChat.name || chatName;
+            chatId = String(existingChat.id);
+            chatName = existingChat.name ? String(existingChat.name) : chatName;
           }
           await GroupChatService.recordInvite(
             userId,
@@ -286,7 +289,7 @@ export class ActorSocialActions {
     let finalChatId = chatId;
 
     if (existingChat) {
-      finalChatId = existingChat.id;
+      finalChatId = String(existingChat.id);
     } else {
       await db.insert(chats).values({
         id: chatId,

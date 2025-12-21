@@ -1,7 +1,8 @@
 /**
- * LLM Provider Tests
+ * Jeju Compute Provider Tests
  *
- * Verifies that the multi-provider LLM support works correctly
+ * Verifies that the Jeju Compute integration works correctly
+ * NO FALLBACKS - Decentralized compute is required
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -10,81 +11,62 @@ import { AgentDecisionMaker } from '../src/decision';
 
 dotenv.config({ path: '.env.local' });
 
-describe('LLM Provider Configuration', () => {
-  it('should reject when no API keys provided', () => {
-    expect(() => {
-      new AgentDecisionMaker({
-        strategy: 'balanced',
-        groqApiKey: undefined,
-        anthropicApiKey: undefined,
-        openaiApiKey: undefined,
+describe('Jeju Compute Configuration', () => {
+  it('should create decision maker with Jeju Compute', () => {
+    const maker = new AgentDecisionMaker({
+      strategy: 'balanced',
+      jejuGatewayUrl: 'http://localhost:4200',
+    });
+
+    expect(maker.getProvider()).toContain('Jeju Compute');
+  });
+
+  it('should use environment variable for gateway URL', () => {
+    const originalUrl = process.env.JEJU_GATEWAY_URL;
+    process.env.JEJU_GATEWAY_URL = 'http://test-gateway:4200';
+
+    const maker = new AgentDecisionMaker({
+      strategy: 'balanced',
+    });
+
+    expect(maker.getProvider()).toContain('test-gateway');
+
+    // Restore original
+    if (originalUrl) {
+      process.env.JEJU_GATEWAY_URL = originalUrl;
+    } else {
+      delete process.env.JEJU_GATEWAY_URL;
+    }
+  });
+
+  it('should support different strategies', () => {
+    const strategies = [
+      'conservative',
+      'balanced',
+      'aggressive',
+      'social',
+    ] as const;
+
+    for (const strategy of strategies) {
+      const maker = new AgentDecisionMaker({
+        strategy,
+        jejuGatewayUrl: 'http://localhost:4200',
       });
-    }).toThrow('At least one LLM API key is required');
-  });
-
-  it('should accept Groq API key', () => {
-    const maker = new AgentDecisionMaker({
-      strategy: 'balanced',
-      groqApiKey: 'test-key',
-    });
-
-    expect(maker.getProvider()).toContain('Groq');
-  });
-
-  it('should fall back to Claude if Groq not provided', () => {
-    const maker = new AgentDecisionMaker({
-      strategy: 'balanced',
-      anthropicApiKey: 'test-key',
-    });
-
-    expect(maker.getProvider()).toContain('Claude');
-  });
-
-  it('should fall back to OpenAGI if neither Groq nor Claude provided', () => {
-    const maker = new AgentDecisionMaker({
-      strategy: 'balanced',
-      openaiApiKey: 'test-key',
-    });
-
-    expect(maker.getProvider()).toContain('OpenAGI');
-  });
-
-  it('should prefer Groq over Claude and OpenAGI', () => {
-    const maker = new AgentDecisionMaker({
-      strategy: 'balanced',
-      groqApiKey: 'groq-key',
-      anthropicApiKey: 'claude-key',
-      openaiApiKey: 'openai-key',
-    });
-
-    expect(maker.getProvider()).toContain('Groq');
-  });
-
-  it('should prefer Claude over OpenAGI when Groq not available', () => {
-    const maker = new AgentDecisionMaker({
-      strategy: 'balanced',
-      anthropicApiKey: 'claude-key',
-      openaiApiKey: 'openai-key',
-    });
-
-    expect(maker.getProvider()).toContain('Claude');
+      expect(maker.getProvider()).toBeDefined();
+    }
   });
 });
 
-describe('LLM Provider Live Test', () => {
-  const hasLLMKey = !!(
-    process.env.GROQ_API_KEY ||
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.OPENAI_API_KEY
+describe('Jeju Compute Live Test', () => {
+  const hasJejuCompute = !!(
+    process.env.JEJU_GATEWAY_URL || process.env.JEJU_COMPUTE_ENDPOINT
   );
 
-  if (hasLLMKey) {
-    it('should make a real decision with configured provider', async () => {
+  if (hasJejuCompute) {
+    it('should make a real decision with Jeju Compute', async () => {
       const maker = new AgentDecisionMaker({
         strategy: 'balanced',
-        groqApiKey: process.env.GROQ_API_KEY,
-        anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-        openaiApiKey: process.env.OPENAI_API_KEY,
+        jejuGatewayUrl: process.env.JEJU_GATEWAY_URL,
       });
 
       console.log(`   Using: ${maker.getProvider()}`);
@@ -124,15 +106,15 @@ describe('LLM Provider Live Test', () => {
       if (decision.reasoning) {
         console.log(`   Reasoning: ${decision.reasoning.substring(0, 60)}...`);
       }
-    }, 15000);
+    }, 30000); // 30 second timeout for decentralized compute
   } else {
-    it('Live LLM test skipped - no API keys configured', () => {
-      console.log('\n⚠️  Live LLM test skipped');
-      console.log('   Configure at least one API key to test:');
-      console.log('   - GROQ_API_KEY');
-      console.log('   - ANTHROPIC_API_KEY');
-      console.log('   - OPENAI_API_KEY\n');
-      // Test skipped - no API keys configured
+    it('Live Jeju test skipped - no Jeju Compute configured', () => {
+      console.log('\n⚠️  Live Jeju Compute test skipped');
+      console.log('   Configure Jeju Compute to test:');
+      console.log('   - JEJU_GATEWAY_URL');
+      console.log('   - JEJU_COMPUTE_ENDPOINT');
+      console.log('   Start Jeju with: cd /path/to/jeju && bun run dev\n');
+      // Test skipped - no Jeju Compute configured
     });
   }
 });

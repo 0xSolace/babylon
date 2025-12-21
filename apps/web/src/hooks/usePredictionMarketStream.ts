@@ -1,5 +1,3 @@
-import { useMemo } from 'react';
-
 import { useSSEChannel } from '@/hooks/useSSE';
 
 /**
@@ -97,7 +95,7 @@ export function usePredictionMarketStream(
   marketId: string | null,
   { onTrade, onResolution }: UsePredictionMarketStreamOptions = {}
 ) {
-  const normalizedMarketId = useMemo(() => marketId ?? null, [marketId]);
+  const normalizedMarketId = marketId;
 
   useSSEChannel(normalizedMarketId ? 'markets' : null, (data) => {
     if (!normalizedMarketId) return;

@@ -93,9 +93,9 @@ export async function GET(
     displayName: agent.displayName,
     bio: agent.bio,
     profileImageUrl: agent.profileImageUrl,
-    systemPrompt: agentConfig?.systemPrompt,
-    personality: agentConfig?.personality,
-    tradingStrategy: agentConfig?.tradingStrategy,
+    systemPrompt: agentConfig?.systemPrompt ?? null,
+    personality: agentConfig?.personality ?? null,
+    tradingStrategy: agentConfig?.tradingStrategy ?? null,
   });
 
   return NextResponse.json(agentCard, {

@@ -6,16 +6,7 @@
  * @packageDocumentation
  */
 
-import {
-  agentLogs,
-  agentTrades,
-  db,
-  desc,
-  eq,
-  type JsonValue,
-  users,
-  withTransaction,
-} from '@babylon/db';
+import { db, type JsonValue } from '@babylon/db';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -66,9 +57,9 @@ export class AgentPnLService {
       reasoning,
     } = params;
 
-    await withTransaction(async (tx) => {
-      // Create trade record
-      await tx.insert(agentTrades).values({
+    // Create trade record
+    await db.agentTrade.create({
+      data: {
         id: uuidv4(),
         agentUserId: agentId,
         marketType,
@@ -80,32 +71,32 @@ export class AgentPnLService {
         price,
         pnl: pnl ?? null,
         reasoning: reasoning ?? null,
+      },
+    });
+
+    // Update agent P&L if provided
+    if (pnl !== undefined && pnl !== null) {
+      // Get current lifetimePnL
+      const agent = await db.user.findFirst({
+        where: { id: agentId },
       });
 
-      // Update agent P&L if provided
-      if (pnl !== undefined && pnl !== null) {
-        // Get current lifetimePnL
-        const agentResult = await tx
-          .select({ lifetimePnL: users.lifetimePnL })
-          .from(users)
-          .where(eq(users.id, agentId))
-          .limit(1);
+      const currentPnL = agent?.lifetimePnL
+        ? Number.parseFloat(String(agent.lifetimePnL))
+        : 0;
 
-        const currentPnL = agentResult[0]?.lifetimePnL
-          ? Number.parseFloat(String(agentResult[0].lifetimePnL))
-          : 0;
+      await db.user.update({
+        where: { id: agentId },
+        data: {
+          lifetimePnL: String(currentPnL + pnl),
+          updatedAt: new Date(),
+        },
+      });
+    }
 
-        await tx
-          .update(users)
-          .set({
-            lifetimePnL: String(currentPnL + pnl),
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, agentId));
-      }
-
-      // Log the trade
-      await tx.insert(agentLogs).values({
+    // Log the trade
+    await db.agentLog.create({
+      data: {
         id: await generateSnowflakeId(),
         agentUserId: agentId,
         type: 'trade',
@@ -118,7 +109,7 @@ export class AgentPnLService {
           pnl,
           reasoning,
         } as JsonValue,
-      });
+      },
     });
 
     logger.info(
@@ -132,24 +123,22 @@ export class AgentPnLService {
    * Get agent trades
    */
   async getAgentTrades(agentUserId: string, limit = 50) {
-    return db
-      .select()
-      .from(agentTrades)
-      .where(eq(agentTrades.agentUserId, agentUserId))
-      .orderBy(desc(agentTrades.executedAt))
-      .limit(limit);
+    return db.agentTrade.findMany({
+      where: { agentUserId },
+      orderBy: { executedAt: 'desc' },
+      take: limit,
+    });
   }
 
   /**
    * Get total agent P&L for a user (manager) by summing their agents' lifetimePnL
    */
   async getUserAgentPnL(userId: string): Promise<number> {
-    const agentsResult = await db
-      .select({ lifetimePnL: users.lifetimePnL })
-      .from(users)
-      .where(eq(users.managedBy, userId));
+    const agents = await db.user.findMany({
+      where: { managedBy: userId },
+    });
 
-    return agentsResult.reduce((sum, agent) => {
+    return agents.reduce((sum, agent) => {
       return (
         sum +
         (agent.lifetimePnL ? Number.parseFloat(String(agent.lifetimePnL)) : 0)

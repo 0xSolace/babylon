@@ -12,6 +12,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar,
   ChevronDown,
@@ -22,7 +23,7 @@ import {
   User as UserIcon,
   Users,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useState } from 'react';
 import { z } from 'zod';
 
 /**
@@ -69,56 +70,59 @@ const GroupChatSchema = z.object({
 });
 type GroupChat = z.infer<typeof GroupChatSchema>;
 
+interface AdminGroupsApiResponse {
+  data?: {
+    groups?: GroupChat[];
+  };
+}
+
 export default function AdminGroupsPage() {
-  const [groups, setGroups] = useState<GroupChat[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<
     'createdAt' | 'memberCount' | 'messageCount'
   >('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [isRefreshing, startRefresh] = useTransition();
 
-  const fetchGroups = useCallback(async () => {
-    startRefresh(async () => {
-      setIsLoading(true);
-      setError(null);
-
+  const {
+    data: groups = [],
+    isLoading,
+    error: queryError,
+    isFetching: isRefreshing,
+  } = useQuery({
+    queryKey: ['admin', 'groups', sortBy, sortOrder],
+    queryFn: async (): Promise<GroupChat[]> => {
       const response = await fetch(
         `/api/admin/groups?sortBy=${sortBy}&sortOrder=${sortOrder}`
-      ).catch((err: Error) => {
-        console.error('Failed to fetch groups:', err);
-        setError('Failed to fetch groups. Are you on localhost?');
-        setIsLoading(false);
-        throw err;
-      });
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('API error:', errorText);
-        setError(`API error: ${response.status} - ${errorText}`);
-        setIsLoading(false);
-        return;
+        throw new Error(`API error: ${response.status} - ${errorText}`);
       }
 
-      const data = await response.json();
-      const validation = z.array(GroupChatSchema).safeParse(data.data?.groups);
+      const data = (await response.json()) as AdminGroupsApiResponse;
+      if (!data.data?.groups) {
+        throw new Error(
+          'Invalid group data structure from API: missing groups'
+        );
+      }
+      const validation = z.array(GroupChatSchema).safeParse(data.data.groups);
       if (!validation.success) {
-        console.error('Validation error:', validation.error);
-        setError('Invalid group data structure from API');
-        setIsLoading(false);
-        return;
+        throw new Error('Invalid group data structure from API');
       }
-      setGroups(validation.data || []);
-      setIsLoading(false);
-    });
-  }, [sortBy, sortOrder]);
+      return validation.data;
+    },
+  });
 
-  useEffect(() => {
-    fetchGroups();
-  }, [fetchGroups]);
+  const error = queryError ? (queryError as Error).message : null;
+
+  const fetchGroups = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ['admin', 'groups', sortBy, sortOrder],
+    });
+  };
 
   const toggleExpanded = (groupId: string) => {
     setExpandedGroups((prev) => {

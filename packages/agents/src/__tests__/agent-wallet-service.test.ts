@@ -4,7 +4,8 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { ethers } from 'ethers';
+import { generateRandomWallet, verifyMessage } from '@babylon/shared';
+import { privateKeyToAccount } from 'viem/accounts';
 
 // Mock database
 const mockDb = {
@@ -33,8 +34,9 @@ mock.module('@babylon/db', () => ({
   eq: (a: unknown, b: unknown) => ({ a, b }),
 }));
 
-// Mock ethers wallet
-const mockWallet = ethers.Wallet.createRandom();
+// Mock wallet using viem
+const mockWalletData = generateRandomWallet();
+const mockAccount = privateKeyToAccount(mockWalletData.privateKey);
 
 describe('Agent Wallet Service', () => {
   beforeEach(() => {
@@ -42,7 +44,7 @@ describe('Agent Wallet Service', () => {
   });
 
   test('generates valid Ethereum addresses', () => {
-    const address = mockWallet.address;
+    const address = mockAccount.address;
 
     expect(address).toBeTruthy();
     expect(address).toMatch(/^0x[a-fA-F0-9]{40}$/);
@@ -53,7 +55,7 @@ describe('Agent Wallet Service', () => {
     const addresses = [
       '0x1234567890123456789012345678901234567890',
       '0xabcdef0123456789ABCDEF0123456789abcdef01',
-      mockWallet.address,
+      mockAccount.address,
     ];
 
     for (const address of addresses) {
@@ -63,27 +65,31 @@ describe('Agent Wallet Service', () => {
   });
 
   test('can create wallet from random seed', () => {
-    const wallet1 = ethers.Wallet.createRandom();
-    const wallet2 = ethers.Wallet.createRandom();
+    const wallet1 = generateRandomWallet();
+    const wallet2 = generateRandomWallet();
 
     expect(wallet1.address).not.toBe(wallet2.address);
     expect(wallet1.privateKey).not.toBe(wallet2.privateKey);
   });
 
   test('wallet private key has correct format', () => {
-    expect(mockWallet.privateKey).toMatch(/^0x[a-fA-F0-9]{64}$/);
+    expect(mockWalletData.privateKey).toMatch(/^0x[a-fA-F0-9]{64}$/);
   });
 
   test('can sign messages with wallet', async () => {
     const message = 'Test message for signing';
-    const signature = await mockWallet.signMessage(message);
+    const signature = await mockAccount.signMessage({ message });
 
     expect(signature).toBeTruthy();
     expect(signature).toMatch(/^0x[a-fA-F0-9]+$/);
 
     // Verify signature
-    const recoveredAddress = ethers.verifyMessage(message, signature);
-    expect(recoveredAddress).toBe(mockWallet.address);
+    const isValid = await verifyMessage({
+      address: mockAccount.address,
+      message,
+      signature,
+    });
+    expect(isValid).toBe(true);
   });
 
   test('database mock returns expected agent data', async () => {
@@ -106,7 +112,7 @@ describe('Agent Wallet Service', () => {
 
   test('setupAgentIdentity result structure', () => {
     const result = {
-      walletAddress: mockWallet.address,
+      walletAddress: mockAccount.address,
       onChainRegistered: false,
       privyUserId: 'did:privy:test-123',
       privyWalletId: 'wallet-123',

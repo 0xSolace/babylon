@@ -57,23 +57,8 @@ ENVIRONMENT:
  */
 async function checkDocker(): Promise<void> {
   logger.step('Checking Docker installation...');
-
-  try {
-    await $`docker --version`.quiet();
-  } catch {
-    logger.fail('Docker is not installed!');
-    console.log('Install Docker: https://docs.docker.com/get-docker/');
-    process.exit(1);
-  }
-
-  try {
-    await $`docker info`.quiet();
-  } catch {
-    logger.fail('Docker is installed but not running!');
-    console.log('Please start Docker Desktop or the Docker daemon.');
-    process.exit(1);
-  }
-
+  await $`docker --version`.quiet();
+  await $`docker info`.quiet();
   logger.success('Docker is running');
 }
 

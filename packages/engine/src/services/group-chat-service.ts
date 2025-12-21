@@ -140,8 +140,11 @@ export class GroupChatService {
     }
 
     // Check follow duration
+    const followedAtDate = followStatus.followedAt
+      ? new Date(String(followStatus.followedAt))
+      : new Date();
     const hoursSinceFollow =
-      (Date.now() - followStatus.followedAt.getTime()) / (1000 * 60 * 60);
+      (Date.now() - followedAtDate.getTime()) / (1000 * 60 * 60);
 
     if (hoursSinceFollow < GroupChatService.MIN_FOLLOW_DURATION_HOURS) {
       return {
@@ -184,7 +187,7 @@ export class GroupChatService {
         and(
           eq(userInteractions.userId, userId),
           eq(userInteractions.npcId, npcId),
-          gte(userInteractions.timestamp, followStatus.followedAt)
+          gte(userInteractions.timestamp, followedAtDate)
         )
       );
 
@@ -203,8 +206,10 @@ export class GroupChatService {
 
     // Calculate average quality since follow
     const avgQuality =
-      interactionsSinceFollow.reduce((sum, i) => sum + i.qualityScore, 0) /
-      interactionsSinceFollow.length;
+      interactionsSinceFollow.reduce(
+        (sum, i) => sum + Number(i.qualityScore ?? 0),
+        0
+      ) / interactionsSinceFollow.length;
 
     if (avgQuality < GroupChatService.MIN_QUALITY_SCORE) {
       return {
@@ -345,9 +350,9 @@ export class GroupChatService {
       .orderBy(groupChatMemberships.joinedAt);
 
     return memberships.map((m) => ({
-      id: m.chatId,
-      name: `${m.npcAdminId}'s Chat`,
-      admin: m.npcAdminId,
+      id: String(m.chatId),
+      name: `${String(m.npcAdminId)}'s Chat`,
+      admin: String(m.npcAdminId),
       members: [userId],
       theme: 'default',
       messageCount: 0,
@@ -369,7 +374,7 @@ export class GroupChatService {
       )
       .limit(1);
 
-    return membership?.isActive ?? false;
+    return Boolean(membership?.isActive) ?? false;
   }
 
   // ---------------------------------------------------------------------------
@@ -416,8 +421,10 @@ export class GroupChatService {
       .orderBy(desc(messages.createdAt));
 
     const totalMessages = allMessages.length;
-    const ticksSinceJoin =
-      (Date.now() - membership.joinedAt.getTime()) / (1000 * 60);
+    const joinedAtDate = membership.joinedAt
+      ? new Date(String(membership.joinedAt))
+      : new Date();
+    const ticksSinceJoin = (Date.now() - joinedAtDate.getTime()) / (1000 * 60);
 
     if (totalMessages === 0) {
       if (ticksSinceJoin > GroupChatService.INACTIVITY_GRACE_PERIOD_TICKS) {
@@ -442,8 +449,11 @@ export class GroupChatService {
       };
     }
 
+    const lastMessageDate = lastMessage.createdAt
+      ? new Date(String(lastMessage.createdAt))
+      : new Date();
     const ticksSinceLastMessage =
-      (Date.now() - lastMessage.createdAt.getTime()) / (1000 * 60);
+      (Date.now() - lastMessageDate.getTime()) / (1000 * 60);
 
     let inactivityMultiplier = 1;
     let reason = '';
@@ -462,9 +472,10 @@ export class GroupChatService {
 
     let overactivityMultiplier = 1;
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const messagesLast24h = allMessages.filter(
-      (m) => m.createdAt >= oneDayAgo
-    ).length;
+    const messagesLast24h = allMessages.filter((m) => {
+      const msgDate = m.createdAt ? new Date(String(m.createdAt)) : new Date(0);
+      return msgDate >= oneDayAgo;
+    }).length;
 
     if (messagesLast24h > GroupChatService.ACTIVITY_HARD_CAP) {
       overactivityMultiplier = 20;
@@ -499,7 +510,7 @@ export class GroupChatService {
       stats: {
         hoursSinceLastMessage: ticksSinceLastMessage / 60,
         messagesLast24h,
-        averageQuality: membership.qualityScore,
+        averageQuality: Number(membership.qualityScore ?? 0),
         totalMessages,
       },
     };
@@ -551,14 +562,15 @@ export class GroupChatService {
     const reasons: Record<string, number> = {};
 
     for (const membership of memberships) {
+      const memberUserId = String(membership.userId);
       const decision = await GroupChatService.calculateKickChance(
-        membership.userId,
+        memberUserId,
         chatId
       );
 
       if (Math.random() < decision.kickChance && decision.reason) {
         await GroupChatService.removeFromChat(
-          membership.userId,
+          memberUserId,
           chatId,
           decision.reason
         );
@@ -589,7 +601,7 @@ export class GroupChatService {
     const reasonsSummary: Record<string, number> = {};
 
     for (const chat of groupChats) {
-      const result = await GroupChatService.sweepChat(chat.id);
+      const result = await GroupChatService.sweepChat(String(chat.id));
       totalRemoved += result.removed;
 
       for (const [reason, count] of Object.entries(result.reasons)) {
@@ -621,9 +633,11 @@ export class GroupChatService {
 
     if (!membership) return;
 
-    const totalMessages = membership.messageCount + 1;
+    const currentMessageCount = Number(membership.messageCount ?? 0);
+    const currentQualityScore = Number(membership.qualityScore ?? 0);
+    const totalMessages = currentMessageCount + 1;
     const newAvgQuality =
-      (membership.qualityScore * membership.messageCount + newMessageQuality) /
+      (currentQualityScore * currentMessageCount + newMessageQuality) /
       totalMessages;
 
     await db

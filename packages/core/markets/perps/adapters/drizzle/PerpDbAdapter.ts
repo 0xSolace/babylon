@@ -1,12 +1,7 @@
 import {
-  and,
-  type PerpPosition as DbPerpPosition,
+  type CQLClient,
   db as defaultDb,
-  eq,
-  getRawDrizzle,
   type InferInsertModel,
-  isNull,
-  perpMarketSnapshots,
   perpPositions,
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
@@ -19,86 +14,68 @@ import type {
 
 type NewPerpPosition = InferInsertModel<typeof perpPositions>;
 
-// Database operations interface - works with DrizzleClient and raw transactions
-interface DbOperations {
-  select: typeof defaultDb.select;
-  insert: typeof defaultDb.insert;
-  update: typeof defaultDb.update;
-  delete: typeof defaultDb.delete;
+interface PerpMarketSnapshot {
+  ticker: string;
+  organizationId: string;
+  name: string | null;
+  currentPrice: number;
+  price24hAgo: number | null;
+  price24hAgoUpdatedAt: Date | string | null;
+  metrics24hResetAt: Date | string | null;
+  change24h: number;
+  changePercent24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  openInterest: number;
+  fundingRate: unknown;
+  maxLeverage: number;
+  minOrderSize: number;
+  markPrice: number | null;
+  indexPrice: number | null;
 }
 
 /**
- * Drizzle adapter for PerpDbPort.
+ * CQL adapter for PerpDbPort.
  *
  * Notes:
  * - Uses PerpMarketSnapshot as single source for market-level stats.
  * - Generates IDs via snowflake when none provided.
- * - Supports transactions via constructor injection or transaction() method.
+ * - Uses raw SQL for PerpMarketSnapshot (has ticker as PK, not id).
  */
 export class PerpDbAdapter implements PerpDbPort {
-  private readonly dbClient: DbOperations;
-  // Note: isTransaction is stored for potential future use in transaction-aware operations
-  private readonly _isTransaction: boolean;
+  private readonly dbClient: CQLClient;
 
-  constructor(dbClient?: DbOperations, isTransaction = false) {
+  constructor(dbClient?: CQLClient, _isTransaction = false) {
+    void _isTransaction; // Stored for potential future transaction-aware operations
     this.dbClient = dbClient ?? defaultDb;
-    this._isTransaction = isTransaction;
   }
 
   async listMarkets(): Promise<PerpMarketRecord[]> {
-    const snapshots = await this.dbClient.select().from(perpMarketSnapshots);
-    if (snapshots.length === 0) return [];
-
-    // Name is stored directly in the snapshot - no need to join with organizations
-    return snapshots.map((s: typeof perpMarketSnapshots.$inferSelect) => ({
-      ticker: s.ticker,
-      organizationId: s.organizationId,
-      name: s.name ?? undefined,
-      currentPrice: Number(s.currentPrice),
-      price24hAgo: s.price24hAgo ? Number(s.price24hAgo) : undefined,
-      change24h: Number(s.change24h ?? 0),
-      changePercent24h: Number(s.changePercent24h ?? 0),
-      high24h: Number(s.high24h),
-      low24h: Number(s.low24h),
-      volume24h: Number(s.volume24h ?? 0),
-      openInterest: Number(s.openInterest ?? 0),
-      fundingRate: (s.fundingRate ?? {
-        rate: 0,
-        nextFundingTime: new Date().toISOString(),
-        predictedRate: 0,
-      }) as PerpMarketRecord['fundingRate'],
-      maxLeverage: Number(s.maxLeverage ?? 100),
-      minOrderSize: Number(s.minOrderSize ?? 10),
-      markPrice: s.markPrice ? Number(s.markPrice) : undefined,
-      indexPrice: s.indexPrice ? Number(s.indexPrice) : undefined,
-    }));
+    const snapshots = await this.dbClient.query<PerpMarketSnapshot>(
+      'SELECT * FROM "PerpMarketSnapshot"'
+    );
+    return snapshots.map(mapMarketSnapshot);
   }
 
   async listOpenPositions(): Promise<PerpPositionRecord[]> {
-    const positions = await this.dbClient
-      .select()
-      .from(perpPositions)
-      .where(isNull(perpPositions.closedAt));
-
+    const positions = await this.dbClient.perpPosition.findMany({
+      where: { closedAt: null },
+    });
     return positions.map(mapPosition);
   }
 
   async getPositionById(id: string): Promise<PerpPositionRecord | null> {
-    const [pos] = await this.dbClient
-      .select()
-      .from(perpPositions)
-      .where(eq(perpPositions.id, id))
-      .limit(1);
+    const pos = await this.dbClient.perpPosition.findUnique({
+      where: { id },
+    });
     return pos ? mapPosition(pos) : null;
   }
 
   async getOpenPositionsByUser(userId: string): Promise<PerpPositionRecord[]> {
-    const positions = await this.dbClient
-      .select()
-      .from(perpPositions)
-      .where(
-        and(eq(perpPositions.userId, userId), isNull(perpPositions.closedAt))
-      );
+    const positions = await this.dbClient.perpPosition.findMany({
+      where: { userId, closedAt: null },
+    });
     return positions.map(mapPosition);
   }
 
@@ -106,18 +83,11 @@ export class PerpDbAdapter implements PerpDbPort {
     userId: string,
     ticker: string
   ): Promise<PerpPositionRecord | null> {
-    const [pos] = await this.dbClient
-      .select()
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.userId, userId),
-          eq(perpPositions.ticker, ticker),
-          isNull(perpPositions.closedAt)
-        )
-      )
-      .limit(1);
-    return pos ? mapPosition(pos) : null;
+    const positions = await this.dbClient.perpPosition.findMany({
+      where: { userId, ticker, closedAt: null },
+      take: 1,
+    });
+    return positions[0] ? mapPosition(positions[0]) : null;
   }
 
   async upsertPosition(
@@ -125,7 +95,8 @@ export class PerpDbAdapter implements PerpDbPort {
   ): Promise<PerpPositionRecord> {
     const now = new Date();
     const id = position.id ?? (await generateSnowflakeId());
-    const insert: NewPerpPosition = {
+
+    const data: NewPerpPosition = {
       id,
       userId: position.userId,
       ticker: position.ticker,
@@ -145,17 +116,13 @@ export class PerpDbAdapter implements PerpDbPort {
       realizedPnL: position.realizedPnL ?? null,
     };
 
-    const result = await this.dbClient
-      .insert(perpPositions)
-      .values(insert)
-      .onConflictDoUpdate({
-        target: perpPositions.id,
-        set: { ...insert, openedAt: insert.openedAt },
-      })
-      .returning()
-      .execute();
+    const result = await this.dbClient.perpPosition.upsert({
+      where: { id },
+      create: data,
+      update: { ...data, openedAt: data.openedAt },
+    });
 
-    return mapPosition(result[0]!);
+    return mapPosition(result);
   }
 
   async updateOpenPosition(
@@ -173,40 +140,37 @@ export class PerpDbAdapter implements PerpDbPort {
       >
     >
   ): Promise<void> {
-    // Only set fields that are explicitly provided (not undefined)
-    const setFields: Record<string, unknown> = {
+    const updateData: Record<string, unknown> = {
       lastUpdated: updates.lastUpdated ?? new Date(),
     };
     if (updates.currentPrice !== undefined) {
-      setFields.currentPrice = updates.currentPrice;
+      updateData.currentPrice = updates.currentPrice;
     }
     if (updates.unrealizedPnL !== undefined) {
-      setFields.unrealizedPnL = updates.unrealizedPnL;
+      updateData.unrealizedPnL = updates.unrealizedPnL;
     }
     if (updates.unrealizedPnLPercent !== undefined) {
-      setFields.unrealizedPnLPercent = updates.unrealizedPnLPercent;
+      updateData.unrealizedPnLPercent = updates.unrealizedPnLPercent;
     }
     if (updates.fundingPaid !== undefined) {
-      setFields.fundingPaid = updates.fundingPaid;
+      updateData.fundingPaid = updates.fundingPaid;
     }
     if (updates.liquidationPrice !== undefined) {
-      setFields.liquidationPrice = updates.liquidationPrice;
+      updateData.liquidationPrice = updates.liquidationPrice;
     }
     if (updates.size !== undefined) {
-      setFields.size = updates.size;
+      updateData.size = updates.size;
     }
 
-    await this.dbClient
-      .update(perpPositions)
-      .set(setFields)
-      .where(
-        and(eq(perpPositions.id, positionId), isNull(perpPositions.closedAt))
-      );
+    await this.dbClient.perpPosition.update({
+      where: { id: positionId },
+      data: updateData,
+    });
   }
 
   async closePosition(
     positionId: string,
-    updates: Partial<
+    closeData: Partial<
       Pick<
         PerpPositionRecord,
         | 'currentPrice'
@@ -217,27 +181,72 @@ export class PerpDbAdapter implements PerpDbPort {
       >
     >
   ): Promise<void> {
-    const closedAt = updates.closedAt ?? new Date();
-    // Only set fields that are explicitly provided (not undefined)
-    const setFields: Record<string, unknown> = {
-      closedAt,
-      lastUpdated: closedAt,
-      unrealizedPnL: updates.unrealizedPnL ?? 0,
-      unrealizedPnLPercent: updates.unrealizedPnLPercent ?? 0,
-    };
-    if (updates.currentPrice !== undefined) {
-      setFields.currentPrice = updates.currentPrice;
-    }
-    if (updates.realizedPnL !== undefined) {
-      setFields.realizedPnL = updates.realizedPnL;
-    }
-
-    await this.dbClient
-      .update(perpPositions)
-      .set(setFields)
-      .where(eq(perpPositions.id, positionId));
+    await this.dbClient.perpPosition.update({
+      where: { id: positionId },
+      data: {
+        closedAt: closeData.closedAt ?? new Date(),
+        realizedPnL: closeData.realizedPnL ?? null,
+        currentPrice: closeData.currentPrice,
+        unrealizedPnL: closeData.unrealizedPnL,
+        unrealizedPnLPercent: closeData.unrealizedPnLPercent,
+      },
+    });
   }
 
+  async getMarketByTicker(ticker: string): Promise<PerpMarketRecord | null> {
+    const snapshots = await this.dbClient.query<PerpMarketSnapshot>(
+      'SELECT * FROM "PerpMarketSnapshot" WHERE ticker = $1 LIMIT 1',
+      [ticker]
+    );
+    return snapshots[0] ? mapMarketSnapshot(snapshots[0]) : null;
+  }
+
+  async upsertMarketSnapshot(
+    market: PerpMarketRecord
+  ): Promise<PerpMarketRecord> {
+    const now = new Date().toISOString();
+    const fundingRateJson = JSON.stringify(market.fundingRate);
+
+    await this.dbClient.exec(
+      `INSERT INTO "PerpMarketSnapshot" (
+        ticker, "organizationId", name, "currentPrice", "price24hAgo",
+        "change24h", "changePercent24h", "high24h", "low24h", "volume24h",
+        "openInterest", "fundingRate", "maxLeverage", "minOrderSize",
+        "markPrice", "indexPrice", "updatedAt"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      ON CONFLICT (ticker) DO UPDATE SET
+        "organizationId" = $2, name = $3, "currentPrice" = $4, "price24hAgo" = $5,
+        "change24h" = $6, "changePercent24h" = $7, "high24h" = $8, "low24h" = $9,
+        "volume24h" = $10, "openInterest" = $11, "fundingRate" = $12,
+        "maxLeverage" = $13, "minOrderSize" = $14, "markPrice" = $15,
+        "indexPrice" = $16, "updatedAt" = $17`,
+      [
+        market.ticker,
+        market.organizationId,
+        market.name ?? null,
+        market.currentPrice,
+        market.price24hAgo ?? null,
+        market.change24h,
+        market.changePercent24h,
+        market.high24h,
+        market.low24h,
+        market.volume24h,
+        market.openInterest,
+        fundingRateJson,
+        market.maxLeverage,
+        market.minOrderSize,
+        market.markPrice ?? null,
+        market.indexPrice ?? null,
+        now,
+      ]
+    );
+
+    return market;
+  }
+
+  /**
+   * Update market stats (partial update)
+   */
   async updateMarketStats(
     ticker: string,
     updates: Partial<
@@ -260,27 +269,30 @@ export class PerpDbAdapter implements PerpDbPort {
     >
   ): Promise<void> {
     const now = new Date();
-    const existing = await this.dbClient
-      .select()
-      .from(perpMarketSnapshots)
-      .where(eq(perpMarketSnapshots.ticker, ticker))
-      .limit(1);
 
-    if (existing.length === 0) {
-      // Snapshot must be seeded separately - this method only updates existing snapshots
-      // Use init-snapshots script in @babylon/engine to seed from static organization data
+    // Get current snapshot
+    const snapshots = await this.dbClient.query<PerpMarketSnapshot>(
+      'SELECT * FROM "PerpMarketSnapshot" WHERE ticker = $1 LIMIT 1',
+      [ticker]
+    );
+    const current = snapshots[0];
+
+    if (!current) {
       throw new Error(
         `Cannot update market snapshot for ${ticker}: snapshot not found. ` +
           'Run perp market seeding to create snapshots from static organization data.'
       );
     }
 
-    const current = existing[0]!;
     const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    const currentPrice24hAgoUpdatedAt = current.price24hAgoUpdatedAt
+      ? new Date(current.price24hAgoUpdatedAt)
+      : null;
 
     // Rotate price24hAgo if more than 24 hours have passed since last rotation
     let price24hAgo = updates.price24hAgo ?? current.price24hAgo;
-    let price24hAgoUpdatedAt = current.price24hAgoUpdatedAt;
+    let price24hAgoUpdatedAt = currentPrice24hAgoUpdatedAt;
 
     if (
       !price24hAgoUpdatedAt ||
@@ -291,11 +303,15 @@ export class PerpDbAdapter implements PerpDbPort {
       price24hAgoUpdatedAt = now;
     }
 
+    const currentMetrics24hResetAt = current.metrics24hResetAt
+      ? new Date(current.metrics24hResetAt)
+      : null;
+
     // Reset 24h metrics (high/low/volume) if more than 24 hours have passed
     let high24h = updates.high24h ?? current.high24h;
     let low24h = updates.low24h ?? current.low24h;
     let volume24h = updates.volume24h ?? current.volume24h;
-    let metrics24hResetAt = current.metrics24hResetAt;
+    let metrics24hResetAt = currentMetrics24hResetAt;
 
     if (
       !metrics24hResetAt ||
@@ -309,53 +325,84 @@ export class PerpDbAdapter implements PerpDbPort {
       metrics24hResetAt = now;
     }
 
-    await this.dbClient
-      .update(perpMarketSnapshots)
-      .set({
-        currentPrice: updates.currentPrice ?? current.currentPrice,
+    const fundingRate = updates.fundingRate ?? current.fundingRate;
+
+    await this.dbClient.exec(
+      `UPDATE "PerpMarketSnapshot" SET
+        "currentPrice" = $1, "price24hAgo" = $2, "price24hAgoUpdatedAt" = $3,
+        "metrics24hResetAt" = $4, "change24h" = $5, "changePercent24h" = $6,
+        "high24h" = $7, "low24h" = $8, "volume24h" = $9, "openInterest" = $10,
+        "fundingRate" = $11, "maxLeverage" = $12, "minOrderSize" = $13,
+        "markPrice" = $14, "indexPrice" = $15, "updatedAt" = $16
+      WHERE ticker = $17`,
+      [
+        updates.currentPrice ?? current.currentPrice,
         price24hAgo,
-        price24hAgoUpdatedAt,
-        metrics24hResetAt,
-        change24h: updates.change24h ?? current.change24h,
-        changePercent24h: updates.changePercent24h ?? current.changePercent24h,
+        price24hAgoUpdatedAt?.toISOString() ?? current.price24hAgoUpdatedAt,
+        metrics24hResetAt?.toISOString() ?? current.metrics24hResetAt,
+        updates.change24h ?? current.change24h,
+        updates.changePercent24h ?? current.changePercent24h,
         high24h,
         low24h,
         volume24h,
-        openInterest: updates.openInterest ?? current.openInterest,
-        fundingRate: updates.fundingRate ?? current.fundingRate,
-        maxLeverage: updates.maxLeverage ?? current.maxLeverage,
-        minOrderSize: updates.minOrderSize ?? current.minOrderSize,
-        markPrice: updates.markPrice ?? current.markPrice,
-        indexPrice: updates.indexPrice ?? current.indexPrice,
-        updatedAt: now,
-      })
-      .where(eq(perpMarketSnapshots.ticker, ticker));
+        updates.openInterest ?? current.openInterest,
+        JSON.stringify(fundingRate),
+        updates.maxLeverage ?? current.maxLeverage,
+        updates.minOrderSize ?? current.minOrderSize,
+        updates.markPrice ?? current.markPrice,
+        updates.indexPrice ?? current.indexPrice,
+        now.toISOString(),
+        ticker,
+      ]
+    );
   }
 
   /**
-   * Execute operations within a transaction for atomicity.
-   * Creates a new PerpDbAdapter bound to the transaction context.
+   * Execute operations within a transaction.
+   *
+   * NOTE: CQL handles transactions through the client.
    */
   async transaction<T>(fn: (tx: PerpDbPort) => Promise<T>): Promise<T> {
-    // If already in a transaction, just use the current client
-    if (this._isTransaction) {
-      return fn(this);
-    }
-
-    const rawDrizzle = getRawDrizzle();
-    return rawDrizzle.transaction(async (txClient) => {
-      const txAdapter = new PerpDbAdapter(txClient, true);
+    return this.dbClient.$transaction(async (tx) => {
+      const txAdapter = new PerpDbAdapter(tx as CQLClient, true);
       return fn(txAdapter);
     });
   }
 }
 
-function mapPosition(pos: DbPerpPosition): PerpPositionRecord {
+// Helper to map DB record to market record
+function mapMarketSnapshot(s: PerpMarketSnapshot): PerpMarketRecord {
   return {
-    id: pos.id,
-    userId: pos.userId,
-    ticker: pos.ticker,
-    organizationId: pos.organizationId,
+    ticker: s.ticker,
+    organizationId: s.organizationId,
+    name: s.name ?? undefined,
+    currentPrice: Number(s.currentPrice),
+    price24hAgo: s.price24hAgo ? Number(s.price24hAgo) : undefined,
+    change24h: Number(s.change24h ?? 0),
+    changePercent24h: Number(s.changePercent24h ?? 0),
+    high24h: Number(s.high24h),
+    low24h: Number(s.low24h),
+    volume24h: Number(s.volume24h ?? 0),
+    openInterest: Number(s.openInterest ?? 0),
+    fundingRate: (s.fundingRate ?? {
+      rate: 0,
+      nextFundingTime: new Date().toISOString(),
+      predictedRate: 0,
+    }) as PerpMarketRecord['fundingRate'],
+    maxLeverage: Number(s.maxLeverage ?? 100),
+    minOrderSize: Number(s.minOrderSize ?? 10),
+    markPrice: s.markPrice ? Number(s.markPrice) : undefined,
+    indexPrice: s.indexPrice ? Number(s.indexPrice) : undefined,
+  };
+}
+
+// Helper to map DB record to position record
+function mapPosition(pos: Record<string, unknown>): PerpPositionRecord {
+  return {
+    id: pos.id as string,
+    userId: pos.userId as string,
+    ticker: pos.ticker as string,
+    organizationId: pos.organizationId as string,
     side: pos.side as PerpSide,
     entryPrice: Number(pos.entryPrice),
     currentPrice: Number(pos.currentPrice),
@@ -365,9 +412,19 @@ function mapPosition(pos: DbPerpPosition): PerpPositionRecord {
     unrealizedPnL: Number(pos.unrealizedPnL),
     unrealizedPnLPercent: Number(pos.unrealizedPnLPercent),
     fundingPaid: Number(pos.fundingPaid),
-    openedAt: new Date(pos.openedAt),
-    lastUpdated: new Date(pos.lastUpdated),
-    closedAt: pos.closedAt ? new Date(pos.closedAt) : undefined,
-    realizedPnL: pos.realizedPnL !== null ? Number(pos.realizedPnL) : undefined,
+    openedAt:
+      pos.openedAt instanceof Date
+        ? pos.openedAt
+        : new Date(String(pos.openedAt)),
+    lastUpdated:
+      pos.lastUpdated instanceof Date
+        ? pos.lastUpdated
+        : new Date(String(pos.lastUpdated)),
+    closedAt: pos.closedAt
+      ? pos.closedAt instanceof Date
+        ? pos.closedAt
+        : new Date(String(pos.closedAt))
+      : undefined,
+    realizedPnL: pos.realizedPnL ? Number(pos.realizedPnL) : undefined,
   };
 }

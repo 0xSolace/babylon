@@ -47,11 +47,16 @@ export async function GET(request: NextRequest) {
   }
 
   const realtimePayload = verifyRealtimeToken(tokenParam);
-  let allowedChannels: RealtimeChannel[] = realtimePayload?.channels ?? [];
 
-  if (!realtimePayload?.userId) {
+  if (!realtimePayload || !realtimePayload.userId) {
     return new Response('Unauthorized', { status: 401 });
   }
+
+  if (!realtimePayload.channels || realtimePayload.channels.length === 0) {
+    return new Response('Token missing channels', { status: 400 });
+  }
+
+  let allowedChannels: RealtimeChannel[] = realtimePayload.channels;
 
   const userId = realtimePayload.userId;
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Send, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -18,6 +19,24 @@ interface Message {
   modelUsed?: string;
   pointsCost: number;
   createdAt: string;
+}
+
+interface MessagesResponse {
+  success: boolean;
+  messages: Message[];
+}
+
+interface SendMessageResponse {
+  success: boolean;
+  messageId: string;
+  response: string;
+  modelUsed: string;
+  pointsCost: number;
+  balanceAfter: number;
+}
+
+interface SendMessageError {
+  error: string;
 }
 
 /**
@@ -62,8 +81,6 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
   const { user, getAccessToken } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
   const [usePro, setUsePro] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -71,37 +88,108 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
-  const fetchMessages = useCallback(async () => {
-    setLoading(true);
-    const token = await getAccessToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+  // Fetch messages
+  const { isLoading } = useQuery({
+    queryKey: ['agent', 'chat', agent.id],
+    queryFn: async (): Promise<Message[]> => {
+      const token = await getAccessToken();
+      if (!token) return [];
 
-    const res = await fetch(`/api/agents/${agent.id}/chat?limit=50`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      const res = await fetch(`/api/agents/${agent.id}/chat?limit=50`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    if (res.ok) {
-      const data = (await res.json()) as {
-        success: boolean;
-        messages: Message[];
-      };
-      if (data.success && data.messages) {
-        setMessages(data.messages.reverse());
+      if (!res.ok) {
+        logger.error('Failed to fetch messages', undefined, 'AgentChat');
+        return [];
       }
-    } else {
-      logger.error('Failed to fetch messages', undefined, 'AgentChat');
-    }
-    setLoading(false);
-  }, [agent.id, getAccessToken]);
 
-  useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+      const data: MessagesResponse = await res.json();
+      if (data.success && data.messages) {
+        const reversedMessages = data.messages.reverse();
+        setMessages(reversedMessages);
+        return reversedMessages;
+      }
+      return [];
+    },
+  });
+
+  // Send message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: async (userMessage: string): Promise<SendMessageResponse> => {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const res = await fetch(`/api/agents/${agent.id}/chat`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          usePro,
+        }),
+      });
+
+      if (!res.ok) {
+        const error: SendMessageError = await res.json();
+        throw new Error(error.error || 'Failed to send message');
+      }
+
+      return res.json();
+    },
+    onMutate: async (userMessage) => {
+      // Optimistically add user message
+      const optimisticMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: userMessage,
+        pointsCost: 0,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMessage]);
+      return { optimisticMessage };
+    },
+    onSuccess: (data, _userMessage, context) => {
+      if (!data.response || !data.messageId) {
+        // Remove optimistic message
+        setMessages((prev) =>
+          prev.filter((m) => m.id !== context?.optimisticMessage.id)
+        );
+        toast.error('Invalid response from agent');
+        return;
+      }
+
+      // Add assistant message
+      const assistantMessage: Message = {
+        id: data.messageId,
+        role: 'assistant',
+        content: data.response,
+        modelUsed: data.modelUsed,
+        pointsCost: data.pointsCost,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      // Update agent balance without full page refresh
+      onBalanceUpdate?.(data.balanceAfter);
+      toast.success(`Message sent (-${data.pointsCost} points)`);
+    },
+    onError: (error, _userMessage, context) => {
+      // Remove optimistic message
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== context?.optimisticMessage.id)
+      );
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to send message'
+      );
+    },
+  });
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -110,81 +198,11 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
   }, [messages, scrollToBottom]);
 
   const sendMessage = async () => {
-    if (!input.trim() || sending) return;
+    if (!input.trim() || sendMessageMutation.isPending) return;
 
     const userMessage = input;
     setInput('');
-    setSending(true);
-
-    // Optimistically add user message
-    const optimisticMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: userMessage,
-      pointsCost: 0,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, optimisticMessage]);
-
-    const token = await getAccessToken();
-    if (!token) {
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
-      toast.error('Authentication required');
-      setSending(false);
-      return;
-    }
-
-    const res = await fetch(`/api/agents/${agent.id}/chat`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: userMessage,
-        usePro,
-      }),
-    });
-
-    if (!res.ok) {
-      const error = (await res.json()) as { error: string };
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
-      toast.error(error.error || 'Failed to send message');
-      setSending(false);
-      return;
-    }
-
-    const data = (await res.json()) as {
-      success: boolean;
-      messageId: string;
-      response: string;
-      modelUsed: string;
-      pointsCost: number;
-      balanceAfter: number;
-    };
-
-    if (!data.response || !data.messageId) {
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
-      toast.error('Invalid response from agent');
-      setSending(false);
-      return;
-    }
-
-    // Add assistant message
-    const assistantMessage: Message = {
-      id: data.messageId,
-      role: 'assistant',
-      content: data.response,
-      modelUsed: data.modelUsed,
-      pointsCost: data.pointsCost,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, assistantMessage]);
-
-    // Update agent balance without full page refresh
-    onBalanceUpdate?.(data.balanceAfter);
-    toast.success(`Message sent (-${data.pointsCost} points)`);
-    setSending(false);
+    sendMessageMutation.mutate(userMessage);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -223,7 +241,7 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
 
       {/* Messages */}
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {loading && messages.length === 0 ? (
+        {isLoading && messages.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground">
             Loading chat history...
           </div>
@@ -290,7 +308,7 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
             </div>
           ))
         )}
-        {sending && (
+        {sendMessageMutation.isPending && (
           <div className="flex justify-start gap-3">
             <Avatar
               id={agent.id}
@@ -334,12 +352,16 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Type your message..."
-              disabled={sending}
+              disabled={sendMessageMutation.isPending}
               className="flex-1"
             />
             <button
               onClick={sendMessage}
-              disabled={!input.trim() || sending || agent.pointsBalance < 1}
+              disabled={
+                !input.trim() ||
+                sendMessageMutation.isPending ||
+                agent.pointsBalance < 1
+              }
               className="flex items-center gap-2 rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground transition-all hover:bg-[#2952d9] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send className="h-4 w-4" />

@@ -12,7 +12,7 @@
  * @packageDocumentation
  */
 
-import { db, elizaHolderAllocations, eq, sql } from '@babylon/db';
+import { db } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import {
   type Address,
@@ -99,6 +99,28 @@ const ERC20_ABI = [
 // =============================================================================
 // TYPES
 // =============================================================================
+
+/** Database row type for eliza holder allocations */
+interface ElizaHolderAllocationRow {
+  id: string;
+  walletAddress: string;
+  elizaBalanceSnapshot: string;
+  chainBalances: string | null;
+  snapshotBlock: string | null;
+  snapshotTime: Date | null;
+  bblnAllocation: string;
+  dripsUnlocked: number;
+  totalClaimed: string;
+  lastDripTime: Date | null;
+  lastDripAction: string | null;
+  fullyClaimed: boolean;
+  registeredOnChain: boolean;
+  claimTxHash: string | null;
+  claimDeadline: Date | null;
+  expired: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 export interface ElizaHolderSnapshot {
   walletAddress: Address;
@@ -388,30 +410,39 @@ export class ElizaHolderAirdropService {
     claimDeadline.setDate(claimDeadline.getDate() + CLAIM_PERIOD_DAYS);
 
     // Check if allocation already exists
-    const [existing] = await db
-      .select({ id: elizaHolderAllocations.id })
-      .from(elizaHolderAllocations)
-      .where(eq(elizaHolderAllocations.walletAddress, evmAddress))
-      .limit(1);
+    const existingRows = await db.query<{ id: string }>(
+      `SELECT "id" FROM "ElizaHolderAllocation" WHERE "walletAddress" = $1 LIMIT 1`,
+      [evmAddress]
+    );
+    const existing = existingRows[0];
 
     if (existing) {
       // Update existing allocation
-      await db
-        .update(elizaHolderAllocations)
-        .set({
-          elizaBalanceSnapshot: totalBalance.toString(),
-          chainBalances: JSON.stringify(
+      await db.exec(
+        `UPDATE "ElizaHolderAllocation" SET 
+          "elizaBalanceSnapshot" = $1,
+          "chainBalances" = $2,
+          "bblnAllocation" = $3,
+          "snapshotBlock" = $4,
+          "snapshotTime" = $5,
+          "claimDeadline" = $6,
+          "updatedAt" = $7
+        WHERE "id" = $8`,
+        [
+          totalBalance.toString(),
+          JSON.stringify(
             Object.fromEntries(
               Object.entries(byChain).map(([k, v]) => [k, v.toString()])
             )
           ),
-          bblnAllocation: bblnAllocation.toString(),
-          snapshotBlock: snapshotBlock ?? null,
-          snapshotTime,
-          claimDeadline,
-          updatedAt: new Date(),
-        })
-        .where(eq(elizaHolderAllocations.id, existing.id));
+          bblnAllocation.toString(),
+          snapshotBlock ?? null,
+          snapshotTime.toISOString(),
+          claimDeadline.toISOString(),
+          new Date().toISOString(),
+          existing.id,
+        ]
+      );
 
       logger.info(
         'Updated ELIZA holder allocation',
@@ -433,27 +464,36 @@ export class ElizaHolderAirdropService {
 
     // Create new allocation
     const allocationId = await generateSnowflakeId();
-    await db.insert(elizaHolderAllocations).values({
-      id: allocationId,
-      walletAddress: evmAddress,
-      elizaBalanceSnapshot: totalBalance.toString(),
-      chainBalances: JSON.stringify(
-        Object.fromEntries(
-          Object.entries(byChain).map(([k, v]) => [k, v.toString()])
-        )
-      ),
-      snapshotBlock: snapshotBlock ?? null,
-      snapshotTime,
-      bblnAllocation: bblnAllocation.toString(),
-      dripsUnlocked: 0,
-      totalClaimed: '0',
-      fullyClaimed: false,
-      registeredOnChain: false,
-      claimDeadline,
-      expired: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    const now = new Date();
+    await db.exec(
+      `INSERT INTO "ElizaHolderAllocation" (
+        "id", "walletAddress", "elizaBalanceSnapshot", "chainBalances",
+        "snapshotBlock", "snapshotTime", "bblnAllocation", "dripsUnlocked",
+        "totalClaimed", "fullyClaimed", "registeredOnChain", "claimDeadline",
+        "expired", "createdAt", "updatedAt"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      [
+        allocationId,
+        evmAddress,
+        totalBalance.toString(),
+        JSON.stringify(
+          Object.fromEntries(
+            Object.entries(byChain).map(([k, v]) => [k, v.toString()])
+          )
+        ),
+        snapshotBlock ?? null,
+        snapshotTime.toISOString(),
+        bblnAllocation.toString(),
+        0,
+        '0',
+        false,
+        false,
+        claimDeadline.toISOString(),
+        false,
+        now.toISOString(),
+        now.toISOString(),
+      ]
+    );
 
     logger.info(
       'Created ELIZA holder allocation',
@@ -607,18 +647,27 @@ export class ElizaHolderAirdropService {
       expired: boolean;
     }>
   > {
-    const allocations = await db
-      .select({
-        walletAddress: elizaHolderAllocations.walletAddress,
-        elizaBalance: elizaHolderAllocations.elizaBalanceSnapshot,
-        bblnAllocation: elizaHolderAllocations.bblnAllocation,
-        dripsUnlocked: elizaHolderAllocations.dripsUnlocked,
-        totalClaimed: elizaHolderAllocations.totalClaimed,
-        expired: elizaHolderAllocations.expired,
-      })
-      .from(elizaHolderAllocations);
+    const allocations = await db.query<{
+      walletAddress: string;
+      elizaBalanceSnapshot: string;
+      bblnAllocation: string;
+      dripsUnlocked: number;
+      totalClaimed: string;
+      expired: boolean;
+    }>(
+      `SELECT "walletAddress", "elizaBalanceSnapshot", "bblnAllocation", 
+              "dripsUnlocked", "totalClaimed", "expired" 
+       FROM "ElizaHolderAllocation"`
+    );
 
-    return allocations;
+    return allocations.map((row) => ({
+      walletAddress: row.walletAddress,
+      elizaBalance: row.elizaBalanceSnapshot,
+      bblnAllocation: row.bblnAllocation,
+      dripsUnlocked: Number(row.dripsUnlocked),
+      totalClaimed: row.totalClaimed,
+      expired: Boolean(row.expired),
+    }));
   }
 
   /**
@@ -632,24 +681,32 @@ export class ElizaHolderAirdropService {
     fullyClaimed: number;
     expired: number;
   }> {
-    const [stats] = await db
-      .select({
-        totalHolders: sql<number>`count(*)`,
-        totalEliza: sql<string>`sum(cast(${elizaHolderAllocations.elizaBalanceSnapshot} as numeric))`,
-        totalBbln: sql<string>`sum(cast(${elizaHolderAllocations.bblnAllocation} as numeric))`,
-        claimsStarted: sql<number>`count(*) filter (where ${elizaHolderAllocations.dripsUnlocked} > 0)`,
-        fullyClaimed: sql<number>`count(*) filter (where ${elizaHolderAllocations.fullyClaimed} = true)`,
-        expired: sql<number>`count(*) filter (where ${elizaHolderAllocations.expired} = true)`,
-      })
-      .from(elizaHolderAllocations);
+    const rows = await db.query<{
+      totalHolders: string | number;
+      totalEliza: string | null;
+      totalBbln: string | null;
+      claimsStarted: string | number;
+      fullyClaimed: string | number;
+      expired: string | number;
+    }>(
+      `SELECT 
+        COUNT(*) as "totalHolders",
+        SUM(CAST("elizaBalanceSnapshot" AS numeric)) as "totalEliza",
+        SUM(CAST("bblnAllocation" AS numeric)) as "totalBbln",
+        COUNT(*) FILTER (WHERE "dripsUnlocked" > 0) as "claimsStarted",
+        COUNT(*) FILTER (WHERE "fullyClaimed" = true) as "fullyClaimed",
+        COUNT(*) FILTER (WHERE "expired" = true) as "expired"
+      FROM "ElizaHolderAllocation"`
+    );
+    const stats = rows[0];
 
     return {
-      totalHolders: stats?.totalHolders ?? 0,
+      totalHolders: Number(stats?.totalHolders ?? 0),
       totalElizaSnapshotted: BigInt(stats?.totalEliza ?? '0'),
       totalBblnAllocated: BigInt(stats?.totalBbln ?? '0'),
-      claimsStarted: stats?.claimsStarted ?? 0,
-      fullyClaimed: stats?.fullyClaimed ?? 0,
-      expired: stats?.expired ?? 0,
+      claimsStarted: Number(stats?.claimsStarted ?? 0),
+      fullyClaimed: Number(stats?.fullyClaimed ?? 0),
+      expired: Number(stats?.expired ?? 0),
     };
   }
 
@@ -693,11 +750,11 @@ export class ElizaHolderAirdropService {
     }
 
     // Get allocation from database
-    const [allocation] = await db
-      .select()
-      .from(elizaHolderAllocations)
-      .where(eq(elizaHolderAllocations.walletAddress, walletAddress))
-      .limit(1);
+    const allocations = await db.query<ElizaHolderAllocationRow>(
+      `SELECT * FROM "ElizaHolderAllocation" WHERE "walletAddress" = $1 LIMIT 1`,
+      [walletAddress]
+    );
+    const allocation = allocations[0];
 
     if (!allocation) {
       return {
@@ -738,17 +795,25 @@ export class ElizaHolderAirdropService {
     const newDripsUnlocked = dripsUnlocked + 1;
 
     // Update allocation
-    await db
-      .update(elizaHolderAllocations)
-      .set({
-        dripsUnlocked: newDripsUnlocked,
-        lastDripTime: now,
-        lastDripAction: action,
-        totalClaimed: (BigInt(allocation.totalClaimed) + amount).toString(),
-        fullyClaimed: newDripsUnlocked > TOTAL_DRIP_DAYS,
-        updatedAt: now,
-      })
-      .where(eq(elizaHolderAllocations.id, allocation.id));
+    await db.exec(
+      `UPDATE "ElizaHolderAllocation" SET 
+        "dripsUnlocked" = $1,
+        "lastDripTime" = $2,
+        "lastDripAction" = $3,
+        "totalClaimed" = $4,
+        "fullyClaimed" = $5,
+        "updatedAt" = $6
+      WHERE "id" = $7`,
+      [
+        newDripsUnlocked,
+        now.toISOString(),
+        action,
+        (BigInt(allocation.totalClaimed) + amount).toString(),
+        newDripsUnlocked > TOTAL_DRIP_DAYS,
+        now.toISOString(),
+        allocation.id,
+      ]
+    );
 
     logger.info(
       'ELIZA holder drip executed',
@@ -791,11 +856,11 @@ export class ElizaHolderAirdropService {
         );
 
     // Query allocation from database
-    const [allocation] = await db
-      .select()
-      .from(elizaHolderAllocations)
-      .where(eq(elizaHolderAllocations.walletAddress, walletAddress))
-      .limit(1);
+    const allocations = await db.query<ElizaHolderAllocationRow>(
+      `SELECT * FROM "ElizaHolderAllocation" WHERE "walletAddress" = $1 LIMIT 1`,
+      [walletAddress]
+    );
+    const allocation = allocations[0];
 
     if (!allocation) {
       return {
@@ -948,11 +1013,11 @@ export class ElizaHolderAirdropService {
       const totalBalance = evmBalance + solanaBalance;
 
       // Check if allocation already exists
-      const [existing] = await db
-        .select({ id: elizaHolderAllocations.id })
-        .from(elizaHolderAllocations)
-        .where(eq(elizaHolderAllocations.walletAddress, walletAddress))
-        .limit(1);
+      const existingRows = await db.query<{ id: string }>(
+        `SELECT "id" FROM "ElizaHolderAllocation" WHERE "walletAddress" = $1 LIMIT 1`,
+        [walletAddress]
+      );
+      const existing = existingRows[0];
 
       if (existing) {
         skipped++;
@@ -967,21 +1032,35 @@ export class ElizaHolderAirdropService {
       totalBblnAllocated += bblnAllocation;
 
       // Store in database
-      await db.insert(elizaHolderAllocations).values({
-        id: await generateSnowflakeId(),
-        walletAddress,
-        elizaBalanceSnapshot: totalBalance.toString(),
-        chainBalances: JSON.stringify({
-          ...chainBreakdown,
-          solana: solanaBalance.toString(),
-        }),
-        snapshotBlock: options.snapshotBlock?.toString(),
-        snapshotTime,
-        bblnAllocation: bblnAllocation.toString(),
-        dripsUnlocked: 0,
-        totalClaimed: '0',
-        claimDeadline,
-      });
+      const now = new Date();
+      await db.exec(
+        `INSERT INTO "ElizaHolderAllocation" (
+          "id", "walletAddress", "elizaBalanceSnapshot", "chainBalances",
+          "snapshotBlock", "snapshotTime", "bblnAllocation", "dripsUnlocked",
+          "totalClaimed", "claimDeadline", "fullyClaimed", "registeredOnChain",
+          "expired", "createdAt", "updatedAt"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+        [
+          await generateSnowflakeId(),
+          walletAddress,
+          totalBalance.toString(),
+          JSON.stringify({
+            ...chainBreakdown,
+            solana: solanaBalance.toString(),
+          }),
+          options.snapshotBlock?.toString() ?? null,
+          snapshotTime.toISOString(),
+          bblnAllocation.toString(),
+          0,
+          '0',
+          claimDeadline.toISOString(),
+          false,
+          false,
+          false,
+          now.toISOString(),
+          now.toISOString(),
+        ]
+      );
 
       created++;
     }

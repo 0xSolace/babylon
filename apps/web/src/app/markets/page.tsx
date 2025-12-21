@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowUpDown,
   Clock,
@@ -82,10 +83,35 @@ export default function MarketsPage() {
     refetch: refetchPerps,
   } = usePerpMarkets();
 
-  // Data
-  const [predictions, setPredictions] = useState<PredictionMarket[]>([]);
-  const [predictionsLoading, setPredictionsLoading] = useState(true);
-  const [balanceRefreshTrigger, setBalanceRefreshTrigger] = useState(0);
+  // Use react-query for predictions
+  interface PredictionsResponse {
+    questions?: PredictionMarket[];
+  }
+
+  const {
+    data: predictionsData,
+    isLoading: predictionsLoading,
+    refetch: refetchPredictions,
+  } = useQuery({
+    queryKey: ['markets', 'predictions', authenticated ? user?.id : null],
+    queryFn: async (): Promise<PredictionMarket[]> => {
+      const isAuth = authenticated;
+      const userId = user?.id;
+
+      const predictionsRes = await fetch(
+        `/api/markets/predictions${isAuth && userId ? `?userId=${userId}` : ''}`
+      );
+
+      if (!predictionsRes.ok) {
+        throw new Error('Failed to fetch predictions');
+      }
+
+      const data = (await predictionsRes.json()) as PredictionsResponse;
+      return data.questions || [];
+    },
+  });
+
+  const predictions = predictionsData || [];
 
   // Combined loading state
   const loading = perpLoading && predictionsLoading;
@@ -105,23 +131,18 @@ export default function MarketsPage() {
   } = useUserPositions(user?.id, { enabled: authenticated });
 
   // Use refs to store latest values to break dependency chains
-  const fetchDataRef = useRef<(() => Promise<void>) | null>(null);
-  const refreshPositionsRef = useRef<(() => Promise<void>) | null>(
+  const fetchDataRef = useRef<(() => Promise<void> | void) | null>(null);
+  const refreshPositionsRef = useRef<(() => Promise<void> | void) | null>(
     refreshUserPositions
   );
   const authenticatedRef = useRef(authenticated);
-  const userIdRef = useRef<string | null>(user?.id || null);
-  const prevAuthRef = useRef<{
-    authenticated: boolean;
-    userId: string | null | undefined;
-  } | null>(null);
-  const hasMountedRef = useRef(false);
+  const userIdRef = useRef<string | null>(user ? user.id : null);
 
   // Update refs when values change
   useEffect(() => {
     authenticatedRef.current = authenticated;
-    userIdRef.current = user?.id || null;
-  }, [authenticated, user?.id]);
+    userIdRef.current = user ? user.id : null;
+  }, [authenticated, user]);
 
   useEffect(() => {
     refreshPositionsRef.current = refreshUserPositions;
@@ -132,75 +153,27 @@ export default function MarketsPage() {
       await refreshPositionsRef.current();
     }
     await refetchPerps();
-    if (fetchDataRef.current) {
-      await fetchDataRef.current();
-    }
-  }, [refetchPerps]);
+    await refetchPredictions();
+    void refreshPortfolio();
+  }, [refetchPerps, refetchPredictions, refreshPortfolio]);
 
-  // Fetch predictions data - perps come from shared store
+  // fetchData just calls refetch for backward compatibility
   const fetchData = useCallback(async () => {
-    const isAuth = authenticatedRef.current;
-    const userId = userIdRef.current;
-
-    const predictionsRes = await fetch(
-      `/api/markets/predictions${isAuth && userId ? `?userId=${userId}` : ''}`
-    );
-
-    if (!predictionsRes.ok) {
-      console.error('Failed to fetch predictions: Failed to fetch predictions');
-      setPredictionsLoading(false);
-      return;
+    await refetchPredictions();
+    if (
+      authenticatedRef.current &&
+      userIdRef.current &&
+      refreshPositionsRef.current
+    ) {
+      await refreshPositionsRef.current();
     }
+    void refreshPortfolio();
+  }, [refetchPredictions, refreshPortfolio]);
 
-    const predictionsData = await predictionsRes.json();
-    setPredictions(predictionsData.questions || []);
-
-    if (isAuth && userId) {
-      if (refreshPositionsRef.current) {
-        await refreshPositionsRef.current();
-      }
-    }
-
-    // Trigger balance refresh after data fetch (after trades)
-    setBalanceRefreshTrigger(Date.now());
-    setPredictionsLoading(false);
-  }, []); // Empty dependency array - fetchData never changes
-
-  // Store fetchData in ref (fetchData is stable with empty deps)
+  // Store fetchData in ref for child components
   useEffect(() => {
     fetchDataRef.current = fetchData;
   }, [fetchData]);
-
-  useEffect(() => {
-    if (!authenticated) return;
-    if (!balanceRefreshTrigger) return;
-    void refreshPortfolio();
-  }, [authenticated, balanceRefreshTrigger, refreshPortfolio]);
-
-  // Initial fetch on mount and when auth state changes
-  // Use refs to track auth state changes without causing fetchData to recreate
-  useEffect(() => {
-    const currentAuth = { authenticated, userId: user?.id };
-
-    // Always fetch on initial mount
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      prevAuthRef.current = currentAuth;
-      fetchData();
-      return;
-    }
-
-    // On subsequent renders, only fetch if auth state actually changed
-    const prevAuth = prevAuthRef.current;
-    if (
-      prevAuth &&
-      (prevAuth.authenticated !== currentAuth.authenticated ||
-        prevAuth.userId !== currentAuth.userId)
-    ) {
-      prevAuthRef.current = currentAuth;
-      fetchData();
-    }
-  }, [authenticated, user?.id, fetchData]);
 
   // Note: Real-time updates via SSE removed - using periodic polling instead
 
@@ -234,8 +207,8 @@ export default function MarketsPage() {
       switch (predictionSort) {
         case 'trending': {
           // Trending = combination of volume and recency
-          const aVolume = (a.yesShares || 0) + (a.noShares || 0);
-          const bVolume = (b.yesShares || 0) + (b.noShares || 0);
+          const aVolume = (a.yesShares ?? 0) + (a.noShares ?? 0);
+          const bVolume = (b.yesShares ?? 0) + (b.noShares ?? 0);
           const aTime = a.createdDate ? new Date(a.createdDate).getTime() : 0;
           const bTime = b.createdDate ? new Date(b.createdDate).getTime() : 0;
           // Weight: 70% volume, 30% recency
@@ -259,9 +232,9 @@ export default function MarketsPage() {
           );
         case 'volume':
           return (
-            (b.yesShares || 0) +
-            (b.noShares || 0) -
-            ((a.yesShares || 0) + (a.noShares || 0))
+            (b.yesShares ?? 0) +
+            (b.noShares ?? 0) -
+            ((a.yesShares ?? 0) + (a.noShares ?? 0))
           );
         default:
           return 0;
@@ -303,7 +276,7 @@ export default function MarketsPage() {
       .filter((p) => p.status === 'active')
       .map((p) => ({
         ...p,
-        totalShares: (p.yesShares || 0) + (p.noShares || 0),
+        totalShares: (p.yesShares ?? 0) + (p.noShares ?? 0),
       }))
       .sort((a, b) => b.totalShares - a.totalShares)
       .slice(0, 6);
@@ -617,11 +590,11 @@ export default function MarketsPage() {
                       <div className="space-y-2">
                         {topPredictions.map((prediction, idx) => {
                           const totalShares =
-                            (prediction.yesShares || 0) +
-                            (prediction.noShares || 0);
+                            (prediction.yesShares ?? 0) +
+                            (prediction.noShares ?? 0);
                           const yesPercent =
                             totalShares > 0
-                              ? ((prediction.yesShares || 0) / totalShares) *
+                              ? ((prediction.yesShares ?? 0) / totalShares) *
                                 100
                               : 50;
                           const daysLeft = getDaysLeft(
@@ -889,18 +862,18 @@ export default function MarketsPage() {
                   {activePredictions.map((prediction, idx) => {
                     const daysLeft = getDaysLeft(prediction.resolutionDate);
                     const totalShares =
-                      (prediction.yesShares || 0) + (prediction.noShares || 0);
+                      (prediction.yesShares ?? 0) + (prediction.noShares ?? 0);
                     const yesPrice =
                       totalShares > 0
                         ? (
-                            ((prediction.yesShares || 0) / totalShares) *
+                            ((prediction.yesShares ?? 0) / totalShares) *
                             100
                           ).toFixed(1)
                         : '50';
                     const noPrice =
                       totalShares > 0
                         ? (
-                            ((prediction.noShares || 0) / totalShares) *
+                            ((prediction.noShares ?? 0) / totalShares) *
                             100
                           ).toFixed(1)
                         : '50';
@@ -1268,11 +1241,11 @@ export default function MarketsPage() {
                   <div className="space-y-2">
                     {topPredictions.map((prediction, idx) => {
                       const totalShares =
-                        (prediction.yesShares || 0) +
-                        (prediction.noShares || 0);
+                        (prediction.yesShares ?? 0) +
+                        (prediction.noShares ?? 0);
                       const yesPercent =
                         totalShares > 0
-                          ? ((prediction.yesShares || 0) / totalShares) * 100
+                          ? ((prediction.yesShares ?? 0) / totalShares) * 100
                           : 50;
                       const daysLeft = getDaysLeft(prediction.resolutionDate);
 
@@ -1532,18 +1505,18 @@ export default function MarketsPage() {
                 {activePredictions.map((prediction, idx) => {
                   const daysLeft = getDaysLeft(prediction.resolutionDate);
                   const totalShares =
-                    (prediction.yesShares || 0) + (prediction.noShares || 0);
+                    (prediction.yesShares ?? 0) + (prediction.noShares ?? 0);
                   const yesPrice =
                     totalShares > 0
                       ? (
-                          ((prediction.yesShares || 0) / totalShares) *
+                          ((prediction.yesShares ?? 0) / totalShares) *
                           100
                         ).toFixed(1)
                       : '50';
                   const noPrice =
                     totalShares > 0
                       ? (
-                          ((prediction.noShares || 0) / totalShares) *
+                          ((prediction.noShares ?? 0) / totalShares) *
                           100
                         ).toFixed(1)
                       : '50';
@@ -1695,7 +1668,7 @@ export default function MarketsPage() {
         isOpen={showPnLShareModal}
         onClose={() => setShowPnLShareModal(false)}
         data={portfolioPnL}
-        user={user ?? null}
+        user={user || null}
         lastUpdated={portfolioUpdatedAt}
       />
 
@@ -1706,7 +1679,7 @@ export default function MarketsPage() {
           onClose={() => setShowCategoryPnLShareModal(null)}
           category="perps"
           data={perpPnLData}
-          user={user ?? null}
+          user={user || null}
           lastUpdated={portfolioUpdatedAt}
         />
       )}
@@ -1717,7 +1690,7 @@ export default function MarketsPage() {
           onClose={() => setShowCategoryPnLShareModal(null)}
           category="predictions"
           data={predictionPnLData}
-          user={user ?? null}
+          user={user || null}
           lastUpdated={portfolioUpdatedAt}
         />
       )}
@@ -1727,8 +1700,8 @@ export default function MarketsPage() {
         isOpen={showBuyPointsModal}
         onClose={() => setShowBuyPointsModal(false)}
         onSuccess={() => {
-          setBalanceRefreshTrigger(Date.now());
-          fetchData();
+          void refreshPortfolio();
+          void fetchData();
         }}
       />
     </PageContainer>

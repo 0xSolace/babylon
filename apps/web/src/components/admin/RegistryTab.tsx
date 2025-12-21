@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   Ban,
@@ -18,7 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { FeedbackForm } from '@/components/feedback/FeedbackForm';
@@ -123,9 +124,7 @@ type RegistryData = z.infer<typeof RegistryDataSchema>;
  * @returns Registry tab element
  */
 export function RegistryTab() {
-  const [data, setData] = useState<RegistryData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [onChainOnly, setOnChainOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<
@@ -139,41 +138,88 @@ export function RegistryTab() {
   const [banReason, setBanReason] = useState('');
   const [isScammer, setIsScammer] = useState(false);
   const [isCSAM, setIsCSAM] = useState(false);
-  const [isBanning, setIsBanning] = useState(false);
 
-  const fetchRegistry = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams();
-    if (search) params.set('search', search);
-    if (onChainOnly) params.set('onChainOnly', 'true');
+  const { data, isLoading, error, refetch } = useQuery<RegistryData>({
+    queryKey: ['admin', 'registry', search, onChainOnly],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      if (onChainOnly) params.set('onChainOnly', 'true');
 
-    const response = await fetch(`/api/registry/all?${params}`);
-    const result = await response.json();
+      const response = await fetch(`/api/registry/all?${params}`);
+      const result = await response.json();
 
-    if (result.success && result.data) {
-      const validation = RegistryDataSchema.safeParse(result.data);
-      if (validation.success) {
-        setData(validation.data);
-      } else {
-        setError('Invalid data structure for registry');
+      if (result.success && result.data) {
+        const validation = RegistryDataSchema.safeParse(result.data);
+        if (validation.success) {
+          return validation.data;
+        }
+        throw new Error('Invalid data structure for registry');
       }
-    } else {
-      setError(result.error?.message || 'Failed to fetch registry data');
-    }
-    setLoading(false);
-  }, [search, onChainOnly]);
+      const errorMessage =
+        result.error &&
+        typeof result.error === 'object' &&
+        'message' in result.error
+          ? String(result.error.message)
+          : 'Failed to fetch registry data';
+      throw new Error(errorMessage);
+    },
+  });
 
-  useEffect(() => {
-    fetchRegistry();
-  }, [fetchRegistry]);
+  const banMutation = useMutation({
+    mutationFn: async ({
+      entity,
+      action,
+      reason,
+      scammer,
+      csam,
+    }: {
+      entity: RegistryEntity;
+      action: 'ban' | 'unban';
+      reason?: string;
+      scammer?: boolean;
+      csam?: boolean;
+    }) => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      const response = await fetch(`/api/admin/users/${entity.id}/ban`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action,
+          reason: action === 'ban' ? reason : undefined,
+          isScammer: action === 'ban' ? scammer : false,
+          isCSAM: action === 'ban' ? csam : false,
+        }),
+      });
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchRegistry();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [fetchRegistry]);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to update user');
+      }
+
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      toast.success(
+        variables.action === 'ban'
+          ? 'User banned successfully'
+          : 'User unbanned successfully'
+      );
+      setShowBanModal(false);
+      setBanReason('');
+      setIsScammer(false);
+      setIsCSAM(false);
+      setSelectedEntity(null);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'registry'] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to update user');
+    },
+  });
 
   const renderBadge = (
     _type: string,
@@ -424,7 +470,7 @@ export function RegistryTab() {
                   >
                     {entity.reputationScore !== undefined
                       ? `${Math.round(entity.reputationScore)}/100`
-                      : `${entity.reputationPoints?.toLocaleString() || 0} pts`}
+                      : `${entity.reputationPoints ? entity.reputationPoints.toLocaleString() : 0} pts`}
                   </div>
                   {entity.totalFeedbackCount !== undefined &&
                     entity.totalFeedbackCount > 0 && (
@@ -627,51 +673,19 @@ export function RegistryTab() {
     );
   };
 
-  const handleBanUser = async (
-    entity: RegistryEntity,
-    action: 'ban' | 'unban'
-  ) => {
+  const handleBanUser = (entity: RegistryEntity, action: 'ban' | 'unban') => {
     if (action === 'ban' && !banReason.trim()) {
       toast.error('Please provide a reason for banning');
       return;
     }
 
-    setIsBanning(true);
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    const response = await fetch(`/api/admin/users/${entity.id}/ban`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        action,
-        reason: action === 'ban' ? banReason : undefined,
-        isScammer: action === 'ban' ? isScammer : false,
-        isCSAM: action === 'ban' ? isCSAM : false,
-      }),
+    banMutation.mutate({
+      entity,
+      action,
+      reason: banReason,
+      scammer: isScammer,
+      csam: isCSAM,
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      setIsBanning(false);
-      toast.error(error.message || 'Failed to update user');
-      return;
-    }
-
-    toast.success(
-      action === 'ban'
-        ? 'User banned successfully'
-        : 'User unbanned successfully'
-    );
-    setShowBanModal(false);
-    setBanReason('');
-    setIsScammer(false);
-    setIsCSAM(false);
-    setSelectedEntity(null);
-    fetchRegistry();
-    setIsBanning(false);
   };
 
   const allEntities = data
@@ -777,7 +791,7 @@ export function RegistryTab() {
         </div>
       )}
 
-      {loading && (
+      {isLoading && (
         <div className="flex items-center justify-center py-20">
           <div className="w-full max-w-2xl space-y-4 text-center">
             <Skeleton className="mx-auto h-8 w-48" />
@@ -790,16 +804,18 @@ export function RegistryTab() {
         </div>
       )}
 
-      {error && !loading && (
+      {error && !isLoading && (
         <div className="flex items-center justify-center py-20">
           <div className="max-w-md text-center">
             <AlertCircle className="mx-auto mb-4 h-12 w-12 text-red-500" />
             <h3 className="mb-2 font-semibold text-foreground text-lg">
               Failed to load registry
             </h3>
-            <p className="mb-4 text-muted-foreground">{error}</p>
+            <p className="mb-4 text-muted-foreground">
+              {error instanceof Error ? error.message : 'Unknown error'}
+            </p>
             <button
-              onClick={fetchRegistry}
+              onClick={() => refetch()}
               className="rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Try Again
@@ -808,7 +824,7 @@ export function RegistryTab() {
         </div>
       )}
 
-      {!loading && !error && data && (
+      {!isLoading && !error && data && (
         <>
           <div className="mb-2 flex gap-2 overflow-x-auto pb-2">
             <button
@@ -906,7 +922,9 @@ export function RegistryTab() {
               onSuccess={() => {
                 setShowFeedbackModal(false);
                 setSelectedEntity(null);
-                fetchRegistry();
+                queryClient.invalidateQueries({
+                  queryKey: ['admin', 'registry'],
+                });
               }}
               onCancel={() => {
                 setShowFeedbackModal(false);
@@ -1010,7 +1028,8 @@ export function RegistryTab() {
                   )
                 }
                 disabled={
-                  isBanning || (!selectedEntity.isBanned && !banReason.trim())
+                  banMutation.isPending ||
+                  (!selectedEntity.isBanned && !banReason.trim())
                 }
                 className={cn(
                   'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 transition-colors disabled:opacity-50',
@@ -1020,7 +1039,7 @@ export function RegistryTab() {
                 )}
               >
                 <Ban className="h-4 w-4" />
-                {isBanning
+                {banMutation.isPending
                   ? 'Processing...'
                   : selectedEntity.isBanned
                     ? 'Unban User'

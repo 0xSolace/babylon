@@ -114,21 +114,13 @@ tokenCommand
     const balances: Array<{ name: string; tier: string; balance: bigint }> = [];
 
     for (const actor of actors) {
-      try {
-        const balance = await walletService.getBalance(actor.id);
-        balances.push({
-          name: actor.name,
-          tier: actor.tier ?? 'C_TIER',
-          balance: balance.totalValue,
-        });
-        totalBalance += balance.totalValue;
-      } catch {
-        balances.push({
-          name: actor.name,
-          tier: actor.tier ?? 'C_TIER',
-          balance: 0n,
-        });
-      }
+      const balance = await walletService.getBalance(actor.id);
+      balances.push({
+        name: actor.name,
+        tier: actor.tier ?? 'C_TIER',
+        balance: balance.totalValue,
+      });
+      totalBalance += balance.totalValue;
     }
 
     // Sort by balance descending

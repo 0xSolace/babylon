@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   RefreshCw,
@@ -10,7 +11,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -63,109 +64,122 @@ interface AvailableUser {
  * @returns Admin management tab element
  */
 export function AdminManagementTab() {
-  const [admins, setAdmins] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [processing, setProcessing] = useState(false);
 
-  const fetchAdmins = useCallback(async (showRefreshing = false) => {
-    if (showRefreshing) setRefreshing(true);
-    const response = await fetch('/api/admin/admins');
-    if (!response.ok) throw new Error('Failed to fetch admins');
-    const data = await response.json();
-    setAdmins(data.admins || []);
-    setLoading(false);
-    setRefreshing(false);
-  }, []);
+  const {
+    data: admins = [],
+    isLoading,
+    refetch,
+    isFetching,
+  } = useQuery<AdminUser[]>({
+    queryKey: ['admin', 'admins'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/admins');
+      if (!response.ok) throw new Error('Failed to fetch admins');
+      const data = await response.json();
+      return data.admins || [];
+    },
+  });
 
-  useEffect(() => {
-    void fetchAdmins();
-  }, [fetchAdmins]);
+  const searchUsers = useCallback(
+    async (query: string) => {
+      if (!query.trim()) {
+        setAvailableUsers([]);
+        return;
+      }
 
-  const searchUsers = async (query: string) => {
-    if (!query.trim()) {
-      setAvailableUsers([]);
-      return;
-    }
+      setLoadingUsers(true);
+      const params = new URLSearchParams({
+        search: query,
+        limit: '10',
+        filter: 'users', // Only real users, not actors
+      });
+      const response = await fetch(`/api/admin/users?${params}`);
+      if (!response.ok) {
+        setAvailableUsers([]);
+        setLoadingUsers(false);
+        return;
+      }
+      const data = await response.json();
 
-    setLoadingUsers(true);
-    const params = new URLSearchParams({
-      search: query,
-      limit: '10',
-      filter: 'users', // Only real users, not actors
-    });
-    const response = await fetch(`/api/admin/users?${params}`);
-    if (!response.ok) {
-      setAvailableUsers([]);
+      // Filter out users who are already admins
+      const adminIds = new Set(admins.map((a) => a.id));
+      const nonAdminUsers = (data.users || []).filter(
+        (u: AvailableUser) => !adminIds.has(u.id) && !u.isActor
+      );
+
+      setAvailableUsers(nonAdminUsers);
       setLoadingUsers(false);
-      return;
-    }
-    const data = await response.json();
+    },
+    [admins]
+  );
 
-    // Filter out users who are already admins
-    const adminIds = new Set(admins.map((a) => a.id));
-    const nonAdminUsers = (data.users || []).filter(
-      (u: AvailableUser) => !adminIds.has(u.id) && !u.isActor
-    );
+  const addAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await fetch(`/api/admin/admins/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'promote' }),
+      });
 
-    setAvailableUsers(nonAdminUsers);
-    setLoadingUsers(false);
-  };
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to add admin');
+      }
 
-  const handleAddAdmin = async (userId: string) => {
-    setProcessing(true);
-    const response = await fetch(`/api/admin/admins/${userId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'promote' }),
-    });
+      return response.json();
+    },
+    onSuccess: (result) => {
+      toast.success(
+        `${result.user.displayName || result.user.username || 'User'} is now an admin`
+      );
+      setShowAddModal(false);
+      setSearchQuery('');
+      setAvailableUsers([]);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to add admin'
+      );
+    },
+  });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to add admin');
-    }
+  const removeAdminMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await fetch(`/api/admin/admins/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'demote' }),
+      });
 
-    const result = await response.json();
-    toast.success(
-      `${result.user.displayName || result.user.username || 'User'} is now an admin`
-    );
-    setShowAddModal(false);
-    setSearchQuery('');
-    setAvailableUsers([]);
-    fetchAdmins(true);
-    setProcessing(false);
-  };
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to remove admin');
+      }
 
-  const handleRemoveAdmin = async () => {
-    if (!selectedUser) return;
-
-    setProcessing(true);
-    const response = await fetch(`/api/admin/admins/${selectedUser.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'demote' }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to remove admin');
-    }
-
-    const result = await response.json();
-    toast.success(
-      `${result.user.displayName || result.user.username || 'User'} is no longer an admin`
-    );
-    setShowRemoveModal(false);
-    setSelectedUser(null);
-    fetchAdmins(true);
-    setProcessing(false);
-  };
+      return response.json();
+    },
+    onSuccess: (result) => {
+      toast.success(
+        `${result.user.displayName || result.user.username || 'User'} is no longer an admin`
+      );
+      setShowRemoveModal(false);
+      setSelectedUser(null);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to remove admin'
+      );
+    },
+  });
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
@@ -240,7 +254,7 @@ export function AdminManagementTab() {
                 setSelectedUser(admin);
                 setShowRemoveModal(true);
               }}
-              disabled={processing}
+              disabled={removeAdminMutation.isPending}
               className="flex items-center gap-1 whitespace-nowrap rounded bg-red-500/20 px-3 py-1.5 font-medium text-red-500 text-sm transition-colors hover:bg-red-500/30 disabled:opacity-50"
             >
               <UserMinus className="h-4 w-4" />
@@ -252,7 +266,7 @@ export function AdminManagementTab() {
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="w-full space-y-3">
@@ -281,12 +295,12 @@ export function AdminManagementTab() {
 
         <div className="flex gap-2">
           <button
-            onClick={() => fetchAdmins(true)}
-            disabled={refreshing}
+            onClick={() => refetch()}
+            disabled={isFetching}
             className="flex items-center gap-2 rounded bg-muted px-3 py-2 font-medium text-sm transition-colors hover:bg-muted/80 disabled:opacity-50"
           >
             <RefreshCw
-              className={cn('h-4 w-4', refreshing && 'animate-spin')}
+              className={cn('h-4 w-4', isFetching && 'animate-spin')}
             />
             Refresh
           </button>
@@ -393,11 +407,11 @@ export function AdminManagementTab() {
                     </div>
 
                     <button
-                      onClick={() => handleAddAdmin(user.id)}
-                      disabled={processing}
+                      onClick={() => addAdminMutation.mutate(user.id)}
+                      disabled={addAdminMutation.isPending}
                       className="rounded bg-primary px-3 py-1.5 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
                     >
-                      {processing ? 'Adding...' : 'Add'}
+                      {addAdminMutation.isPending ? 'Adding...' : 'Add'}
                     </button>
                   </div>
                 ))}
@@ -438,17 +452,17 @@ export function AdminManagementTab() {
                   setShowRemoveModal(false);
                   setSelectedUser(null);
                 }}
-                disabled={processing}
+                disabled={removeAdminMutation.isPending}
                 className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={handleRemoveAdmin}
-                disabled={processing}
+                onClick={() => removeAdminMutation.mutate(selectedUser.id)}
+                disabled={removeAdminMutation.isPending}
                 className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-primary-foreground transition-colors hover:bg-red-600 disabled:opacity-50"
               >
-                {processing ? (
+                {removeAdminMutation.isPending ? (
                   'Removing...'
                 ) : (
                   <>

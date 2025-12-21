@@ -274,34 +274,35 @@ async function collectReportContext(
     .orderBy(desc(posts.createdAt))
     .limit(20);
 
-  // Get report counts
-  const [reporterReportsSentResult] = await db
+  // Get report counts - cast to expected type since count() returns number
+  type CountResult = { count: number };
+  const [reporterReportsSentResult] = (await db
     .select({ count: count() })
     .from(reports)
-    .where(eq(reports.reporterId, reporterId));
+    .where(eq(reports.reporterId, reporterId))) as unknown as CountResult[];
 
-  const [reporterReportsReceivedResult] = await db
+  const [reporterReportsReceivedResult] = (await db
     .select({ count: count() })
     .from(reports)
-    .where(eq(reports.reportedUserId, reporterId));
+    .where(eq(reports.reportedUserId, reporterId))) as unknown as CountResult[];
 
-  const [reportedReportsSentResult] = await db
+  const [reportedReportsSentResult] = (await db
     .select({ count: count() })
     .from(reports)
-    .where(eq(reports.reporterId, reportedId));
+    .where(eq(reports.reporterId, reportedId))) as unknown as CountResult[];
 
-  const [reportedReportsReceivedResult] = await db
+  const [reportedReportsReceivedResult] = (await db
     .select({ count: count() })
     .from(reports)
-    .where(eq(reports.reportedUserId, reportedId));
+    .where(eq(reports.reportedUserId, reportedId))) as unknown as CountResult[];
 
   return {
     reporter: {
       id: reporterId,
       username: reporter.username,
       displayName: reporter.displayName,
-      recentReportsSent: reporterReportsSentResult?.count ?? 0,
-      recentReportsReceived: reporterReportsReceivedResult?.count ?? 0,
+      recentReportsSent: Number(reporterReportsSentResult?.count ?? 0),
+      recentReportsReceived: Number(reporterReportsReceivedResult?.count ?? 0),
       earnedPoints: reporter.earnedPoints,
       totalDeposited: Number(reporter.totalDeposited),
       totalWithdrawn: Number(reporter.totalWithdrawn),
@@ -311,8 +312,8 @@ async function collectReportContext(
       id: reportedId,
       username: reportedUser?.username ?? null,
       displayName: reportedUser?.displayName ?? null,
-      recentReportsReceived: reportedReportsReceivedResult?.count ?? 0,
-      recentReportsSent: reportedReportsSentResult?.count ?? 0,
+      recentReportsReceived: Number(reportedReportsReceivedResult?.count ?? 0),
+      recentReportsSent: Number(reportedReportsSentResult?.count ?? 0),
       earnedPoints: reportedUser?.earnedPoints ?? 0,
       totalDeposited: reportedUser ? Number(reportedUser.totalDeposited) : 0,
       totalWithdrawn: reportedUser ? Number(reportedUser.totalWithdrawn) : 0,

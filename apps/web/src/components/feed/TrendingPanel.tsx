@@ -1,7 +1,8 @@
 'use client';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { useSSEChannel } from '@/hooks/useSSE';
@@ -9,6 +10,11 @@ import {
   type TrendingItem,
   useWidgetCacheStore,
 } from '@/stores/widgetCacheStore';
+
+interface TrendingResponse {
+  success: boolean;
+  trending?: TrendingItem[];
+}
 
 /**
  * Trending panel component for displaying trending topics.
@@ -29,63 +35,46 @@ import {
  */
 export function TrendingPanel() {
   const router = useRouter();
-  const [trending, setTrending] = useState<TrendingItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const { getTrending, setTrending: cacheTrending } = useWidgetCacheStore();
   const { registerRefresh, unregisterRefresh } = useWidgetRefresh();
 
-  // Use ref to store fetchTrending function to break dependency chain
-  const fetchTrendingRef = useRef<(() => void) | null>(null);
-
-  const fetchTrending = useCallback(
-    async (skipCache = false) => {
-      // Check cache first (unless explicitly skipping)
-      if (!skipCache) {
-        const cached = getTrending();
-        // Only use cache if it has data (don't cache empty arrays)
-        if (cached && cached.length > 0) {
-          setTrending(cached);
-          setLoading(false);
-          return;
-        }
-      }
-
+  const { data: trending = [], isLoading } = useQuery({
+    queryKey: ['feed', 'trending'],
+    queryFn: async (): Promise<TrendingItem[]> => {
       const response = await fetch('/api/feed/widgets/trending');
-      const data = (await response.json()) as {
-        success: boolean;
-        trending?: TrendingItem[];
-      };
-
-      if (data.success) {
-        const trendingData = data.trending || [];
-        setTrending(trendingData);
-        cacheTrending(trendingData); // Cache the data
+      if (!response.ok) {
+        throw new Error('Failed to fetch trending');
       }
-      setLoading(false);
+      const data: TrendingResponse = await response.json();
+      if (!data.success) {
+        return [];
+      }
+      if (!data.trending) {
+        throw new Error('Trending API returned success without trending data');
+      }
+      cacheTrending(data.trending);
+      return data.trending;
     },
-    [getTrending, cacheTrending]
-  );
+    initialData: () => {
+      const cached = getTrending();
+      return cached && cached.length > 0 ? cached : undefined;
+    },
+    staleTime: (cached) => (cached && cached.length > 0 ? 30000 : 0),
+  });
 
-  // Update ref when fetchTrending changes
-  useEffect(() => {
-    fetchTrendingRef.current = () => fetchTrending(true); // Skip cache on manual refresh
-  }, [fetchTrending]);
-
-  useEffect(() => {
-    fetchTrending();
-  }, [fetchTrending]);
+  const refetch = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['feed', 'trending'] });
+  }, [queryClient]);
 
   // Register refresh function
   useEffect(() => {
-    const refresh = () => fetchTrending(true);
-    registerRefresh('trending', refresh);
+    registerRefresh('trending', refetch);
     return () => unregisterRefresh('trending');
-  }, [registerRefresh, unregisterRefresh, fetchTrending]);
+  }, [registerRefresh, unregisterRefresh, refetch]);
 
   // Real-time refresh on feed events
-  useSSEChannel('feed', () => {
-    void fetchTrending(true);
-  });
+  useSSEChannel('feed', refetch);
 
   const handleTrendingClick = (item: TrendingItem) => {
     // If multiple tags, navigate to grouped view; otherwise single tag view
@@ -104,7 +93,7 @@ export function TrendingPanel() {
       <h2 className="mb-3 text-left font-bold text-foreground text-lg">
         Trending
       </h2>
-      {loading ? (
+      {isLoading ? (
         <div className="flex-1 space-y-3 pl-3">
           <Skeleton className="h-14 w-full" />
           <Skeleton className="h-14 w-full" />

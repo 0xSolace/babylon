@@ -5,16 +5,7 @@
  * This gives RULER the ground truth to evaluate agent decisions.
  */
 
-import {
-  and,
-  db,
-  eq,
-  gte,
-  lte,
-  marketOutcomes,
-  markets,
-  perpPositions,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import { generateSnowflakeId, logger } from '../utils';
 import { getPreviousWindowId } from './window-utils';
 
@@ -48,20 +39,11 @@ export class MarketOutcomesTracker {
 
     // Get stock price movements from perpetual positions
     // (Approximate using PerpPosition data)
-    const perpTrades = await db
-      .select({
-        ticker: perpPositions.ticker,
-        entryPrice: perpPositions.entryPrice,
-        currentPrice: perpPositions.currentPrice,
-        closedAt: perpPositions.closedAt,
-      })
-      .from(perpPositions)
-      .where(
-        and(
-          gte(perpPositions.openedAt, windowStart),
-          lte(perpPositions.openedAt, windowEnd)
-        )
-      );
+    const perpTrades = await db.perpPosition.findMany({
+      where: {
+        openedAt: { gte: windowStart, lte: windowEnd },
+      },
+    });
 
     // Group by ticker and calculate movements
     const stockMovements = new Map<
@@ -90,34 +72,26 @@ export class MarketOutcomesTracker {
     for (const [ticker, data] of stockMovements.entries()) {
       const changePercent = ((data.end - data.start) / data.start) * 100;
 
-      await db.insert(marketOutcomes).values({
-        id: await generateSnowflakeId(),
-        windowId,
-        stockTicker: ticker,
-        startPrice: String(data.start),
-        endPrice: String(data.end),
-        changePercent: String(changePercent),
-        sentiment: changePercent > 0 ? 'BULLISH' : 'BEARISH',
+      await db.marketOutcome.create({
+        data: {
+          id: await generateSnowflakeId(),
+          windowId,
+          stockTicker: ticker,
+          startPrice: String(data.start),
+          endPrice: String(data.end),
+          changePercent: String(changePercent),
+          sentiment: changePercent > 0 ? 'BULLISH' : 'BEARISH',
+        },
       });
     }
 
     // Get prediction market resolutions
-    const resolvedMarkets = await db
-      .select({
-        id: markets.id,
-        question: markets.question,
-        resolution: markets.resolution,
-        yesShares: markets.yesShares,
-        noShares: markets.noShares,
-      })
-      .from(markets)
-      .where(
-        and(
-          eq(markets.resolved, true),
-          gte(markets.updatedAt, windowStart),
-          lte(markets.updatedAt, windowEnd)
-        )
-      );
+    const resolvedMarkets = await db.market.findMany({
+      where: {
+        resolved: true,
+        updatedAt: { gte: windowStart, lte: windowEnd },
+      },
+    });
 
     // Save prediction outcomes
     for (const market of resolvedMarkets) {
@@ -125,13 +99,15 @@ export class MarketOutcomesTracker {
       const finalProb =
         totalShares > 0 ? Number(market.yesShares) / totalShares : 0.5;
 
-      await db.insert(marketOutcomes).values({
-        id: await generateSnowflakeId(),
-        windowId,
-        predictionMarketId: market.id,
-        question: market.question,
-        outcome: market.resolution ? 'YES' : 'NO',
-        finalProbability: String(finalProb),
+      await db.marketOutcome.create({
+        data: {
+          id: await generateSnowflakeId(),
+          windowId,
+          predictionMarketId: market.id,
+          question: market.question,
+          outcome: market.resolution ? 'YES' : 'NO',
+          finalProbability: String(finalProb),
+        },
       });
     }
 
@@ -153,13 +129,11 @@ export class MarketOutcomesTracker {
       const windowId = getPreviousWindowId(i);
 
       // Check if already tracked
-      const existingResult = await db
-        .select()
-        .from(marketOutcomes)
-        .where(eq(marketOutcomes.windowId, windowId))
-        .limit(1);
+      const existing = await db.marketOutcome.findFirst({
+        where: { windowId },
+      });
 
-      if (existingResult.length === 0) {
+      if (!existing) {
         await this.trackWindowOutcomes(windowId);
         synced++;
       }
@@ -173,19 +147,21 @@ export class MarketOutcomesTracker {
    * Get outcomes for a window
    */
   async getWindowOutcomes(windowId: string): Promise<WindowOutcomes | null> {
-    const outcomes = await db
-      .select()
-      .from(marketOutcomes)
-      .where(eq(marketOutcomes.windowId, windowId));
+    const outcomes = await db.marketOutcome.findMany({
+      where: { windowId },
+    });
 
     if (outcomes.length === 0) {
       return null;
     }
 
     const stocks = outcomes
-      .filter((o: (typeof outcomes)[number]) => o.stockTicker)
-      .map((o: (typeof outcomes)[number]) => ({
-        ticker: o.stockTicker!,
+      .filter(
+        (o): o is typeof o & { stockTicker: string } =>
+          typeof o.stockTicker === 'string' && o.stockTicker.length > 0
+      )
+      .map((o) => ({
+        ticker: o.stockTicker,
         startPrice: Number(o.startPrice),
         endPrice: Number(o.endPrice),
         changePercent: Number(o.changePercent),
@@ -194,9 +170,13 @@ export class MarketOutcomesTracker {
       }));
 
     const predictions = outcomes
-      .filter((o: (typeof outcomes)[number]) => o.predictionMarketId)
-      .map((o: (typeof outcomes)[number]) => ({
-        marketId: o.predictionMarketId!,
+      .filter(
+        (o): o is typeof o & { predictionMarketId: string } =>
+          typeof o.predictionMarketId === 'string' &&
+          o.predictionMarketId.length > 0
+      )
+      .map((o) => ({
+        marketId: o.predictionMarketId,
         question: o.question || '',
         outcome: o.outcome || 'UNRESOLVED',
         finalProbability: Number(o.finalProbability || 0),

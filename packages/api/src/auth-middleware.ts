@@ -11,7 +11,7 @@
  */
 
 import { getOAuth3Client, type OAuth3Client } from '@babylon/auth';
-import { db, eq, users } from '@babylon/db';
+import { db } from '@babylon/db';
 import type { AuthenticatedUser } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -97,44 +97,32 @@ export async function authenticate(
   // Get user from database using OAuth3 identity
   const identityId = session.identityId;
 
-  const result = await db
-    .select({
-      id: users.id,
-      walletAddress: users.walletAddress,
-    })
-    .from(users)
-    .where(eq(users.oauth3Id, identityId))
-    .limit(1);
-
-  let dbUser = result[0];
+  let dbUser = await db.user.findFirst({
+    where: { oauth3Id: identityId },
+  });
 
   // If not found by oauth3Id, try by wallet address from session
   if (!dbUser && session.smartAccount) {
-    const walletResult = await db
-      .select({
-        id: users.id,
-        walletAddress: users.walletAddress,
-      })
-      .from(users)
-      .where(eq(users.walletAddress, session.smartAccount))
-      .limit(1);
-
-    dbUser = walletResult[0];
+    dbUser = await db.user.findFirst({
+      where: { walletAddress: session.smartAccount },
+    });
 
     // Link OAuth3 identity to existing user
     if (dbUser) {
-      await db
-        .update(users)
-        .set({ oauth3Id: identityId })
-        .where(eq(users.id, dbUser.id));
+      await db.user.update({
+        where: { id: String(dbUser.id) },
+        data: { oauth3Id: identityId },
+      });
     }
   }
 
   return {
-    userId: dbUser?.id ?? identityId,
-    dbUserId: dbUser?.id,
+    userId: dbUser ? String(dbUser.id) : identityId,
+    dbUserId: dbUser ? String(dbUser.id) : undefined,
     oauth3Id: identityId,
-    walletAddress: dbUser?.walletAddress ?? session.smartAccount ?? undefined,
+    walletAddress: dbUser?.walletAddress
+      ? String(dbUser.walletAddress)
+      : (session.smartAccount ?? undefined),
     email: undefined,
     isAgent: false,
   };
@@ -193,22 +181,17 @@ export async function optionalAuth(
 
     if (!session) return null;
 
-    const result = await db
-      .select({
-        id: users.id,
-        walletAddress: users.walletAddress,
-      })
-      .from(users)
-      .where(eq(users.oauth3Id, session.identityId))
-      .limit(1);
-
-    const dbUser = result[0];
+    const dbUser = await db.user.findFirst({
+      where: { oauth3Id: session.identityId },
+    });
 
     return {
-      userId: dbUser?.id ?? session.identityId,
-      dbUserId: dbUser?.id,
+      userId: dbUser ? String(dbUser.id) : session.identityId,
+      dbUserId: dbUser ? String(dbUser.id) : undefined,
       oauth3Id: session.identityId,
-      walletAddress: dbUser?.walletAddress ?? session.smartAccount ?? undefined,
+      walletAddress: dbUser?.walletAddress
+        ? String(dbUser.walletAddress)
+        : (session.smartAccount ?? undefined),
       email: undefined,
       isAgent: false,
     };

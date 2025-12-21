@@ -15,7 +15,6 @@
  */
 
 import type { TrajectoryStep } from '../training/types';
-import { logger } from '../utils/logger';
 import type {
   BehavioralMetrics,
   BehaviorMetrics,
@@ -600,50 +599,34 @@ export class TrajectoryMetricsExtractor {
     stepsJson: string;
     scenarioId?: string;
     finalPnL?: number;
-  }): BehavioralMetrics | null {
-    try {
-      const steps = JSON.parse(params.stepsJson) as TrajectoryStep[];
+  }): BehavioralMetrics {
+    const steps = JSON.parse(params.stepsJson) as TrajectoryStep[];
 
-      if (!Array.isArray(steps) || steps.length === 0) {
-        logger.warn(
-          'Invalid or empty steps array',
-          { trajectoryId: params.trajectoryId },
-          'MetricsExtractor'
-        );
-        return null;
-      }
-
-      // Get start/end balance from environment state
-      const startBalance = steps[0]?.environmentState?.agentBalance;
-      const endBalance =
-        steps[steps.length - 1]?.environmentState?.agentBalance;
-
-      return this.extract({
-        trajectoryId: params.trajectoryId,
-        agentId: params.agentId,
-        steps,
-        scenarioId: params.scenarioId,
-        startBalance:
-          startBalance !== undefined ? Number(startBalance) : undefined,
-        endBalance:
-          endBalance !== undefined
-            ? Number(endBalance)
-            : params.finalPnL !== undefined
-              ? (startBalance !== undefined ? Number(startBalance) : 0) +
-                params.finalPnL
-              : undefined,
-      });
-    } catch (error) {
-      logger.error(
-        'Failed to extract metrics',
-        {
-          trajectoryId: params.trajectoryId,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'MetricsExtractor'
+    if (!Array.isArray(steps) || steps.length === 0) {
+      throw new Error(
+        `Invalid or empty steps array for trajectory ${params.trajectoryId}`
       );
-      return null;
     }
+
+    // Get start/end balance from environment state
+    const startBalance = steps[0]?.environmentState?.agentBalance;
+    const endBalance = steps[steps.length - 1]?.environmentState?.agentBalance;
+
+    return this.extract({
+      trajectoryId: params.trajectoryId,
+      agentId: params.agentId,
+      steps,
+      scenarioId: params.scenarioId,
+      startBalance:
+        startBalance !== undefined ? Number(startBalance) : undefined,
+      endBalance:
+        endBalance !== undefined
+          ? Number(endBalance)
+          : params.finalPnL !== undefined
+            ? (startBalance !== undefined ? Number(startBalance) : 0) +
+              params.finalPnL
+            : undefined,
+    });
   }
 }
 

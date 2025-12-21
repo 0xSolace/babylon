@@ -10,24 +10,15 @@
  * 3. Game is learnable (simple strategies beat random)
  * 4. Insider advantage exists (group chats provide value)
  *
- * ⚠️ **IMPORTANT**: These tests:
- * - Use API calls (cost money)
- * - Take 30-120 seconds each
- * - Marked as .skip by default
- * - Run manually for quality validation
+ * **Requirements**: Jeju Compute must be available (JEJU_GATEWAY_URL or JEJU_COMPUTE_ENDPOINT)
+ * Tests will FAIL if infrastructure is unavailable - no silent skipping.
  *
- * **To run manually**:
+ * **To run**:
  * ```bash
  * bun test src/engine/__tests__/integration/game-learnability.test.ts
  * ```
  *
- * **Or run specific test**:
- * ```bash
- * bun test --grep "information gradient"
- * ```
- *
  * @see {@link GameGenerator} - Class under test
- * @see {@link /docs/research/game-engine-analysis.md} - Research justifying these tests
  */
 
 import {
@@ -108,10 +99,10 @@ const loadEnvFile = (filePath: string) => {
 loadEnvFile('.env.test');
 loadEnvFile('.env.local');
 
-const hasLLMKey = !!(
-  (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
+// Check if Jeju Compute is available for inference
+const hasJejuCompute = !!(
+  (process.env.JEJU_GATEWAY_URL?.trim() ?? '') !== '' ||
+  (process.env.JEJU_COMPUTE_ENDPOINT?.trim() ?? '') !== ''
 );
 
 // Helper functions need to be defined before usage but outside tests
@@ -157,49 +148,37 @@ function calculateCertaintyFromPosts(
   return correctPosts.length / relevantPosts.length;
 }
 
+// Helper to require Jeju Compute
+const requireJejuCompute = () => {
+  if (!hasJejuCompute) {
+    throw new Error(
+      'LEARNABILITY TESTS REQUIRE JEJU COMPUTE. ' +
+        'Set JEJU_GATEWAY_URL or JEJU_COMPUTE_ENDPOINT to run these tests. ' +
+        'Start Jeju with: cd /path/to/jeju && bun run dev'
+    );
+  }
+};
+
 // Always run LLM tests - fail if no API key rather than skip
 describe('Game Learnability Integration Tests', () => {
   // Shared game instance - generated once before all tests
-  let game: GeneratedGame | null = null;
-  let skipped = false;
-  let skipReason = '';
+  let game: GeneratedGame;
 
   beforeAll(async () => {
-    if (!hasLLMKey) {
-      console.log('⏭️  Skipping all tests - No LLM API key available');
-      skipped = true;
-      skipReason = 'No LLM API key';
-      return;
-    }
+    requireJejuCompute();
 
-    try {
-      logger.info(
-        'Generating shared game for learnability tests...',
-        undefined,
-        'LearnabilityTest'
-      );
-      const { GameGenerator } = await import('../../GameGenerator');
-      const generator = new GameGenerator();
-      game = await generator.generateCompleteGame();
-      logger.info('Game generated successfully', undefined, 'LearnabilityTest');
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.log(
-        '⏭️  Game generation failed - tests will skip:',
-        errorMessage.substring(0, 100)
-      );
-      skipped = true;
-      skipReason = `Generation failed: ${errorMessage.substring(0, 100)}`;
-    }
+    logger.info(
+      'Generating shared game for learnability tests...',
+      undefined,
+      'LearnabilityTest'
+    );
+    const { GameGenerator } = await import('../../GameGenerator');
+    const generator = new GameGenerator();
+    game = await generator.generateCompleteGame();
+    logger.info('Game generated successfully', undefined, 'LearnabilityTest');
   });
 
   test('CRITICAL: information gradient exists (early unclear, late clear)', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
     logger.info(
       'Testing information gradient...',
       undefined,
@@ -263,11 +242,6 @@ describe('Game Learnability Integration Tests', () => {
   });
 
   test('NPCs with high reliability are consistently accurate', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
     logger.info('Testing NPC consistency...', undefined, 'LearnabilityTest');
 
     const allActors = [
@@ -322,11 +296,6 @@ describe('Game Learnability Integration Tests', () => {
   });
 
   test('simple betting strategy beats random guessing', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
     logger.info(
       'Testing learnability with simple strategy...',
       undefined,
@@ -410,11 +379,6 @@ describe('Game Learnability Integration Tests', () => {
   });
 
   test('group chat information provides measurable advantage', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
     logger.info(
       'Testing group chat advantage...',
       undefined,
@@ -462,11 +426,6 @@ describe('Game Learnability Integration Tests', () => {
   });
 
   test('questions have resolution verification events', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
     logger.info(
       'Testing resolution verification...',
       undefined,

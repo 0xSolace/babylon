@@ -135,8 +135,8 @@ describe('TokenService', () => {
   });
 
   describe('Points to Token Display', () => {
-    it('should convert points to display format', () => {
-      const display = TokenService.pointsToDisplayTokens(10000);
+    it('should convert points to display format', async () => {
+      const display = await TokenService.pointsToDisplayTokens(10000);
       expect(display).toContain(TOKEN_SYMBOL);
     });
   });

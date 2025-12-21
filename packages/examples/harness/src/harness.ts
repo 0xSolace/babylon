@@ -82,14 +82,10 @@ export class AgentHarness {
           });
 
           // Register with A2A
-          try {
-            await client.register(
-              `${agent.name}-${archetype.id}-${i}`,
-              `${archetype.description} (${agent.language})`
-            );
-          } catch {
-            // Ignore already registered errors
-          }
+          await client.register(
+            `${agent.name}-${archetype.id}-${i}`,
+            `${archetype.description} (${agent.language})`
+          );
 
           const trajectory: Trajectory = {
             id: `traj-${Date.now()}-${instanceId}`,
@@ -413,11 +409,7 @@ export class AgentHarness {
 
       // Cleanup agent
       if (instance.agent.cleanup) {
-        try {
-          await instance.agent.cleanup();
-        } catch {
-          // Ignore cleanup errors
-        }
+        await instance.agent.cleanup();
       }
     }
 

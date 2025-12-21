@@ -109,7 +109,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const user = await requireUserByIdentifier(userId);
 
   // Calculate balance changes
-  const balanceBefore = new Decimal(user.virtualBalance?.toString() || '0');
+  const balanceBefore = new Decimal(
+    user.virtualBalance ? user.virtualBalance.toString() : '0'
+  );
   const amountDecimal = new Decimal(amount);
   const balanceAfter = Decimal.add(balanceBefore, amountDecimal);
 
@@ -162,16 +164,24 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     message: `Successfully awarded ${amount} points`,
     transaction: {
       id: transaction.id,
-      amount: transaction.amount?.toString() || '0',
+      amount: transaction.amount ? transaction.amount.toString() : '0',
       reason: transaction.description,
       timestamp: transaction.createdAt,
-      balanceBefore: transaction.balanceBefore?.toString() || '0',
-      balanceAfter: transaction.balanceAfter?.toString() || '0',
+      balanceBefore: transaction.balanceBefore
+        ? transaction.balanceBefore.toString()
+        : '0',
+      balanceAfter: transaction.balanceAfter
+        ? transaction.balanceAfter.toString()
+        : '0',
     },
     user: {
       id: updatedUser.id,
-      virtualBalance: updatedUser.virtualBalance?.toString() || '0',
-      totalDeposited: updatedUser.totalDeposited?.toString() || '0',
+      virtualBalance: updatedUser.virtualBalance
+        ? updatedUser.virtualBalance.toString()
+        : '0',
+      totalDeposited: updatedUser.totalDeposited
+        ? updatedUser.totalDeposited.toString()
+        : '0',
     },
   });
 });

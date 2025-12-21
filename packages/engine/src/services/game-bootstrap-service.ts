@@ -183,13 +183,6 @@ export class GameBootstrapService {
       }
 
       return result;
-    } catch (error) {
-      logger.error(
-        'Game bootstrap failed',
-        { error: String(error) },
-        'GameBootstrapService'
-      );
-      throw error;
     } finally {
       this.isBootstrapping = false;
     }
@@ -496,7 +489,7 @@ export class GameBootstrapService {
           startedAt: game.startedAt || new Date(),
           pausedAt: null,
         })
-        .where(eq(games.id, game.id));
+        .where(eq(games.id, String(game.id)));
       return true;
     }
 
@@ -540,12 +533,13 @@ export class GameBootstrapService {
     organizationMappings: number;
     rssFeedSources: number;
   }> {
-    const [actorCount, orgCount, poolCount, feedCount] = await Promise.all([
+    type CountResult = { count: number }[];
+    const [actorCount, orgCount, poolCount, feedCount] = (await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(actorState),
       db.select({ count: sql<number>`count(*)` }).from(organizationState),
       db.select({ count: sql<number>`count(*)` }).from(pools),
       db.select({ count: sql<number>`count(*)` }).from(rssFeedSources),
-    ]);
+    ])) as unknown as [CountResult, CountResult, CountResult, CountResult];
 
     return {
       actors: Number(actorCount[0]?.count ?? 0),

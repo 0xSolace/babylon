@@ -86,6 +86,7 @@
 
 import {
   authenticate,
+  NotFoundError,
   notifyUserGroupInvite,
   withErrorHandling,
 } from '@babylon/api';
@@ -187,6 +188,10 @@ export const POST = withErrorHandling(
       select: { name: true },
     });
 
+    if (!group) {
+      throw new NotFoundError('Group', groupId);
+    }
+
     // Create invite
     const invite = await db.userGroupInvite.create({
       data: {
@@ -203,7 +208,7 @@ export const POST = withErrorHandling(
       inviteeId,
       user.userId,
       groupId,
-      group?.name || 'a group',
+      group.name,
       invite.id
     );
 

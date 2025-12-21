@@ -106,47 +106,40 @@ export class JejuInference {
       return this.providerCache.get(model ?? 'all') ?? [];
     }
 
-    try {
-      const url = new URL('/v1/providers', this.gatewayUrl);
-      if (model) url.searchParams.set('model', model);
+    const url = new URL('/v1/providers', this.gatewayUrl);
+    if (model) url.searchParams.set('model', model);
 
-      const response = await fetch(url.toString(), {
-        headers: { 'x-jeju-address': this.config.userAddress },
-      });
+    const response = await fetch(url.toString(), {
+      headers: { 'x-jeju-address': this.config.userAddress },
+    });
 
-      if (!response.ok) {
-        throw new Error(`Gateway error: ${response.status}`);
-      }
-
-      const data = (await response.json()) as {
-        providers: InferenceProvider[];
-      };
-      this.providerCache.set(model ?? 'all', data.providers);
-      this.cacheExpiry = now + 60_000; // 1 minute cache
-
-      return data.providers;
-    } catch (error) {
-      console.warn('Failed to fetch providers from marketplace:', error);
-      return [];
+    if (!response.ok) {
+      throw new Error(`Gateway error: ${response.status}`);
     }
+
+    const data = (await response.json()) as {
+      providers: InferenceProvider[];
+    };
+    this.providerCache.set(model ?? 'all', data.providers);
+    this.cacheExpiry = now + 60_000; // 1 minute cache
+
+    return data.providers;
   }
 
   /**
    * Get available models from marketplace
    */
   async listModels(): Promise<string[]> {
-    try {
-      const response = await fetch(`${this.gatewayUrl}/v1/models`, {
-        headers: { 'x-jeju-address': this.config.userAddress },
-      });
+    const response = await fetch(`${this.gatewayUrl}/v1/models`, {
+      headers: { 'x-jeju-address': this.config.userAddress },
+    });
 
-      if (!response.ok) return [];
-
-      const data = (await response.json()) as { data: Array<{ id: string }> };
-      return data.data.map((m) => m.id);
-    } catch {
-      return [];
+    if (!response.ok) {
+      throw new Error(`Failed to list models: ${response.status}`);
     }
+
+    const data = (await response.json()) as { data: Array<{ id: string }> };
+    return data.data.map((m) => m.id);
   }
 
   /**
@@ -158,19 +151,10 @@ export class JejuInference {
     const resolvedModel = this.resolveModel(request.model);
 
     // Route through Jeju marketplace only
-    const result = await this.inferenceViaMarketplace({
+    return this.inferenceViaMarketplace({
       ...request,
       model: resolvedModel,
     });
-
-    if (!result) {
-      throw new Error(
-        `[Inference] No provider available for model ${request.model}. ` +
-          'Ensure Jeju Compute is running: cd /path/to/jeju && bun run dev'
-      );
-    }
-
-    return result;
   }
 
   /**
@@ -178,65 +162,59 @@ export class JejuInference {
    */
   private async inferenceViaMarketplace(
     request: InferenceRequest
-  ): Promise<InferenceResponse | null> {
-    try {
-      const response = await fetch(`${this.gatewayUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-jeju-address': this.config.userAddress,
-        },
-        body: JSON.stringify({
-          model: request.model,
-          messages: request.messages,
-          temperature: request.temperature ?? 0.7,
-          max_tokens: request.maxTokens ?? 2048,
-          stream: request.stream ?? false,
-        }),
-      });
+  ): Promise<InferenceResponse> {
+    const response = await fetch(`${this.gatewayUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jeju-address': this.config.userAddress,
+      },
+      body: JSON.stringify({
+        model: request.model,
+        messages: request.messages,
+        temperature: request.temperature ?? 0.7,
+        max_tokens: request.maxTokens ?? 2048,
+        stream: request.stream ?? false,
+      }),
+    });
 
-      if (!response.ok) {
-        console.warn(`Marketplace inference failed: ${response.status}`);
-        return null;
-      }
-
-      const data = (await response.json()) as {
-        id: string;
-        model: string;
-        choices: Array<{ message: { content: string } }>;
-        usage: {
-          prompt_tokens: number;
-          completion_tokens: number;
-          total_tokens: number;
-        };
-        settlement?: {
-          provider: Address;
-          requestHash: Hex;
-          signature: Hex;
-        };
-      };
-
-      return {
-        id: data.id,
-        model: data.model,
-        content: data.choices[0]?.message?.content ?? '',
-        usage: {
-          promptTokens: data.usage.prompt_tokens,
-          completionTokens: data.usage.completion_tokens,
-          totalTokens: data.usage.total_tokens,
-        },
-        provider: data.settlement?.provider ?? ('0x0' as Address),
-        settlement: data.settlement
-          ? {
-              requestHash: data.settlement.requestHash,
-              signature: data.settlement.signature,
-            }
-          : undefined,
-      };
-    } catch (error) {
-      console.warn('Marketplace inference error:', error);
-      return null;
+    if (!response.ok) {
+      throw new Error(`Marketplace inference failed: ${response.status}`);
     }
+
+    const data = (await response.json()) as {
+      id: string;
+      model: string;
+      choices: Array<{ message: { content: string } }>;
+      usage: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+      };
+      settlement?: {
+        provider: Address;
+        requestHash: Hex;
+        signature: Hex;
+      };
+    };
+
+    return {
+      id: data.id,
+      model: data.model,
+      content: data.choices[0]?.message?.content ?? '',
+      usage: {
+        promptTokens: data.usage.prompt_tokens,
+        completionTokens: data.usage.completion_tokens,
+        totalTokens: data.usage.total_tokens,
+      },
+      provider: data.settlement?.provider ?? ('0x0' as Address),
+      settlement: data.settlement
+        ? {
+            requestHash: data.settlement.requestHash,
+            signature: data.settlement.signature,
+          }
+        : undefined,
+    };
   }
 
   /**

@@ -6,7 +6,7 @@
  */
 
 import type { Page } from '@playwright/test';
-import type { MetaMask } from '@synthetixio/synpress-metamask/playwright';
+import type { MetaMask } from '@synthetixio/synpress/playwright';
 
 // Default Anvil test wallet (first account from hardhat/foundry node)
 export const DEFAULT_ANVIL_WALLET = {
@@ -60,18 +60,12 @@ export async function loginWithWallet(
       console.log('[OAuth3Auth] Found wallet option, clicking...');
       await walletOption.click();
 
-      // If MetaMask is provided, handle the signature request
+      // If MetaMask is provided, handle the connection and signature
       if (metaMask) {
-        console.log('[OAuth3Auth] Handling MetaMask signature...');
-        try {
-          // Wait for MetaMask popup and approve connection
-          await metaMask.approveNewNetwork();
-          await metaMask.approveSwitchNetwork();
-          await metaMask.confirmSignature();
-          console.log('[OAuth3Auth] MetaMask signature approved');
-        } catch (error) {
-          console.log('[OAuth3Auth] MetaMask interaction failed:', error);
-        }
+        console.log('[OAuth3Auth] Handling MetaMask connection...');
+        // Connect MetaMask to the dapp
+        await metaMask.connectToDapp();
+        console.log('[OAuth3Auth] MetaMask connected to dapp');
       }
     }
   } else {
@@ -104,41 +98,15 @@ export async function loginWithWallet(
 }
 
 /**
- * Wait for OAuth3 to be ready (client-side initialization)
- */
-export async function waitForOAuth3Ready(
-  page: Page,
-  timeout = 30000
-): Promise<void> {
-  console.log('[OAuth3Auth] Waiting for OAuth3 client to be ready...');
-
-  // Wait for OAuth3 client to initialize
-  await page
-    .waitForFunction(
-      () => {
-        // Check for OAuth3 client in window
-        const win = window as unknown as { oauth3?: { ready?: boolean } };
-        return win.oauth3?.ready === true;
-      },
-      { timeout }
-    )
-    .catch(() => {
-      console.log('[OAuth3Auth] OAuth3 ready check timed out, continuing...');
-    });
-
-  console.log('[OAuth3Auth] OAuth3 client ready');
-}
-
-/**
- * Logout from OAuth3 session
+ * Logout from the current session
  */
 export async function logout(page: Page): Promise<void> {
-  console.log('[OAuth3Auth] Logging out...');
+  console.log('[OAuth3Auth] Initiating logout...');
 
-  // Look for user menu
+  // Look for user menu or logout button
   const userMenu = page
     .locator('[data-testid="user-menu"]')
-    .or(page.getByRole('button', { name: /account|profile/i }))
+    .or(page.getByRole('button', { name: /account|profile|settings/i }))
     .first();
 
   const isUserMenuVisible = await userMenu
@@ -149,10 +117,8 @@ export async function logout(page: Page): Promise<void> {
     await userMenu.click();
     await page.waitForTimeout(500);
 
-    // Look for logout option
     const logoutButton = page
-      .getByRole('menuitem', { name: /logout|sign out|disconnect/i })
-      .or(page.getByRole('button', { name: /logout|sign out|disconnect/i }))
+      .getByRole('button', { name: /logout|sign out|disconnect/i })
       .first();
 
     const isLogoutVisible = await logoutButton
@@ -161,10 +127,42 @@ export async function logout(page: Page): Promise<void> {
 
     if (isLogoutVisible) {
       await logoutButton.click();
-      console.log('[OAuth3Auth] Logout clicked');
+      console.log('[OAuth3Auth] Logout button clicked');
     }
   }
 
   await page.waitForTimeout(1000);
-  console.log('[OAuth3Auth] Logout complete');
+  console.log('[OAuth3Auth] Logout completed');
+}
+
+/**
+ * Check if user is currently authenticated
+ */
+export async function isAuthenticated(page: Page): Promise<boolean> {
+  const userIndicator = page
+    .locator('[data-testid="user-menu"]')
+    .or(page.locator(`text=${DEFAULT_ANVIL_WALLET.address.slice(0, 6)}`))
+    .or(page.getByRole('button', { name: /account|profile|settings/i }))
+    .first();
+
+  return userIndicator.isVisible({ timeout: 2000 }).catch(() => false);
+}
+
+/**
+ * Wait for authentication to complete after wallet connection
+ */
+export async function waitForAuth(
+  page: Page,
+  timeout: number = 10000
+): Promise<boolean> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    if (await isAuthenticated(page)) {
+      return true;
+    }
+    await page.waitForTimeout(500);
+  }
+
+  return false;
 }

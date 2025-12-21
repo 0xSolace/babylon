@@ -103,14 +103,19 @@ export function AdminSendMoneyModal({
         throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
       }
 
-      const currentBalance = balance ?? (await refreshBalance());
+      const currentBalance =
+        balance !== null ? balance : await refreshBalance();
       if (currentBalance !== null && currentBalance >= requiredAmountWei) {
         return true;
       }
 
+      if (currentBalance === null) {
+        throw new Error('Failed to fetch wallet balance');
+      }
+
       const deficit =
-        requiredAmountWei - (currentBalance ?? 0n) > 0n
-          ? requiredAmountWei - (currentBalance ?? 0n)
+        requiredAmountWei - currentBalance > 0n
+          ? requiredAmountWei - currentBalance
           : requiredAmountWei;
 
       // Show user they need to fund their wallet manually
@@ -369,9 +374,7 @@ export function AdminSendMoneyModal({
     setStep('success');
     toast.success(`Successfully sent $${amountNum} to ${recipientName}!`);
 
-    if (onSuccess) {
-      onSuccess();
-    }
+    onSuccess?.();
     setLoading(false);
   };
 
@@ -394,8 +397,8 @@ export function AdminSendMoneyModal({
                   {recipientUsername && ` (@${recipientUsername})`}
                 </p>
                 <p className="mt-1 text-muted-foreground text-xs">
-                  Wallet: {recipientWalletAddress?.slice(0, 6)}...
-                  {recipientWalletAddress?.slice(-4)}
+                  Wallet: {recipientWalletAddress.slice(0, 6)}...
+                  {recipientWalletAddress.slice(-4)}
                 </p>
               </div>
 

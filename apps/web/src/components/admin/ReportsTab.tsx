@@ -21,8 +21,9 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle, Clock, Flag, XCircle } from 'lucide-react';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -106,9 +107,7 @@ type StatusFilter = 'all' | 'pending' | 'reviewing' | 'resolved' | 'dismissed';
 type PriorityFilter = 'all' | 'low' | 'normal' | 'high' | 'critical';
 
 export function ReportsTab() {
-  const [reports, setReports] = useState<Report[]>([]);
-  const [stats, setStats] = useState<ReportStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
@@ -117,99 +116,107 @@ export function ReportsTab() {
   const [evaluatingReportId, setEvaluatingReportId] = useState<string | null>(
     null
   );
-  const [, startRefresh] = useTransition();
 
-  const fetchReports = useCallback(
-    async (showRefreshing = false) => {
-      const fetchLogic = async () => {
-        const params = new URLSearchParams({
-          limit: '100',
-        });
-        if (statusFilter !== 'all') params.set('status', statusFilter);
-        if (priorityFilter !== 'all') params.set('priority', priorityFilter);
+  const { data: reports = [], isLoading } = useQuery<Report[]>({
+    queryKey: ['admin', 'reports', statusFilter, priorityFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        limit: '100',
+      });
+      if (statusFilter !== 'all') params.set('status', statusFilter);
+      if (priorityFilter !== 'all') params.set('priority', priorityFilter);
 
-        const response = await fetch(`/api/admin/reports?${params}`);
-        if (!response.ok) throw new Error('Failed to fetch reports');
+      const response = await fetch(`/api/admin/reports?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch reports');
 
-        const data = await response.json();
-        setReports(data.reports || []);
-        setLoading(false);
-      };
-
-      if (showRefreshing) {
-        startRefresh(fetchLogic);
-      } else {
-        await fetchLogic();
-      }
+      const data = await response.json();
+      return data.reports || [];
     },
-    [statusFilter, priorityFilter]
-  );
+  });
 
-  const fetchStats = useCallback(async () => {
-    const response = await fetch('/api/admin/reports/stats');
-    if (!response.ok) return;
+  const { data: stats } = useQuery<ReportStats>({
+    queryKey: ['admin', 'reports', 'stats'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/reports/stats');
+      if (!response.ok) throw new Error('Failed to fetch stats');
+      return response.json();
+    },
+  });
 
-    const data = await response.json();
-    setStats(data);
-  }, []);
+  const actionMutation = useMutation({
+    mutationFn: async ({
+      reportId,
+      action,
+      resolution,
+    }: {
+      reportId: string;
+      action: string;
+      resolution: string;
+    }) => {
+      const response = await fetch(`/api/admin/reports/${reportId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, resolution }),
+      });
 
-  useEffect(() => {
-    fetchReports();
-    fetchStats();
-  }, [fetchReports, fetchStats]);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to take action');
+      }
 
-  const handleAction = async (
-    reportId: string,
-    action: string,
-    resolution: string
-  ) => {
-    const response = await fetch(`/api/admin/reports/${reportId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, resolution }),
-    });
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      toast.success(`Report ${variables.action} successfully`);
+      setShowActionModal(false);
+      setSelectedReport(null);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to take action'
+      );
+    },
+  });
 
-    if (!response.ok) {
-      const error = await response.json();
-      toast.error(error.message || 'Failed to take action');
-      return;
-    }
+  const evaluateMutation = useMutation({
+    mutationFn: async (reportId: string) => {
+      const response = await fetch(`/api/admin/reports/${reportId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'evaluate' }),
+      });
 
-    toast.success(`Report ${action} successfully`);
-    setShowActionModal(false);
-    setSelectedReport(null);
-    fetchReports(true);
-    fetchStats();
-  };
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to evaluate report');
+      }
 
-  const handleEvaluate = async (reportId: string) => {
-    setEvaluatingReportId(reportId);
-    const response = await fetch(`/api/admin/reports/${reportId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'evaluate' }),
-    });
+      return response.json();
+    },
+    onSuccess: (data, reportId) => {
+      toast.success('Report evaluated successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] });
 
-    if (!response.ok) {
-      const error = await response.json();
-      toast.error(error.message || 'Failed to evaluate report');
+      // Show evaluation modal if we have the report selected
+      const report = reports.find((r) => r.id === reportId);
+      if (report && data.evaluation) {
+        setSelectedReport({ ...report, evaluation: data.evaluation });
+        setShowEvaluationModal(true);
+      }
       setEvaluatingReportId(null);
-      return;
-    }
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to evaluate report'
+      );
+      setEvaluatingReportId(null);
+    },
+  });
 
-    const data = await response.json();
-    toast.success('Report evaluated successfully');
-
-    // Refresh reports to show evaluation
-    await fetchReports(true);
-
-    // Show evaluation modal if we have the report selected
-    const report = reports.find((r) => r.id === reportId);
-    if (report && data.evaluation) {
-      setSelectedReport({ ...report, evaluation: data.evaluation });
-      setShowEvaluationModal(true);
-    }
-    setEvaluatingReportId(null);
+  const handleEvaluate = (reportId: string) => {
+    setEvaluatingReportId(reportId);
+    evaluateMutation.mutate(reportId);
   };
 
   const formatDate = (date: string) => {
@@ -267,7 +274,7 @@ export function ReportsTab() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-32 w-full" />
@@ -494,11 +501,11 @@ export function ReportsTab() {
                       </button>
                       <button
                         onClick={() =>
-                          handleAction(
-                            report.id,
-                            'dismiss',
-                            'Dismissed by admin'
-                          )
+                          actionMutation.mutate({
+                            reportId: report.id,
+                            action: 'dismiss',
+                            resolution: 'Dismissed by admin',
+                          })
                         }
                         className="rounded bg-muted px-3 py-1 text-foreground text-sm transition-colors hover:bg-muted/80"
                       >
@@ -547,7 +554,10 @@ export function ReportsTab() {
             setShowActionModal(false);
             setSelectedReport(null);
           }}
-          onAction={handleAction}
+          onAction={(reportId, action, resolution) =>
+            actionMutation.mutate({ reportId, action, resolution })
+          }
+          isPending={actionMutation.isPending}
         />
       )}
 
@@ -570,6 +580,7 @@ interface ActionModalProps {
   report: Report;
   onClose: () => void;
   onAction: (reportId: string, action: string, resolution: string) => void;
+  isPending: boolean;
 }
 
 interface EvaluationModalProps {
@@ -706,10 +717,15 @@ function EvaluationModal({
   );
 }
 
-function ActionModal({ report, onClose, onAction }: ActionModalProps) {
+function ActionModal({
+  report,
+  onClose,
+  onAction,
+  isPending,
+}: ActionModalProps) {
   const [action, setAction] = useState('resolve');
   const [resolution, setResolution] = useState('');
-  const [isSubmitting, startSubmit] = useTransition();
+  const [, startSubmit] = useTransition();
 
   const handleSubmit = () => {
     if (!resolution.trim()) {
@@ -803,17 +819,17 @@ function ActionModal({ report, onClose, onAction }: ActionModalProps) {
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            disabled={isSubmitting}
+            disabled={isPending}
             className="flex-1 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || !resolution.trim()}
+            disabled={isPending || !resolution.trim()}
             className="flex-1 rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            {isSubmitting ? 'Submitting...' : 'Submit'}
+            {isPending ? 'Submitting...' : 'Submit'}
           </button>
         </div>
       </div>

@@ -7,21 +7,7 @@
  * - Manages tag statistics and trending calculations
  */
 
-import {
-  and,
-  asc,
-  count,
-  db,
-  desc,
-  eq,
-  gte,
-  inArray,
-  ne,
-  postTags,
-  tags,
-  trendingTags,
-  withTransaction,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import { isPromptLoggingEnabled, logPrompt } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 
@@ -344,49 +330,31 @@ export async function storeTagsForPost(
   }
 
   const tagNames = generatedTags.map((t) => t.name);
-  const existingTagsList = await db
-    .select()
-    .from(tags)
-    .where(inArray(tags.name, tagNames));
+  const existingTagsList = await db.tag.findMany({
+    where: { name: { in: tagNames } },
+  });
 
   const existingTagMap = new Map(existingTagsList.map((t) => [t.name, t]));
 
   const tagsToCreate = generatedTags.filter((t) => !existingTagMap.has(t.name));
 
   if (tagsToCreate.length > 0) {
-    const tagIds = await Promise.all(
-      tagsToCreate.map(() => generateSnowflakeId())
+    const now = new Date();
+    const tagsToInsert = await Promise.all(
+      tagsToCreate.map(async (tag) => ({
+        id: await generateSnowflakeId(),
+        name: tag.name,
+        displayName: tag.displayName,
+        category: tag.category ?? null,
+        updatedAt: now,
+      }))
     );
 
-    for (let index = 0; index < tagsToCreate.length; index++) {
-      const tag = tagsToCreate[index];
-      if (!tag) continue;
-      const tagId = tagIds[index];
-      if (!tagId) {
-        throw new Error(`Failed to generate tag ID for index ${index}`);
-      }
+    await db.tag.createMany({ data: tagsToInsert, skipDuplicates: true });
 
-      await db
-        .insert(tags)
-        .values({
-          id: tagId,
-          name: tag.name,
-          displayName: tag.displayName,
-          category: tag.category || null,
-          updatedAt: new Date(),
-        })
-        .onConflictDoNothing();
-    }
-
-    const createdTags = await db
-      .select()
-      .from(tags)
-      .where(
-        inArray(
-          tags.name,
-          tagsToCreate.map((t) => t.name)
-        )
-      );
+    const createdTags = await db.tag.findMany({
+      where: { name: { in: tagsToCreate.map((t) => t.name) } },
+    });
 
     createdTags.forEach((t) => existingTagMap.set(t.name, t));
     logger.debug(
@@ -396,31 +364,22 @@ export async function storeTagsForPost(
     );
   }
 
-  const postTagIds = await Promise.all(
-    generatedTags.map(() => generateSnowflakeId())
-  );
+  const postTagsToInsert = await Promise.all(
+    generatedTags.map(async (tag, _idx) => {
+      const dbTag = existingTagMap.get(tag.name);
+      if (!dbTag) {
+        throw new Error(`Tag ${tag.name} not found in existing tags`);
+      }
 
-  for (let idx = 0; idx < generatedTags.length; idx++) {
-    const tag = generatedTags[idx];
-    if (!tag) continue;
-    const dbTag = existingTagMap.get(tag.name);
-    if (!dbTag) {
-      throw new Error(`Tag ${tag.name} not found in existing tags`);
-    }
-    const postTagId = postTagIds[idx];
-    if (!postTagId) {
-      throw new Error(`Failed to generate post tag ID for index ${idx}`);
-    }
-
-    await db
-      .insert(postTags)
-      .values({
-        id: postTagId,
+      return {
+        id: await generateSnowflakeId(),
         postId,
         tagId: dbTag.id,
-      })
-      .onConflictDoNothing();
-  }
+      };
+    })
+  );
+
+  await db.postTag.createMany({ data: postTagsToInsert, skipDuplicates: true });
 
   logger.debug(
     'Stored tags for post',
@@ -433,13 +392,19 @@ export async function storeTagsForPost(
  * Get tags for a post
  */
 export async function getTagsForPost(postId: string) {
-  return await db.query.postTags.findMany({
-    where: eq(postTags.postId, postId),
-    with: {
-      tag: true,
-    },
-    orderBy: asc(postTags.createdAt),
+  const postTags = await db.postTag.findMany({
+    where: { postId },
+    orderBy: { createdAt: 'asc' },
   });
+
+  const tagIds = [...new Set(postTags.map((pt) => pt.tagId))];
+  const tags =
+    tagIds.length > 0
+      ? await db.tag.findMany({ where: { id: { in: tagIds } } })
+      : [];
+  const tagsById = new Map(tags.map((t) => [t.id, t]));
+
+  return postTags.map((pt) => ({ ...pt, tag: tagsById.get(pt.tagId) ?? null }));
 }
 
 /**
@@ -451,37 +416,39 @@ export async function getPostsByTag(
 ) {
   const { limit = 20, offset = 0 } = options;
 
-  const [tag] = await db
-    .select()
-    .from(tags)
-    .where(eq(tags.name, tagName.toLowerCase()))
-    .limit(1);
+  const tag = await db.tag.findFirst({
+    where: { name: tagName.toLowerCase() },
+  });
 
   if (!tag) {
     return { tag: null, posts: [], total: 0 };
   }
 
-  const [postTagsList, totalResult] = await Promise.all([
-    db.query.postTags.findMany({
-      where: eq(postTags.tagId, tag.id),
-      with: { post: true },
-      orderBy: desc(postTags.createdAt),
-      offset,
-      limit,
+  const [postTagsList, total] = await Promise.all([
+    db.postTag.findMany({
+      where: { tagId: tag.id },
+      orderBy: { createdAt: 'desc' },
+      skip: offset,
+      take: limit,
     }),
-    db
-      .select({ count: count() })
-      .from(postTags)
-      .where(eq(postTags.tagId, tag.id)),
+    db.postTag.count({ where: { tagId: tag.id } }),
   ]);
 
-  const total = totalResult[0]?.count ?? 0;
+  const postIds = postTagsList.map((pt) => pt.postId);
+  const posts =
+    postIds.length > 0
+      ? await db.post.findMany({
+          where: { id: { in: postIds } },
+        })
+      : [];
+
+  const postsById = new Map(posts.map((p) => [p.id, p]));
 
   return {
     tag,
-    posts: postTagsList
-      .map((pt) => pt.post)
-      .filter((post): post is NonNullable<typeof post> => post !== null),
+    posts: postIds
+      .map((id) => postsById.get(id))
+      .filter((post): post is NonNullable<typeof post> => post !== undefined),
     total,
   };
 }
@@ -507,21 +474,50 @@ export async function getTagStatistics(
   const last24Hours = new Date(windowEnd.getTime() - 24 * 60 * 60 * 1000);
 
   // Query postTags within time window, then filter out deleted posts
-  const allPostTags = await db.query.postTags.findMany({
-    where: (pt, { and: andOp, gte: whereGte, lte: whereLte }) =>
-      andOp(
-        whereGte(pt.createdAt, windowStart),
-        whereLte(pt.createdAt, windowEnd)
-      ),
-    with: {
-      tag: true,
-      post: true,
+  const allPostTags = await db.postTag.findMany({
+    where: {
+      AND: [
+        { createdAt: { gte: windowStart } },
+        { createdAt: { lte: windowEnd } },
+      ],
     },
-    orderBy: asc(postTags.createdAt),
+    orderBy: { createdAt: 'asc' },
   });
 
+  const postIds = [...new Set(allPostTags.map((pt) => pt.postId))];
+  const tagIds = [...new Set(allPostTags.map((pt) => pt.tagId))];
+
+  type PostRecord = {
+    id: string;
+    deletedAt: Date | null;
+  };
+  type TagRecord = {
+    id: string;
+    name: string;
+    displayName: string;
+    category: string | null;
+  };
+  const [posts, tags] = await Promise.all([
+    postIds.length > 0
+      ? (db.post.findMany({ where: { id: { in: postIds } } }) as Promise<
+          PostRecord[]
+        >)
+      : ([] as PostRecord[]),
+    tagIds.length > 0
+      ? (db.tag.findMany({ where: { id: { in: tagIds } } }) as Promise<
+          TagRecord[]
+        >)
+      : ([] as TagRecord[]),
+  ]);
+
+  const postsById = new Map(posts.map((p) => [p.id, p]));
+  const tagsById = new Map(tags.map((t) => [t.id, t]));
+
   // Filter out postTags where the post is deleted
-  const postTagsList = allPostTags.filter((pt) => !pt.post.deletedAt);
+  const postTagsList = allPostTags.filter((pt) => {
+    const post = postsById.get(pt.postId);
+    return post !== undefined && post.deletedAt === null;
+  });
 
   const tagStats = new Map<
     string,
@@ -539,7 +535,12 @@ export async function getTagStatistics(
     }
   >();
 
-  postTagsList.forEach((pt) => {
+  for (const pt of postTagsList) {
+    const tag = tagsById.get(pt.tagId);
+    if (!tag) {
+      throw new Error(`Tag ${pt.tagId} not found for postTag ${pt.id}`);
+    }
+
     const existing = tagStats.get(pt.tagId);
     const isRecent = pt.createdAt >= last24Hours;
 
@@ -552,14 +553,19 @@ export async function getTagStatistics(
         existing.newestPostDate = pt.createdAt;
     } else {
       tagStats.set(pt.tagId, {
-        tag: pt.tag,
+        tag: {
+          id: tag.id,
+          name: tag.name,
+          displayName: tag.displayName,
+          category: tag.category ?? null,
+        },
         postCount: 1,
         recentPostCount: isRecent ? 1 : 0,
         oldestPostDate: pt.createdAt,
         newestPostDate: pt.createdAt,
       });
     }
-  });
+  }
 
   return Array.from(tagStats.values())
     .filter((stats) => stats.postCount >= 3)
@@ -590,30 +596,22 @@ export async function storeTrendingTags(
   windowStart: Date,
   windowEnd: Date
 ): Promise<void> {
-  const trendingTagIds = await Promise.all(
-    tagsList.map(() => generateSnowflakeId())
+  const calculatedAt = new Date();
+  const rows = await Promise.all(
+    tagsList.map(async (tag) => ({
+      id: await generateSnowflakeId(),
+      tagId: tag.tagId,
+      score: tag.score,
+      postCount: tag.postCount,
+      rank: tag.rank,
+      calculatedAt,
+      windowStart,
+      windowEnd,
+      relatedContext: tag.relatedContext ?? null,
+    }))
   );
 
-  await withTransaction(async (tx) => {
-    for (let idx = 0; idx < tagsList.length; idx++) {
-      const tag = tagsList[idx];
-      if (!tag) continue;
-      const trendingTagId = trendingTagIds[idx];
-      if (!trendingTagId) {
-        throw new Error(`Failed to generate trending tag ID for index ${idx}`);
-      }
-      await tx.insert(trendingTags).values({
-        id: trendingTagId,
-        tagId: tag.tagId,
-        score: tag.score,
-        postCount: tag.postCount,
-        rank: tag.rank,
-        windowStart,
-        windowEnd,
-        relatedContext: tag.relatedContext || null,
-      });
-    }
-  });
+  await db.trendingTag.createMany({ data: rows, skipDuplicates: true });
 
   logger.info(
     'Stored trending tags',
@@ -626,11 +624,9 @@ export async function storeTrendingTags(
  * Get current trending tags (most recent calculation)
  */
 export async function getCurrentTrendingTags(limit = 10) {
-  const [latestCalculation] = await db
-    .select({ calculatedAt: trendingTags.calculatedAt })
-    .from(trendingTags)
-    .orderBy(desc(trendingTags.calculatedAt))
-    .limit(1);
+  const latestCalculation = await db.trendingTag.findFirst({
+    orderBy: { calculatedAt: 'desc' },
+  });
 
   if (!latestCalculation) {
     return [];
@@ -638,12 +634,20 @@ export async function getCurrentTrendingTags(limit = 10) {
 
   const cutoffTime = new Date(latestCalculation.calculatedAt.getTime() - 1000);
 
-  return await db.query.trendingTags.findMany({
-    where: gte(trendingTags.calculatedAt, cutoffTime),
-    with: { tag: true },
-    orderBy: asc(trendingTags.rank),
-    limit,
+  const trending = await db.trendingTag.findMany({
+    where: { calculatedAt: { gte: cutoffTime } },
+    orderBy: { rank: 'asc' },
+    take: limit,
   });
+
+  const tagIds = [...new Set(trending.map((t) => t.tagId))];
+  const tags =
+    tagIds.length > 0
+      ? await db.tag.findMany({ where: { id: { in: tagIds } } })
+      : [];
+  const tagsById = new Map(tags.map((t) => [t.id, t]));
+
+  return trending.map((t) => ({ ...t, tag: tagsById.get(t.tagId) ?? null }));
 }
 
 /**
@@ -653,23 +657,21 @@ export async function getRelatedTags(
   tagId: string,
   limit = 3
 ): Promise<string[]> {
-  const postsWithTagResult = await db
-    .select({ postId: postTags.postId })
-    .from(postTags)
-    .where(eq(postTags.tagId, tagId))
-    .orderBy(desc(postTags.createdAt))
-    .limit(100);
+  const postsWithTagResult = await db.postTag.findMany({
+    where: { tagId },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  });
 
-  const postIds = postsWithTagResult.map((pt) => pt.postId);
+  const postIds = [...new Set(postsWithTagResult.map((pt) => pt.postId))];
 
   if (postIds.length === 0) {
     return [];
   }
 
-  const coOccurringPostTags = await db
-    .select({ tagId: postTags.tagId })
-    .from(postTags)
-    .where(and(inArray(postTags.postId, postIds), ne(postTags.tagId, tagId)));
+  const coOccurringPostTags = await db.postTag.findMany({
+    where: { AND: [{ postId: { in: postIds } }, { tagId: { not: tagId } }] },
+  });
 
   const tagCounts = new Map<string, number>();
   coOccurringPostTags.forEach((pt) => {
@@ -685,13 +687,14 @@ export async function getRelatedTags(
     return [];
   }
 
-  const tagsList = await db
-    .select({ id: tags.id, displayName: tags.displayName })
-    .from(tags)
-    .where(inArray(tags.id, sortedTagIds));
+  const tagsList = await db.tag.findMany({
+    where: { id: { in: sortedTagIds } },
+  });
 
-  const tagMap = new Map(tagsList.map((t) => [t.id, t.displayName]));
+  const tagMap = new Map(tagsList.map((t) => [t.id, t.displayName ?? t.name]));
   return sortedTagIds
     .map((id) => tagMap.get(id))
-    .filter((name): name is string => name !== undefined);
+    .filter(
+      (name): name is string => typeof name === 'string' && name.length > 0
+    );
 }

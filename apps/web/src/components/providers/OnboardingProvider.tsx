@@ -215,9 +215,9 @@ export function OnboardingProvider({
         setSubmittedProfile({
           username: user.username ?? `user_${user.id.slice(0, 8)}`,
           displayName: user.displayName ?? user.username ?? 'New User',
-          bio: user.bio ?? undefined,
-          profileImageUrl: user.profileImageUrl ?? undefined,
-          coverImageUrl: user.coverImageUrl ?? undefined,
+          bio: user.bio,
+          profileImageUrl: user.profileImageUrl,
+          coverImageUrl: user.coverImageUrl,
         });
       }
       setStage((prev) => (prev === 'COMPLETED' ? prev : 'ONCHAIN'));
@@ -369,8 +369,8 @@ export function OnboardingProvider({
       }
 
       const body = {
-        walletAddress: smartWalletAddress ?? null,
-        referralCode: referralCode ?? null,
+        walletAddress: smartWalletAddress || null,
+        referralCode: referralCode || null,
       };
 
       const callEndpoint = async (payload: Record<string, string | null>) => {
@@ -405,13 +405,13 @@ export function OnboardingProvider({
         if (data.user) {
           setUser({
             id: data.user.id,
-            walletAddress: data.user.walletAddress ?? undefined,
+            walletAddress: data.user.walletAddress,
             displayName: data.user.displayName ?? user?.displayName,
             email: user?.email,
-            username: data.user.username ?? undefined,
-            bio: data.user.bio ?? undefined,
-            profileImageUrl: data.user.profileImageUrl ?? undefined,
-            coverImageUrl: data.user.coverImageUrl ?? undefined,
+            username: data.user.username,
+            bio: data.user.bio,
+            profileImageUrl: data.user.profileImageUrl,
+            coverImageUrl: data.user.coverImageUrl,
             profileComplete: data.user.profileComplete ?? true,
             reputationPoints:
               data.user.reputationPoints ?? user?.reputationPoints,
@@ -420,7 +420,7 @@ export function OnboardingProvider({
             farcasterUsername:
               data.user.farcasterUsername ?? user?.farcasterUsername,
             twitterUsername: data.user.twitterUsername ?? user?.twitterUsername,
-            nftTokenId: data.user.nftTokenId ?? undefined,
+            nftTokenId: data.user.nftTokenId,
             createdAt: data.user.createdAt ?? user?.createdAt,
             onChainRegistered:
               data.user.onChainRegistered ?? user?.onChainRegistered,
@@ -577,7 +577,7 @@ export function OnboardingProvider({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...payload,
-          referralCode: referralCode ?? undefined,
+          referralCode: referralCode || undefined,
         }),
       });
 
@@ -593,16 +593,13 @@ export function OnboardingProvider({
       if (data.user) {
         setUser({
           id: data.user.id,
-          walletAddress:
-            data.user.walletAddress ?? smartWalletAddress ?? undefined,
+          walletAddress: data.user.walletAddress ?? smartWalletAddress,
           displayName: data.user.displayName ?? payload.displayName,
           email: user?.email,
           username: data.user.username ?? payload.username,
           bio: data.user.bio ?? payload.bio,
-          profileImageUrl:
-            data.user.profileImageUrl ?? payload.profileImageUrl ?? undefined,
-          coverImageUrl:
-            data.user.coverImageUrl ?? payload.coverImageUrl ?? undefined,
+          profileImageUrl: data.user.profileImageUrl ?? payload.profileImageUrl,
+          coverImageUrl: data.user.coverImageUrl ?? payload.coverImageUrl,
           profileComplete: data.user.profileComplete ?? true,
           reputationPoints:
             data.user.reputationPoints ?? user?.reputationPoints,
@@ -611,7 +608,7 @@ export function OnboardingProvider({
           farcasterUsername:
             data.user.farcasterUsername ?? user?.farcasterUsername,
           twitterUsername: data.user.twitterUsername ?? user?.twitterUsername,
-          nftTokenId: data.user.nftTokenId ?? undefined,
+          nftTokenId: data.user.nftTokenId,
           createdAt: data.user.createdAt ?? user?.createdAt,
           onChainRegistered:
             data.user.onChainRegistered ?? user?.onChainRegistered,
@@ -622,7 +619,7 @@ export function OnboardingProvider({
 
       clearReferralCode();
       setSubmittedProfile(payload);
-      setOnchainReferralCode(referralCode ?? null);
+      setOnchainReferralCode(referralCode || null);
       setPendingOnchainSubmission({ ...payload });
       setStage('ONCHAIN');
       setIsSubmitting(false);
@@ -711,7 +708,7 @@ export function OnboardingProvider({
           onLogout={logout}
           user={user}
           importedData={importedProfileData}
-          initialEmail={user?.email ?? null}
+          initialEmail={user?.email || null}
         />
       )}
     </>

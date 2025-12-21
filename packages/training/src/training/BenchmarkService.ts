@@ -15,17 +15,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {
-  and,
-  db,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  not,
-  trainedModels,
-  users,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import { BenchmarkRunner } from '../benchmark/BenchmarkRunner';
 import { getAgentRuntimeManager } from '../dependencies';
 import { logger } from '../utils/logger';
@@ -152,13 +142,9 @@ export class BenchmarkService {
 
     // Force the runtime to use the specific model we're benchmarking
     // by temporarily overriding the model selection
-    const modelResult = await db
-      .select()
-      .from(trainedModels)
-      .where(eq(trainedModels.modelId, modelId))
-      .limit(1);
-
-    const model = modelResult[0];
+    const model = await db.trainedModel.findUnique({
+      where: { modelId },
+    });
 
     if (!model) {
       throw new Error(`Model not found: ${modelId}`);
@@ -260,13 +246,9 @@ export class BenchmarkService {
     );
 
     // Get new model's benchmark results
-    const newModelResult = await db
-      .select()
-      .from(trainedModels)
-      .where(eq(trainedModels.modelId, newModelId))
-      .limit(1);
-
-    const newModel = newModelResult[0];
+    const newModel = await db.trainedModel.findUnique({
+      where: { modelId: newModelId },
+    });
 
     if (!newModel) {
       throw new Error(`Model not found: ${newModelId}`);
@@ -279,20 +261,14 @@ export class BenchmarkService {
     const newScore = newModel.benchmarkScore;
 
     // Get previous best model (excluding the new one)
-    const previousBestResult = await db
-      .select()
-      .from(trainedModels)
-      .where(
-        and(
-          not(eq(trainedModels.modelId, newModelId)),
-          inArray(trainedModels.status, ['ready', 'deployed']),
-          isNotNull(trainedModels.benchmarkScore)
-        )
-      )
-      .orderBy(desc(trainedModels.benchmarkScore))
-      .limit(1);
-
-    const previousBest = previousBestResult[0];
+    const previousBest = await db.trainedModel.findFirst({
+      where: {
+        modelId: { not: newModelId },
+        status: { in: ['ready', 'deployed'] },
+        benchmarkScore: { not: null },
+      },
+      orderBy: { benchmarkScore: 'desc' },
+    });
 
     // If no previous model, always deploy
     if (!previousBest) {
@@ -367,9 +343,9 @@ export class BenchmarkService {
     modelId: string,
     results: BenchmarkResults
   ): Promise<void> {
-    await db
-      .update(trainedModels)
-      .set({
+    await db.trainedModel.update({
+      where: { modelId },
+      data: {
         benchmarkScore: results.benchmarkScore,
         accuracy: results.accuracy,
         evalMetrics: {
@@ -382,8 +358,9 @@ export class BenchmarkService {
           duration: results.duration,
           benchmarkedAt: results.timestamp.toISOString(),
         },
-      })
-      .where(eq(trainedModels.modelId, modelId));
+        updatedAt: new Date(),
+      },
+    });
 
     logger.info(
       'Stored benchmark results',
@@ -476,31 +453,21 @@ export class BenchmarkService {
    */
   private async getTestAgent() {
     // Try to find a specific test agent
-    let agentResult = await db
-      .select()
-      .from(users)
-      .where(
-        and(
-          eq(users.isAgent, true),
-          inArray(users.username, [
-            'trader-aggressive',
-            'test-agent',
-            'benchmark-agent',
-          ])
-        )
-      )
-      .limit(1);
+    let agent = await db.user.findFirst({
+      where: {
+        isAgent: true,
+        username: {
+          in: ['trader-aggressive', 'test-agent', 'benchmark-agent'],
+        },
+      },
+    });
 
     // Fall back to any agent
-    if (agentResult.length === 0) {
-      agentResult = await db
-        .select()
-        .from(users)
-        .where(eq(users.isAgent, true))
-        .limit(1);
+    if (!agent) {
+      agent = await db.user.findFirst({
+        where: { isAgent: true },
+      });
     }
-
-    const agent = agentResult[0];
 
     if (!agent) {
       throw new Error('No test agent available for benchmarking');
@@ -524,14 +491,13 @@ export class BenchmarkService {
    * Get benchmark summary for monitoring
    */
   async getBenchmarkSummary() {
-    const models = await db
-      .select()
-      .from(trainedModels)
-      .where(isNotNull(trainedModels.benchmarkScore))
-      .orderBy(desc(trainedModels.benchmarkScore))
-      .limit(10);
+    const models = await db.trainedModel.findMany({
+      where: { benchmarkScore: { not: null } },
+      orderBy: { benchmarkScore: 'desc' },
+      take: 10,
+    });
 
-    const summary = models.map((m: (typeof models)[number]) => ({
+    const summary = models.map((m) => ({
       modelId: m.modelId,
       version: m.version,
       score: m.benchmarkScore,
@@ -545,8 +511,8 @@ export class BenchmarkService {
       topModels: summary.slice(0, 5),
       recentModels: summary
         .sort(
-          (a: (typeof summary)[number], b: (typeof summary)[number]) =>
-            b.createdAt.getTime() - a.createdAt.getTime()
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         )
         .slice(0, 5),
     };

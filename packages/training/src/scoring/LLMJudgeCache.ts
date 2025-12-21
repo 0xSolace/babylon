@@ -11,7 +11,7 @@
  * @packageDocumentation
  */
 
-import { db, eq, trajectories } from '@babylon/db';
+import { db } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { createHash } from 'crypto';
 import { getRubricHash, RUBRICS_VERSION } from '../rubrics';
@@ -280,27 +280,21 @@ export class LLMJudgeCache {
    * Loads previously scored trajectories into cache
    */
   async warmFromDatabase(limit = 1000): Promise<number> {
-    const results = await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        stepsJson: trajectories.stepsJson,
-        aiJudgeReward: trajectories.aiJudgeReward,
-        aiJudgeReasoning: trajectories.aiJudgeReasoning,
-        judgedAt: trajectories.judgedAt,
-      })
-      .from(trajectories)
-      .where(eq(trajectories.isTrainingData, true))
-      .limit(limit);
+    const results = await db.trajectory.findMany({
+      where: { isTrainingData: true },
+      take: limit,
+      orderBy: { judgedAt: 'desc' },
+    });
 
     let loaded = 0;
 
     for (const row of results) {
       if (row.aiJudgeReward !== null && row.aiJudgeReasoning && row.judgedAt) {
-        // Use 'default' archetype for warmed entries since archetype isn't stored
+        const archetype = row.archetype ?? 'default';
         this.set(
           row.trajectoryId,
           row.stepsJson,
-          'default',
+          archetype,
           row.aiJudgeReward,
           row.aiJudgeReasoning
         );

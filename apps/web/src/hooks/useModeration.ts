@@ -6,7 +6,8 @@
  * and local moderation features.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import type { Address } from 'viem';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 
@@ -129,35 +130,35 @@ const getModerationConfig = () => ({
     '0x0000000000000000000000000000000000000000') as Address,
 });
 
+interface StakeResult {
+  amount: bigint;
+  stakedAt: bigint;
+  stakedBlock: bigint;
+  lastActivityBlock: bigint;
+  isStaked: boolean;
+}
+
 /**
  * Hook to check if a user is banned
  */
 export function useBanStatus(address: Address | undefined) {
-  const [isBanned, setIsBanned] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const publicClient = usePublicClient();
   const config = getModerationConfig();
 
-  useEffect(() => {
-    if (!address || !publicClient) {
-      setIsLoading(false);
-      return;
-    }
-
-    const checkBanStatus = async () => {
-      setIsLoading(true);
-      const banned = await publicClient.readContract({
+  const { data: isBanned = false, isLoading } = useQuery({
+    queryKey: ['banStatus', address],
+    queryFn: async (): Promise<boolean> => {
+      const banned = await publicClient!.readContract({
         address: config.banManager,
         abi: BAN_MANAGER_ABI,
         functionName: 'isAddressBanned',
-        args: [address],
+        args: [address!],
       });
-      setIsBanned(banned);
-      setIsLoading(false);
-    };
-
-    checkBanStatus();
-  }, [address, publicClient, config.banManager]);
+      return banned;
+    },
+    enabled: !!address && !!publicClient,
+    staleTime: 60000,
+  });
 
   return { isBanned, isLoading };
 }
@@ -167,78 +168,71 @@ export function useBanStatus(address: Address | undefined) {
  */
 export function useStake() {
   const { address } = useAccount();
-  const [stake, setStake] = useState<StakeInfo | null>(null);
-  const [canReport, setCanReport] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const publicClient = usePublicClient();
+  const queryClient = useQueryClient();
   const config = getModerationConfig();
 
+  const { data, isLoading } = useQuery({
+    queryKey: ['moderationStake', address],
+    queryFn: async (): Promise<{ stake: StakeInfo; canReport: boolean }> => {
+      const [stakeResult, canReportResult] = await Promise.all([
+        publicClient!.readContract({
+          address: config.moderationMarketplace,
+          abi: MODERATION_MARKETPLACE_ABI,
+          functionName: 'getStake',
+          args: [address!],
+        }),
+        publicClient!.readContract({
+          address: config.moderationMarketplace,
+          abi: MODERATION_MARKETPLACE_ABI,
+          functionName: 'canReport',
+          args: [address!],
+        }),
+      ]);
+
+      const { amount, stakedAt, isStaked } = stakeResult as StakeResult;
+
+      return {
+        stake: {
+          amount,
+          stakedAt: Number(stakedAt),
+          isStaked,
+        },
+        canReport: canReportResult,
+      };
+    },
+    enabled: !!address && !!publicClient,
+    staleTime: 30000,
+  });
+
   const refreshStake = useCallback(async () => {
-    if (!address || !publicClient) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-
-    const [stakeResult, canReportResult] = await Promise.all([
-      publicClient.readContract({
-        address: config.moderationMarketplace,
-        abi: MODERATION_MARKETPLACE_ABI,
-        functionName: 'getStake',
-        args: [address],
-      }),
-      publicClient.readContract({
-        address: config.moderationMarketplace,
-        abi: MODERATION_MARKETPLACE_ABI,
-        functionName: 'canReport',
-        args: [address],
-      }),
-    ]);
-
-    const { amount, stakedAt, isStaked } = stakeResult as {
-      amount: bigint;
-      stakedAt: bigint;
-      stakedBlock: bigint;
-      lastActivityBlock: bigint;
-      isStaked: boolean;
-    };
-
-    setStake({
-      amount,
-      stakedAt: Number(stakedAt),
-      isStaked,
+    await queryClient.invalidateQueries({
+      queryKey: ['moderationStake', address],
     });
-    setCanReport(canReportResult);
-    setIsLoading(false);
-  }, [address, publicClient, config.moderationMarketplace]);
+  }, [queryClient, address]);
 
-  useEffect(() => {
-    refreshStake();
-  }, [refreshStake]);
-
-  return { stake, canReport, isLoading, refreshStake };
+  return {
+    stake: data?.stake ?? null,
+    canReport: data?.canReport ?? false,
+    isLoading,
+    refreshStake,
+  };
 }
 
 /**
  * Hook to stake in the moderation system
  */
 export function useStakeAction() {
-  const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { data: walletClient } = useWalletClient();
   const { address } = useAccount();
+  const queryClient = useQueryClient();
   const config = getModerationConfig();
 
-  const stake = useCallback(
-    async (amount: bigint) => {
+  const mutation = useMutation({
+    mutationFn: async (amount: bigint): Promise<`0x${string}`> => {
       if (!walletClient || !address) {
-        setError('Wallet not connected');
-        return null;
+        throw new Error('Wallet not connected');
       }
-
-      setIsPending(true);
-      setError(null);
 
       const hash = await walletClient.writeContract({
         address: config.moderationMarketplace,
@@ -248,38 +242,51 @@ export function useStakeAction() {
         value: amount,
       });
 
-      setIsPending(false);
       return hash;
     },
-    [walletClient, address, config.moderationMarketplace]
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['moderationStake', address],
+      });
+    },
+  });
+
+  const stake = useCallback(
+    async (amount: bigint) => {
+      return mutation.mutateAsync(amount);
+    },
+    [mutation]
   );
 
-  return { stake, isPending, error };
+  return {
+    stake,
+    isPending: mutation.isPending,
+    error: mutation.error ? (mutation.error as Error).message : null,
+  };
 }
 
 /**
  * Hook to open a ban case
  */
 export function useOpenCase() {
-  const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { data: walletClient } = useWalletClient();
   const { address } = useAccount();
+  const queryClient = useQueryClient();
   const config = getModerationConfig();
 
-  const openCase = useCallback(
-    async (
-      target: Address,
-      reason: string,
-      evidenceHash: `0x${string}` = '0x0000000000000000000000000000000000000000000000000000000000000000'
-    ) => {
+  const mutation = useMutation({
+    mutationFn: async ({
+      target,
+      reason,
+      evidenceHash = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
+    }: {
+      target: Address;
+      reason: string;
+      evidenceHash?: `0x${string}`;
+    }): Promise<`0x${string}`> => {
       if (!walletClient || !address) {
-        setError('Wallet not connected');
-        return null;
+        throw new Error('Wallet not connected');
       }
-
-      setIsPending(true);
-      setError(null);
 
       const hash = await walletClient.writeContract({
         address: config.moderationMarketplace,
@@ -288,34 +295,47 @@ export function useOpenCase() {
         args: [target, reason, evidenceHash],
       });
 
-      setIsPending(false);
       return hash;
     },
-    [walletClient, address, config.moderationMarketplace]
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['activeCases'] });
+    },
+  });
+
+  const openCase = useCallback(
+    async (target: Address, reason: string, evidenceHash?: `0x${string}`) => {
+      return mutation.mutateAsync({ target, reason, evidenceHash });
+    },
+    [mutation]
   );
 
-  return { openCase, isPending, error };
+  return {
+    openCase,
+    isPending: mutation.isPending,
+    error: mutation.error ? (mutation.error as Error).message : null,
+  };
 }
 
 /**
  * Hook to vote on a ban case
  */
 export function useVote() {
-  const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { data: walletClient } = useWalletClient();
   const { address } = useAccount();
+  const queryClient = useQueryClient();
   const config = getModerationConfig();
 
-  const vote = useCallback(
-    async (caseId: `0x${string}`, position: VotePosition) => {
+  const mutation = useMutation({
+    mutationFn: async ({
+      caseId,
+      position,
+    }: {
+      caseId: `0x${string}`;
+      position: VotePosition;
+    }): Promise<`0x${string}`> => {
       if (!walletClient || !address) {
-        setError('Wallet not connected');
-        return null;
+        throw new Error('Wallet not connected');
       }
-
-      setIsPending(true);
-      setError(null);
 
       const hash = await walletClient.writeContract({
         address: config.moderationMarketplace,
@@ -324,46 +344,54 @@ export function useVote() {
         args: [caseId, position],
       });
 
-      setIsPending(false);
       return hash;
     },
-    [walletClient, address, config.moderationMarketplace]
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['activeCases'] });
+    },
+  });
+
+  const vote = useCallback(
+    async (caseId: `0x${string}`, position: VotePosition) => {
+      return mutation.mutateAsync({ caseId, position });
+    },
+    [mutation]
   );
 
-  return { vote, isPending, error };
+  return {
+    vote,
+    isPending: mutation.isPending,
+    error: mutation.error ? (mutation.error as Error).message : null,
+  };
 }
 
 /**
  * Hook to get all active moderation cases
  */
 export function useActiveCases() {
-  const [caseIds, setCaseIds] = useState<`0x${string}`[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const publicClient = usePublicClient();
+  const queryClient = useQueryClient();
   const config = getModerationConfig();
 
+  const { data: caseIds = [], isLoading } = useQuery({
+    queryKey: ['activeCases'],
+    queryFn: async (): Promise<`0x${string}`[]> => {
+      const ids = await publicClient!.readContract({
+        address: config.moderationMarketplace,
+        abi: MODERATION_MARKETPLACE_ABI,
+        functionName: 'getAllCaseIds',
+        args: [],
+      });
+
+      return ids as `0x${string}`[];
+    },
+    enabled: !!publicClient,
+    staleTime: 60000,
+  });
+
   const refreshCases = useCallback(async () => {
-    if (!publicClient) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-
-    const ids = await publicClient.readContract({
-      address: config.moderationMarketplace,
-      abi: MODERATION_MARKETPLACE_ABI,
-      functionName: 'getAllCaseIds',
-      args: [],
-    });
-
-    setCaseIds(ids as `0x${string}`[]);
-    setIsLoading(false);
-  }, [publicClient, config.moderationMarketplace]);
-
-  useEffect(() => {
-    refreshCases();
-  }, [refreshCases]);
+    await queryClient.invalidateQueries({ queryKey: ['activeCases'] });
+  }, [queryClient]);
 
   return { caseIds, isLoading, refreshCases };
 }

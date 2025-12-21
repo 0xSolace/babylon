@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -42,99 +43,108 @@ interface GroupInvite {
   invitedAt: string;
 }
 
+interface NotificationsResponse {
+  notifications: Notification[];
+  unreadCount: number;
+}
+
+interface GroupInvitesResponse {
+  invites: GroupInvite[];
+}
+
 export default function NotificationsPage() {
   const { authenticated, user, getAccessToken } = useAuth();
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [groupInvites, setGroupInvites] = useState<GroupInvite[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const queryClient = useQueryClient();
+  // Local state for optimistic updates on read status
+  const [localNotifications, setLocalNotifications] = useState<Notification[]>(
+    []
+  );
+  const [localUnreadCount, setLocalUnreadCount] = useState(0);
 
-  const fetchNotifications = useCallback(
-    async (showLoading = true, silent = false) => {
-      if (showLoading) {
-        setLoading(true);
-      }
+  const {
+    data: notificationsData,
+    isLoading: notificationsLoading,
+    refetch: refetchNotifications,
+  } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: async (): Promise<NotificationsResponse> => {
       const token = await getAccessToken();
 
       if (!token) {
-        if (showLoading) {
-          setLoading(false);
-        }
-        return;
+        return { notifications: [], unreadCount: 0 };
       }
 
-      const [notifResponse, invitesResponse] = await Promise.all([
-        fetch('/api/notifications?limit=100', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }),
-        fetch('/api/groups/invites', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }),
-      ]);
+      const response = await fetch('/api/notifications?limit=100', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-      if (notifResponse.ok) {
-        const data = await notifResponse.json();
-        setNotifications(data.notifications || []);
-        setUnreadCount(data.unreadCount || 0);
-      } else {
-        console.error(
-          'Failed to fetch notifications:',
-          notifResponse.statusText
-        );
-        if (!silent) {
-          toast.error('Failed to refresh notifications');
-        }
+      if (!response.ok) {
+        throw new Error('Failed to fetch notifications');
       }
 
-      if (invitesResponse.ok) {
-        const data = await invitesResponse.json();
-        setGroupInvites(data.invites || []);
-      }
-
-      if (!silent && notifResponse.ok) {
-        toast.success('Notifications refreshed');
-      }
-
-      if (showLoading) {
-        setLoading(false);
-      }
+      return (await response.json()) as NotificationsResponse;
     },
-    [getAccessToken]
-  );
+    enabled: authenticated && !!user,
+    refetchInterval: 60000, // Poll every 1 minute
+    refetchIntervalInBackground: false, // Only poll when visible
+  });
+
+  const { data: invitesData, isLoading: invitesLoading } = useQuery({
+    queryKey: ['group-invites'],
+    queryFn: async (): Promise<GroupInvite[]> => {
+      const token = await getAccessToken();
+
+      if (!token) {
+        return [];
+      }
+
+      const response = await fetch('/api/groups/invites', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch group invites');
+      }
+
+      const data = (await response.json()) as GroupInvitesResponse;
+      return data.invites || [];
+    },
+    enabled: authenticated && !!user,
+  });
+
+  // Keep local state in sync with query data
+  useEffect(() => {
+    if (notificationsData) {
+      setLocalNotifications(notificationsData.notifications || []);
+      setLocalUnreadCount(notificationsData.unreadCount || 0);
+    }
+  }, [notificationsData]);
+
+  const notifications = localNotifications;
+  const groupInvites = invitesData ?? [];
+  const loading = notificationsLoading || invitesLoading;
+  const unreadCount = localUnreadCount;
 
   const handleRefresh = useCallback(async () => {
-    await fetchNotifications(false, false); // Show loading via pull-to-refresh indicator, show toast on complete
-  }, [fetchNotifications]);
+    await refetchNotifications();
+    await queryClient.invalidateQueries({ queryKey: ['group-invites'] });
+    toast.success('Notifications refreshed');
+  }, [refetchNotifications, queryClient]);
 
   // Pull-to-refresh hook
   const { pullDistance, isRefreshing, containerRef } = usePullToRefresh({
     onRefresh: handleRefresh,
   });
 
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setLoading(false);
-      return;
-    }
-
-    fetchNotifications(true, true); // Initial load: show loading, but silent (no toast)
-
-    // Poll for new notifications every 1 minute when page is visible
-    // Use silent refresh (no loading indicator) for polling
-    const interval = setInterval(() => {
-      // Only refresh if page is visible (not in background tab)
-      if (document.visibilityState === 'visible') {
-        fetchNotifications(false, true); // Silent refresh, no loading indicator, no toast
-      }
-    }, 60000); // 60 seconds = 1 minute
-
-    return () => clearInterval(interval);
-  }, [authenticated, user, fetchNotifications]);
+  const fetchNotifications = useCallback(async () => {
+    await refetchNotifications();
+    await queryClient.invalidateQueries({ queryKey: ['group-invites'] });
+  }, [refetchNotifications, queryClient]);
 
   const markAsRead = useCallback(
     async (notificationId: string, isAlreadyRead: boolean) => {
@@ -148,10 +158,10 @@ export default function NotificationsPage() {
       if (!token) return;
 
       // Update local state optimistically first
-      setNotifications((prev) =>
+      setLocalNotifications((prev) =>
         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      setLocalUnreadCount((prev) => Math.max(0, prev - 1));
 
       // Then make the API call
       const response = await fetch('/api/notifications', {
@@ -171,10 +181,10 @@ export default function NotificationsPage() {
           response.statusText
         );
         // Revert optimistic update on error
-        setNotifications((prev) =>
+        setLocalNotifications((prev) =>
           prev.map((n) => (n.id === notificationId ? { ...n, read: false } : n))
         );
-        setUnreadCount((prev) => prev + 1);
+        setLocalUnreadCount((prev) => prev + 1);
       }
     },
     [getAccessToken]
@@ -418,7 +428,7 @@ export default function NotificationsPage() {
                     invitedAt={invite.invitedAt}
                     onAccepted={(_groupId, chatId) => {
                       // Refresh invites list
-                      fetchNotifications(false, true);
+                      void fetchNotifications();
                       toast.success('Joined group!');
                       // Navigate to chat if available
                       if (chatId) {
@@ -427,7 +437,7 @@ export default function NotificationsPage() {
                     }}
                     onDeclined={() => {
                       // Refresh invites list
-                      fetchNotifications(false, true);
+                      void fetchNotifications();
                       toast.success('Invite declined');
                     }}
                   />

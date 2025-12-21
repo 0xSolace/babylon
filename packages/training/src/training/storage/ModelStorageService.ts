@@ -8,7 +8,8 @@
  * Uses permanent (Arweave) storage for production models.
  */
 
-import { db, eq, trainedModels } from '@babylon/db';
+import type { StorageClient as JejuStorageClient } from '@babylon/api';
+import { db } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
 import fs from 'fs/promises';
 import path from 'path';
@@ -18,33 +19,7 @@ import { logger } from '../../utils/logger';
 // Types
 // ============================================================================
 
-interface StorageClient {
-  upload: (
-    key: string,
-    data: Buffer | string,
-    options?: {
-      contentType?: string;
-      metadata?: Record<string, string>;
-      permanent?: boolean;
-    }
-  ) => Promise<{ url: string; cid: string; size: number }>;
-  uploadJson: <T>(
-    key: string,
-    data: T,
-    options?: { permanent?: boolean }
-  ) => Promise<{ url: string; cid: string }>;
-  download: (key: string) => Promise<Buffer>;
-  downloadJson: <T>(cid: string) => Promise<T>;
-  delete: (key: string) => Promise<void>;
-  list: (prefix?: string) => Promise<
-    Array<{
-      key: string;
-      cid: string;
-      size: number;
-    }>
-  >;
-  isInitialized: () => boolean;
-}
+type StorageClient = JejuStorageClient;
 
 export interface ModelMetadata {
   trainingBatch?: string;
@@ -81,8 +56,7 @@ async function getStorage(): Promise<StorageClient> {
   if (!storage.isInitialized()) {
     await initializeStorage();
   }
-  // Cast through unknown since API client has compatible methods
-  storageClient = storage as unknown as StorageClient;
+  storageClient = storage;
   return storageClient;
 }
 
@@ -115,25 +89,20 @@ export class ModelStorageService {
     });
 
     // Upload model file
-    const modelResult = await storage.upload(
-      `${this.prefix}${options.version}/${fileName}`,
-      modelData,
-      {
-        contentType: 'application/octet-stream',
-        permanent: options.permanent ?? true,
-        metadata: {
-          'App-Name': 'babylon-ai',
-          'Content-Type': 'model',
-          Version: options.version,
-        },
-      }
-    );
+    const modelResult = await storage.upload(modelData, {
+      name: `${this.prefix}${options.version}/${fileName}`,
+      mimeType: 'application/octet-stream',
+      metadata: {
+        'App-Name': 'babylon-ai',
+        'Content-Type': 'model',
+        Version: options.version,
+      },
+    });
 
     // Upload metadata
     await storage.uploadJson(
-      `${this.prefix}${options.version}/metadata.json`,
       options.metadata ?? {},
-      { permanent: options.permanent ?? true }
+      `${this.prefix}${options.version}/metadata.json`
     );
 
     logger.info('Model uploaded to Jeju Storage', {
@@ -143,24 +112,25 @@ export class ModelStorageService {
     });
 
     // Save to database
-    await db.insert(trainedModels).values({
-      id: `model-${Date.now()}`,
-      modelId: `babylon-agent-${options.version}`,
-      version: options.version,
-      baseModel:
-        (options.metadata?.baseModel as string) || 'unsloth/Qwen3-4B-128K',
-      storagePath: modelResult.url,
-      accuracy: (options.metadata?.accuracy as number) || null,
-      avgReward: (options.metadata?.avgReward as number) || null,
-      status: 'ready',
-      agentsUsing: 0,
-      updatedAt: new Date(),
+    await db.trainedModel.create({
+      data: {
+        id: `model-${Date.now()}`,
+        modelId: `babylon-agent-${options.version}`,
+        version: options.version,
+        baseModel: options.metadata?.baseModel ?? 'unsloth/Qwen3-4B-128K',
+        trainingBatch: options.metadata?.trainingBatch ?? null,
+        storagePath: modelResult.url,
+        accuracy: options.metadata?.accuracy ?? null,
+        avgReward: options.metadata?.avgReward ?? null,
+        status: 'ready',
+        agentsUsing: 0,
+        updatedAt: new Date(),
+      },
     });
 
     return {
       version: options.version,
-      baseModel:
-        (options.metadata?.baseModel as string) || 'unsloth/Qwen3-4B-128K',
+      baseModel: options.metadata?.baseModel ?? 'unsloth/Qwen3-4B-128K',
       blobUrl: modelResult.url,
       cid: modelResult.cid,
       size: modelData.length,
@@ -177,13 +147,9 @@ export class ModelStorageService {
     modelData: Buffer;
     metadata: ModelVersion['metadata'];
   }> {
-    const modelResult = await db
-      .select({ storagePath: trainedModels.storagePath })
-      .from(trainedModels)
-      .where(eq(trainedModels.version, version))
-      .limit(1);
-
-    const model = modelResult[0];
+    const model = await db.trainedModel.findFirst({
+      where: { version },
+    });
 
     if (!model) {
       throw new Error(`Model version ${version} not found`);
@@ -224,11 +190,10 @@ export class ModelStorageService {
    * List all model versions
    */
   async listModels(): Promise<ModelVersion[]> {
-    const dbModels = await db
-      .select()
-      .from(trainedModels)
-      .where(eq(trainedModels.status, 'ready'))
-      .orderBy(trainedModels.updatedAt);
+    const dbModels = await db.trainedModel.findMany({
+      where: { status: 'ready' },
+      orderBy: { updatedAt: 'desc' },
+    });
 
     const models: ModelVersion[] = [];
 
@@ -254,7 +219,7 @@ export class ModelStorageService {
           ? model.storagePath
           : undefined,
         size: 0,
-        uploadedAt: model.updatedAt,
+        uploadedAt: new Date(model.updatedAt),
         metadata,
         provider: 'jeju',
       });
@@ -272,13 +237,9 @@ export class ModelStorageService {
   async deleteModel(version: string): Promise<void> {
     const storage = await getStorage();
 
-    const modelResult = await db
-      .select({ storagePath: trainedModels.storagePath })
-      .from(trainedModels)
-      .where(eq(trainedModels.version, version))
-      .limit(1);
-
-    const model = modelResult[0];
+    const model = await db.trainedModel.findFirst({
+      where: { version },
+    });
 
     if (model) {
       // Arweave content is permanent
@@ -304,13 +265,14 @@ export class ModelStorageService {
     }
 
     // Archive in database
-    await db
-      .update(trainedModels)
-      .set({
+    await db.trainedModel.updateMany({
+      where: { version },
+      data: {
         status: 'archived',
         archivedAt: new Date(),
-      })
-      .where(eq(trainedModels.version, version));
+        updatedAt: new Date(),
+      },
+    });
 
     logger.info('Model archived', { version });
   }

@@ -257,8 +257,8 @@ export default function ICOAdminPage() {
       return;
     }
 
-    const response = await fetch('/api/admin/stats').catch(() => null);
-    setIsAuthorized(response?.ok ?? false);
+    const response = await fetch('/api/admin/stats');
+    setIsAuthorized(response.ok);
     setLoading(false);
   }, [authenticated, ready]);
 

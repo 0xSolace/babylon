@@ -453,44 +453,40 @@ export class ComputeTriggerService {
       return;
     }
 
+    const account = this.config.privateKey
+      ? privateKeyToAccount(this.config.privateKey as Hex)
+      : null;
+
+    if (!account) {
+      logger.debug(
+        '[ComputeTrigger] No account configured, skipping on-chain load'
+      );
+      return;
+    }
+
     const publicClient = this.getPublicClient();
 
     const abi = parseAbi([
       'function getTriggersByOwner(address owner) view returns ((bytes32 id, uint8 triggerType, string cronExpression, string webhookPath, bytes actionData, bool active)[])',
     ]);
 
-    try {
-      const account = this.config.privateKey
-        ? privateKeyToAccount(this.config.privateKey as Hex)
-        : null;
+    const triggers = await publicClient.readContract({
+      address: this.config.triggerRegistryAddress as Address,
+      abi,
+      functionName: 'getTriggersByOwner',
+      args: [account.address],
+    });
 
-      if (!account) {
-        logger.debug(
-          '[ComputeTrigger] No account configured, skipping on-chain load'
-        );
-        return;
+    logger.info('[ComputeTrigger] Loaded on-chain triggers', {
+      count: triggers.length,
+    });
+
+    // Parse and register each trigger
+    for (const onchainTrigger of triggers) {
+      const trigger = this.parseOnChainTrigger(onchainTrigger);
+      if (trigger) {
+        this.registeredTriggers.set(trigger.id, trigger);
       }
-
-      const triggers = await publicClient.readContract({
-        address: this.config.triggerRegistryAddress as Address,
-        abi,
-        functionName: 'getTriggersByOwner',
-        args: [account.address],
-      });
-
-      logger.info('[ComputeTrigger] Loaded on-chain triggers', {
-        count: triggers.length,
-      });
-
-      // Parse and register each trigger
-      for (const onchainTrigger of triggers) {
-        const trigger = this.parseOnChainTrigger(onchainTrigger);
-        if (trigger) {
-          this.registeredTriggers.set(trigger.id, trigger);
-        }
-      }
-    } catch (err) {
-      logger.warn('[ComputeTrigger] Failed to load on-chain triggers', { err });
     }
   }
 
@@ -735,33 +731,29 @@ export class ComputeTriggerService {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout * 1000);
 
-    try {
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Trigger-Source': 'compute-marketplace',
-          'X-Cron-Secret': process.env.CRON_SECRET ?? '',
-        },
-        body:
-          method !== 'GET'
-            ? JSON.stringify({ ...payload, ...input })
-            : undefined,
-        signal: controller.signal,
-      });
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Trigger-Source': 'compute-marketplace',
+        'X-Cron-Secret': process.env.CRON_SECRET ?? '',
+      },
+      body:
+        method !== 'GET' ? JSON.stringify({ ...payload, ...input }) : undefined,
+      signal: controller.signal,
+    });
 
-      const data = await response.json().catch(() => ({}));
+    clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status}: ${data.error ?? response.statusText}`
-        );
-      }
+    const data = (await response.json()) as Record<string, unknown>;
 
-      return data as Record<string, unknown>;
-    } finally {
-      clearTimeout(timeoutId);
+    if (!response.ok) {
+      const errorMessage =
+        typeof data.error === 'string' ? data.error : response.statusText;
+      throw new Error(`HTTP ${response.status}: ${errorMessage}`);
     }
+
+    return data;
   }
 
   /**

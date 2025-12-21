@@ -8,9 +8,9 @@
 import { Database } from 'bun:sqlite';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { ethers } from 'ethers';
 import express, { type Request, type Response } from 'express';
 import { createServer } from 'http';
+import { createPublicClient, http } from 'viem';
 import { WebSocketServer } from 'ws';
 import { agentCard } from './agent-card';
 import { setupDatabase } from './database/setup';
@@ -32,11 +32,10 @@ const db = new Database('./data/a2a.db', { create: true });
 setupDatabase(db);
 
 // Initialize services
-const provider = new ethers.JsonRpcProvider(RPC_URL, undefined, {
-  staticNetwork: true,
-  batchMaxCount: 1,
+const publicClient = createPublicClient({
+  transport: http(RPC_URL),
 });
-const blockchain = new LocalBlockchain(provider);
+const blockchain = new LocalBlockchain(publicClient);
 const agentRegistry = new AgentRegistry(db, blockchain);
 
 // Initialize handlers

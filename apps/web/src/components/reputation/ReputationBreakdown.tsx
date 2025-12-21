@@ -27,13 +27,14 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Activity, DollarSign, MessageSquare } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 /**
  * Breakdown data structure from API.
  */
 interface BreakdownData {
+  success: boolean;
   userId: string;
   reputationScore: number;
   trustLevel: string;
@@ -66,27 +67,21 @@ export function ReputationBreakdown({
   userId,
   className = '',
 }: ReputationBreakdownProps) {
-  const [breakdown, setBreakdown] = useState<BreakdownData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchBreakdown = async () => {
-      setLoading(true);
+  const { data: breakdown, isLoading } = useQuery({
+    queryKey: ['reputation', 'breakdown', userId],
+    queryFn: async (): Promise<BreakdownData | null> => {
       const response = await fetch(
         `/api/reputation/breakdown/${encodeURIComponent(userId)}`
       );
-      const data = await response.json();
-
-      if (data.success) {
-        setBreakdown(data);
+      if (!response.ok) {
+        throw new Error('Failed to fetch breakdown');
       }
-      setLoading(false);
-    };
+      const data: BreakdownData = await response.json();
+      return data.success ? data : null;
+    },
+  });
 
-    fetchBreakdown();
-  }, [userId]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={cn('rounded-lg bg-sidebar p-4', className)}>
         <div className="text-muted-foreground text-sm">

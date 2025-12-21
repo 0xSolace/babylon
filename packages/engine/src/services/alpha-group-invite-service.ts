@@ -134,7 +134,7 @@ export class AlphaGroupInviteService {
       }
 
       // Check if user is at their group limit
-      const [activeGroupResult] = await db
+      const [activeGroupResult] = (await db
         .select({ count: count() })
         .from(groupChatMemberships)
         .where(
@@ -142,7 +142,7 @@ export class AlphaGroupInviteService {
             eq(groupChatMemberships.userId, userScore.userId),
             eq(groupChatMemberships.isActive, true)
           )
-        );
+        )) as unknown as { count: number }[];
 
       const activeGroupCount = activeGroupResult?.count ?? 0;
 
@@ -173,20 +173,28 @@ export class AlphaGroupInviteService {
         .limit(1);
 
       if (latestMembership) {
-        const hoursSinceJoin =
-          (Date.now() - latestMembership.joinedAt.getTime()) / (1000 * 60 * 60);
+        const joinedAt = latestMembership.joinedAt
+          ? latestMembership.joinedAt instanceof Date
+            ? latestMembership.joinedAt
+            : new Date(String(latestMembership.joinedAt))
+          : null;
 
-        if (hoursSinceJoin < AlphaGroupInviteService.INVITE_COOLDOWN_HOURS) {
-          logger.debug(
-            'User in invite cooldown, skipping',
-            {
-              userId: userScore.userId,
-              hoursSinceJoin: hoursSinceJoin.toFixed(2),
-              cooldownRequired: AlphaGroupInviteService.INVITE_COOLDOWN_HOURS,
-            },
-            'AlphaGroupInviteService'
-          );
-          continue;
+        if (joinedAt) {
+          const hoursSinceJoin =
+            (Date.now() - joinedAt.getTime()) / (1000 * 60 * 60);
+
+          if (hoursSinceJoin < AlphaGroupInviteService.INVITE_COOLDOWN_HOURS) {
+            logger.debug(
+              'User in invite cooldown, skipping',
+              {
+                userId: userScore.userId,
+                hoursSinceJoin: hoursSinceJoin.toFixed(2),
+                cooldownRequired: AlphaGroupInviteService.INVITE_COOLDOWN_HOURS,
+              },
+              'AlphaGroupInviteService'
+            );
+            continue;
+          }
         }
       }
 
@@ -252,19 +260,25 @@ export class AlphaGroupInviteService {
   }> {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const [totalResult] = await db
-      .select({ count: count() })
-      .from(groupChatMemberships);
+    type CountResult = { count: number };
 
-    const [activeResult] = await db
+    const [totalResult] = (await db
+      .select({ count: count() })
+      .from(groupChatMemberships)) as unknown as CountResult[];
+
+    const [activeResult] = (await db
       .select({ count: count() })
       .from(groupChatMemberships)
-      .where(eq(groupChatMemberships.isActive, true));
+      .where(
+        eq(groupChatMemberships.isActive, true)
+      )) as unknown as CountResult[];
 
-    const [recentResult] = await db
+    const [recentResult] = (await db
       .select({ count: count() })
       .from(groupChatMemberships)
-      .where(gte(groupChatMemberships.joinedAt, oneDayAgo));
+      .where(
+        gte(groupChatMemberships.joinedAt, oneDayAgo)
+      )) as unknown as CountResult[];
 
     return {
       totalInvites: totalResult?.count ?? 0,

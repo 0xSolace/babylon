@@ -8,8 +8,7 @@
  */
 
 import { logger } from '@babylon/shared';
-import { verifyMessage } from 'ethers';
-import type { Address } from 'viem';
+import { type Address, type Hex, recoverMessageAddress } from 'viem';
 
 export type X402Network =
   | 'sepolia'
@@ -135,14 +134,17 @@ export function parseX402Header(header: string): X402PaymentHeader | null {
 /**
  * Verify x402 payment signature
  */
-export function verifyX402Signature(
+export async function verifyX402Signature(
   payment: X402PaymentHeader,
   providerAddress: Address,
   expectedUserAddress: Address
-): boolean {
+): Promise<boolean> {
   if (payment.scheme !== 'exact') return false;
   const message = `x402:${payment.network}:${providerAddress}:${payment.amount}`;
-  const recovered = verifyMessage(message, payment.payload);
+  const recovered = await recoverMessageAddress({
+    message,
+    signature: payment.payload as Hex,
+  });
   return recovered.toLowerCase() === expectedUserAddress.toLowerCase();
 }
 

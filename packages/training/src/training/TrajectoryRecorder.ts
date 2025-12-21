@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import { db, llmCallLogs, trajectories } from '@babylon/db';
+import { db } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
 import { logger } from '../utils/logger';
 import { generateSnowflakeId } from '../utils/snowflake';
@@ -54,7 +54,7 @@ export interface StartTrajectoryOptions {
   /** Optional time window ID */
   windowId?: string;
   /** Optional metadata */
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, JsonValue>;
 }
 
 /**
@@ -233,61 +233,86 @@ export class TrajectoryRecorder {
     const finalStatus = errorCount > 0 ? 'completed_with_errors' : 'completed';
 
     // Save trajectory
-    await db.insert(trajectories).values({
-      id: await generateSnowflakeId(),
-      trajectoryId,
-      agentId: traj.agentId,
-      archetype: traj.archetype,
-      startTime: new Date(traj.startTime),
-      endTime: new Date(endTime),
-      durationMs,
-      scenarioId: traj.scenarioId || windowId,
-      episodeId: traj.scenarioId
-        ? `${traj.scenarioId}-${Date.now()}`
-        : undefined,
-      windowId,
-      windowHours: 1,
-      stepsJson: JSON.stringify(traj.steps),
-      rewardComponentsJson: JSON.stringify({ environmentReward: totalReward }),
-      metricsJson: JSON.stringify({
+    await db.trajectory.create({
+      data: {
+        id: await generateSnowflakeId(),
+        trajectoryId,
+        agentId: traj.agentId,
+        archetype: traj.archetype ?? null,
+        startTime: new Date(traj.startTime),
+        endTime: new Date(endTime),
+        durationMs,
+        windowId,
+        windowHours: 1,
+        scenarioId: traj.scenarioId ?? windowId,
+        episodeId: traj.scenarioId ? `${traj.scenarioId}-${Date.now()}` : null,
+        stepsJson: JSON.stringify(traj.steps),
+        rewardComponentsJson: JSON.stringify({
+          environmentReward: totalReward,
+        }),
+        metricsJson: JSON.stringify({
+          episodeLength: traj.steps.length,
+          finalStatus,
+          finalBalance: options.finalBalance,
+          finalPnL: options.finalPnL,
+          tradesExecuted,
+          postsCreated,
+          errorCount,
+        }),
+        metadataJson: JSON.stringify({
+          isTrainingData: true,
+          gameKnowledge: options.gameKnowledge ?? {},
+        }),
+        totalReward,
         episodeLength: traj.steps.length,
         finalStatus,
-        finalBalance: options.finalBalance,
-        finalPnL: options.finalPnL,
+        finalBalance: options.finalBalance ?? null,
+        finalPnL: options.finalPnL ?? null,
         tradesExecuted,
         postsCreated,
-        errorCount,
-      }),
-      metadataJson: JSON.stringify({
         isTrainingData: true,
-        gameKnowledge: options.gameKnowledge || {},
-      }),
-      totalReward,
-      episodeLength: traj.steps.length,
-      finalStatus,
-      finalBalance: options.finalBalance,
-      finalPnL: options.finalPnL,
-      tradesExecuted,
-      postsCreated,
-      isTrainingData: true,
-      isEvaluation: false,
-      usedInTraining: false,
-      updatedAt: new Date(),
+        isEvaluation: false,
+        usedInTraining: false,
+        updatedAt: new Date(),
+      },
     });
 
     // Save LLM calls
+    const llmLogRows: Array<{
+      id: string;
+      trajectoryId: string;
+      stepId: string;
+      callId: string;
+      timestamp: Date;
+      latencyMs: number | null;
+      model: string;
+      purpose: string;
+      actionType: string | null;
+      systemPrompt: string;
+      userPrompt: string;
+      messagesJson: string | null;
+      response: string;
+      reasoning: string | null;
+      temperature: number;
+      maxTokens: number;
+      metadata: string | null;
+    }> = [];
+
     for (const step of traj.steps) {
-      for (const llmCall of step.llmCalls) {
-        await db.insert(llmCallLogs).values({
+      for (let i = 0; i < step.llmCalls.length; i++) {
+        const llmCall = step.llmCalls[i];
+        if (!llmCall) continue;
+
+        llmLogRows.push({
           id: await generateSnowflakeId(),
           trajectoryId,
           stepId: `${trajectoryId}-step-${step.stepNumber}`,
-          callId: `${trajectoryId}-call-${step.stepNumber}-${step.llmCalls.indexOf(llmCall)}`,
+          callId: `${trajectoryId}-call-${step.stepNumber}-${i}`,
           timestamp: new Date(step.timestamp),
-          latencyMs: llmCall.latencyMs,
+          latencyMs: llmCall.latencyMs ?? null,
           model: llmCall.model,
           purpose: llmCall.purpose,
-          actionType: llmCall.actionType,
+          actionType: llmCall.actionType ?? null,
           systemPrompt: llmCall.systemPrompt,
           userPrompt: llmCall.userPrompt,
           messagesJson: JSON.stringify([
@@ -295,12 +320,18 @@ export class TrajectoryRecorder {
             { role: 'user', content: llmCall.userPrompt },
           ]),
           response: llmCall.response,
-          reasoning: llmCall.reasoning,
+          reasoning: llmCall.reasoning ?? null,
           temperature: llmCall.temperature,
           maxTokens: llmCall.maxTokens,
           metadata: JSON.stringify({ modelVersion: llmCall.modelVersion }),
         });
       }
+    }
+
+    if (llmLogRows.length > 0) {
+      await db.llmCallLog.createMany({
+        data: llmLogRows,
+      });
     }
 
     this.activeTrajectories.delete(trajectoryId);

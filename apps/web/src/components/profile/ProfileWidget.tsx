@@ -7,9 +7,10 @@ import type {
   UserProfileStats,
 } from '@babylon/shared';
 import { cn } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { HelpCircle, TrendingDown, TrendingUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useWidgetCacheStore } from '@/stores/widgetCacheStore';
@@ -43,14 +44,42 @@ interface ProfileWidgetProps {
   userId: string;
 }
 
+interface ProfileWidgetData {
+  balance: UserBalanceData | null;
+  predictions: PredictionPosition[];
+  perps: PerpPositionFromAPI[];
+  stats: UserProfileStats | null;
+}
+
+interface BalanceResponse {
+  balance?: number;
+  totalDeposited?: number;
+  totalWithdrawn?: number;
+  lifetimePnL?: number;
+}
+
+interface PositionsResponse {
+  predictions?: { positions: PredictionPosition[] };
+  perpetuals?: { positions: PerpPositionFromAPI[] };
+}
+
+interface ProfileResponse {
+  needsOnboarding?: boolean;
+  user?: {
+    stats?: {
+      following?: number;
+      followers?: number;
+      comments?: number;
+      reactions?: number;
+      positions?: number;
+    };
+  };
+}
+
 export function ProfileWidget({ userId }: ProfileWidgetProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { needsOnboarding, user } = useAuth();
-  const [balance, setBalance] = useState<UserBalanceData | null>(null);
-  const [predictions, setPredictions] = useState<PredictionPosition[]>([]);
-  const [perps, setPerps] = useState<PerpPositionFromAPI[]>([]);
-  const [stats, setStats] = useState<UserProfileStats | null>(null);
-  const [loading, setLoading] = useState(true);
   const widgetCache = useWidgetCacheStore();
 
   // Modal state
@@ -62,37 +91,13 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
     PredictionPosition | PerpPositionFromAPI | null
   >(null);
 
-  useEffect(() => {
-    if (!userId) return;
+  // Skip fetching profile if current user needs onboarding
+  const isCurrentUser = user?.id === userId;
+  const shouldFetch = !!userId && !(isCurrentUser && needsOnboarding);
 
-    // Skip fetching profile if current user needs onboarding
-    const isCurrentUser = user?.id === userId;
-    if (isCurrentUser && needsOnboarding) {
-      setLoading(false);
-      return;
-    }
-
-    const fetchData = async (skipCache = false) => {
-      // Check cache first (unless explicitly skipping)
-      if (!skipCache) {
-        const cached = widgetCache.getProfileWidget(userId) as {
-          balance: UserBalanceData | null;
-          predictions: PredictionPosition[];
-          perps: PerpPositionFromAPI[];
-          stats: UserProfileStats | null;
-        } | null;
-        if (cached) {
-          setBalance(cached.balance);
-          setPredictions(cached.predictions);
-          setPerps(cached.perps);
-          setStats(cached.stats);
-          setLoading(false);
-          return;
-        }
-      }
-
-      setLoading(true);
-
+  const { data, isLoading } = useQuery({
+    queryKey: ['profile', 'widget', userId],
+    queryFn: async (): Promise<ProfileWidgetData> => {
       // Fetch all data in parallel
       const [balanceRes, positionsRes, profileRes] = await Promise.all([
         fetch(`/api/users/${encodeURIComponent(userId)}/balance`),
@@ -107,45 +112,45 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
 
       // Process balance
       if (balanceRes.ok) {
-        const balanceJson = await balanceRes.json();
+        const balanceJson: BalanceResponse = await balanceRes.json();
         balanceData = {
           balance: Number(balanceJson.balance || 0),
           totalDeposited: Number(balanceJson.totalDeposited || 0),
           totalWithdrawn: Number(balanceJson.totalWithdrawn || 0),
           lifetimePnL: Number(balanceJson.lifetimePnL || 0),
         };
-        setBalance(balanceData);
       }
 
       // Process positions
       if (positionsRes.ok) {
-        const positionsJson = await positionsRes.json();
-        predictionsData = positionsJson.predictions?.positions || [];
-        perpsData = positionsJson.perpetuals?.positions || [];
-        setPredictions(predictionsData);
-        setPerps(perpsData);
+        const positionsJson: PositionsResponse = await positionsRes.json();
+        predictionsData = positionsJson.predictions?.positions ?? [];
+        perpsData = positionsJson.perpetuals?.positions ?? [];
       }
 
       // Process stats
       if (profileRes.ok) {
-        const profileJson = await profileRes.json();
+        const profileJson: ProfileResponse = await profileRes.json();
 
         // Check if user needs onboarding (graceful handling)
         if (profileJson.needsOnboarding) {
-          setLoading(false);
-          return;
+          return {
+            balance: null,
+            predictions: [],
+            perps: [],
+            stats: null,
+          };
         }
 
-        const userStats = profileJson.user?.stats || {};
+        const userStats = profileJson.user?.stats ?? {};
         statsData = {
-          following: userStats.following || 0,
-          followers: userStats.followers || 0,
+          following: userStats.following ?? 0,
+          followers: userStats.followers ?? 0,
           totalActivity:
-            (userStats.comments || 0) +
-            (userStats.reactions || 0) +
-            (userStats.positions || 0),
+            (userStats.comments ?? 0) +
+            (userStats.reactions ?? 0) +
+            (userStats.positions ?? 0),
         };
-        setStats(statsData);
       }
 
       // Cache all the data
@@ -155,15 +160,28 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
         perps: perpsData,
         stats: statsData,
       });
-      setLoading(false);
-    };
 
-    fetchData();
+      return {
+        balance: balanceData,
+        predictions: predictionsData,
+        perps: perpsData,
+        stats: statsData,
+      };
+    },
+    enabled: shouldFetch,
+    initialData: () => {
+      const cached = widgetCache.getProfileWidget(
+        userId
+      ) as ProfileWidgetData | null;
+      return cached || undefined;
+    },
+    refetchInterval: 30000,
+  });
 
-    // Refresh every 30 seconds (skip cache to get fresh data)
-    const interval = setInterval(() => fetchData(true), 30000);
-    return () => clearInterval(interval);
-  }, [userId, needsOnboarding, user?.id, widgetCache]);
+  const balance = data?.balance ?? null;
+  const predictions = data?.predictions ?? [];
+  const perps = data?.perps ?? [];
+  const stats = data?.stats ?? null;
 
   const formatPoints = (points: number) => {
     return points.toLocaleString('en-US', {
@@ -182,15 +200,25 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
   // Calculate points in positions (total deposited minus available balance)
   const pointsInPositions = Math.max(
     0,
-    (balance?.totalDeposited || 0) - (balance?.balance || 0)
+    (balance?.totalDeposited ?? 0) - (balance?.balance ?? 0)
   );
-  const totalPortfolio = balance?.totalDeposited || 0;
+  const totalPortfolio = balance?.totalDeposited ?? 0;
   const pnlPercent =
     totalPortfolio > 0
-      ? ((balance?.lifetimePnL || 0) / totalPortfolio) * 100
+      ? ((balance?.lifetimePnL ?? 0) / totalPortfolio) * 100
       : 0;
 
-  if (loading) {
+  const refreshData = async () => {
+    const [_balanceRes, _positionsRes] = await Promise.all([
+      fetch(`/api/users/${encodeURIComponent(userId)}/balance`),
+      fetch(`/api/markets/positions/${encodeURIComponent(userId)}`),
+    ]);
+
+    // Invalidate queries to refresh
+    queryClient.invalidateQueries({ queryKey: ['profile', 'widget', userId] });
+  };
+
+  if (isLoading) {
     return (
       <div className="flex h-full w-full flex-col overflow-y-auto">
         <div className="flex items-center justify-center py-8">
@@ -213,7 +241,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground text-sm">Available</span>
             <span className="font-semibold text-foreground text-sm">
-              {formatPoints(balance?.balance || 0)} pts
+              {formatPoints(balance?.balance ?? 0)} pts
             </span>
           </div>
           <div className="flex items-center justify-between">
@@ -235,12 +263,12 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
             <span
               className={cn(
                 'font-semibold text-sm',
-                (balance?.lifetimePnL || 0) >= 0
+                (balance?.lifetimePnL ?? 0) >= 0
                   ? 'text-green-600'
                   : 'text-red-600'
               )}
             >
-              {formatPoints(balance?.lifetimePnL || 0)} pts (
+              {formatPoints(balance?.lifetimePnL ?? 0)} pts (
               {formatPercent(pnlPercent)})
             </span>
           </div>
@@ -406,24 +434,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
         type={modalType}
         data={selectedPosition}
         userId={userId}
-        onSuccess={async () => {
-          const [balanceRes, positionsRes] = await Promise.all([
-            fetch(`/api/users/${encodeURIComponent(userId)}/balance`),
-            fetch(`/api/markets/positions/${encodeURIComponent(userId)}`),
-          ]);
-
-          const balanceJson = await balanceRes.json();
-          setBalance({
-            balance: Number(balanceJson.balance),
-            totalDeposited: Number(balanceJson.totalDeposited),
-            totalWithdrawn: Number(balanceJson.totalWithdrawn),
-            lifetimePnL: Number(balanceJson.lifetimePnL),
-          });
-
-          const positionsJson = await positionsRes.json();
-          setPredictions(positionsJson.predictions.positions);
-          setPerps(positionsJson.perpetuals.positions);
-        }}
+        onSuccess={refreshData}
       />
     </div>
   );

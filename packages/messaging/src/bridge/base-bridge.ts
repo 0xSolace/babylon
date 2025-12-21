@@ -225,20 +225,18 @@ export class BaseBridgeClient {
     deliveredAt?: number;
     error?: string;
   }> {
-    try {
-      const response = await fetch(
-        `${this.config.relayNodeUrl}/bridge/message-status/${messageId}`,
-        { signal: AbortSignal.timeout(10000) }
+    const response = await fetch(
+      `${this.config.relayNodeUrl}/bridge/message-status/${messageId}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get message status: ${response.status} ${response.statusText}`
       );
-
-      if (!response.ok) {
-        return { status: 'pending' };
-      }
-
-      return await response.json();
-    } catch {
-      return { status: 'pending' };
     }
+
+    return await response.json();
   }
 
   /**
@@ -248,24 +246,22 @@ export class BaseBridgeClient {
     recipient: Address,
     destinationChain: MessagingChain
   ): Promise<CrossChainMessage[]> {
-    try {
-      const response = await fetch(
-        `${this.config.relayNodeUrl}/bridge/messages/${recipient}?chain=${destinationChain}`,
-        { signal: AbortSignal.timeout(30000) }
+    const response = await fetch(
+      `${this.config.relayNodeUrl}/bridge/messages/${recipient}?chain=${destinationChain}`,
+      { signal: AbortSignal.timeout(30000) }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch cross-chain messages: ${response.status} ${response.statusText}`
       );
-
-      if (!response.ok) {
-        return [];
-      }
-
-      const data = (await response.json()) as { messages: CrossChainMessage[] };
-      return data.messages.map((m) => ({
-        ...m,
-        bridgeNonce: BigInt(m.bridgeNonce as unknown as string),
-      }));
-    } catch {
-      return [];
     }
+
+    const data = (await response.json()) as { messages: CrossChainMessage[] };
+    return data.messages.map((m) => ({
+      ...m,
+      bridgeNonce: BigInt(m.bridgeNonce as unknown as string),
+    }));
   }
 
   /**
@@ -275,21 +271,19 @@ export class BaseBridgeClient {
     address: Address,
     chain: MessagingChain
   ): Promise<boolean> {
-    try {
-      const response = await fetch(
-        `${this.config.relayNodeUrl}/bridge/has-keys/${address}?chain=${chain}`,
-        { signal: AbortSignal.timeout(10000) }
+    const response = await fetch(
+      `${this.config.relayNodeUrl}/bridge/has-keys/${address}?chain=${chain}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to check keys on chain: ${response.status} ${response.statusText}`
       );
-
-      if (!response.ok) {
-        return false;
-      }
-
-      const data = (await response.json()) as { hasKeys: boolean };
-      return data.hasKeys;
-    } catch {
-      return false;
     }
+
+    const data = (await response.json()) as { hasKeys: boolean };
+    return data.hasKeys;
   }
 
   /**
@@ -304,31 +298,18 @@ export class BaseBridgeClient {
     destinationChain: MessagingChain;
     estimatedTime: number;
   }> {
-    try {
-      const response = await fetch(
-        `${this.config.relayNodeUrl}/bridge/route?sender=${sender}&recipient=${recipient}`,
-        { signal: AbortSignal.timeout(10000) }
+    const response = await fetch(
+      `${this.config.relayNodeUrl}/bridge/route?sender=${sender}&recipient=${recipient}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get message route: ${response.status} ${response.statusText}`
       );
-
-      if (!response.ok) {
-        // Default to direct Jeju routing
-        return {
-          route: 'direct',
-          sourceChain: MessagingChain.JEJU,
-          destinationChain: MessagingChain.JEJU,
-          estimatedTime: 1000,
-        };
-      }
-
-      return await response.json();
-    } catch {
-      return {
-        route: 'direct',
-        sourceChain: MessagingChain.JEJU,
-        destinationChain: MessagingChain.JEJU,
-        estimatedTime: 1000,
-      };
     }
+
+    return await response.json();
   }
 }
 

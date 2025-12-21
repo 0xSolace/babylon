@@ -195,7 +195,7 @@ export const POST = withErrorHandling(
         {
           userId: authUser.userId,
           targetUserId,
-          muteId: mute?.id,
+          muteId: mute.id,
         },
         'POST /api/users/[userId]/mute'
       );

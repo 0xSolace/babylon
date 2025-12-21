@@ -266,7 +266,4 @@ async function runPipeline() {
   );
 }
 
-runPipeline().catch((error) => {
-  console.error('Pipeline failed:', error);
-  process.exit(1);
-});
+runPipeline();

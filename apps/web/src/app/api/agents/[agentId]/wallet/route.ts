@@ -158,8 +158,11 @@ export async function GET(
   // Verify ownership
   await agentService.getAgent(agentId, user.id);
 
-  // Get agent config for balance info
+  // Get agent config for balance info - must exist if agent exists
   const config = await getAgentConfig(agentId);
+  if (!config) {
+    throw new Error(`Agent config not found for agent ${agentId}`);
+  }
 
   const transactions = await db.agentPointsTransaction.findMany({
     where: { agentUserId: agentId },
@@ -170,10 +173,10 @@ export async function GET(
   return NextResponse.json({
     success: true,
     balance: {
-      current: config?.pointsBalance ?? 0,
-      totalDeposited: config?.totalDeposited ?? 0,
-      totalWithdrawn: config?.totalWithdrawn ?? 0,
-      totalSpent: config?.totalPointsSpent ?? 0,
+      current: config.pointsBalance,
+      totalDeposited: config.totalDeposited,
+      totalWithdrawn: config.totalWithdrawn,
+      totalSpent: config.totalPointsSpent,
     },
     transactions: transactions.map((tx) => ({
       id: tx.id,
@@ -214,15 +217,20 @@ export async function POST(
     );
   }
 
-  // Re-fetch config for updated balance
+  // Re-fetch config for updated balance - must exist after deposit/withdraw
   const updatedConfig = await getAgentConfig(agentId);
+  if (!updatedConfig) {
+    throw new Error(
+      `Agent config not found after wallet operation for agent ${agentId}`
+    );
+  }
 
   return NextResponse.json({
     success: true,
     balance: {
-      current: updatedConfig?.pointsBalance ?? 0,
-      totalDeposited: updatedConfig?.totalDeposited ?? 0,
-      totalWithdrawn: updatedConfig?.totalWithdrawn ?? 0,
+      current: updatedConfig.pointsBalance,
+      totalDeposited: updatedConfig.totalDeposited,
+      totalWithdrawn: updatedConfig.totalWithdrawn,
     },
     message: `${action === 'deposit' ? 'Deposited' : 'Withdrew'} ${amount} points successfully`,
   });

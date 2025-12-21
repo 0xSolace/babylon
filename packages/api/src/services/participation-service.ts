@@ -55,6 +55,10 @@ export class ParticipationService {
    * @returns {Promise<ParticipationStats | null>} Participation stats or null if user not found
    */
   static async getStats(userId: string): Promise<ParticipationStats | null> {
+    // Type for count query results
+    type CountResult = { count: number }[];
+    type DateResult = { createdAt: Date }[];
+
     // Get all counts in parallel
     const [
       postsCountResult,
@@ -71,60 +75,62 @@ export class ParticipationService {
       db
         .select({ count: count() })
         .from(posts)
-        .where(eq(posts.authorId, userId)),
+        .where(eq(posts.authorId, userId)) as unknown as Promise<CountResult>,
       db
         .select({ count: count() })
         .from(comments)
-        .where(eq(comments.authorId, userId)),
+        .where(
+          eq(comments.authorId, userId)
+        ) as unknown as Promise<CountResult>,
       db
         .select({ count: count() })
         .from(shares)
-        .where(eq(shares.userId, userId)),
+        .where(eq(shares.userId, userId)) as unknown as Promise<CountResult>,
       db
         .select({ count: count() })
         .from(reactions)
-        .where(eq(reactions.userId, userId)),
+        .where(eq(reactions.userId, userId)) as unknown as Promise<CountResult>,
       db
         .select({ count: count() })
         .from(positions)
-        .where(eq(positions.userId, userId)),
+        .where(eq(positions.userId, userId)) as unknown as Promise<CountResult>,
       db
         .select({ createdAt: posts.createdAt })
         .from(posts)
         .where(and(eq(posts.authorId, userId), isNull(posts.deletedAt)))
         .orderBy(desc(posts.createdAt))
-        .limit(1),
+        .limit(1) as unknown as Promise<DateResult>,
       db
         .select({ createdAt: comments.createdAt })
         .from(comments)
         .where(eq(comments.authorId, userId))
         .orderBy(desc(comments.createdAt))
-        .limit(1),
+        .limit(1) as unknown as Promise<DateResult>,
       db
         .select({ createdAt: shares.createdAt })
         .from(shares)
         .where(eq(shares.userId, userId))
         .orderBy(desc(shares.createdAt))
-        .limit(1),
+        .limit(1) as unknown as Promise<DateResult>,
       db
         .select({ createdAt: reactions.createdAt })
         .from(reactions)
         .where(eq(reactions.userId, userId))
         .orderBy(desc(reactions.createdAt))
-        .limit(1),
+        .limit(1) as unknown as Promise<DateResult>,
       db
         .select({ createdAt: positions.createdAt })
         .from(positions)
         .where(eq(positions.userId, userId))
         .orderBy(desc(positions.createdAt))
-        .limit(1),
+        .limit(1) as unknown as Promise<DateResult>,
     ]);
 
-    const postsCreated = postsCountResult[0]?.count ?? 0;
-    const commentsMade = commentsCountResult[0]?.count ?? 0;
-    const sharesMade = sharesCountResult[0]?.count ?? 0;
-    const reactionsGiven = reactionsCountResult[0]?.count ?? 0;
-    const marketsParticipated = positionsCountResult[0]?.count ?? 0;
+    const postsCreated = Number(postsCountResult[0]?.count ?? 0);
+    const commentsMade = Number(commentsCountResult[0]?.count ?? 0);
+    const sharesMade = Number(sharesCountResult[0]?.count ?? 0);
+    const reactionsGiven = Number(reactionsCountResult[0]?.count ?? 0);
+    const marketsParticipated = Number(positionsCountResult[0]?.count ?? 0);
     const lastPost = lastPostResult[0];
     const lastComment = lastCommentResult[0];
     const lastShare = lastShareResult[0];

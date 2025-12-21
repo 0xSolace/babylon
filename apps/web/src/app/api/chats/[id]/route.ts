@@ -329,36 +329,29 @@ export const GET = withErrorHandling(
 
     // Fetch from decentralized storage if enabled
     if (isDecentralizedMessagingEnabled()) {
-      try {
-        const messaging = getMessaging();
-        const decentralizedMessages = await messaging.getMessages({
-          conversationId: chatId,
-          limit: effectiveLimit,
-          before: cursor ? Date.now() : undefined, // TODO: Use proper cursor timestamp
-        });
+      const messaging = getMessaging();
+      const decentralizedMessages = await messaging.getMessages({
+        conversationId: chatId,
+        limit: effectiveLimit,
+        before: cursor ? Date.now() : undefined, // TODO: Use proper cursor timestamp
+      });
 
-        // Merge decentralized messages (prefer decentralized if IDs match)
-        const existingIds = new Set(messagesInOrder.map((m) => m.id));
-        const newMessages = decentralizedMessages
-          .filter((dm) => !existingIds.has(dm.id))
-          .map((dm) => ({
-            id: dm.id,
-            content: dm.content,
-            senderId: dm.sender as string,
-            createdAt: new Date(dm.timestamp),
-            chatId,
-          }));
-
-        if (newMessages.length > 0) {
-          messagesInOrder = [...messagesInOrder, ...newMessages].sort(
-            (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
-          );
-        }
-      } catch (error) {
-        logger.warn('Failed to fetch decentralized messages', {
+      // Merge decentralized messages (prefer decentralized if IDs match)
+      const existingIds = new Set(messagesInOrder.map((m) => m.id));
+      const newMessages = decentralizedMessages
+        .filter((dm) => !existingIds.has(dm.id))
+        .map((dm) => ({
+          id: dm.id,
+          content: dm.content,
+          senderId: dm.sender as string,
+          createdAt: new Date(dm.timestamp),
           chatId,
-          error: error instanceof Error ? error.message : String(error),
-        });
+        }));
+
+      if (newMessages.length > 0) {
+        messagesInOrder = [...messagesInOrder, ...newMessages].sort(
+          (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+        );
       }
     }
 

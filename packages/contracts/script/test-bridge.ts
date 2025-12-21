@@ -33,14 +33,7 @@ import {
   PublicKey,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
-import {
-  type Address,
-  createPublicClient,
-  createWalletClient,
-  formatEther,
-  http,
-  parseEther,
-} from 'viem';
+import { type Address, createPublicClient, formatEther, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
 
@@ -86,15 +79,6 @@ const TEST_AMOUNT_EVM = 10n * 10n ** 18n; // 18 decimals for EVM
 // =============================================================================
 // HELPERS
 // =============================================================================
-
-function addressToBytes32(address: string): `0x${string}` {
-  const clean = address.startsWith('0x') ? address.slice(2) : address;
-  return `0x${'0'.repeat(24)}${clean.toLowerCase()}` as `0x${string}`;
-}
-
-function pubkeyToBytes32(pubkey: PublicKey): `0x${string}` {
-  return `0x${pubkey.toBuffer().toString('hex')}` as `0x${string}`;
-}
 
 // =============================================================================
 // SOLANA -> EVM TRANSFER
@@ -199,12 +183,6 @@ async function testEvmToSolana() {
   const publicClient = createPublicClient({
     chain: baseSepolia,
     transport: http(EVM_CONFIG.rpc),
-  });
-
-  const walletClient = createWalletClient({
-    chain: baseSepolia,
-    transport: http(EVM_CONFIG.rpc),
-    account: evmAccount,
   });
 
   console.log(`\n📍 EVM Wallet: ${evmAccount.address}`);

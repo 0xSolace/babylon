@@ -111,20 +111,16 @@ describe('Concurrent Agent Performance Tests', () => {
 
       const { result, duration } = await measureTime(async () => {
         const registrations = agents.map(async (agent) => {
-          try {
-            const response = await fetch(
-              'http://localhost:5007/api/agents/external/register',
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(agent),
-              }
-            );
-            const data = await response.json();
-            return { success: data.success, status: response.status };
-          } catch (error) {
-            return { success: false, error: (error as Error).message };
-          }
+          const response = await fetch(
+            'http://localhost:5007/api/agents/external/register',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(agent),
+            }
+          );
+          const data = (await response.json()) as { success: boolean };
+          return { success: data.success, status: response.status };
         });
 
         return Promise.all(registrations);
@@ -198,24 +194,20 @@ describe('Concurrent Agent Performance Tests', () => {
       while (Date.now() - startTime < duration) {
         const messageStart = performance.now();
 
-        try {
-          const response = await hub.sendMessage(
-            'load-test-sender',
-            'load-test-receiver',
-            'load-test',
-            { timestamp: Date.now(), index: sentMessages }
-          );
+        const response = await hub.sendMessage(
+          'load-test-sender',
+          'load-test-receiver',
+          'load-test',
+          { timestamp: Date.now(), index: sentMessages }
+        );
 
-          const messageEnd = performance.now();
-          const latency = messageEnd - messageStart;
+        const messageEnd = performance.now();
+        const latency = messageEnd - messageStart;
 
-          latencies.push(latency);
+        latencies.push(latency);
 
-          if (response.success) {
-            successCount++;
-          }
-        } catch {
-          // Track failures but continue
+        if (response.success) {
+          successCount++;
         }
 
         sentMessages++;

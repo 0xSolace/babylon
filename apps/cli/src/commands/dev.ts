@@ -243,43 +243,35 @@ export async function runDevCommand(args: string[]): Promise<void> {
     }
   }
 
-  try {
-    // Start chain (L1, L2, CQL)
-    if (!options.skipChain) {
-      await startChain();
+  // Start chain (L1, L2, CQL)
+  if (!options.skipChain) {
+    await startChain();
 
-      // Check CQL is available
-      const cqlHealthy = await checkCQL();
-      if (!cqlHealthy) {
-        logger.warn(
-          'CQL not responding - decentralized messaging may not work'
-        );
-        logger.info('CQL endpoint: http://localhost:4300');
-      } else {
-        logger.success('CQL is healthy');
-      }
-    }
-
-    // Deploy contracts
-    if (!options.skipContracts) {
-      await deployContracts();
-    }
-
-    // Start web app
-    if (!options.minimal) {
-      await startWebApp();
+    // Check CQL is available
+    const cqlHealthy = await checkCQL();
+    if (!cqlHealthy) {
+      logger.warn('CQL not responding - decentralized messaging may not work');
+      logger.info('CQL endpoint: http://localhost:4300');
     } else {
-      logger.success('Minimal mode - chain is running');
-      logger.info('L2 RPC: http://localhost:9545');
-      logger.info('CQL API: http://localhost:4300');
-      logger.info('\nPress Ctrl+C to stop');
-
-      // Keep running
-      await new Promise(() => {});
+      logger.success('CQL is healthy');
     }
-  } catch (error) {
-    const err = error as Error;
-    logger.fail(err.message);
-    process.exit(1);
+  }
+
+  // Deploy contracts
+  if (!options.skipContracts) {
+    await deployContracts();
+  }
+
+  // Start web app
+  if (!options.minimal) {
+    await startWebApp();
+  } else {
+    logger.success('Minimal mode - chain is running');
+    logger.info('L2 RPC: http://localhost:9545');
+    logger.info('CQL API: http://localhost:4300');
+    logger.info('\nPress Ctrl+C to stop');
+
+    // Keep running
+    await new Promise(() => {});
   }
 }

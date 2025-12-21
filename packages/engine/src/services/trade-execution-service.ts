@@ -10,6 +10,7 @@
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
 import {
   actorState,
+  type CQLClient,
   db,
   eq,
   ilike,
@@ -18,7 +19,6 @@ import {
   organizations,
   perpPositions,
   poolPositions,
-  type Transaction,
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
@@ -169,18 +169,20 @@ export class TradeExecutionService {
     // Balance checks are performed inside transactions to ensure atomicity
     // and prevent race conditions when multiple trades are queued for the same NPC
 
+    const actorId = String(actor.id);
+
     // Handle close position
     if (decision.action === 'close_position') {
-      return await this.closePosition(decision, actor.id);
+      return await this.closePosition(decision, actorId);
     }
 
     // Handle open position
     if (decision.action === 'open_long' || decision.action === 'open_short') {
-      return await this.openPerpPosition(decision, actor.id);
+      return await this.openPerpPosition(decision, actorId);
     }
 
     if (decision.action === 'buy_yes' || decision.action === 'buy_no') {
-      return await this.openPredictionPosition(decision, actor.id);
+      return await this.openPredictionPosition(decision, actorId);
     }
 
     throw new Error(`Unknown action: ${decision.action}`);
@@ -236,11 +238,14 @@ export class TradeExecutionService {
 
       const matchedOrg = orgs.find((o) => {
         if (!o.currentPrice) return false;
-        const normalizedName = o.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const normalizedOrgTicker = (o.ticker || '')
+        const orgName = String(o.name ?? '');
+        const orgTicker = String(o.ticker ?? '');
+        const orgId = String(o.id ?? '');
+        const normalizedName = orgName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normalizedOrgTicker = orgTicker
           .toLowerCase()
           .replace(/[^a-z0-9]/g, '');
-        const normalizedOrgId = o.id.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normalizedOrgId = orgId.toLowerCase().replace(/[^a-z0-9]/g, '');
 
         return (
           normalizedName === normalizedTicker ||
@@ -287,10 +292,12 @@ export class TradeExecutionService {
       },
     });
 
+    const orgId = String(org.id);
+
     // Open position via PerpMarketService (uses perpPositions table)
     const result = await perpService.openPosition({
       userId: actorId, // Use actorId as userId for NPC
-      ticker: org.id,
+      ticker: orgId,
       side,
       size: positionSize,
       leverage,
@@ -302,7 +309,7 @@ export class TradeExecutionService {
       npcActorId: decision.npcId,
       poolId: null,
       marketType: 'perp',
-      ticker: org.id,
+      ticker: orgId,
       action: decision.action,
       side,
       amount: decision.amount,
@@ -355,7 +362,10 @@ export class TradeExecutionService {
       throw new Error(`Market already resolved: ${decision.marketId}`);
     }
 
-    if (new Date() > market.endDate) {
+    const marketEndDate = market.endDate
+      ? new Date(String(market.endDate))
+      : null;
+    if (marketEndDate && new Date() > marketEndDate) {
       throw new Error(`Market expired: ${decision.marketId}`);
     }
 
@@ -379,7 +389,7 @@ export class TradeExecutionService {
       (side === 'YES' ? calculation.newYesPrice : calculation.newNoPrice) * 100;
 
     // Execute in transaction
-    const position = await db.transaction(async (tx: Transaction) => {
+    const position = await db.transaction(async (tx: CQLClient) => {
       // Check and deduct from actor's trading balance (amount + fee)
       const [actor] = await tx
         .select()
@@ -389,9 +399,11 @@ export class TradeExecutionService {
 
       if (!actor) throw new Error(`Actor not found: ${actorId}`);
 
-      const availableBalance = Number.parseFloat(
-        actor.tradingBalance.toString()
-      );
+      const tradingBalanceRaw = actor.tradingBalance;
+      const availableBalance =
+        tradingBalanceRaw != null
+          ? Number.parseFloat(String(tradingBalanceRaw))
+          : 0;
       if (availableBalance < totalWithFee) {
         throw new Error(
           `Insufficient trading balance: ${availableBalance} < ${totalWithFee} (amount: ${decision.amount}, fee: ${calculation.fee})`
@@ -473,21 +485,9 @@ export class TradeExecutionService {
       liquidity: liquidityAfter,
       eventType: 'trade',
       source: 'npc_trade',
-    }).catch((error) => {
-      logger.warn(
-        'Failed to record price history for NPC buy',
-        { error, marketId: decision.marketId },
-        'TradeExecutionService'
-      );
     });
 
-    await invalidateAfterPredictionTrade(decision.marketId).catch((error) => {
-      logger.warn(
-        'Failed to invalidate cache after NPC prediction buy',
-        { error, marketId: decision.marketId },
-        'TradeExecutionService'
-      );
-    });
+    await invalidateAfterPredictionTrade(decision.marketId);
 
     PredictionMarketService.emitTradeUpdate({
       marketId: decision.marketId!.toString(),
@@ -523,7 +523,7 @@ export class TradeExecutionService {
       executionPrice: entryPrice,
       confidence: decision.confidence,
       reasoning: decision.reasoning,
-      positionId: position.id,
+      positionId: String(position.id),
       timestamp: new Date().toISOString(),
     };
   }
@@ -551,7 +551,14 @@ export class TradeExecutionService {
 
     if (perpPosition && !perpPosition.closedAt) {
       // Use PerpMarketService to close perp position
-      return this.closePerpPositionViaService(decision, actorId, perpPosition);
+      return this.closePerpPositionViaService(decision, actorId, {
+        id: String(perpPosition.id),
+        ticker: String(perpPosition.ticker),
+        side: String(perpPosition.side),
+        size: Number(perpPosition.size),
+        entryPrice: Number(perpPosition.entryPrice),
+        leverage: Number(perpPosition.leverage),
+      });
     }
 
     // Fall back to poolPositions (legacy perp or prediction positions)
@@ -571,39 +578,53 @@ export class TradeExecutionService {
 
     const now = new Date();
 
-    if (position.marketType === 'prediction') {
-      if (!position.marketId) {
-        throw new Error(`Prediction position missing marketId: ${position.id}`);
+    const positionId = String(position.id);
+    const positionMarketId = position.marketId
+      ? String(position.marketId)
+      : null;
+    const positionSize = Number(position.size);
+    const positionShares =
+      position.shares != null ? Number(position.shares) : 0;
+    const positionSide = String(position.side);
+    const positionEntryPrice = Number(position.entryPrice);
+    const positionTicker = position.ticker ? String(position.ticker) : null;
+    const positionMarketType = String(position.marketType);
+
+    if (positionMarketType === 'prediction') {
+      if (!positionMarketId) {
+        throw new Error(`Prediction position missing marketId: ${positionId}`);
       }
 
-      const shares = position.shares ?? 0;
+      const shares = positionShares;
       if (shares <= 0) {
         throw new Error(
-          `Prediction position has no shares to close: ${position.id}`
+          `Prediction position has no shares to close: ${positionId}`
         );
       }
 
       const side =
-        position.side === 'YES' || position.side === 'NO'
-          ? position.side
-          : null;
+        positionSide === 'YES' || positionSide === 'NO' ? positionSide : null;
       if (!side) {
-        throw new Error(`Invalid prediction position side: ${position.side}`);
+        throw new Error(`Invalid prediction position side: ${positionSide}`);
       }
 
       const [market] = await db
         .select()
         .from(markets)
-        .where(eq(markets.id, position.marketId))
+        .where(eq(markets.id, positionMarketId))
         .limit(1);
 
       if (!market) {
-        throw new Error(`Market not found: ${position.marketId}`);
+        throw new Error(`Market not found: ${positionMarketId}`);
       }
 
+      const marketYesShares = Number(market.yesShares);
+      const marketNoShares = Number(market.noShares);
+      const marketLiquidity = Number(market.liquidity ?? 0);
+
       const calculation = PredictionPricing.calculateSellWithFees(
-        Number(market.yesShares),
-        Number(market.noShares),
+        marketYesShares,
+        marketNoShares,
         side === 'YES' ? 'yes' : 'no',
         shares
       );
@@ -613,7 +634,7 @@ export class TradeExecutionService {
 
       if (netProceeds <= 0) {
         throw new Error(
-          `Calculated net proceeds must be positive (position ${position.id})`
+          `Calculated net proceeds must be positive (position ${positionId})`
         );
       }
 
@@ -621,14 +642,11 @@ export class TradeExecutionService {
       const postTradePrice =
         (side === 'YES' ? calculation.newYesPrice : calculation.newNoPrice) *
         100;
-      const realizedPnL = netProceeds - position.size;
-      const liquidityAfter = Math.max(
-        0,
-        Number(market.liquidity ?? 0) - grossProceeds
-      );
+      const realizedPnL = netProceeds - positionSize;
+      const liquidityAfter = Math.max(0, marketLiquidity - grossProceeds);
       const sideLabel: 'yes' | 'no' = side === 'YES' ? 'yes' : 'no';
 
-      await db.transaction(async (tx: Transaction) => {
+      await db.transaction(async (tx: CQLClient) => {
         await tx
           .update(poolPositions)
           .set({
@@ -638,18 +656,16 @@ export class TradeExecutionService {
             realizedPnL,
             updatedAt: now,
           })
-          .where(eq(poolPositions.id, position.id));
+          .where(eq(poolPositions.id, positionId));
 
         await tx
           .update(markets)
           .set({
             yesShares: String(calculation.newYesShares),
             noShares: String(calculation.newNoShares),
-            liquidity: String(
-              Math.max(0, Number(market.liquidity) - grossProceeds)
-            ),
+            liquidity: String(Math.max(0, marketLiquidity - grossProceeds)),
           })
-          .where(eq(markets.id, position.marketId!));
+          .where(eq(markets.id, positionMarketId!));
 
         // Return proceeds to actor's trading balance
         const [actor] = await tx
@@ -659,13 +675,14 @@ export class TradeExecutionService {
           .limit(1);
 
         if (actor) {
-          const currentBalance = Number.parseFloat(
-            actor.tradingBalance.toString()
-          );
+          const actorBalance =
+            actor.tradingBalance != null
+              ? Number.parseFloat(String(actor.tradingBalance))
+              : 0;
           await tx
             .update(actorState)
             .set({
-              tradingBalance: String(currentBalance + netProceeds),
+              tradingBalance: String(actorBalance + netProceeds),
               updatedAt: new Date(),
             })
             .where(eq(actorState.id, actorId));
@@ -677,7 +694,7 @@ export class TradeExecutionService {
           npcActorId: decision.npcId,
           poolId: null, // No longer using pools
           marketType: 'prediction',
-          marketId: position.marketId,
+          marketId: positionMarketId,
           action: 'close',
           side,
           amount: netProceeds,
@@ -688,7 +705,7 @@ export class TradeExecutionService {
       });
 
       await PredictionMarketService.recordSnapshot({
-        marketId: position.marketId,
+        marketId: positionMarketId,
         yesPrice: calculation.newYesPrice,
         noPrice: calculation.newNoPrice,
         yesShares: calculation.newYesShares,
@@ -699,21 +716,21 @@ export class TradeExecutionService {
       }).catch((error) => {
         logger.warn(
           'Failed to record price history for NPC close',
-          { error, marketId: position.marketId },
+          { error, marketId: positionMarketId },
           'TradeExecutionService'
         );
       });
 
-      await invalidateAfterPredictionTrade(position.marketId).catch((error) => {
+      await invalidateAfterPredictionTrade(positionMarketId).catch((error) => {
         logger.warn(
           'Failed to invalidate cache after NPC prediction close',
-          { error, marketId: position.marketId },
+          { error, marketId: positionMarketId },
           'TradeExecutionService'
         );
       });
 
       PredictionMarketService.emitTradeUpdate({
-        marketId: position.marketId,
+        marketId: positionMarketId,
         yesPrice: calculation.newYesPrice,
         noPrice: calculation.newNoPrice,
         yesShares: calculation.newYesShares,
@@ -737,48 +754,48 @@ export class TradeExecutionService {
         npcName: decision.npcName,
         poolId: actorId, // Using actorId for backward compatibility
         marketType: 'prediction',
-        marketId: position.marketId ?? undefined,
+        marketId: positionMarketId ?? undefined,
         action: 'close_position',
         side,
         amount: netProceeds,
-        size: position.size,
-        shares: position.shares ?? undefined,
+        size: positionSize,
+        shares: positionShares > 0 ? positionShares : undefined,
         executionPrice: exitPrice,
         confidence: decision.confidence,
         reasoning: decision.reasoning,
-        positionId: position.id,
+        positionId,
         timestamp: now.toISOString(),
       };
     }
 
     // Get current price
-    let currentPrice = position.currentPrice;
+    let currentPrice = Number(position.currentPrice ?? 0);
 
-    if (position.marketType === 'perp' && position.ticker) {
+    if (positionMarketType === 'perp' && positionTicker) {
       // Fetch current market price from organizations table
       const [org] = await db
         .select()
         .from(organizations)
-        .where(ilike(organizations.id, `%${position.ticker}%`))
+        .where(ilike(organizations.id, `%${positionTicker}%`))
         .limit(1);
 
       if (org?.currentPrice) {
-        currentPrice = org.currentPrice;
+        currentPrice = Number(org.currentPrice);
       }
-    } else if (position.marketType === 'prediction' && position.marketId) {
+    } else if (positionMarketType === 'prediction' && positionMarketId) {
       const [market] = await db
         .select()
         .from(markets)
-        .where(eq(markets.id, position.marketId))
+        .where(eq(markets.id, positionMarketId))
         .limit(1);
 
       if (market) {
-        const yesShares = Number.parseFloat(market.yesShares.toString());
-        const noShares = Number.parseFloat(market.noShares.toString());
+        const yesShares = Number(market.yesShares);
+        const noShares = Number(market.noShares);
         const totalShares = yesShares + noShares;
         if (totalShares > 0) {
           currentPrice =
-            position.side === 'YES'
+            positionSide === 'YES'
               ? (yesShares / totalShares) * 100
               : (noShares / totalShares) * 100;
         }
@@ -786,26 +803,25 @@ export class TradeExecutionService {
     }
 
     // Calculate P&L
-    const priceChange = currentPrice - position.entryPrice;
-    const isLong = position.side === 'long' || position.side === 'YES';
+    const priceChange = currentPrice - positionEntryPrice;
+    const isLong = positionSide === 'long' || positionSide === 'YES';
     const pnlMultiplier = isLong ? 1 : -1;
 
     let realizedPnL: number;
-    if (position.marketType === 'perp') {
-      const percentChange = priceChange / position.entryPrice;
-      realizedPnL = percentChange * position.size * pnlMultiplier;
+    if (positionMarketType === 'perp') {
+      const percentChange = priceChange / positionEntryPrice;
+      realizedPnL = percentChange * positionSize * pnlMultiplier;
     } else {
-      const shares = position.shares || 0;
-      realizedPnL = (priceChange / 100) * shares;
+      realizedPnL = (priceChange / 100) * positionShares;
     }
 
     // Calculate trading fee (0.1% on position size)
-    const feeCalc = FeeService.calculateFee(position.size);
-    const grossReturn = position.size + realizedPnL;
+    const feeCalc = FeeService.calculateFee(positionSize);
+    const grossReturn = positionSize + realizedPnL;
     const netReturn = Math.max(0, grossReturn - feeCalc.feeAmount);
 
     // Execute in transaction
-    await db.transaction(async (tx: Transaction) => {
+    await db.transaction(async (tx: CQLClient) => {
       // Close position
       await tx
         .update(poolPositions)
@@ -826,13 +842,14 @@ export class TradeExecutionService {
         .limit(1);
 
       if (actor) {
-        const currentBalance = Number.parseFloat(
-          actor.tradingBalance.toString()
-        );
+        const actorBalance =
+          actor.tradingBalance != null
+            ? Number.parseFloat(String(actor.tradingBalance))
+            : 0;
         await tx
           .update(actorState)
           .set({
-            tradingBalance: String(currentBalance + netReturn),
+            tradingBalance: String(actorBalance + netReturn),
             updatedAt: new Date(),
           })
           .where(eq(actorState.id, actorId));
@@ -843,12 +860,12 @@ export class TradeExecutionService {
         id: await generateSnowflakeId(),
         npcActorId: decision.npcId,
         poolId: null, // No longer using pools
-        marketType: position.marketType,
-        ticker: position.ticker,
-        marketId: position.marketId,
+        marketType: positionMarketType,
+        ticker: positionTicker,
+        marketId: positionMarketId,
         action: 'close',
-        side: position.side,
-        amount: position.size,
+        side: positionSide,
+        amount: positionSize,
         price: currentPrice,
         sentiment: 0,
         reason: decision.reasoning,
@@ -859,18 +876,18 @@ export class TradeExecutionService {
       npcId: decision.npcId,
       npcName: decision.npcName,
       poolId: actorId, // Using actorId for backward compatibility
-      marketType: position.marketType as 'perp' | 'prediction',
-      ticker: position.ticker || undefined,
-      marketId: position.marketId ?? undefined,
+      marketType: positionMarketType as 'perp' | 'prediction',
+      ticker: positionTicker ?? undefined,
+      marketId: positionMarketId ?? undefined,
       action: 'close_position',
-      side: position.side,
-      amount: position.size,
-      size: position.size,
-      shares: position.shares || undefined,
+      side: positionSide,
+      amount: positionSize,
+      size: positionSize,
+      shares: positionShares > 0 ? positionShares : undefined,
       executionPrice: currentPrice,
       confidence: decision.confidence,
       reasoning: decision.reasoning,
-      positionId: position.id,
+      positionId,
       timestamp: new Date().toISOString(),
     };
   }

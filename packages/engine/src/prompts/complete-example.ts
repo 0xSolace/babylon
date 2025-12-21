@@ -303,26 +303,22 @@ export async function runAllExamples() {
   console.log('FEED PROMPT SYSTEM - COMPLETE EXAMPLES');
   console.log('='.repeat(80));
 
-  try {
-    // Example 1
-    console.log('\n📌 Example 1: Single Ambient Post\n');
-    await generateAmbientPost();
+  // Example 1
+  console.log('\n📌 Example 1: Single Ambient Post\n');
+  await generateAmbientPost();
 
-    // Example 2
-    console.log('\n' + '='.repeat(80));
-    console.log('\n📌 Example 2: Reactions with Retry\n');
-    await generateReactionsWithRetry('TeslAI announces Dogecoin acceptance');
+  // Example 2
+  console.log('\n' + '='.repeat(80));
+  console.log('\n📌 Example 2: Reactions with Retry\n');
+  await generateReactionsWithRetry('TeslAI announces Dogecoin acceptance');
 
-    // Example 3
-    console.log('\n' + '='.repeat(80));
-    console.log('\n📌 Example 3: Mixed Feed Content\n');
-    await generateMixedFeedContent();
+  // Example 3
+  console.log('\n' + '='.repeat(80));
+  console.log('\n📌 Example 3: Mixed Feed Content\n');
+  await generateMixedFeedContent();
 
-    console.log('\n' + '='.repeat(80));
-    console.log('\n✅ All examples completed successfully!\n');
-  } catch (error) {
-    console.error('\n❌ Error running examples:', error);
-  }
+  console.log('\n' + '='.repeat(80));
+  console.log('\n✅ All examples completed successfully!\n');
 }
 
 // Uncomment to run:

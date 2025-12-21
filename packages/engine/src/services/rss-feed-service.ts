@@ -344,7 +344,7 @@ export class RSSFeedService {
     const result = await db
       .delete(rssHeadlines)
       .where(lt(rssHeadlines.publishedAt, sevenDaysAgo))
-      .returning({ id: rssHeadlines.id });
+      .returning();
 
     const count = result.length;
 

@@ -10,10 +10,8 @@ function getHostname(): string | null {
 }
 
 function isProductionHost(hostname: string | null): boolean {
-  return (
-    hostname === 'babylon.market' ||
-    hostname?.endsWith('.babylon.market') === true
-  );
+  if (!hostname) return false;
+  return hostname === 'babylon.market' || hostname.endsWith('.babylon.market');
 }
 
 export function getApiBaseUrl(): string {
@@ -22,7 +20,12 @@ export function getApiBaseUrl(): string {
   }
 
   const hostname = getHostname();
-  if (!hostname) return process.env.API_BASE_URL ?? 'http://localhost:5007';
+  if (!hostname) {
+    if (process.env.API_BASE_URL) {
+      return process.env.API_BASE_URL;
+    }
+    return 'http://localhost:5007';
+  }
 
   if (isProductionHost(hostname)) return 'https://api.babylon.market';
   if (hostname.includes('testnet')) return 'https://api.testnet.babylon.market';
@@ -37,14 +40,20 @@ export function getIpfsGatewayUrl(): string {
   if (process.env.NEXT_PUBLIC_IPFS_GATEWAY)
     return process.env.NEXT_PUBLIC_IPFS_GATEWAY;
   if (isProductionHost(getHostname())) return 'https://ipfs.babylon.market';
-  return process.env.JEJU_STORAGE_SERVICE_URL ?? 'https://ipfs.jeju.network';
+  if (process.env.JEJU_STORAGE_SERVICE_URL) {
+    return process.env.JEJU_STORAGE_SERVICE_URL;
+  }
+  return 'https://ipfs.jeju.network';
 }
 
 export function getStorageApiUrl(): string {
   if (process.env.NEXT_PUBLIC_STORAGE_API_URL)
     return process.env.NEXT_PUBLIC_STORAGE_API_URL;
   if (isProductionHost(getHostname())) return 'https://storage.babylon.market';
-  return process.env.JEJU_STORAGE_SERVICE_URL ?? 'http://localhost:5001';
+  if (process.env.JEJU_STORAGE_SERVICE_URL) {
+    return process.env.JEJU_STORAGE_SERVICE_URL;
+  }
+  return 'http://localhost:5001';
 }
 
 export function getWsBaseUrl(): string {
@@ -119,10 +128,10 @@ export async function apiFetch<T>(
   });
 
   if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ message: response.statusText }));
-    throw new Error(error.message ?? `API error: ${response.status}`);
+    const errorBody = await response.text();
+    throw new Error(
+      `API ${response.status}: ${errorBody || response.statusText}`
+    );
   }
 
   return response.json() as Promise<T>;

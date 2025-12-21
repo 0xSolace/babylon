@@ -129,7 +129,7 @@ export class RelationshipEvolutionEngine {
               context,
               actor1.personality || '',
               actor2.personality || '',
-              existing?.history || undefined
+              existing?.history ? String(existing.history) : undefined
             );
 
             history = llmResult.description;
@@ -333,7 +333,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
     let updated = 0;
 
     // Process each pair
-    for (const [pairKey, interactions] of pairInteractions) {
+    for (const [pairKey, interactions] of Array.from(pairInteractions)) {
       // Need at least 2 interactions to update relationship
       if (interactions.length < 2) continue;
 
@@ -360,16 +360,16 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
 
       // Calculate average sentiment
       const avgSentiment =
-        interactions.reduce((sum, i) => sum + i.sentiment, 0) /
+        interactions.reduce((sum, i) => sum + Number(i.sentiment ?? 0), 0) /
         interactions.length;
 
       // Build context for LLM
       const interactionSummary = interactions
         .slice(0, 5)
-        .map(
-          (i) =>
-            `- ${i.interactionType}: ${i.context} (sentiment: ${i.sentiment > 0 ? '+' : ''}${i.sentiment.toFixed(2)})`
-        )
+        .map((i) => {
+          const sentiment = Number(i.sentiment ?? 0);
+          return `- ${i.interactionType}: ${i.context} (sentiment: ${sentiment > 0 ? '+' : ''}${sentiment.toFixed(2)})`;
+        })
         .join('\n');
 
       // Use LLM to generate natural text description with retry logic
@@ -456,15 +456,15 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
             sentiment: newSentiment,
             strength: Math.min(
               1.0,
-              (existing.strength || 0.5) + interactions.length * 0.05
+              Number(existing.strength ?? 0.5) + interactions.length * 0.05
             ),
             lastInteraction: new Date(),
             interactionCount:
-              (existing.interactionCount || 0) + interactions.length,
-            evolutionCount: (existing.evolutionCount || 0) + 1,
+              Number(existing.interactionCount ?? 0) + interactions.length,
+            evolutionCount: Number(existing.evolutionCount ?? 0) + 1,
             updatedAt: new Date(),
           })
-          .where(eq(actorRelationships.id, existing.id));
+          .where(eq(actorRelationships.id, String(existing.id)));
       } else {
         // Create new
         await db.insert(actorRelationships).values({
@@ -535,7 +535,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
     // Get actor names from static registry
     const actorNameMap = new Map(
       otherActorIds.map((id) => {
-        const actor = StaticDataRegistry.getActor(id);
+        const actor = StaticDataRegistry.getActor(String(id));
         return [id, actor?.name || 'Unknown'];
       })
     );
@@ -573,20 +573,22 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
         )
       );
 
-    return relationships.map((rel) => ({
-      id: rel.id,
-      actor1Id: rel.actor1Id,
-      actor2Id: rel.actor2Id,
-      relationshipType:
-        rel.relationshipType as ActorRelationship['relationshipType'],
-      strength: rel.strength,
-      sentiment: rel.sentiment,
-      isPublic: rel.isPublic,
-      history: rel.history || undefined,
-      affects: rel.affects as Record<string, number> | undefined,
-      createdAt: rel.createdAt,
-      updatedAt: rel.updatedAt,
-    }));
+    return relationships.map(
+      (rel): ActorRelationship => ({
+        id: String(rel.id),
+        actor1Id: String(rel.actor1Id),
+        actor2Id: String(rel.actor2Id),
+        relationshipType:
+          rel.relationshipType as ActorRelationship['relationshipType'],
+        strength: Number(rel.strength ?? 0),
+        sentiment: Number(rel.sentiment ?? 0),
+        isPublic: Boolean(rel.isPublic),
+        history: rel.history ? String(rel.history) : undefined,
+        affects: rel.affects as Record<string, number> | undefined,
+        createdAt: rel.createdAt as Date,
+        updatedAt: rel.updatedAt as Date,
+      })
+    );
   }
 
   /**
@@ -616,18 +618,18 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
     if (!relationship) return null;
 
     return {
-      id: relationship.id,
-      actor1Id: relationship.actor1Id,
-      actor2Id: relationship.actor2Id,
+      id: String(relationship.id),
+      actor1Id: String(relationship.actor1Id),
+      actor2Id: String(relationship.actor2Id),
       relationshipType:
         relationship.relationshipType as ActorRelationship['relationshipType'],
-      strength: relationship.strength,
-      sentiment: relationship.sentiment,
-      isPublic: relationship.isPublic,
-      history: relationship.history || undefined,
+      strength: Number(relationship.strength ?? 0),
+      sentiment: Number(relationship.sentiment ?? 0),
+      isPublic: Boolean(relationship.isPublic),
+      history: relationship.history ? String(relationship.history) : undefined,
       affects: relationship.affects as Record<string, number> | undefined,
-      createdAt: relationship.createdAt,
-      updatedAt: relationship.updatedAt,
+      createdAt: relationship.createdAt as Date,
+      updatedAt: relationship.updatedAt as Date,
     };
   }
 }

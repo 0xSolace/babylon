@@ -2,6 +2,7 @@
 
 import { FEE_CONFIG } from '@babylon/engine/client';
 import { cn } from '@babylon/shared';
+import { useMutation } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -43,8 +44,7 @@ export default function PerpsDetailClient() {
   const { user, authenticated, login, getAccessToken } = useAuth();
   // Catch-all route: params.ticker is string[] or undefined
   const tickerParam = params.ticker;
-  const ticker =
-    (Array.isArray(tickerParam) ? tickerParam[0] : tickerParam) ?? '';
+  const ticker = Array.isArray(tickerParam) ? tickerParam[0] : tickerParam;
   const { trackMarketView } = useMarketTracking();
 
   // Redirect to markets list if no ticker provided
@@ -53,6 +53,11 @@ export default function PerpsDetailClient() {
       router.replace('/markets/perps');
     }
   }, [ticker, router]);
+
+  // Don't render with missing ticker - redirect will happen via useEffect
+  if (!ticker) {
+    return null;
+  }
   const from = searchParams.get('from');
 
   // Use shared perp markets store
@@ -62,7 +67,6 @@ export default function PerpsDetailClient() {
   const [side, setSide] = useState<'long' | 'short'>('long');
   const [size, setSize] = useState('100');
   const [leverage, setLeverage] = useState(10);
-  const [submitting, setSubmitting] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
   const { perpPositions, refresh: refreshUserPositions } = useUserPositions(
@@ -133,6 +137,39 @@ export default function PerpsDetailClient() {
     ]);
   }, [refreshUserPositions, refreshWalletBalance, refetch]);
 
+  // Mutation for opening position
+  const openPositionMutation = useMutation({
+    mutationFn: async (params: {
+      positionTicker: string;
+      positionSide: 'long' | 'short';
+      positionSize: number;
+      positionLeverage: number;
+    }) => {
+      return openPosition({
+        ticker: params.positionTicker,
+        side: params.positionSide,
+        size: params.positionSize,
+        leverage: params.positionLeverage,
+      });
+    },
+    onSuccess: async () => {
+      toast.success('Position opened!', {
+        description: `Opened ${leverage}x ${side} on ${market?.ticker} at $${displayPrice.toFixed(2)}`,
+      });
+
+      await Promise.all([
+        refetch(),
+        refreshUserPositions(),
+        refreshWalletBalance(),
+      ]);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const submitting = openPositionMutation.isPending;
+
   const handleSubmit = () => {
     if (!authenticated) {
       login();
@@ -160,32 +197,14 @@ export default function PerpsDetailClient() {
     if (!market) return;
 
     const sizeNum = Number.parseFloat(size) || 0;
-    setSubmitting(true);
     setConfirmDialogOpen(false);
 
-    await openPosition({
-      ticker: market.ticker,
-      side,
-      size: sizeNum,
-      leverage,
-    })
-      .then(async () => {
-        toast.success('Position opened!', {
-          description: `Opened ${leverage}x ${side} on ${market.ticker} at $${displayPrice.toFixed(2)}`,
-        });
-
-        await Promise.all([
-          refetch(),
-          refreshUserPositions(),
-          refreshWalletBalance(),
-        ]);
-      })
-      .catch((error: Error) => {
-        toast.error(error.message);
-      })
-      .finally(() => {
-        setSubmitting(false);
-      });
+    openPositionMutation.mutate({
+      positionTicker: market.ticker,
+      positionSide: side,
+      positionSize: sizeNum,
+      positionLeverage: leverage,
+    });
   };
 
   const formatPrice = (price: number) => {

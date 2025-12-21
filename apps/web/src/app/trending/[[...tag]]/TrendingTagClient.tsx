@@ -1,9 +1,10 @@
 'use client';
 
 import { logger } from '@babylon/shared';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { PostCard } from '@/components/posts/PostCard';
 import { PageContainer } from '@/components/shared/PageContainer';
 
@@ -22,6 +23,18 @@ interface PostData {
   isShared?: boolean;
 }
 
+interface TagInfo {
+  name: string;
+  displayName: string;
+  category?: string | null;
+}
+
+interface TrendingResponse {
+  success: boolean;
+  tag?: TagInfo;
+  posts: PostData[];
+}
+
 const PAGE_SIZE = 20;
 
 export default function TrendingTagClient() {
@@ -29,8 +42,7 @@ export default function TrendingTagClient() {
   const router = useRouter();
   // Catch-all route: params.tag is string[] or undefined
   const tagParam = params.tag;
-  const tag = (Array.isArray(tagParam) ? tagParam[0] : tagParam) ?? '';
-  const [posts, setPosts] = useState<PostData[]>([]);
+  const tag = Array.isArray(tagParam) ? tagParam[0] : tagParam;
 
   // Redirect to home if no tag provided
   useEffect(() => {
@@ -38,83 +50,76 @@ export default function TrendingTagClient() {
       router.replace('/trending');
     }
   }, [tag, router]);
-  const [loading, setLoading] = useState(true);
-  const [tagInfo, setTagInfo] = useState<{
-    name: string;
-    displayName: string;
-    category?: string | null;
-  } | null>(null);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
 
-  const fetchPosts = useCallback(
-    async (requestOffset: number, append = false) => {
-      if (append) setLoadingMore(true);
-      else setLoading(true);
+  // Don't render with missing tag - redirect will happen via useEffect
+  if (!tag) {
+    return null;
+  }
 
+  const {
+    data,
+    isLoading: loading,
+    isFetchingNextPage: loadingMore,
+    hasNextPage: hasMore,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['trending', tag],
+    queryFn: async ({ pageParam = 0 }) => {
       const response = await fetch(
-        `/api/trending/${encodeURIComponent(tag)}?limit=${PAGE_SIZE}&offset=${requestOffset}`
+        `/api/trending/${encodeURIComponent(tag)}?limit=${PAGE_SIZE}&offset=${pageParam}`
       );
 
       if (!response.ok) {
         if (response.status === 404) {
           logger.warn('Tag not found', { tag }, 'TrendingTagPage');
         }
-        if (append) setHasMore(false);
-        if (append) setLoadingMore(false);
-        else setLoading(false);
-        return;
+        throw new Error('Failed to fetch posts');
       }
 
-      const data = await response.json();
-
-      if (data.success) {
-        if (!append && data.tag) {
-          setTagInfo(data.tag);
-        }
-
-        const newPosts = data.posts || [];
-
-        setPosts((prev) => {
-          const combined = append ? [...prev, ...newPosts] : newPosts;
-          const unique = new Map<string, PostData>();
-          combined.forEach((post: PostData) => {
-            if (post?.id) {
-              unique.set(post.id, post);
-            }
-          });
-
-          const deduped = Array.from(unique.values()).sort((a, b) => {
-            const aTime = new Date(a.timestamp ?? 0).getTime();
-            const bTime = new Date(b.timestamp ?? 0).getTime();
-            return bTime - aTime;
-          });
-
-          return deduped;
-        });
-
-        setOffset(requestOffset + newPosts.length);
-
-        const moreAvailable = newPosts.length === PAGE_SIZE;
-        setHasMore(moreAvailable);
-      }
-
-      if (append) setLoadingMore(false);
-      else setLoading(false);
+      const responseData = (await response.json()) as TrendingResponse;
+      return {
+        posts: responseData.posts || [],
+        tag: responseData.tag,
+        nextOffset: pageParam + (responseData.posts?.length || 0),
+        hasMore: (responseData.posts?.length || 0) === PAGE_SIZE,
+      };
     },
-    [tag]
-  );
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.nextOffset : undefined,
+    initialPageParam: 0,
+    enabled: !!tag,
+  });
 
-  useEffect(() => {
-    setOffset(0);
-    setHasMore(true);
-    fetchPosts(0, false);
-  }, [fetchPosts]);
+  // Derive posts and tagInfo from pages
+  const { posts, tagInfo } = useMemo(() => {
+    if (!data?.pages) {
+      return { posts: [] as PostData[], tagInfo: null as TagInfo | null };
+    }
+
+    // Get tag info from first page
+    const firstPageTag = data.pages[0]?.tag ?? null;
+
+    // Combine all posts from all pages with deduplication
+    const allPosts = data.pages.flatMap((page) => page.posts);
+    const unique = new Map<string, PostData>();
+    allPosts.forEach((post: PostData) => {
+      if (post?.id) {
+        unique.set(post.id, post);
+      }
+    });
+
+    const deduped = Array.from(unique.values()).sort((a, b) => {
+      const aTime = new Date(a.timestamp).getTime();
+      const bTime = new Date(b.timestamp).getTime();
+      return bTime - aTime;
+    });
+
+    return { posts: deduped, tagInfo: firstPageTag };
+  }, [data]);
 
   const handleLoadMore = () => {
     if (!loading && !loadingMore && hasMore) {
-      fetchPosts(offset, true);
+      fetchNextPage();
     }
   };
 

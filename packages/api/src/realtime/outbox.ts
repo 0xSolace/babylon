@@ -1,13 +1,4 @@
-import {
-  and,
-  db,
-  eq,
-  type JsonValue,
-  lt,
-  or,
-  realtimeOutboxes,
-  sql,
-} from '@babylon/db';
+import { db, type JsonValue } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { randomUUID } from 'crypto';
 import { streamAdd } from '../redis';
@@ -31,13 +22,15 @@ export async function enqueueOutbox(
     data: event.data,
     timestamp: event.timestamp,
   };
-  await db.insert(realtimeOutboxes).values({
-    id: randomUUID(),
-    channel: event.channel,
-    type: event.type,
-    version: event.version ?? 'v1',
-    payload,
-    updatedAt: new Date(),
+  await db.realtimeOutbox.create({
+    data: {
+      id: randomUUID(),
+      channel: event.channel,
+      type: event.type,
+      version: event.version ?? 'v1',
+      payload,
+      updatedAt: new Date(),
+    },
   });
 }
 
@@ -49,20 +42,19 @@ export async function drainOutboxBatch(limit: number = BATCH_SIZE): Promise<{
   sent: number;
   failed: number;
 }> {
-  const rows = await db
-    .select()
-    .from(realtimeOutboxes)
-    .where(
-      or(
-        eq(realtimeOutboxes.status, 'pending'),
-        and(
-          eq(realtimeOutboxes.status, 'failed'),
-          lt(realtimeOutboxes.attempts, MAX_ATTEMPTS)
-        )
-      )
-    )
-    .orderBy(realtimeOutboxes.createdAt)
-    .limit(limit);
+  // Query pending or (failed with attempts < MAX_ATTEMPTS)
+  const rows = await db.realtimeOutbox.findMany({
+    where: {
+      OR: [
+        { status: 'pending' },
+        {
+          AND: [{ status: 'failed' }, { attempts: { lt: MAX_ATTEMPTS } }],
+        },
+      ],
+    },
+    orderBy: { createdAt: 'asc' },
+    take: limit,
+  });
 
   let sent = 0;
   let failed = 0;
@@ -109,14 +101,16 @@ export async function drainOutboxBatch(limit: number = BATCH_SIZE): Promise<{
     await streamAdd(toStreamKey(envelope.channel), envelopeRecord, {
       maxlen: 10_000,
     });
-    await db
-      .update(realtimeOutboxes)
-      .set({
+
+    // Update the row status to 'sent' and increment attempts
+    await db.realtimeOutbox.update({
+      where: { id: row.id },
+      data: {
         status: 'sent',
-        attempts: sql`${realtimeOutboxes.attempts} + 1`,
+        attempts: { increment: 1 },
         lastError: null,
-      })
-      .where(eq(realtimeOutboxes.id, row.id));
+      },
+    });
     sent++;
   }
 

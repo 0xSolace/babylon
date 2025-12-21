@@ -6,7 +6,7 @@
  * information.
  */
 
-import { db, eq, type User, users } from '@babylon/db';
+import { db, type User } from '@babylon/db';
 import type { AuthenticatedUser } from '../auth-middleware';
 
 /**
@@ -56,104 +56,84 @@ export async function ensureUserForAuth(
 ): Promise<{ user: CanonicalUser }> {
   const oauth3Id = user.oauth3Id ?? user.userId;
 
-  // Check if user exists
-  const existing = await db
-    .select({
-      id: users.id,
-      oauth3Id: users.oauth3Id,
-      username: users.username,
-      displayName: users.displayName,
-      walletAddress: users.walletAddress,
-      isActor: users.isActor,
-      profileImageUrl: users.profileImageUrl,
-    })
-    .from(users)
-    .where(eq(users.oauth3Id, oauth3Id))
-    .limit(1);
+  const toCanonicalUser = (u: User): CanonicalUser => ({
+    id: u.id,
+    oauth3Id: u.oauth3Id,
+    username: u.username,
+    displayName: u.displayName,
+    walletAddress: u.walletAddress,
+    isActor: u.isActor,
+    profileImageUrl: u.profileImageUrl,
+  });
 
-  if (existing.length > 0 && existing[0]) {
-    // User exists - update if needed
-    const existingUser = existing[0];
-    const updateData: Partial<typeof users.$inferInsert> = {};
+  const existingUser = await db.user.findFirst({ where: { oauth3Id } });
+
+  if (existingUser) {
+    const now = new Date();
+    const updateData: {
+      walletAddress?: string | null;
+      username?: string | null;
+      isActor?: boolean;
+      displayName?: string | null;
+      updatedAt?: Date;
+    } = {};
 
     if (
-      user.walletAddress &&
+      user.walletAddress !== undefined &&
       user.walletAddress !== existingUser.walletAddress
     ) {
-      updateData.walletAddress = user.walletAddress;
+      updateData.walletAddress = user.walletAddress ?? null;
     }
+
     if (
       options.username !== undefined &&
       options.username !== existingUser.username
     ) {
       updateData.username = options.username;
     }
+
     if (
       options.isActor !== undefined &&
       options.isActor !== existingUser.isActor
     ) {
       updateData.isActor = options.isActor;
     }
-    if (options.displayName !== undefined && !existingUser.displayName) {
+
+    if (
+      options.displayName !== undefined &&
+      existingUser.displayName === null
+    ) {
       updateData.displayName = options.displayName;
     }
 
     if (Object.keys(updateData).length > 0) {
-      const updated = await db
-        .update(users)
-        .set(updateData)
-        .where(eq(users.id, existingUser.id))
-        .returning({
-          id: users.id,
-          oauth3Id: users.oauth3Id,
-          username: users.username,
-          displayName: users.displayName,
-          walletAddress: users.walletAddress,
-          isActor: users.isActor,
-          profileImageUrl: users.profileImageUrl,
-        });
-
-      const updatedUser = updated[0]!;
+      updateData.updatedAt = now;
+      const updatedUser = await db.user.update({
+        where: { id: existingUser.id },
+        data: updateData,
+      });
       user.dbUserId = updatedUser.id;
-      return { user: updatedUser };
+      return { user: toCanonicalUser(updatedUser) };
     }
 
     user.dbUserId = existingUser.id;
-    return { user: existingUser };
+    return { user: toCanonicalUser(existingUser) };
   }
 
-  // Create new user
-  const createData: typeof users.$inferInsert = {
-    id: user.dbUserId ?? user.userId,
-    oauth3Id,
-    isActor: options.isActor ?? false,
-    updatedAt: new Date(),
-  };
-
-  if (user.walletAddress) {
-    createData.walletAddress = user.walletAddress;
-  }
-  if (options.username !== undefined) {
-    createData.username = options.username ?? null;
-  }
-  if (options.displayName !== undefined) {
-    createData.displayName = options.displayName;
-  }
-
-  const created = await db.insert(users).values(createData).returning({
-    id: users.id,
-    oauth3Id: users.oauth3Id,
-    username: users.username,
-    displayName: users.displayName,
-    walletAddress: users.walletAddress,
-    isActor: users.isActor,
-    profileImageUrl: users.profileImageUrl,
+  const createdUser = await db.user.create({
+    data: {
+      id: user.dbUserId ?? user.userId,
+      oauth3Id,
+      isActor: options.isActor ?? false,
+      walletAddress: user.walletAddress ?? null,
+      username: options.username ?? null,
+      displayName: options.displayName ?? null,
+      updatedAt: new Date(),
+    },
   });
 
-  const createdUser = created[0]!;
   user.dbUserId = createdUser.id;
-
-  return { user: createdUser };
+  return { user: toCanonicalUser(createdUser) };
 }
 
 /**

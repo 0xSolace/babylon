@@ -10,6 +10,8 @@ export * from './chat';
 export * from './common';
 // Export all game/utility schemas
 export * from './game';
+// Export all game engine schemas
+export * from './game-engine';
 // Export all market/position schemas
 export * from './market';
 // Export all moderation schemas

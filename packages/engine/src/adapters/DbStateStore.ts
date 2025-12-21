@@ -40,15 +40,17 @@ export class DbStateStore implements GameStateStore {
       .from(questions)
       .where(eq(questions.status, 'active'));
 
-    return rows.map((q) => ({
-      id: q.id,
-      questionNumber: q.questionNumber,
-      text: q.text,
-      status: q.status as 'active' | 'resolved',
-      outcome: q.outcome ?? undefined,
-      resolutionDate: q.resolutionDate ?? undefined,
-      scenarioId: q.scenarioId ?? undefined,
-    }));
+    return rows.map(
+      (q): ActiveQuestion => ({
+        id: q.id as string,
+        questionNumber: q.questionNumber as number,
+        text: q.text as string,
+        status: q.status as 'active' | 'resolved',
+        outcome: (q.outcome as boolean | null) ?? undefined,
+        resolutionDate: (q.resolutionDate as Date | null) ?? undefined,
+        scenarioId: (q.scenarioId as number | null) ?? undefined,
+      })
+    );
   }
 
   async getQuestionsToResolve(beforeTime: Date): Promise<ActiveQuestion[]> {
@@ -62,15 +64,17 @@ export class DbStateStore implements GameStateStore {
         )
       );
 
-    return rows.map((q) => ({
-      id: q.id,
-      questionNumber: q.questionNumber,
-      text: q.text,
-      status: q.status as 'active' | 'resolved',
-      outcome: q.outcome ?? undefined,
-      resolutionDate: q.resolutionDate ?? undefined,
-      scenarioId: q.scenarioId ?? undefined,
-    }));
+    return rows.map(
+      (q): ActiveQuestion => ({
+        id: q.id as string,
+        questionNumber: q.questionNumber as number,
+        text: q.text as string,
+        status: q.status as 'active' | 'resolved',
+        outcome: (q.outcome as boolean | null) ?? undefined,
+        resolutionDate: (q.resolutionDate as Date | null) ?? undefined,
+        scenarioId: (q.scenarioId as number | null) ?? undefined,
+      })
+    );
   }
 
   async createQuestion(question: QuestionInput): Promise<string> {
@@ -110,17 +114,19 @@ export class DbStateStore implements GameStateStore {
       .from(markets)
       .where(eq(markets.resolved, false));
 
-    return rows.map((m) => ({
-      id: m.id,
-      questionNumber: 0, // Markets don't have questionNumber directly
-      yesShares: Number(m.yesShares),
-      noShares: Number(m.noShares),
-      yesPrice:
-        Number(m.yesShares) / (Number(m.yesShares) + Number(m.noShares) || 1),
-      noPrice:
-        Number(m.noShares) / (Number(m.yesShares) + Number(m.noShares) || 1),
-      resolved: m.resolved,
-    }));
+    return rows.map(
+      (m): ActiveMarket => ({
+        id: m.id as string,
+        questionNumber: 0, // Markets don't have questionNumber directly
+        yesShares: Number(m.yesShares),
+        noShares: Number(m.noShares),
+        yesPrice:
+          Number(m.yesShares) / (Number(m.yesShares) + Number(m.noShares) || 1),
+        noPrice:
+          Number(m.noShares) / (Number(m.yesShares) + Number(m.noShares) || 1),
+        resolved: m.resolved as boolean,
+      })
+    );
   }
 
   async updateMarketPrice(

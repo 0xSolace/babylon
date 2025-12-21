@@ -5,6 +5,7 @@ import {
   PredictionPricing,
 } from '@babylon/engine/client';
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   CheckCircle,
@@ -77,10 +78,11 @@ export default function PredictionDetailClient() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { user, authenticated, login, getAccessToken } = useAuth();
   // Catch-all route: params.id is string[] or undefined
   const idParam = params.id;
-  const marketId = (Array.isArray(idParam) ? idParam[0] : idParam) ?? '';
+  const marketId = Array.isArray(idParam) ? idParam[0] : idParam;
   const { trackMarketView } = useMarketTracking();
 
   // Redirect to markets list if no market ID provided
@@ -89,14 +91,15 @@ export default function PredictionDetailClient() {
       router.replace('/markets/predictions');
     }
   }, [marketId, router]);
+
+  // Don't render with missing marketId - redirect will happen via useEffect
+  if (!marketId) {
+    return null;
+  }
   const from = searchParams.get('from');
 
-  const [market, setMarket] = useState<PredictionMarket | null>(null);
-  const [loading, setLoading] = useState(true);
   const [side, setSide] = useState<'yes' | 'no'>('yes');
   const [amount, setAmount] = useState('10');
-  const [submitting, setSubmitting] = useState(false);
-  const [userPositions, setUserPositions] = useState<PredictionPosition[]>([]);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -138,6 +141,45 @@ export default function PredictionDetailClient() {
     },
     []
   );
+
+  // Query for market data - must be defined before effectiveShares
+  const {
+    data: marketData,
+    isLoading: loading,
+    refetch: fetchMarketData,
+  } = useQuery({
+    queryKey: ['predictionMarket', marketId, user?.id],
+    queryFn: async () => {
+      const userId = authenticated && user?.id ? `?userId=${user.id}` : '';
+      const response = await fetch(`/api/markets/predictions${userId}`);
+      const data = await response.json();
+      const foundMarket = data.questions?.find(
+        (q: PredictionMarket) => q.id.toString() === marketId
+      );
+
+      if (!foundMarket) {
+        toast.error('Market not found');
+        router.push(from === 'dashboard' ? '/markets' : '/markets/predictions');
+        throw new Error('Market not found');
+      }
+
+      const positions =
+        (foundMarket.userPositions ?? []).length > 0
+          ? (foundMarket.userPositions as PredictionPosition[])
+          : foundMarket.userPosition
+            ? [foundMarket.userPosition as PredictionPosition]
+            : [];
+
+      return {
+        market: foundMarket as PredictionMarket,
+        positions,
+      };
+    },
+    enabled: !!marketId,
+  });
+
+  const market = marketData?.market ?? null;
+  const userPositions = marketData?.positions ?? [];
 
   const effectiveShares = useMemo(() => {
     if (!market) {
@@ -194,48 +236,70 @@ export default function PredictionDetailClient() {
 
   const handleTradeEvent = useCallback(
     (event: PredictionTradeSSE) => {
-      setMarket((prev) => {
-        if (!prev || prev.id.toString() !== event.marketId) {
-          return prev;
+      queryClient.setQueryData(
+        ['predictionMarket', marketId, user?.id],
+        (
+          prev:
+            | { market: PredictionMarket; positions: PredictionPosition[] }
+            | undefined
+        ) => {
+          if (!prev || prev.market.id.toString() !== event.marketId) {
+            return prev;
+          }
+          return {
+            market: {
+              ...prev.market,
+              yesShares: event.yesShares,
+              noShares: event.noShares,
+              liquidity: event.liquidity ?? prev.market.liquidity,
+              yesProbability: event.yesPrice,
+              noProbability: event.noPrice,
+            },
+            positions: recalculatePositionMetrics(
+              prev.positions,
+              event.yesShares,
+              event.noShares
+            ),
+          };
         }
-        return {
-          ...prev,
-          yesShares: event.yesShares,
-          noShares: event.noShares,
-          liquidity: event.liquidity ?? prev.liquidity,
-          yesProbability: event.yesPrice,
-          noProbability: event.noPrice,
-        };
-      });
-      setUserPositions((prev) =>
-        recalculatePositionMetrics(prev, event.yesShares, event.noShares)
       );
     },
-    [recalculatePositionMetrics]
+    [queryClient, marketId, user?.id, recalculatePositionMetrics]
   );
 
   const handleResolutionEvent = useCallback(
     (event: PredictionResolutionSSE) => {
-      setMarket((prev) => {
-        if (!prev || prev.id.toString() !== event.marketId) {
-          return prev;
+      queryClient.setQueryData(
+        ['predictionMarket', marketId, user?.id],
+        (
+          prev:
+            | { market: PredictionMarket; positions: PredictionPosition[] }
+            | undefined
+        ) => {
+          if (!prev || prev.market.id.toString() !== event.marketId) {
+            return prev;
+          }
+          return {
+            market: {
+              ...prev.market,
+              resolved: true,
+              resolution: event.winningSide === 'yes',
+              yesShares: event.yesShares,
+              noShares: event.noShares,
+              liquidity: event.liquidity ?? prev.market.liquidity,
+              yesProbability: event.yesPrice,
+              noProbability: event.noPrice,
+            },
+            positions: recalculatePositionMetrics(
+              prev.positions,
+              event.yesShares,
+              event.noShares
+            ),
+          };
         }
-        return {
-          ...prev,
-          resolved: true,
-          resolution: event.winningSide === 'yes',
-          yesShares: event.yesShares,
-          noShares: event.noShares,
-          liquidity: event.liquidity ?? prev.liquidity,
-          yesProbability: event.yesPrice,
-          noProbability: event.noPrice,
-        };
-      });
-      setUserPositions((prev) =>
-        recalculatePositionMetrics(prev, event.yesShares, event.noShares)
       );
     },
-    [recalculatePositionMetrics]
+    [queryClient, marketId, user?.id, recalculatePositionMetrics]
   );
 
   usePredictionMarketStream(marketId ?? null, {
@@ -250,35 +314,62 @@ export default function PredictionDetailClient() {
     }
   }, [marketId, market, trackMarketView]);
 
-  const fetchMarketData = useCallback(async () => {
-    const userId = authenticated && user?.id ? `?userId=${user.id}` : '';
-    const response = await fetch(`/api/markets/predictions${userId}`);
-    const data = await response.json();
-    const foundMarket = data.questions?.find(
-      (q: PredictionMarket) => q.id.toString() === marketId
-    );
+  // Mutation for buying shares
+  const buyMutation = useMutation({
+    mutationFn: async ({
+      marketIdToUse,
+      buyingSide,
+      buyingAmount,
+    }: {
+      marketIdToUse: number | string;
+      buyingSide: 'yes' | 'no';
+      buyingAmount: number;
+    }) => {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in.');
+      }
 
-    if (!foundMarket) {
-      toast.error('Market not found');
-      router.push(from === 'dashboard' ? '/markets' : '/markets/predictions');
-      return;
-    }
+      const response = await fetch(
+        `/api/markets/predictions/${marketIdToUse}/buy`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            side: buyingSide,
+            amount: buyingAmount,
+          }),
+        }
+      );
 
-    setMarket(foundMarket);
-    const positions =
-      (foundMarket.userPositions ?? []).length > 0
-        ? (foundMarket.userPositions as PredictionPosition[])
-        : foundMarket.userPosition
-          ? [foundMarket.userPosition as PredictionPosition]
-          : [];
-    setUserPositions(positions);
+      const data = await response.json();
 
-    setLoading(false);
-  }, [marketId, router, authenticated, user?.id, from]);
+      if (!response.ok) {
+        const errorMessage =
+          typeof data.error === 'object'
+            ? data.error.message || 'Failed to buy shares'
+            : data.error || data.message || 'Failed to buy shares';
+        throw new Error(errorMessage);
+      }
 
-  useEffect(() => {
-    fetchMarketData();
-  }, [fetchMarketData]);
+      return data.calculation;
+    },
+    onSuccess: (calculation) => {
+      toast.success(`Bought ${side.toUpperCase()} shares!`, {
+        description: `${calculation?.sharesBought?.toFixed(2) || ''} shares at ${(calculation?.avgPrice || 0).toFixed(3)} each`,
+      });
+      // Refresh data
+      fetchMarketData();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const submitting = buyMutation.isPending;
 
   const handleSubmit = () => {
     if (!authenticated) {
@@ -314,48 +405,13 @@ export default function PredictionDetailClient() {
     if (!market) return;
 
     const amountNum = Number.parseFloat(amount) || 0;
-    setSubmitting(true);
     setConfirmDialogOpen(false);
 
-    const token = await getAccessToken();
-    if (!token) {
-      toast.error('Authentication required. Please log in.');
-      setSubmitting(false);
-      return;
-    }
-
-    const response = await fetch(`/api/markets/predictions/${market.id}/buy`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        side,
-        amount: amountNum,
-      }),
+    buyMutation.mutate({
+      marketIdToUse: market.id,
+      buyingSide: side,
+      buyingAmount: amountNum,
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const errorMessage =
-        typeof data.error === 'object'
-          ? data.error.message || 'Failed to buy shares'
-          : data.error || data.message || 'Failed to buy shares';
-      toast.error(errorMessage);
-      setSubmitting(false);
-      return;
-    }
-    const calculation = data.calculation;
-
-    toast.success(`Bought ${side.toUpperCase()} shares!`, {
-      description: `${calculation?.sharesBought?.toFixed(2) || ''} shares at ${(calculation?.avgPrice || 0).toFixed(3)} each`,
-    });
-
-    // Refresh data
-    await fetchMarketData();
-    setSubmitting(false);
   };
 
   const formatPrice = (price: number) => {

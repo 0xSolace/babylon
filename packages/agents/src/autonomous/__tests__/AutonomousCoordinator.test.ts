@@ -4,12 +4,12 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { generateRandomWallet } from '@babylon/shared';
 import type { IAgentRuntime, ModelType } from '@elizaos/core';
-import { ethers } from 'ethers';
 
 // Mock agent data
 const testAgentId = '123456789012345678';
-const testWalletAddress = ethers.Wallet.createRandom().address;
+const testWalletAddress = generateRandomWallet().address;
 
 // Mock user data (users table)
 const mockUser = {

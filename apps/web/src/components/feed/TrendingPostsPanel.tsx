@@ -1,11 +1,11 @@
 'use client';
 
 import { getProfileUrl } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { Heart, MessageCircle, Share2, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 
 /**
@@ -22,6 +22,11 @@ interface TrendingPost {
   commentCount: number;
   shareCount: number;
   trendingScore: number;
+}
+
+interface TrendingPostsResponse {
+  success: boolean;
+  posts?: TrendingPost[];
 }
 
 /**
@@ -41,25 +46,28 @@ interface TrendingPost {
  * @returns Trending posts panel element
  */
 export function TrendingPostsPanel() {
-  const [posts, setPosts] = useState<TrendingPost[]>([]);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchTrendingPosts = async () => {
+  const { data: posts = [], isLoading } = useQuery({
+    queryKey: ['feed', 'trending-posts'],
+    queryFn: async (): Promise<TrendingPost[]> => {
       const response = await fetch('/api/feed/widgets/trending-posts');
-      const data = await response.json();
-      if (data.success) {
-        setPosts(data.posts || []);
+      if (!response.ok) {
+        throw new Error('Failed to fetch trending posts');
       }
-      setLoading(false);
-    };
-
-    fetchTrendingPosts();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchTrendingPosts, 30000);
-    return () => clearInterval(interval);
-  }, []);
+      const data: TrendingPostsResponse = await response.json();
+      if (!data.success) {
+        return [];
+      }
+      if (!data.posts) {
+        throw new Error(
+          'Trending posts API returned success without posts data'
+        );
+      }
+      return data.posts;
+    },
+    refetchInterval: 30000,
+  });
 
   const handlePostClick = (postId: string) => {
     // Navigate to feed with post query param to open comments
@@ -77,7 +85,7 @@ export function TrendingPostsPanel() {
         <TrendingUp className="h-5 w-5 text-[#0066FF]" />
         <h2 className="font-bold text-foreground text-xl">Trending</h2>
       </div>
-      {loading ? (
+      {isLoading ? (
         <div className="flex-1 space-y-3">
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-32 w-full" />

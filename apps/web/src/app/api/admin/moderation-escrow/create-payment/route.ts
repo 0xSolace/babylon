@@ -71,8 +71,7 @@
 import { X402Manager } from '@babylon/a2a';
 import { requireAdmin } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
-import { parseEther } from 'ethers';
+import { generateSnowflakeId, logger, parseEther } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -116,9 +115,13 @@ export async function POST(req: NextRequest) {
   const validation = CreateEscrowPaymentSchema.safeParse(body);
 
   if (!validation.success) {
+    const firstIssue = validation.error.issues[0];
+    if (!firstIssue) {
+      throw new Error('Validation failed but no error details available');
+    }
     return NextResponse.json(
       {
-        error: validation.error.issues[0]?.message || 'Invalid request data',
+        error: firstIssue.message,
       },
       { status: 400 }
     );

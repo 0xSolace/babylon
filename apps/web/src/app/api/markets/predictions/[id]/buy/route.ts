@@ -348,7 +348,7 @@ export const POST = withErrorHandling(
           await ensureMarketOnChain(market.id).catch((error) => {
             logger.warn(
               'Failed to create market on-chain (non-blocking)',
-              { error, marketId: market?.id ?? marketId },
+              { error, marketId: market.id },
               'POST /api/markets/predictions/[id]/buy'
             );
           });
@@ -398,7 +398,7 @@ export const POST = withErrorHandling(
       );
 
       // Update market shares (use net amount, not total with fee)
-      const currentLiquidity = Number(market.liquidity ?? 0);
+      const currentLiquidity = Number(market.liquidity);
       const newLiquidity = currentLiquidity + calc.netAmount;
       const updated = await db.market.update({
         where: { id: marketId },
@@ -522,7 +522,7 @@ export const POST = withErrorHandling(
       noPrice: calculation.newNoPrice,
       yesShares: calculation.newYesShares,
       noShares: calculation.newNoShares,
-      liquidity: Number(updatedMarket.liquidity ?? 0),
+      liquidity: Number(updatedMarket.liquidity),
       eventType: 'trade',
       source: 'user_trade',
     }).catch((error) => {
@@ -556,7 +556,7 @@ export const POST = withErrorHandling(
       noPrice: calculation.newNoPrice,
       yesShares: Number(updatedMarket.yesShares),
       noShares: Number(updatedMarket.noShares),
-      liquidity: Number(updatedMarket.liquidity ?? 0),
+      liquidity: Number(updatedMarket.liquidity),
       trade: {
         actorType: 'user',
         actorId: user.userId,

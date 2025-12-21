@@ -1,7 +1,8 @@
 'use client';
 
 import { logger } from '@babylon/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import type {
   LeaderboardTab,
   TopUser,
@@ -36,8 +37,34 @@ interface UseWaitlistDataReturn {
   refreshWaitlistData: () => Promise<void>;
 }
 
-const LEADERBOARD_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const POLL_INTERVAL = 30000; // 30 seconds
+interface WaitlistPositionResponse {
+  position: number | null;
+  leaderboardRank: number;
+  waitlistPosition: number;
+  totalAhead: number;
+  totalCount: number;
+  percentile: number;
+  inviteCode: string;
+  points: number;
+  pointsBreakdown: {
+    total: number;
+    invite: number;
+    earned: number;
+    bonus: number;
+    base: number;
+  };
+  referralCount: number;
+  weeklyReferralCount?: number;
+  weeklyLimit?: number;
+  invitedCount?: number;
+  qualifiedCount?: number;
+  totalReferralPoints?: number;
+}
+
+interface LeaderboardResponse {
+  leaderboard?: TopUser[];
+  totalPages?: number;
+}
 
 export function useWaitlistData({
   authenticated,
@@ -46,15 +73,11 @@ export function useWaitlistData({
   username,
 }: UseWaitlistDataOptions): UseWaitlistDataReturn {
   const { getAccessToken } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [waitlistData, setWaitlistData] = useState<WaitlistData | null>(null);
-  const [topUsers, setTopUsers] = useState<TopUser[]>([]);
   const [leaderboardPage, setLeaderboardPage] = useState(1);
-  const [leaderboardTotalPages, setLeaderboardTotalPages] = useState(10);
   const [leaderboardTab, setLeaderboardTab] =
     useState<LeaderboardTab>('leaderboard');
-  const [leaderboardLastFetched, setLeaderboardLastFetched] =
-    useState<number>(0);
   const [previousRank, setPreviousRank] = useState<number | null>(null);
   const [showRankImprovement, setShowRankImprovement] = useState(false);
 
@@ -63,133 +86,99 @@ export function useWaitlistData({
     []
   );
 
-  const fetchWaitlistPosition = useCallback(
-    async (fetchUserId: string, skipLeaderboard = false): Promise<boolean> => {
-      try {
-        const now = Date.now();
-        const shouldFetchLeaderboard =
-          !skipLeaderboard &&
-          now - leaderboardLastFetched > LEADERBOARD_CACHE_DURATION;
-        const pointsType = getPointsTypeForTab(leaderboardTab);
+  // Query for waitlist position
+  const { data: waitlistData = null, refetch: refetchPosition } = useQuery({
+    queryKey: ['waitlistPosition', userId],
+    queryFn: async (): Promise<WaitlistData | null> => {
+      const token = await getAccessToken();
 
-        const token = await getAccessToken();
+      const response = await fetch('/api/waitlist/position', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
 
-        const requests: Promise<Response>[] = [
-          fetch('/api/waitlist/position', {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          }),
-        ];
-
-        if (shouldFetchLeaderboard) {
-          requests.push(
-            fetch(
-              `/api/waitlist/leaderboard?page=1&limit=10&pointsType=${pointsType}`
-            )
-          );
-        }
-
-        const results = await Promise.allSettled(requests);
-        const positionResult = results[0];
-        const leaderboardResult = shouldFetchLeaderboard ? results[1] : null;
-
-        if (!positionResult) {
-          logger.error(
-            'Position result is undefined',
-            { userId: fetchUserId },
-            'useWaitlistData'
-          );
-          return false;
-        }
-
-        if (positionResult.status === 'fulfilled') {
-          const positionResponse = positionResult.value;
-          if (!positionResponse.ok) {
-            const errorText = await positionResponse.text();
-            logger.error(
-              'Failed to fetch waitlist position',
-              {
-                userId: fetchUserId,
-                status: positionResponse.status,
-                errorText,
-              },
-              'useWaitlistData'
-            );
-            return false;
-          }
-
-          const data = await positionResponse.json();
-
-          if (data.position === null) {
-            return false;
-          }
-
-          // Check if rank improved
-          if (previousRank !== null && data.leaderboardRank < previousRank) {
-            setShowRankImprovement(true);
-            setTimeout(() => setShowRankImprovement(false), 5000);
-          }
-          setPreviousRank(data.leaderboardRank);
-
-          setWaitlistData(data);
-        } else {
-          logger.error(
-            'Failed to fetch waitlist position (network error)',
-            {
-              userId: fetchUserId,
-              error:
-                positionResult.reason instanceof Error
-                  ? positionResult.reason.message
-                  : String(positionResult.reason),
-            },
-            'useWaitlistData'
-          );
-          return false;
-        }
-
-        if (leaderboardResult && leaderboardResult.status === 'fulfilled') {
-          const leaderboardResponse = leaderboardResult.value;
-          if (leaderboardResponse.ok) {
-            try {
-              const leaderboardData = await leaderboardResponse.json();
-              setTopUsers(leaderboardData.leaderboard || []);
-              setLeaderboardTotalPages(leaderboardData.totalPages || 10);
-              setLeaderboardLastFetched(now);
-              setLeaderboardPage(1);
-            } catch (parseError) {
-              logger.warn(
-                'Failed to parse leaderboard response',
-                {
-                  error:
-                    parseError instanceof Error
-                      ? parseError.message
-                      : String(parseError),
-                },
-                'useWaitlistData'
-              );
-            }
-          }
-        }
-
-        return true;
-      } catch (error) {
+      if (!response.ok) {
+        const errorText = await response.text();
         logger.error(
-          'Error fetching waitlist position',
-          {
-            userId: fetchUserId,
-            error: error instanceof Error ? error.message : String(error),
-          },
+          'Failed to fetch waitlist position',
+          { userId, status: response.status, errorText },
           'useWaitlistData'
         );
-        return false;
+        return null;
       }
+
+      const data = (await response.json()) as WaitlistPositionResponse;
+
+      if (data.position === null) {
+        return null;
+      }
+
+      // Check if rank improved
+      if (previousRank !== null && data.leaderboardRank < previousRank) {
+        setShowRankImprovement(true);
+        setTimeout(() => setShowRankImprovement(false), 5000);
+      }
+      setPreviousRank(data.leaderboardRank);
+
+      return {
+        position: data.position,
+        leaderboardRank: data.leaderboardRank,
+        waitlistPosition: data.waitlistPosition,
+        totalAhead: data.totalAhead,
+        totalCount: data.totalCount,
+        percentile: data.percentile,
+        inviteCode: data.inviteCode,
+        points: data.points,
+        pointsBreakdown: data.pointsBreakdown,
+        referralCount: data.referralCount,
+        weeklyReferralCount: data.weeklyReferralCount,
+        weeklyLimit: data.weeklyLimit,
+        invitedCount: data.invitedCount,
+        qualifiedCount: data.qualifiedCount,
+        totalReferralPoints: data.totalReferralPoints,
+      };
     },
-    [
-      leaderboardLastFetched,
-      leaderboardTab,
-      getAccessToken,
-      previousRank,
-      getPointsTypeForTab,
-    ]
+    enabled: authenticated && !!userId && profileComplete && !!username,
+    refetchInterval: 30000,
+    staleTime: 15000,
+  });
+
+  // Query for leaderboard
+  const { data: leaderboardData } = useQuery({
+    queryKey: ['leaderboard', leaderboardPage, leaderboardTab],
+    queryFn: async (): Promise<{ topUsers: TopUser[]; totalPages: number }> => {
+      const pointsType = getPointsTypeForTab(leaderboardTab);
+      const response = await fetch(
+        `/api/waitlist/leaderboard?page=${leaderboardPage}&limit=10&pointsType=${pointsType}`
+      );
+
+      if (!response.ok) {
+        logger.warn(
+          'Failed to fetch leaderboard page',
+          { page: leaderboardPage, status: response.status },
+          'useWaitlistData'
+        );
+        return { topUsers: [], totalPages: 10 };
+      }
+
+      const data = (await response.json()) as LeaderboardResponse;
+      return {
+        topUsers: data.leaderboard ?? [],
+        totalPages: data.totalPages ?? 10,
+      };
+    },
+    enabled: authenticated && !!userId && profileComplete && !!username,
+    staleTime: 300000, // 5 minutes
+  });
+
+  const fetchWaitlistPosition = useCallback(
+    async (
+      _fetchUserId: string,
+      _skipLeaderboard = false
+    ): Promise<boolean> => {
+      const result = await refetchPosition();
+      return result.data !== null;
+    },
+    [refetchPosition]
   );
 
   const fetchLeaderboardPage = useCallback(
@@ -197,69 +186,32 @@ export function useWaitlistData({
       page: number,
       tab: LeaderboardTab = leaderboardTab
     ): Promise<boolean> => {
-      const pointsType = getPointsTypeForTab(tab);
-      try {
-        const response = await fetch(
-          `/api/waitlist/leaderboard?page=${page}&limit=10&pointsType=${pointsType}`
-        );
-        if (!response.ok) {
-          logger.warn(
-            'Failed to fetch leaderboard page',
-            { page, status: response.status },
-            'useWaitlistData'
-          );
-          return false;
-        }
-
-        const data = await response.json();
-        setTopUsers(data.leaderboard || []);
-        setLeaderboardTotalPages(data.totalPages || 10);
-        setLeaderboardLastFetched(Date.now());
-        return true;
-      } catch (error) {
-        logger.error(
-          'Error fetching leaderboard page',
-          {
-            page,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'useWaitlistData'
-        );
-        return false;
+      setLeaderboardPage(page);
+      if (tab !== leaderboardTab) {
+        setLeaderboardTab(tab);
       }
+      await queryClient.invalidateQueries({
+        queryKey: ['leaderboard', page, tab],
+      });
+      return true;
     },
-    [leaderboardTab, getPointsTypeForTab]
+    [leaderboardTab, queryClient]
   );
 
   const refreshWaitlistData = useCallback(async () => {
     if (userId) {
-      await fetchWaitlistPosition(userId, false);
+      await queryClient.invalidateQueries({
+        queryKey: ['waitlistPosition', userId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
     }
-  }, [userId, fetchWaitlistPosition]);
-
-  // Initial fetch when user is authenticated and profile complete
-  useEffect(() => {
-    if (!authenticated || !userId || !profileComplete || !username) return;
-
-    void fetchWaitlistPosition(userId);
-  }, [authenticated, userId, profileComplete, username, fetchWaitlistPosition]);
-
-  // Polling for real-time updates
-  useEffect(() => {
-    if (!authenticated || !userId || !waitlistData) return;
-
-    const refreshInterval = setInterval(() => {
-      void fetchWaitlistPosition(userId, true);
-    }, POLL_INTERVAL);
-
-    return () => clearInterval(refreshInterval);
-  }, [authenticated, userId, waitlistData, fetchWaitlistPosition]);
+  }, [queryClient, userId]);
 
   return {
     waitlistData,
-    topUsers,
+    topUsers: leaderboardData?.topUsers ?? [],
     leaderboardPage,
-    leaderboardTotalPages,
+    leaderboardTotalPages: leaderboardData?.totalPages ?? 10,
     leaderboardTab,
     showRankImprovement,
     setLeaderboardPage,

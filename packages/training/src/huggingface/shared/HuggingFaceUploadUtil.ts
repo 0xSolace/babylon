@@ -166,27 +166,20 @@ export class HuggingFaceUploadUtil {
     localDir: string,
     token: string
   ): Promise<void> {
-    try {
-      const execAsync = promisify(exec);
+    const execAsync = promisify(exec);
 
-      // Set token as environment variable
-      process.env.HUGGINGFACE_HUB_TOKEN = token;
+    // Set token as environment variable
+    process.env.HUGGINGFACE_HUB_TOKEN = token;
 
-      console.log(
-        `Uploading ${localDir} to ${repoName} via huggingface-cli...`
-      );
+    console.log(`Uploading ${localDir} to ${repoName} via huggingface-cli...`);
 
-      await execAsync(
-        `huggingface-cli upload ${repoName} ${localDir} --repo-type ${repoType}`
-      );
+    await execAsync(
+      `huggingface-cli upload ${repoName} ${localDir} --repo-type ${repoType}`
+    );
 
-      logger.info('Successfully uploaded via huggingface-cli', {
-        repo: repoName,
-      });
-    } catch (error) {
-      logger.error('CLI upload failed', { error });
-      throw error;
-    }
+    logger.info('Successfully uploaded via huggingface-cli', {
+      repo: repoName,
+    });
   }
 
   /**

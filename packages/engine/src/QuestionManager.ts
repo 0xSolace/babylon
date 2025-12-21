@@ -71,7 +71,8 @@ import {
   trendingTags,
   worldEvents,
 } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, logger, QuestionSchema } from '@babylon/shared';
+import { z } from 'zod';
 import { type Article, ArticleGenerator } from './ArticleGenerator';
 import type { BabylonLLMClient } from './llm/openai-client';
 import { BabylonLLMClient as BabylonLLMClientValue } from './llm/openai-client';
@@ -330,6 +331,19 @@ export class QuestionManager {
           status: 'active',
         };
       });
+
+    // Validate generated questions
+    try {
+      z.array(QuestionSchema).parse(questions);
+    } catch (error) {
+      logger.error(
+        'Generated daily questions validation failed',
+        { error },
+        'QuestionManager'
+      );
+      // We log but still return them as the system handles partial data well,
+      // but strict validation warns us of schema drifts.
+    }
 
     return questions;
   }
@@ -946,7 +960,16 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
         .from(trendingTags)
         .leftJoin(tags, eq(trendingTags.tagId, tags.id))
         .orderBy(desc(trendingTags.score))
-        .limit(10),
+        .limit(10) as unknown as Promise<
+        {
+          id: string;
+          tagId: string;
+          score: number;
+          tagName: string | null;
+          tagDisplayName: string | null;
+          tagCategory: string | null;
+        }[]
+      >,
     ]);
 
     // Load example questions from TypeScript export
@@ -964,7 +987,7 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
       recentEvents.length > 0
         ? `EVENTS(7d): ${recentEvents
             .slice(0, 10)
-            .map((e) => `${e.description.substring(0, 60)}`)
+            .map((e) => `${String(e.description ?? '').substring(0, 60)}`)
             .join(' | ')}`
         : '';
 
@@ -972,7 +995,7 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
       activeQuestions.length > 0
         ? `ACTIVE(${activeQuestions.length}): ${activeQuestions
             .slice(0, 10)
-            .map((q) => `"${q.text.substring(0, 50)}..."`)
+            .map((q) => `"${String(q.text ?? '').substring(0, 50)}..."`)
             .join(' | ')}`
         : '';
 
@@ -982,7 +1005,7 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
             .slice(0, 5)
             .map(
               (q) =>
-                `"${q.text.substring(0, 40)}..."→${q.resolvedOutcome ? 'YES' : 'NO'}`
+                `"${String(q.text ?? '').substring(0, 40)}..."→${q.resolvedOutcome ? 'YES' : 'NO'}`
             )
             .join(' | ')}`
         : '';
@@ -1003,9 +1026,13 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
             .join(', ')}`
         : '';
 
+    type TrendingTagWithDetails = {
+      tagName: string | null;
+      tagDisplayName: string | null;
+    };
     const trendingContext =
       trendingTagsList.length > 0
-        ? `TRENDING: ${trendingTagsList
+        ? `TRENDING: ${(trendingTagsList as TrendingTagWithDetails[])
             .slice(0, 5)
             .map((tt) => tt.tagDisplayName || tt.tagName || 'Unknown')
             .join(', ')}`
@@ -1260,6 +1287,11 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         .returning();
       const market = marketResults[0]!;
 
+      const marketEndDate =
+        market.endDate instanceof Date
+          ? market.endDate
+          : new Date(String(market.endDate ?? Date.now()));
+
       logger.debug(
         'Question and market created with matching resolution dates',
         {
@@ -1267,7 +1299,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
           questionNumber: question.questionNumber,
           resolutionDate: resolutionDate.toISOString(),
           daysUntilResolution,
-          marketEndDate: market.endDate.toISOString(),
+          marketEndDate: marketEndDate.toISOString(),
         },
         'QuestionManager'
       );
@@ -1301,8 +1333,8 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       const arcPlanner = new QuestionArcPlanner();
       const arcPlan = arcPlanner.planQuestionArc(
         {
-          id: question.questionNumber,
-          text: question.text,
+          id: Number(question.questionNumber ?? 0),
+          text: String(question.text ?? ''),
           scenario: scenarioId,
           outcome: expectedOutcome,
           rank: 1,
@@ -1313,14 +1345,15 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       );
 
       // Save arc plan to database for use in subsequent ticks
-      await saveArcPlan(question.id, arcPlan);
+      await saveArcPlan(String(question.id ?? ''), arcPlan);
 
       // Create market on-chain if it doesn't have onChainMarketId
       if (!market.onChainMarketId) {
-        await ensureMarketOnChain(market.id).catch((error: Error) => {
+        const marketIdStr = String(market.id ?? '');
+        await ensureMarketOnChain(marketIdStr).catch((error: Error) => {
           logger.warn(
             'Failed to create market on-chain (non-blocking)',
-            { error, marketId: market.id },
+            { error, marketId: marketIdStr },
             'QuestionManager'
           );
         });

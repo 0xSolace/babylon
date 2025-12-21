@@ -3,35 +3,52 @@
  * Interacts with local anvil blockchain for agent registration verification
  */
 
-import { type Contract, ethers, type Provider } from 'ethers';
+import { type Address, getContract, type PublicClient } from 'viem';
 
 // ERC-8004 Agent Registry ABI (minimal)
 const AGENT_REGISTRY_ABI = [
-  'function ownerOf(uint256 tokenId) view returns (address)',
-  'function balanceOf(address owner) view returns (uint256)',
-  'function tokenURI(uint256 tokenId) view returns (string)',
-  'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
-  'function mint(address to, string calldata metadataURI) returns (uint256)',
-];
+  {
+    type: 'function',
+    name: 'ownerOf',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [{ type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'balanceOf',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'tokenURI',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [{ type: 'string' }],
+    stateMutability: 'view',
+  },
+] as const;
 
 // Default addresses from local anvil deployment
 const DEFAULT_REGISTRY_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
 
 export class LocalBlockchain {
-  private provider: Provider;
-  private registryAddress: string;
-  private registryContract: Contract | null = null;
+  private client: PublicClient;
+  private registryAddress: Address;
+  private registryContract: ReturnType<typeof getContract> | null = null;
 
-  constructor(provider: Provider, registryAddress?: string) {
-    this.provider = provider;
-    this.registryAddress = registryAddress || DEFAULT_REGISTRY_ADDRESS;
+  constructor(client: PublicClient, registryAddress?: string) {
+    this.client = client;
+    this.registryAddress = (registryAddress ||
+      DEFAULT_REGISTRY_ADDRESS) as Address;
   }
 
   /**
-   * Get connected provider
+   * Get connected client
    */
-  getProvider(): Provider {
-    return this.provider;
+  getClient(): PublicClient {
+    return this.client;
   }
 
   /**
@@ -39,7 +56,7 @@ export class LocalBlockchain {
    */
   async isAvailable(): Promise<boolean> {
     try {
-      await this.provider.getBlockNumber();
+      await this.client.getBlockNumber();
       return true;
     } catch {
       return false;
@@ -50,8 +67,7 @@ export class LocalBlockchain {
    * Get chain ID
    */
   async getChainId(): Promise<number> {
-    const network = await this.provider.getNetwork();
-    return Number(network.chainId);
+    return this.client.getChainId();
   }
 
   /**
@@ -74,12 +90,8 @@ export class LocalBlockchain {
       return null;
     }
 
-    try {
-      const contract = this.getRegistryContract();
-      return await contract.tokenURI(tokenId);
-    } catch {
-      return null;
-    }
+    const contract = this.getRegistryContract();
+    return (await contract.read.tokenURI([BigInt(tokenId)])) as string;
   }
 
   /**
@@ -90,44 +102,32 @@ export class LocalBlockchain {
       return 0;
     }
 
-    try {
-      const contract = this.getRegistryContract();
-      const balance = await contract.balanceOf(walletAddress);
-      return Number(balance);
-    } catch {
-      return 0;
-    }
+    const contract = this.getRegistryContract();
+    const balance = await contract.read.balanceOf([walletAddress as Address]);
+    return Number(balance);
   }
 
   /**
    * Get balance of an address
    */
   async getBalance(address: string): Promise<bigint> {
-    try {
-      return await this.provider.getBalance(address);
-    } catch {
-      return 0n;
-    }
+    return await this.client.getBalance({ address: address as Address });
   }
 
   /**
    * Get current block number
    */
   async getBlockNumber(): Promise<number> {
-    try {
-      return await this.provider.getBlockNumber();
-    } catch {
-      return 0;
-    }
+    return Number(await this.client.getBlockNumber());
   }
 
-  private getRegistryContract(): Contract {
+  private getRegistryContract() {
     if (!this.registryContract) {
-      this.registryContract = new ethers.Contract(
-        this.registryAddress,
-        AGENT_REGISTRY_ABI,
-        this.provider
-      );
+      this.registryContract = getContract({
+        address: this.registryAddress,
+        abi: AGENT_REGISTRY_ABI,
+        client: this.client,
+      });
     }
     return this.registryContract;
   }

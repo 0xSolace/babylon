@@ -30,7 +30,7 @@ export async function getAgentConfig(
     .from(userAgentConfigs)
     .where(eq(userAgentConfigs.userId, userId))
     .limit(1);
-  return result[0] ?? null;
+  return (result[0] as UserAgentConfig | undefined) ?? null;
 }
 
 /**
@@ -45,7 +45,7 @@ export async function getUserWithAgentConfig(
     .where(eq(users.id, userId))
     .limit(1);
 
-  const user = userResult[0];
+  const user = userResult[0] as User | undefined;
   if (!user) return null;
 
   const config = await getAgentConfig(userId);
@@ -85,7 +85,7 @@ export async function upsertAgentConfig(
       })
       .where(eq(userAgentConfigs.userId, userId))
       .returning();
-    return result[0]!;
+    return result[0] as UserAgentConfig;
   }
 
   // Generate a new ID
@@ -100,7 +100,7 @@ export async function upsertAgentConfig(
     })
     .returning();
 
-  return result[0]!;
+  return result[0] as UserAgentConfig;
 }
 
 /**

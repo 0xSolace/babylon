@@ -19,7 +19,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "viem": "^2.21.0"
+    "viem": "^2.41.2"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",

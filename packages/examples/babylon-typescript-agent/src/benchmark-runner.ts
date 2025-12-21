@@ -119,9 +119,7 @@ async function runBenchmark(
     | 'social';
   const decisionMaker = new AgentDecisionMaker({
     strategy,
-    groqApiKey: process.env.GROQ_API_KEY,
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-    openaiApiKey: process.env.OPENAI_API_KEY,
+    jejuGatewayUrl: process.env.JEJU_GATEWAY_URL,
   });
 
   log(`  Strategy: ${strategy}`);

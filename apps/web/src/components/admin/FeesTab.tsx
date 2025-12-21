@@ -1,8 +1,8 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Award, DollarSign, RefreshCw, TrendingUp, Users } from 'lucide-react';
-import { useCallback, useEffect, useState, useTransition } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -103,13 +103,15 @@ type FeeStats = z.infer<typeof FeeStatsSchema>;
  * @returns Fees tab element
  */
 export function FeesTab() {
-  const [stats, setStats] = useState<FeeStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isRefreshing, startRefresh] = useTransition();
-
-  const fetchStats = useCallback(() => {
-    startRefresh(async () => {
+  const {
+    data: stats,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery<FeeStats>({
+    queryKey: ['admin', 'fees'],
+    queryFn: async () => {
       const response = await fetch('/api/admin/fees');
       if (!response.ok) {
         throw new Error('Failed to fetch fee statistics');
@@ -119,15 +121,9 @@ export function FeesTab() {
       if (!validation.success) {
         throw new Error('Invalid data structure for fee statistics');
       }
-      setStats(validation.data);
-      setError(null);
-      setLoading(false);
-    });
-  }, []);
-
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+      return validation.data;
+    },
+  });
 
   const formatCurrency = (value: number) => {
     if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
@@ -190,7 +186,7 @@ export function FeesTab() {
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-32 w-full" />
@@ -203,7 +199,9 @@ export function FeesTab() {
   if (error || !stats) {
     return (
       <div className="p-8 text-center text-red-500">
-        {error || 'Failed to load fee statistics'}
+        {error instanceof Error
+          ? error.message
+          : 'Failed to load fee statistics'}
       </div>
     );
   }
@@ -219,13 +217,11 @@ export function FeesTab() {
           </p>
         </div>
         <button
-          onClick={fetchStats}
-          disabled={isRefreshing}
+          onClick={() => refetch()}
+          disabled={isFetching}
           className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
-          <RefreshCw
-            className={cn('h-4 w-4', isRefreshing && 'animate-spin')}
-          />
+          <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
           Refresh
         </button>
       </div>

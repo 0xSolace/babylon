@@ -5,6 +5,7 @@ import {
   PredictionPricing,
 } from '@babylon/engine/client';
 import { cn } from '@babylon/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, Clock, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -60,6 +61,23 @@ interface PredictionTradingModalProps {
  * />
  * ```
  */
+/**
+ * Payload for buying prediction shares.
+ */
+interface BuyPredictionPayload {
+  side: 'yes' | 'no';
+  amount: number;
+}
+
+/**
+ * Response from buying prediction shares.
+ */
+interface BuyPredictionResponse {
+  success: boolean;
+  sharesBought: number;
+  avgPrice: number;
+}
+
 export function PredictionTradingModal({
   question,
   isOpen,
@@ -69,7 +87,7 @@ export function PredictionTradingModal({
   const { user } = useAuth();
   const [side, setSide] = useState<'yes' | 'no'>('yes');
   const [amount, setAmount] = useState('10');
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
   // Handle escape key and body scroll lock
   useEffect(() => {
@@ -79,7 +97,7 @@ export function PredictionTradingModal({
     }
 
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !loading) {
+      if (e.key === 'Escape' && !buyMutation.isPending) {
         onClose();
       }
     };
@@ -91,7 +109,7 @@ export function PredictionTradingModal({
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
     };
-  }, [isOpen, onClose, loading]);
+  }, [isOpen, onClose, buyMutation.isPending]);
 
   // Cleanup on unmount (for HMR)
   useEffect(() => {
@@ -142,7 +160,59 @@ export function PredictionTradingModal({
 
   const daysLeft = getDaysUntilResolution();
 
-  const handleSubmit = async () => {
+  // Mutation for buying prediction shares
+  const buyMutation = useMutation({
+    mutationFn: async (
+      payload: BuyPredictionPayload
+    ): Promise<BuyPredictionResponse> => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('Authentication required. Please log in.');
+      }
+
+      const response = await fetch(
+        `/api/markets/predictions/${question.id}/buy`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as {
+          error?: string;
+          message?: string;
+        };
+        throw new Error(
+          errorData.error || errorData.message || 'Failed to buy shares'
+        );
+      }
+
+      return response.json() as Promise<BuyPredictionResponse>;
+    },
+    onSuccess: () => {
+      toast.success(`Bought ${side.toUpperCase()} shares!`, {
+        description: `${calculation?.sharesBought.toFixed(2)} shares at ${(calculation?.avgPrice || 0).toFixed(3)} each`,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['markets', 'predictions'],
+      });
+      void queryClient.invalidateQueries({ queryKey: ['positions'] });
+      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
+      onClose();
+      onSuccess?.();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleSubmit = () => {
     if (!user) return;
 
     if (amountNum < 1) {
@@ -150,40 +220,7 @@ export function PredictionTradingModal({
       return;
     }
 
-    setLoading(true);
-
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      toast.error('Authentication required. Please log in.');
-      setLoading(false);
-      return;
-    }
-
-    const response = await fetch(
-      `/api/markets/predictions/${question.id}/buy`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          side,
-          amount: amountNum,
-        }),
-      }
-    );
-
-    await response.json();
-
-    toast.success(`Bought ${side.toUpperCase()} shares!`, {
-      description: `${calculation?.sharesBought.toFixed(2)} shares at ${(calculation?.avgPrice || 0).toFixed(3)} each`,
-    });
-
-    onClose();
-    if (onSuccess) onSuccess();
-    setLoading(false);
+    buyMutation.mutate({ side, amount: amountNum });
   };
 
   const formatPrice = (price: number) => {
@@ -364,16 +401,17 @@ export function PredictionTradingModal({
           {/* Submit Button */}
           <button
             onClick={handleSubmit}
-            disabled={loading || amountNum < 1}
+            disabled={buyMutation.isPending || amountNum < 1}
             className={cn(
               'w-full cursor-pointer rounded py-3 font-bold text-base text-foreground transition-all sm:py-4 sm:text-lg',
               side === 'yes'
                 ? 'bg-green-600 hover:bg-green-700'
                 : 'bg-red-600 hover:bg-red-700',
-              (loading || amountNum < 1) && 'cursor-not-allowed opacity-50'
+              (buyMutation.isPending || amountNum < 1) &&
+                'cursor-not-allowed opacity-50'
             )}
           >
-            {loading ? (
+            {buyMutation.isPending ? (
               <span className="flex items-center justify-center gap-2">
                 Buying Shares...
               </span>
@@ -385,7 +423,7 @@ export function PredictionTradingModal({
           {/* Cancel */}
           <button
             onClick={onClose}
-            disabled={loading}
+            disabled={buyMutation.isPending}
             className="mt-3 w-full cursor-pointer rounded py-2.5 font-medium text-muted-foreground transition-all hover:bg-muted disabled:cursor-not-allowed sm:py-3"
           >
             Cancel

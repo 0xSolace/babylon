@@ -154,22 +154,22 @@ export class ExternalAgentAdapter {
    * @internal
    */
   private async loadConnections(): Promise<void> {
-    const externalAgents = await db.query.externalAgentConnections.findMany({
-      where: (externalAgentConnections, { eq }) =>
-        eq(externalAgentConnections.isHealthy, true),
-      with: {
-        agentRegistry: true,
-      },
+    const externalAgents = await db.externalAgentConnection.findMany({
+      where: { isHealthy: true },
     });
 
     for (const agent of externalAgents) {
-      this.connections.set(agent.externalId, {
-        id: agent.id,
-        externalId: agent.externalId,
-        endpoint: agent.endpoint,
-        protocol: agent.protocol as Protocol,
-        isHealthy: agent.isHealthy,
-        lastConnected: agent.lastConnected ?? undefined,
+      this.connections.set(String(agent.externalId), {
+        id: String(agent.id),
+        externalId: String(agent.externalId),
+        endpoint: String(agent.endpoint),
+        protocol: String(agent.protocol) as Protocol,
+        isHealthy: Boolean(agent.isHealthy),
+        lastConnected: agent.lastConnected
+          ? agent.lastConnected instanceof Date
+            ? agent.lastConnected
+            : new Date(String(agent.lastConnected))
+          : undefined,
       });
 
       // Load and decrypt authentication credentials if present

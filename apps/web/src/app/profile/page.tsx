@@ -1,6 +1,7 @@
 'use client';
 
 import { cn, getProfileUrl } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
   ArrowLeft,
@@ -90,63 +91,94 @@ export default function ProfilePage() {
   });
   const [tab, setTab] = useState<'posts' | 'replies' | 'trades'>('posts');
   const [showLinkAccountsModal, setShowLinkAccountsModal] = useState(false);
-  const [posts, setPosts] = useState<
-    Array<{
+
+  // Types for posts and replies
+  type PostItem = {
+    id: string;
+    type?: string;
+    content: string;
+    fullContent?: string | null;
+    articleTitle?: string | null;
+    byline?: string | null;
+    biasScore?: number | null;
+    category?: string | null;
+    timestamp: string;
+    likeCount: number;
+    commentCount: number;
+    shareCount: number;
+    authorId?: string;
+    author?: {
+      id?: string;
+      displayName?: string | null;
+      username?: string | null;
+      profileImageUrl?: string | null;
+    } | null;
+    authorProfileImageUrl?: string | null;
+    isLiked?: boolean;
+    isShared?: boolean;
+    isRepost?: boolean;
+    isQuote?: boolean;
+    quoteComment?: string | null;
+    originalPostId?: string | null;
+    originalPost?: {
       id: string;
-      type?: string;
       content: string;
-      fullContent?: string | null;
-      articleTitle?: string | null;
-      byline?: string | null;
-      biasScore?: number | null;
-      category?: string | null;
+      authorId: string;
+      authorName: string;
+      authorUsername: string | null;
+      authorProfileImageUrl: string | null;
       timestamp: string;
-      likeCount: number;
-      commentCount: number;
-      shareCount: number;
-      authorId?: string;
+    } | null;
+  };
+
+  type ReplyItem = {
+    id: string;
+    content: string;
+    createdAt: string;
+    likeCount: number;
+    replyCount: number;
+    postId: string;
+    post: {
       author?: {
-        id?: string;
         displayName?: string | null;
         username?: string | null;
-        profileImageUrl?: string | null;
       } | null;
-      authorProfileImageUrl?: string | null;
-      isLiked?: boolean;
-      isShared?: boolean;
-      isRepost?: boolean;
-      isQuote?: boolean;
-      quoteComment?: string | null;
-      originalPostId?: string | null;
-      originalPost?: {
-        id: string;
-        content: string;
-        authorId: string;
-        authorName: string;
-        authorUsername: string | null;
-        authorProfileImageUrl: string | null;
-        timestamp: string;
-      } | null;
-    }>
-  >([]);
-  const [replies, setReplies] = useState<
-    Array<{
-      id: string;
       content: string;
-      createdAt: string;
-      likeCount: number;
-      replyCount: number;
-      postId: string;
-      post: {
-        author?: {
-          displayName?: string | null;
-          username?: string | null;
-        } | null;
-        content: string;
-      };
-    }>
-  >([]);
-  const [loadingPosts, setLoadingPosts] = useState(false);
+    };
+  };
+
+  interface UserContentResponse {
+    data?: {
+      items?: PostItem[] | ReplyItem[];
+    };
+    items?: PostItem[] | ReplyItem[];
+  }
+
+  // Fetch posts using react-query
+  const { data: postsData, isLoading: loadingPosts } = useQuery({
+    queryKey: ['profile', 'posts', user?.id, tab],
+    queryFn: async (): Promise<PostItem[] | ReplyItem[]> => {
+      const token = await getAccessToken();
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(user!.id)}/posts?type=${tab}`,
+        { headers }
+      );
+      if (!response.ok) {
+        throw new Error('Failed to load content');
+      }
+      const data = (await response.json()) as UserContentResponse;
+      return data?.data?.items ?? data?.items ?? [];
+    },
+    enabled: !!user?.id && tab !== 'trades',
+  });
+
+  const posts = tab === 'posts' ? ((postsData as PostItem[]) ?? []) : [];
+  const replies = tab === 'replies' ? ((postsData as ReplyItem[]) ?? []) : [];
 
   // Social visibility toggles
   const [socialVisibility, setSocialVisibility] = useState<SocialVisibility>({
@@ -207,37 +239,6 @@ export default function ProfilePage() {
       setLoading(false);
     }
   }, [user, ready]);
-
-  // Load posts and replies when user or tab changes
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const loadContent = async () => {
-      setLoadingPosts(true);
-      const token = await getAccessToken();
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(
-        `/api/users/${encodeURIComponent(user.id)}/posts?type=${tab}`,
-        { headers }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        const items = data?.data?.items ?? data?.items ?? [];
-        if (tab === 'posts') {
-          setPosts(items);
-        } else {
-          setReplies(items);
-        }
-      }
-      setLoadingPosts(false);
-    };
-
-    loadContent();
-  }, [user?.id, tab, getAccessToken]);
 
   // Listen for profile updates (when user follows/unfollows someone)
   useEffect(() => {

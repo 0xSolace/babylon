@@ -12,13 +12,17 @@
  *   bun run scripts/snapshot-airdrop.ts [--dry-run]
  */
 
+import { ElizaHolderAirdropService } from '@babylon/api';
 import { airdropAllocations, db, eq, sql, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
+import type { Address } from 'viem';
 import {
   AIRDROP_TOKENS,
   ELIZA_HOLDER_BONUS_MULTIPLIER,
   tokensToWei,
 } from '../src/config/tokenomics';
+
+const elizaService = new ElizaHolderAirdropService();
 
 interface SnapshotStats {
   totalUsers: number;
@@ -150,8 +154,11 @@ async function takeSnapshot(dryRun: boolean): Promise<SnapshotStats> {
       allocation = minAllocation;
     }
 
-    // TODO: Check ELIZA holdings
-    const isElizaHolder = false;
+    // Check ELIZA holdings via ElizaHolderAirdropService
+    const elizaBalance = await elizaService.getFullElizaBalance(
+      user.walletAddress as Address
+    );
+    const isElizaHolder = elizaBalance > 0n;
     const bonusMultiplier = isElizaHolder ? ELIZA_HOLDER_BONUS_MULTIPLIER : 100;
     const finalAllocation = (allocation * BigInt(bonusMultiplier)) / 100n;
 

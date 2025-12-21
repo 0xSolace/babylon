@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Ban,
   CheckCircle,
@@ -11,7 +12,7 @@ import {
   Users,
   VolumeX,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { AdminSendMoneyModal } from '@/components/admin/AdminSendMoneyModal';
@@ -117,9 +118,7 @@ type SortByType =
  * @returns User management tab element
  */
 export function UserManagementTab() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, startRefresh] = useTransition();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortByType>('created');
   const [searchQuery, setSearchQuery] = useState('');
@@ -131,58 +130,56 @@ export function UserManagementTab() {
   const [banReason, setBanReason] = useState('');
   const [isScammer, setIsScammer] = useState(false);
   const [isCSAM, setIsCSAM] = useState(false);
-  const [isBanning, startBanning] = useTransition();
 
-  const fetchUsers = useCallback(
-    (showRefreshing = false) => {
-      const fetchLogic = async () => {
-        const params = new URLSearchParams({
-          limit: '50',
-          filter,
-          sortBy,
-          sortOrder: 'desc',
-        });
-        if (searchQuery) params.set('search', searchQuery);
+  const {
+    data: users = [],
+    isLoading,
+    refetch,
+    isFetching,
+  } = useQuery<User[]>({
+    queryKey: ['admin', 'users', filter, sortBy, searchQuery],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        limit: '50',
+        filter,
+        sortBy,
+        sortOrder: 'desc',
+      });
+      if (searchQuery) params.set('search', searchQuery);
 
-        const response = await fetch(`/api/admin/users?${params}`);
-        if (!response.ok) throw new Error('Failed to fetch users');
-        const data = await response.json();
-        const validation = z.array(UserSchema).safeParse(data.users);
-        if (!validation.success) {
-          throw new Error('Invalid user data structure');
-        }
-        setUsers(validation.data || []);
-        setLoading(false);
-      };
-
-      if (showRefreshing) {
-        startRefresh(fetchLogic);
-      } else {
-        fetchLogic();
+      const response = await fetch(`/api/admin/users?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch users');
+      const data = await response.json();
+      const validation = z.array(UserSchema).safeParse(data.users);
+      if (!validation.success) {
+        throw new Error('Invalid user data structure');
       }
+      return validation.data;
     },
-    [filter, sortBy, searchQuery]
-  );
+  });
 
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
-
-  const handleBanUser = (user: User, action: 'ban' | 'unban') => {
-    if (action === 'ban' && !banReason.trim()) {
-      toast.error('Please provide a reason for banning');
-      return;
-    }
-
-    startBanning(async () => {
-      const response = await fetch(`/api/admin/users/${user.id}/ban`, {
+  const banMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      action,
+      reason,
+      scammer,
+      csam,
+    }: {
+      userId: string;
+      action: 'ban' | 'unban';
+      reason?: string;
+      scammer?: boolean;
+      csam?: boolean;
+    }) => {
+      const response = await fetch(`/api/admin/users/${userId}/ban`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action,
-          reason: action === 'ban' ? banReason : undefined,
-          isScammer: action === 'ban' ? isScammer : false,
-          isCSAM: action === 'ban' ? isCSAM : false,
+          reason: action === 'ban' ? reason : undefined,
+          isScammer: action === 'ban' ? scammer : false,
+          isCSAM: action === 'ban' ? csam : false,
         }),
       });
 
@@ -191,8 +188,11 @@ export function UserManagementTab() {
         throw new Error(error.message || 'Failed to update user');
       }
 
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
       toast.success(
-        action === 'ban'
+        variables.action === 'ban'
           ? 'User banned successfully'
           : 'User unbanned successfully'
       );
@@ -201,7 +201,27 @@ export function UserManagementTab() {
       setIsScammer(false);
       setIsCSAM(false);
       setSelectedUser(null);
-      fetchUsers(true);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to update user'
+      );
+    },
+  });
+
+  const handleBanUser = (user: User, action: 'ban' | 'unban') => {
+    if (action === 'ban' && !banReason.trim()) {
+      toast.error('Please provide a reason for banning');
+      return;
+    }
+
+    banMutation.mutate({
+      userId: user.id,
+      action,
+      reason: banReason,
+      scammer: isScammer,
+      csam: isCSAM,
     });
   };
 
@@ -299,11 +319,11 @@ export function UserManagementTab() {
 
             {/* Activity Stats */}
             <div className="flex gap-4 text-muted-foreground text-xs">
-              <span>Posts: {user._count?.comments ?? 0}</span>
-              <span>Reactions: {user._count?.reactions ?? 0}</span>
-              <span>Positions: {user._count?.positions ?? 0}</span>
-              <span>Followers: {user._count?.followedBy ?? 0}</span>
-              <span>Following: {user._count?.following ?? 0}</span>
+              <span>Posts: {user._count ? user._count.comments : 0}</span>
+              <span>Reactions: {user._count ? user._count.reactions : 0}</span>
+              <span>Positions: {user._count ? user._count.positions : 0}</span>
+              <span>Followers: {user._count ? user._count.followedBy : 0}</span>
+              <span>Following: {user._count ? user._count.following : 0}</span>
             </div>
 
             {/* Moderation Metrics */}
@@ -427,7 +447,7 @@ export function UserManagementTab() {
               {user.isBanned ? (
                 <button
                   onClick={() => handleBanUser(user, 'unban')}
-                  disabled={isBanning}
+                  disabled={banMutation.isPending}
                   className="flex items-center gap-1 rounded bg-green-500/20 px-3 py-1.5 font-medium text-green-500 text-sm transition-colors hover:bg-green-500/30 disabled:opacity-50"
                 >
                   <CheckCircle className="h-4 w-4" />
@@ -439,7 +459,7 @@ export function UserManagementTab() {
                     setSelectedUser(user);
                     setShowBanModal(true);
                   }}
-                  disabled={isBanning}
+                  disabled={banMutation.isPending}
                   className="flex items-center gap-1 rounded bg-red-500/20 px-3 py-1.5 font-medium text-red-500 text-sm transition-colors hover:bg-red-500/30 disabled:opacity-50"
                 >
                   <Ban className="h-4 w-4" />
@@ -453,7 +473,7 @@ export function UserManagementTab() {
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="w-full space-y-3">
@@ -527,12 +547,12 @@ export function UserManagementTab() {
           </div>
 
           <button
-            onClick={() => fetchUsers(true)}
-            disabled={isRefreshing}
+            onClick={() => refetch()}
+            disabled={isFetching}
             className="ml-auto flex items-center gap-2 rounded bg-muted px-3 py-1.5 font-medium text-sm transition-colors hover:bg-muted/80 disabled:opacity-50"
           >
             <RefreshCw
-              className={cn('h-4 w-4', isRefreshing && 'animate-spin')}
+              className={cn('h-4 w-4', isFetching && 'animate-spin')}
             />
             Refresh
           </button>
@@ -568,7 +588,7 @@ export function UserManagementTab() {
           recipientUsername={selectedUser.username}
           recipientWalletAddress={selectedUser.walletAddress}
           onSuccess={() => {
-            fetchUsers(true);
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
           }}
         />
       )}
@@ -586,7 +606,7 @@ export function UserManagementTab() {
             selectedUser.displayName || selectedUser.username || 'User'
           }
           onSuccess={() => {
-            fetchUsers(true);
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
           }}
         />
       )}
@@ -604,7 +624,7 @@ export function UserManagementTab() {
             selectedUser.displayName || selectedUser.username || 'User'
           }
           onSuccess={() => {
-            fetchUsers(true);
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
           }}
         />
       )}
@@ -685,17 +705,17 @@ export function UserManagementTab() {
                   setIsCSAM(false);
                   setSelectedUser(null);
                 }}
-                disabled={isBanning}
+                disabled={banMutation.isPending}
                 className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleBanUser(selectedUser, 'ban')}
-                disabled={isBanning || !banReason.trim()}
+                disabled={banMutation.isPending || !banReason.trim()}
                 className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-primary-foreground transition-colors hover:bg-red-600 disabled:opacity-50"
               >
-                {isBanning ? (
+                {banMutation.isPending ? (
                   <>Banning...</>
                 ) : (
                   <>

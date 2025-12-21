@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ArrowUpDown, Clock, Flame, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -58,12 +59,94 @@ export default function PredictionsPage() {
   const [showCategoryPnLShareModal, setShowCategoryPnLShareModal] =
     useState(false);
 
-  // Data
-  const [predictions, setPredictions] = useState<PredictionMarket[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Data - sparklines local state (updated by SSE)
+  const [localPredictions, setLocalPredictions] = useState<PredictionMarket[]>(
+    []
+  );
   const [sparklineData, setSparklineData] = useState<
     Record<string, Array<{ time: number; yesPrice: number; noPrice: number }>>
   >({});
+
+  interface PredictionsResponse {
+    questions?: PredictionMarket[];
+  }
+
+  const {
+    data: predictionsData,
+    isLoading: loading,
+    refetch: refetchPredictions,
+  } = useQuery({
+    queryKey: ['markets', 'predictions', authenticated ? user?.id : null],
+    queryFn: async (): Promise<PredictionMarket[]> => {
+      const isAuth = authenticated;
+      const userId = user?.id;
+
+      const predictionsRes = await fetch(
+        `/api/markets/predictions${isAuth && userId ? `?userId=${userId}` : ''}`
+      );
+
+      if (!predictionsRes.ok) {
+        throw new Error('Failed to fetch predictions');
+      }
+
+      const data = (await predictionsRes.json()) as PredictionsResponse;
+
+      const fetchedAt = Date.now();
+      const fetchedPredictions: PredictionMarket[] = (data.questions || []).map(
+        (prediction: PredictionMarket) => {
+          if (
+            prediction.resolutionDate &&
+            new Date(prediction.resolutionDate).getTime() < fetchedAt
+          ) {
+            return {
+              ...prediction,
+              status: 'resolved',
+            };
+          }
+          return prediction;
+        }
+      );
+
+      // Initialize sparkline data for new predictions
+      setSparklineData((prev) => {
+        const next = { ...prev };
+        fetchedPredictions.forEach((prediction) => {
+          const id = prediction.id.toString();
+          const totalShares =
+            (prediction.yesShares || 0) + (prediction.noShares || 0);
+          const yesProbability =
+            totalShares > 0 ? (prediction.yesShares || 0) / totalShares : 0.5;
+          const noProbability = 1 - yesProbability;
+          if (!next[id] || next[id].length === 0) {
+            next[id] = [
+              {
+                time: fetchedAt,
+                yesPrice: yesProbability,
+                noPrice: noProbability,
+              },
+            ];
+          }
+        });
+        return next;
+      });
+
+      return fetchedPredictions;
+    },
+  });
+
+  // Sync react-query data to local state for SSE updates
+  useEffect(() => {
+    if (predictionsData) {
+      setLocalPredictions(predictionsData);
+    }
+  }, [predictionsData]);
+
+  // Use local predictions (can be updated by SSE)
+  const predictions =
+    localPredictions.length > 0 ? localPredictions : (predictionsData ?? []);
+
+  // Alias for setPredictions for SSE handler
+  const setPredictions = setLocalPredictions;
 
   const {
     data: _portfolioPnL,
@@ -77,8 +160,8 @@ export default function PredictionsPage() {
     useUserPositions(user?.id, { enabled: authenticated });
 
   // Use refs to store latest values to break dependency chains
-  const fetchDataRef = useRef<(() => Promise<void>) | null>(null);
-  const refreshPositionsRef = useRef<(() => Promise<void>) | null>(
+  const fetchDataRef = useRef<(() => Promise<void> | void) | null>(null);
+  const refreshPositionsRef = useRef<(() => Promise<void> | void) | null>(
     refreshUserPositions
   );
   const authenticatedRef = useRef(authenticated);
@@ -98,81 +181,24 @@ export default function PredictionsPage() {
     if (refreshPositionsRef.current) {
       await refreshPositionsRef.current();
     }
-    if (fetchDataRef.current) {
-      await fetchDataRef.current();
-    }
-  }, []);
+    await refetchPredictions();
+  }, [refetchPredictions]);
 
-  // Fetch data
+  // fetchData just calls refetch for backward compatibility
   const fetchData = useCallback(async () => {
-    const isAuth = authenticatedRef.current;
-    const userId = userIdRef.current;
-
-    const predictionsRes = await fetch(
-      `/api/markets/predictions${isAuth && userId ? `?userId=${userId}` : ''}`
-    );
-
-    if (!predictionsRes.ok) {
-      console.error('Failed to fetch predictions: Failed to fetch predictions');
-      setLoading(false);
-      return;
-    }
-
-    const predictionsData = await predictionsRes.json();
-
-    const fetchedAt = Date.now();
-    const fetchedPredictions: PredictionMarket[] = (
-      predictionsData.questions || []
-    ).map((prediction: PredictionMarket) => {
-      if (
-        prediction.resolutionDate &&
-        new Date(prediction.resolutionDate).getTime() < fetchedAt
-      ) {
-        return {
-          ...prediction,
-          status: 'resolved',
-        };
-      }
-      return prediction;
-    });
-    setPredictions(fetchedPredictions);
-
-    setSparklineData((prev) => {
-      const next = { ...prev };
-      fetchedPredictions.forEach((prediction) => {
-        const id = prediction.id.toString();
-        const totalShares =
-          (prediction.yesShares || 0) + (prediction.noShares || 0);
-        const yesProbability =
-          totalShares > 0 ? (prediction.yesShares || 0) / totalShares : 0.5;
-        const noProbability = 1 - yesProbability;
-        if (!next[id] || next[id].length === 0) {
-          next[id] = [
-            {
-              time: fetchedAt,
-              yesPrice: yesProbability,
-              noPrice: noProbability,
-            },
-          ];
-        }
-      });
-      return next;
-    });
-
-    if (isAuth && userId && refreshPositionsRef.current) {
+    await refetchPredictions();
+    if (
+      authenticatedRef.current &&
+      userIdRef.current &&
+      refreshPositionsRef.current
+    ) {
       await refreshPositionsRef.current();
     }
-    setLoading(false);
-  }, []);
+  }, [refetchPredictions]);
 
   // Store fetchData in ref
   useEffect(() => {
     fetchDataRef.current = fetchData;
-  }, [fetchData]);
-
-  // Initial fetch on mount
-  useEffect(() => {
-    fetchData();
   }, [fetchData]);
 
   const appendSparklinePoint = useCallback(

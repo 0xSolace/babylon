@@ -3,7 +3,7 @@
  */
 
 import { getKMSClient } from '@babylon/api';
-import { db, eq, users } from '@babylon/db';
+import { db } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
 import { type CQLClient, getCQL } from '@jeju/db';
 import type { Address, Hex } from 'viem';
@@ -42,11 +42,9 @@ export class DecentralizedDMService {
     agentUserId: string,
     runtime: IAgentRuntime
   ): Promise<number> {
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
     if (!agent?.isActor && !agent?.isAgent)
       throw new Error('Agent/Actor not found');
     if (!agent.walletAddress) {
@@ -61,18 +59,7 @@ export class DecentralizedDMService {
     const config = await getAgentConfig(agentUserId);
     const walletAddress = agent.walletAddress as Address;
 
-    let pendingMessages;
-    try {
-      pendingMessages = await this.fetchPendingMessages(walletAddress);
-    } catch (err) {
-      logger.error(
-        `Failed to fetch pending messages for ${agentUserId}: ${(err as Error).message}`,
-        undefined,
-        'DecentralizedDM'
-      );
-      throw err; // Re-throw - no fallbacks
-    }
-
+    const pendingMessages = await this.fetchPendingMessages(walletAddress);
     if (pendingMessages.length === 0) return 0;
 
     let responsesCreated = 0;
@@ -83,7 +70,7 @@ export class DecentralizedDMService {
           walletAddress
         );
         const response = await this.generateResponse(
-          agent.displayName ?? 'Agent',
+          agent.displayName ? String(agent.displayName) : 'Agent',
           config?.personality ?? '',
           message,
           conversationHistory,

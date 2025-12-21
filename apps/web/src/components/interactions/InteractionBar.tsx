@@ -206,13 +206,15 @@ export function InteractionBar({
         </div>
 
         {/* Delete button (only visible to post author) */}
-        <div onClick={(e) => e.stopPropagation()}>
-          <DeleteButton
-            postId={postId}
-            postAuthorId={postData?.authorId || ''}
-            size="sm"
-          />
-        </div>
+        {postData?.authorId && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <DeleteButton
+              postId={postId}
+              postAuthorId={postData.authorId}
+              size="sm"
+            />
+          </div>
+        )}
       </div>
 
       {/* Comment modal - only if custom onCommentClick is not provided */}

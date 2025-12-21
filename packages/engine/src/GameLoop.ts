@@ -95,28 +95,20 @@ export class GameLoop {
     let tradeCount = 0;
 
     if (decisions.length > 0) {
-      try {
-        const executionService = new TradeExecutionService();
-        const executionResult =
-          await executionService.executeDecisionBatch(decisions);
-        tradeCount = executionResult.successfulTrades;
+      const executionService = new TradeExecutionService();
+      const executionResult =
+        await executionService.executeDecisionBatch(decisions);
+      tradeCount = executionResult.successfulTrades;
 
-        logger.info(
-          `NPC Trading: ${executionResult.successfulTrades} trades executed`,
-          {
-            successful: executionResult.successfulTrades,
-            failed: executionResult.failedTrades,
-            holds: executionResult.holdDecisions,
-          },
-          'GameLoop'
-        );
-      } catch (e) {
-        logger.warn(
-          `Trade execution batch failed: ${e instanceof Error ? e.message : String(e)}`,
-          undefined,
-          'GameLoop'
-        );
-      }
+      logger.info(
+        `NPC Trading: ${executionResult.successfulTrades} trades executed`,
+        {
+          successful: executionResult.successfulTrades,
+          failed: executionResult.failedTrades,
+          holds: executionResult.holdDecisions,
+        },
+        'GameLoop'
+      );
     }
 
     // 3. World Events (Narrative Layer)
@@ -167,19 +159,10 @@ export class GameLoop {
       .filter((m) => Math.abs(m.changePercent24h) > 5)
       .map((m) => ({ ticker: m.ticker, change: m.changePercent24h }));
 
-    let worldEvents: WorldEvent[] = [];
-    try {
-      worldEvents = await this.world.generateTickEvents(day, hour, {
-        markets: marketState,
-        significantMoves,
-      });
-    } catch (e) {
-      logger.warn(
-        `Failed to generate world events: ${e instanceof Error ? e.message : String(e)}`,
-        { day, hour },
-        'GameLoop'
-      );
-    }
+    const worldEvents = await this.world.generateTickEvents(day, hour, {
+      markets: marketState,
+      significantMoves,
+    });
 
     // 4. Feed Reaction (Social Layer)
     // Skip if marketOnly is true (for fast simulations)
@@ -241,15 +224,7 @@ export class GameLoop {
     // 5. Relationship Evolution (Social Layer)
     // Only run once per day to save tokens, or on major interactions
     if (!marketOnly && hour === 23) {
-      try {
-        await this.relationships.analyzeAndUpdateRelationships();
-      } catch (e) {
-        logger.warn(
-          `Failed to analyze relationships: ${e instanceof Error ? e.message : String(e)}`,
-          undefined,
-          'GameLoop'
-        );
-      }
+      await this.relationships.analyzeAndUpdateRelationships();
     }
 
     // 6. Record Snapshot - now handled via PerpMarketService in the game tick cron

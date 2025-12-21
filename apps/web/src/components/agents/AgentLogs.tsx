@@ -1,8 +1,9 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Filter } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
 /**
@@ -18,6 +19,11 @@ interface Log {
   thinking?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
+}
+
+interface LogsResponse {
+  success: boolean;
+  logs: Log[];
 }
 
 /**
@@ -50,47 +56,43 @@ interface AgentLogsProps {
 
 export function AgentLogs({ agentId }: AgentLogsProps) {
   const { getAccessToken } = useAuth();
-  const [logs, setLogs] = useState<Log[]>([]);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [levelFilter, setLevelFilter] = useState<string>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
-    const token = await getAccessToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ['agent', 'logs', agentId, typeFilter, levelFilter],
+    queryFn: async (): Promise<Log[]> => {
+      const token = await getAccessToken();
+      if (!token) return [];
 
-    let url = `/api/agents/${agentId}/logs?limit=100`;
-    if (typeFilter !== 'all') url += `&type=${typeFilter}`;
-    if (levelFilter !== 'all') url += `&level=${levelFilter}`;
+      let url = `/api/agents/${agentId}/logs?limit=100`;
+      if (typeFilter !== 'all') url += `&type=${typeFilter}`;
+      if (levelFilter !== 'all') url += `&level=${levelFilter}`;
 
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    if (res.ok) {
-      const data = (await res.json()) as { success: boolean; logs: Log[] };
-      if (data.success && data.logs) {
-        setLogs(data.logs);
+      if (!res.ok) {
+        logger.error('Failed to fetch logs', undefined, 'AgentLogs');
+        return [];
       }
-    } else {
-      logger.error('Failed to fetch logs', undefined, 'AgentLogs');
-    }
-    setLoading(false);
-  }, [agentId, typeFilter, levelFilter, getAccessToken]);
 
-  useEffect(() => {
-    fetchLogs();
-    // Auto-refresh every 5 seconds
-    const interval = setInterval(fetchLogs, 5000);
-    return () => clearInterval(interval);
-  }, [fetchLogs]);
+      const data: LogsResponse = await res.json();
+      return data.success && data.logs ? data.logs : [];
+    },
+    refetchInterval: 5000,
+  });
+
+  const refetch = () => {
+    queryClient.invalidateQueries({
+      queryKey: ['agent', 'logs', agentId, typeFilter, levelFilter],
+    });
+  };
 
   const toggleExpanded = (logId: string) => {
     const newExpanded = new Set(expanded);
@@ -160,11 +162,11 @@ export function AgentLogs({ agentId }: AgentLogsProps) {
             <option value="debug">Debug</option>
           </select>
           <button
-            onClick={fetchLogs}
-            disabled={loading}
+            onClick={refetch}
+            disabled={isLoading}
             className="rounded-lg bg-muted px-4 py-2 font-medium text-foreground transition-all hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? 'Refreshing...' : 'Refresh'}
+            {isLoading ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       </div>

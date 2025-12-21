@@ -100,37 +100,26 @@ export const trendingProvider: Provider = {
       };
     }
 
-    try {
-      const trendingResult = await babylonRuntime.a2aClient.getTrendingTags(20);
-      const tags =
-        (
-          trendingResult as {
-            tags?: Array<{
-              id: string;
-              name: string;
-              displayName?: string;
-            }>;
-          }
-        )?.tags || [];
+    const trendingResult = await babylonRuntime.a2aClient.getTrendingTags(20);
+    const tags =
+      (
+        trendingResult as {
+          tags?: Array<{
+            id: string;
+            name: string;
+            displayName?: string;
+          }>;
+        }
+      )?.tags || [];
 
-      if (tags.length === 0) {
-        return { text: 'No trending tags available.' };
-      }
-
-      const trendingText = `Trending Topics:\n${tags
-        .map(
-          (t, idx) => `${idx + 1}. #${t.displayName || t.name} (ID: ${t.id})`
-        )
-        .join('\n')}`;
-
-      return { text: trendingText };
-    } catch (error) {
-      logger.error(
-        'Error fetching trending tags via A2A',
-        { error, agentId: runtime.agentId },
-        'TrendingProvider'
-      );
-      throw error;
+    if (tags.length === 0) {
+      return { text: 'No trending tags available.' };
     }
+
+    const trendingText = `Trending Topics:\n${tags
+      .map((t, idx) => `${idx + 1}. #${t.displayName || t.name} (ID: ${t.id})`)
+      .join('\n')}`;
+
+    return { text: trendingText };
   },
 };

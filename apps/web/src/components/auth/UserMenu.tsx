@@ -1,19 +1,30 @@
 'use client';
 
 import { getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Key, LogOut, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { Dropdown, DropdownItem } from '@/components/shared/Dropdown';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
- * Global fetch tracking to prevent duplicate calls across all UserMenu instances.
+ * Balance API response.
  */
-let userMenuFetchInFlight = false;
-let userMenuIntervalId: ReturnType<typeof setInterval> | null = null;
+interface BalanceResponse {
+  balance: number | string;
+}
+
+/**
+ * Profile API response.
+ */
+interface ProfileResponse {
+  user?: {
+    reputationPoints?: number;
+  };
+}
 
 /**
  * User menu component displaying user profile and account actions.
@@ -34,153 +45,82 @@ export function UserMenu() {
   const { logout, refresh } = useAuth();
   const { user, setUser } = useAuthStore();
   const router = useRouter();
-  const [tradingBalance, setTradingBalance] = useState<number | null>(null);
+  const queryClient = useQueryClient();
   const [copiedCode, setCopiedCode] = useState(false);
-  const lastFetchedUserIdRef = useRef<string | null>(null);
-  const lastFetchTimeRef = useRef<number>(0);
 
-  useEffect(() => {
-    let isMounted = true;
-    let currentFetchController: AbortController | null = null;
-
-    const fetchData = async (forceRefresh = false) => {
-      if (!user?.id || !isMounted) {
-        if (!isMounted) return;
-        setTradingBalance(null);
-        lastFetchedUserIdRef.current = null;
-        return;
-      }
-
-      // Skip if we fetched recently (within 5 seconds) unless force refresh
-      const now = Date.now();
-      if (
-        !forceRefresh &&
-        now - lastFetchTimeRef.current < 5000 &&
-        lastFetchedUserIdRef.current === user.id
-      ) {
-        return;
-      }
-
-      // Prevent duplicate fetches globally
-      if (userMenuFetchInFlight) return;
-      userMenuFetchInFlight = true;
-
+  // Fetch trading balance
+  const { data: balanceData } = useQuery({
+    queryKey: ['userMenu', 'balance', user?.id],
+    queryFn: async (): Promise<BalanceResponse> => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-      if (!token) {
-        userMenuFetchInFlight = false;
-        return;
+      if (!token || !user?.id) {
+        return { balance: 0 };
       }
 
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      };
-
-      // Create a new controller for this specific fetch call
-      currentFetchController = new AbortController();
-      const fetchController = currentFetchController;
-
-      // Fetch both trading balance and user profile (for latest reputation points)
-      const [balanceResponse, profileResponse] = await Promise.all([
-        fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, {
-          headers,
-          signal: fetchController.signal,
-        }),
-        fetch(`/api/users/${encodeURIComponent(user.id)}/profile`, {
-          headers,
-          signal: fetchController.signal,
-        }),
-      ]).catch((error) => {
-        // Ignore abort errors
-        if (error instanceof Error && error.name === 'AbortError') {
-          return [null, null];
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(user.id)}/balance`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
         }
-        // Silently handle network errors - component will show previous state or null
-        if (isMounted) {
-          console.warn('Failed to fetch user menu data:', error);
+      );
+
+      if (!response.ok) {
+        return { balance: 0 };
+      }
+
+      return response.json() as Promise<BalanceResponse>;
+    },
+    enabled: !!user?.id,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  // Fetch profile for reputation points
+  const { data: profileData } = useQuery({
+    queryKey: ['userMenu', 'profile', user?.id],
+    queryFn: async (): Promise<ProfileResponse> => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token || !user?.id) {
+        return {};
+      }
+
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(user.id)}/profile`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
         }
-        return [null, null];
-      });
+      );
 
-      if (
-        !isMounted ||
-        fetchController.signal.aborted ||
-        !balanceResponse ||
-        !profileResponse
-      ) {
-        if (isMounted) {
-          userMenuFetchInFlight = false;
-        }
-        currentFetchController = null;
-        return;
+      if (!response.ok) {
+        return {};
       }
 
-      // Update trading balance
-      if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        if (isMounted && !fetchController.signal.aborted) {
-          setTradingBalance(Number(balanceData.balance || 0));
-        }
-      }
+      return response.json() as Promise<ProfileResponse>;
+    },
+    enabled: !!user?.id,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
 
-      // Update reputation points from profile
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json();
-        if (isMounted && !fetchController.signal.aborted && profileData.user) {
-          const newReputationPoints = profileData.user.reputationPoints;
-          // Only update if reputation points changed
-          if (
-            newReputationPoints !== undefined &&
-            newReputationPoints !== user.reputationPoints
-          ) {
-            setUser({
-              ...user,
-              reputationPoints: newReputationPoints,
-            });
-          }
-        }
-      }
+  const tradingBalance = Number(balanceData?.balance || 0);
 
-      if (isMounted && !fetchController.signal.aborted) {
-        lastFetchedUserIdRef.current = user.id;
-        lastFetchTimeRef.current = now;
+  // Update reputation points in auth store when profile data changes
+  useEffect(() => {
+    if (profileData?.user?.reputationPoints !== undefined && user) {
+      if (profileData.user.reputationPoints !== user.reputationPoints) {
+        setUser({
+          ...user,
+          reputationPoints: profileData.user.reputationPoints,
+        });
       }
-
-      if (isMounted) {
-        userMenuFetchInFlight = false;
-      }
-      currentFetchController = null;
-    };
-
-    // Clear any existing interval
-    if (userMenuIntervalId) {
-      clearInterval(userMenuIntervalId);
-      userMenuIntervalId = null;
     }
-
-    // Fetch immediately when user changes or reputation points change
-    const shouldRefresh = lastFetchedUserIdRef.current !== user?.id;
-    fetchData(shouldRefresh);
-
-    // Set up interval for refresh
-    userMenuIntervalId = setInterval(() => {
-      if (isMounted) {
-        fetchData(true);
-      }
-    }, 30000);
-
-    return () => {
-      isMounted = false;
-      if (currentFetchController) {
-        currentFetchController.abort();
-      }
-      if (userMenuIntervalId) {
-        clearInterval(userMenuIntervalId);
-        userMenuIntervalId = null;
-      }
-    };
-  }, [user?.id, user?.reputationPoints, setUser, user]);
+  }, [profileData?.user?.reputationPoints, user, setUser]);
 
   // Listen for rewards-updated events to refresh auth state
   // This ensures the sidebar updates when rewards are claimed elsewhere
@@ -188,13 +128,15 @@ export function UserMenu() {
     const handleRewardsUpdated = () => {
       // Refresh the auth state to get latest reputation points
       refresh();
+      // Also invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['userMenu'] });
     };
 
     window.addEventListener('rewards-updated', handleRewardsUpdated);
     return () => {
       window.removeEventListener('rewards-updated', handleRewardsUpdated);
     };
-  }, [refresh]);
+  }, [refresh, queryClient]);
 
   const handleCopyReferralCode = async () => {
     if (!user?.referralCode) return;
@@ -237,8 +179,8 @@ export function UserMenu() {
   );
 
   // Use reputation points from authStore (synced when rewards are claimed)
-  const reputationPoints = user?.reputationPoints ?? 0;
-  const tradingBalanceValue = tradingBalance ?? 0;
+  const reputationPoints = user.reputationPoints ?? 0;
+  const tradingBalanceValue = tradingBalance;
 
   return (
     <Dropdown trigger={trigger} placement="top-right" width="default">

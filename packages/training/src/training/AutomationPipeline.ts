@@ -15,19 +15,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
   and,
-  count,
   db,
   desc,
   eq,
-  gte,
-  inArray,
   isNotNull,
   isNull,
-  not,
-  trainedModels,
-  trainingBatches,
   trajectories,
-  users,
 } from '@babylon/db';
 import { spawn } from 'child_process';
 import { getExportGroupedForGRPO } from '../dependencies';
@@ -100,53 +93,54 @@ export class AutomationPipeline {
    */
   async checkTrainingReadiness(): Promise<TrainingReadinessResult> {
     // Count SCORED trajectories ready for training
-    const scoredAndReadyResult = await db
-      .select({ count: count() })
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.isTrainingData, true),
-          eq(trajectories.usedInTraining, false),
-          isNotNull(trajectories.aiJudgeReward),
-          not(eq(trajectories.stepsJson, 'null')),
-          not(eq(trajectories.stepsJson, '[]'))
-        )
-      );
-    const scoredAndReady = scoredAndReadyResult[0]?.count || 0;
+    const scoredAndReady = await db.trajectory.count({
+      where: {
+        AND: [
+          { isTrainingData: true },
+          { usedInTraining: false },
+          { aiJudgeReward: { not: null } },
+          { stepsJson: { not: 'null' } },
+          { stepsJson: { not: '[]' } },
+        ],
+      },
+    });
 
     // Also count unscored for reporting
-    const unscoredResult = await db
-      .select({ count: count() })
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.isTrainingData, true),
-          eq(trajectories.usedInTraining, false),
-          isNull(trajectories.aiJudgeReward)
-        )
-      );
-    const unscored = unscoredResult[0]?.count || 0;
+    const unscored = await db.trajectory.count({
+      where: {
+        AND: [
+          { isTrainingData: true },
+          { usedInTraining: false },
+          { aiJudgeReward: null },
+        ],
+      },
+    });
 
     // Get scenario groups
-    const scenariosResult = await db
-      .select({
-        scenarioId: trajectories.scenarioId,
-        count: count(),
-      })
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.isTrainingData, true),
-          eq(trajectories.usedInTraining, false),
-          isNotNull(trajectories.scenarioId)
-        )
-      )
-      .groupBy(trajectories.scenarioId);
+    const scenarioGroups = await db.trajectory.groupBy({
+      by: ['scenarioId'],
+      where: {
+        AND: [
+          { isTrainingData: true },
+          { usedInTraining: false },
+          { scenarioId: { not: null } },
+        ],
+      },
+      _count: true,
+    });
 
-    const validGroups = scenariosResult.filter(
-      (s: { scenarioId: string | null; count: number }) =>
-        s.count >= this.config.minGroupSize
-    );
+    const validGroups = scenarioGroups.filter((g) => {
+      const countValue = g._count;
+      const count =
+        typeof countValue === 'number'
+          ? countValue
+          : typeof countValue === 'string'
+            ? Number(countValue)
+            : typeof countValue === 'bigint'
+              ? Number(countValue)
+              : 0;
+      return count >= this.config.minGroupSize;
+    });
 
     // Calculate data quality
     const quality = await this.calculateDataQuality();
@@ -196,17 +190,11 @@ export class AutomationPipeline {
    * Calculate data quality score
    */
   private async calculateDataQuality(): Promise<number> {
-    const sample = await db
-      .select()
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.isTrainingData, true),
-          eq(trajectories.usedInTraining, false)
-        )
-      )
-      .orderBy(desc(trajectories.createdAt))
-      .limit(50);
+    const sample = await db.trajectory.findMany({
+      where: { AND: [{ isTrainingData: true }, { usedInTraining: false }] },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
 
     if (sample.length === 0) return 0;
 
@@ -324,8 +312,9 @@ export class AutomationPipeline {
         .limit(5);
 
       for (const window of recentWindows) {
-        if (window.windowId) {
-          await rulerScoringService.scoreWindow(window.windowId);
+        const windowId = window.windowId ? String(window.windowId) : null;
+        if (windowId) {
+          await rulerScoringService.scoreWindow(windowId);
         }
       }
 
@@ -385,10 +374,8 @@ export class AutomationPipeline {
 
     // Create training batch record
     const nextVersion = await this.getNextModelVersion();
-
-    const batchResult = await db
-      .insert(trainingBatches)
-      .values({
+    const batch = await db.trainingBatch.create({
+      data: {
         id: batchId,
         batchId,
         scenarioId: windowId,
@@ -400,10 +387,8 @@ export class AutomationPipeline {
         rewardsJson: JSON.stringify([]),
         status: 'pending',
         createdAt: new Date(),
-      })
-      .returning();
-
-    const batch = batchResult[0]!;
+      },
+    });
 
     // Determine execution mode: jeju (decentralized) or local
     const useJeju =
@@ -449,13 +434,9 @@ export class AutomationPipeline {
    * Get next model version
    */
   private async getNextModelVersion(): Promise<string> {
-    const latestModelResult = await db
-      .select()
-      .from(trainedModels)
-      .orderBy(desc(trainedModels.createdAt))
-      .limit(1);
-
-    const latestModel = latestModelResult[0];
+    const latestModel = await db.trainedModel.findFirst({
+      orderBy: { createdAt: 'desc' },
+    });
 
     if (!latestModel) {
       return 'v1.0.0';
@@ -473,28 +454,17 @@ export class AutomationPipeline {
    * Get trajectory IDs for training
    */
   private async getTrajectoryIds(limit?: number): Promise<string[]> {
-    let query = db
-      .select({ trajectoryId: trajectories.trajectoryId })
-      .from(trajectories)
-      .where(
-        and(
-          eq(trajectories.isTrainingData, true),
-          eq(trajectories.usedInTraining, false)
-        )
-      )
-      .orderBy(trajectories.createdAt);
+    const result = await db.trajectory.findMany({
+      where: { AND: [{ isTrainingData: true }, { usedInTraining: false }] },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
 
-    if (limit) {
-      query = query.limit(limit) as typeof query;
-    }
-
-    const result = await query;
-
-    return result.map((t: { trajectoryId: string }) => t.trajectoryId);
+    return result.map((t) => t.trajectoryId);
   }
 
   /**
-   * Execute training via Jeju compute marketplace
+   * Execute training via Jeju RLAIF infrastructure
    */
   private async executeJejuTraining(
     batchId: string,
@@ -503,63 +473,88 @@ export class AutomationPipeline {
     trajectoryCount: number,
     dataLimit?: number
   ): Promise<void> {
-    const { createComputeTrainingClient } = await import('../compute');
+    const archetype = process.env.TRAINING_ARCHETYPE || 'trader';
 
-    const client = createComputeTrainingClient({ mode: 'jeju' });
-
-    logger.info('Submitting training to Jeju compute', {
+    logger.info('Submitting training to Jeju RLAIF', {
       batchId,
       baseModel,
       windowId,
       trajectoryCount,
+      archetype,
     });
 
-    const jobId = await client.submitTrainingJob({
+    // Update batch with training status
+    await db.trainingBatch.update({
+      where: { batchId },
+      data: { status: 'training' },
+    });
+
+    // Start training using Jeju RLAIF
+    const jejuRpcUrl = process.env.JEJU_RPC_URL;
+    if (!jejuRpcUrl) {
+      throw new Error('JEJU_RPC_URL is required for Jeju training');
+    }
+    const jejuStorageUrl = process.env.JEJU_STORAGE_SERVICE_URL;
+    if (!jejuStorageUrl) {
+      throw new Error('JEJU_STORAGE_SERVICE_URL is required for Jeju training');
+    }
+
+    this.monitorJejuRLAIFJob(
       batchId,
+      archetype,
       baseModel,
-      datasetCID: windowId, // Window ID used as dataset reference
-      trainingSteps: dataLimit ?? 2000,
-      batchSize: 4,
-      learningRate: 2e-5,
-    });
-
-    // Update batch with job ID
-    await db
-      .update(trainingBatches)
-      .set({ status: 'training' })
-      .where(eq(trainingBatches.batchId, batchId));
-
-    // Start background monitoring
-    this.monitorJejuJob(jobId, batchId).catch((err) =>
-      logger.error('Jeju job monitoring failed', { jobId, error: String(err) })
+      jejuRpcUrl,
+      jejuStorageUrl,
+      dataLimit
+    ).catch((err) =>
+      logger.error('Jeju RLAIF job monitoring failed', {
+        batchId,
+        error: String(err),
+      })
     );
   }
 
   /**
-   * Monitor Jeju training job in background
+   * Monitor Jeju RLAIF training job in background
    */
-  private async monitorJejuJob(jobId: string, batchId: string): Promise<void> {
-    const { createComputeTrainingClient } = await import('../compute');
-    const client = createComputeTrainingClient({ mode: 'jeju' });
+  private async monitorJejuRLAIFJob(
+    batchId: string,
+    archetype: string,
+    baseModel: string,
+    jejuRpcUrl: string,
+    jejuStorageUrl: string,
+    iterations?: number
+  ): Promise<void> {
+    const { trainWithJejuRLAIF } = await import(
+      '../compute/jeju-rlaif-adapter'
+    );
 
-    const result = await client.waitForJob(jobId, 7200000); // 2 hour timeout
+    try {
+      const result = await trainWithJejuRLAIF({
+        archetype,
+        modelCID: baseModel,
+        jejuRpcUrl,
+        jejuStorageUrl,
+        iterations: iterations ? Math.min(10, Math.ceil(iterations / 200)) : 5,
+      });
 
-    if (result.status === 'completed' && result.modelCID) {
-      await db
-        .update(trainingBatches)
-        .set({
+      await db.trainingBatch.update({
+        where: { batchId },
+        data: {
           status: 'completed',
           completedAt: new Date(),
-          // Note: modelCID stored in logs until DB schema is updated
-        })
-        .where(eq(trainingBatches.batchId, batchId));
+        },
+      });
 
       // Record training on-chain for audit trail
       try {
         const { recordTrainingOnChain } = await import(
           '../compute/treasury-integration'
         );
-        const record = await recordTrainingOnChain(batchId, result.modelCID);
+        const record = await recordTrainingOnChain(
+          batchId,
+          result.finalPolicyCID
+        );
         if (record?.txHash) {
           logger.info('Training recorded on-chain', {
             epoch: record.epoch,
@@ -572,23 +567,24 @@ export class AutomationPipeline {
         });
       }
 
-      logger.info('Jeju training completed', {
+      logger.info('Jeju RLAIF training completed', {
         batchId,
-        modelCID: result.modelCID,
-        durationSeconds: result.durationSeconds,
+        finalPolicyCID: result.finalPolicyCID,
+        iterations: result.iterations,
+        bestScore: result.bestScore,
       });
-    } else {
-      await db
-        .update(trainingBatches)
-        .set({
+    } catch (error) {
+      await db.trainingBatch.update({
+        where: { batchId },
+        data: {
           status: 'failed',
-          error: result.error ?? 'Unknown error',
-        })
-        .where(eq(trainingBatches.batchId, batchId));
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
 
-      logger.error('Jeju training failed', {
+      logger.error('Jeju RLAIF training failed', {
         batchId,
-        error: result.error,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -655,15 +651,17 @@ export class AutomationPipeline {
 
     trainingProcess.on('error', (error: Error) => {
       logger.error('Training process error', { error: error.message });
-      db.update(trainingBatches)
-        .set({
-          status: 'failed',
-          error: `Process spawn failed: ${error.message}`,
+      void db.trainingBatch
+        .update({
+          where: { batchId },
+          data: {
+            status: 'failed',
+            error: `Process spawn failed: ${error.message}`,
+          },
         })
-        .where(eq(trainingBatches.batchId, batchId))
-        .catch((err: unknown) =>
+        .catch((err: Error) =>
           logger.error('Failed to update batch status', {
-            error: err instanceof Error ? err : String(err),
+            error: err.message,
           })
         );
     });
@@ -675,13 +673,9 @@ export class AutomationPipeline {
    * Monitor training job
    */
   async monitorTraining(batchId: string): Promise<TrainingMonitoringStatus> {
-    const batchResult = await db
-      .select()
-      .from(trainingBatches)
-      .where(eq(trainingBatches.batchId, batchId))
-      .limit(1);
-
-    const batch = batchResult[0];
+    const batch = await db.trainingBatch.findUnique({
+      where: { batchId },
+    });
 
     if (!batch) {
       return { status: 'not_found' };
@@ -749,34 +743,29 @@ export class AutomationPipeline {
     // Check for newly completed batches (Python script may have completed)
     // Check last 24 hours to catch long-running training jobs
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const newlyCompletedResult = await db
-      .select()
-      .from(trainingBatches)
-      .where(
-        and(
-          eq(trainingBatches.status, 'completed'),
-          gte(trainingBatches.completedAt, twentyFourHoursAgo)
-        )
-      )
-      .orderBy(desc(trainingBatches.completedAt))
-      .limit(1);
-
-    const newlyCompleted = newlyCompletedResult[0];
+    const newlyCompleted = await db.trainingBatch.findFirst({
+      where: {
+        AND: [
+          { status: 'completed' },
+          { completedAt: { not: null } },
+          { completedAt: { gte: twentyFourHoursAgo } },
+        ],
+      },
+      orderBy: { completedAt: 'desc' },
+    });
 
     // Check if this batch has already been deployed
     if (newlyCompleted) {
-      const existingModelResult = await db
-        .select()
-        .from(trainedModels)
-        .where(
-          and(
-            eq(trainedModels.trainingBatch, newlyCompleted.batchId),
-            eq(trainedModels.status, 'deployed')
-          )
-        )
-        .limit(1);
+      const existingModel = await db.trainedModel.findFirst({
+        where: {
+          AND: [
+            { trainingBatch: newlyCompleted.batchId },
+            { status: 'deployed' },
+          ],
+        },
+      });
 
-      if (existingModelResult.length > 0) {
+      if (existingModel) {
         return; // Skip if already deployed
       }
 
@@ -791,17 +780,15 @@ export class AutomationPipeline {
 
     if (readiness.ready && this.config.autoTriggerTraining) {
       // Check if enough time has passed since last training
-      const lastTrainingResult = await db
-        .select()
-        .from(trainingBatches)
-        .where(eq(trainingBatches.status, 'completed'))
-        .orderBy(desc(trainingBatches.completedAt))
-        .limit(1);
+      const lastTraining = await db.trainingBatch.findFirst({
+        where: {
+          AND: [{ status: 'completed' }, { completedAt: { not: null } }],
+        },
+        orderBy: { completedAt: 'desc' },
+      });
 
-      const lastTraining = lastTrainingResult[0];
-
-      const hoursSinceLastTraining = lastTraining
-        ? (Date.now() - lastTraining.completedAt!.getTime()) / (1000 * 60 * 60)
+      const hoursSinceLastTraining = lastTraining?.completedAt
+        ? (Date.now() - lastTraining.completedAt.getTime()) / (1000 * 60 * 60)
         : 999;
 
       if (hoursSinceLastTraining >= this.config.trainingInterval) {
@@ -855,13 +842,9 @@ export class AutomationPipeline {
    * trajectories as used and updates the training batch status.
    */
   private async deployModel(batchId: string): Promise<void> {
-    const batchResult = await db
-      .select()
-      .from(trainingBatches)
-      .where(eq(trainingBatches.batchId, batchId))
-      .limit(1);
-
-    const batch = batchResult[0];
+    const batch = await db.trainingBatch.findUnique({
+      where: { batchId },
+    });
 
     if (!batch) {
       logger.warn('Batch not found for deployment', { batchId });
@@ -869,18 +852,9 @@ export class AutomationPipeline {
     }
 
     // Check if model was created by Python script
-    const modelResult = await db
-      .select()
-      .from(trainedModels)
-      .where(
-        and(
-          eq(trainedModels.trainingBatch, batch.id),
-          eq(trainedModels.status, 'ready')
-        )
-      )
-      .limit(1);
-
-    const model = modelResult[0];
+    const model = await db.trainedModel.findFirst({
+      where: { AND: [{ trainingBatch: batch.id }, { status: 'ready' }] },
+    });
 
     if (!model) {
       logger.warn('Model not found for batch', { batchId });
@@ -916,23 +890,24 @@ export class AutomationPipeline {
     }
 
     if (trajectoryIds.length > 0) {
-      await db
-        .update(trajectories)
-        .set({
+      await db.trajectory.updateMany({
+        where: { trajectoryId: { in: trajectoryIds } },
+        data: {
           usedInTraining: true,
           trainedInBatch: batch.id,
-        })
-        .where(inArray(trajectories.trajectoryId, trajectoryIds));
+        },
+      });
     }
 
     // Update model status to deployed
-    await db
-      .update(trainedModels)
-      .set({
+    await db.trainedModel.update({
+      where: { modelId: model.modelId },
+      data: {
         status: 'deployed',
         deployedAt: new Date(),
-      })
-      .where(eq(trainedModels.modelId, model.modelId));
+        updatedAt: new Date(),
+      },
+    });
 
     logger.info('Model deployed', {
       version: batch.modelVersion,
@@ -952,31 +927,18 @@ export class AutomationPipeline {
     deployed: boolean;
     reason?: string;
   }> {
-    const batchResult = await db
-      .select()
-      .from(trainingBatches)
-      .where(eq(trainingBatches.batchId, batchId))
-      .limit(1);
-
-    const batch = batchResult[0];
+    const batch = await db.trainingBatch.findUnique({
+      where: { batchId },
+    });
 
     if (!batch) {
       return { benchmarked: false, deployed: false, reason: 'Batch not found' };
     }
 
     // Get model
-    const modelResult = await db
-      .select()
-      .from(trainedModels)
-      .where(
-        and(
-          eq(trainedModels.trainingBatch, batch.id),
-          eq(trainedModels.status, 'ready')
-        )
-      )
-      .limit(1);
-
-    const model = modelResult[0];
+    const model = await db.trainedModel.findFirst({
+      where: { AND: [{ trainingBatch: batch.id }, { status: 'ready' }] },
+    });
 
     if (!model) {
       return { benchmarked: false, deployed: false, reason: 'Model not found' };
@@ -1043,16 +1005,13 @@ export class AutomationPipeline {
   private async runHealthChecks(): Promise<void> {
     try {
       // Check database connectivity
-      await db.select({ count: count() }).from(users);
+      await db.user.count();
 
       // Check data collection rate
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const last1hResult = await db
-        .select({ count: count() })
-        .from(trajectories)
-        .where(gte(trajectories.startTime, oneHourAgo));
-
-      const last1h = last1hResult[0]?.count || 0;
+      const last1h = await db.trajectory.count({
+        where: { startTime: { gte: oneHourAgo } },
+      });
 
       if (last1h < 1) {
         logger.warn('Low data collection rate', {
@@ -1078,49 +1037,35 @@ export class AutomationPipeline {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const last24hResult = await db
-      .select({ count: count() })
-      .from(trajectories)
-      .where(gte(trajectories.startTime, twentyFourHoursAgo));
-    const last24h = last24hResult[0]?.count || 0;
+    const last24h = await db.trajectory.count({
+      where: { startTime: { gte: twentyFourHoursAgo } },
+    });
 
-    const last7dResult = await db
-      .select({ count: count() })
-      .from(trajectories)
-      .where(gte(trajectories.startTime, sevenDaysAgo));
-    const last7d = last7dResult[0]?.count || 0;
+    const last7d = await db.trajectory.count({
+      where: { startTime: { gte: sevenDaysAgo } },
+    });
 
     // Training stats
-    const lastCompletedResult = await db
-      .select()
-      .from(trainingBatches)
-      .where(eq(trainingBatches.status, 'completed'))
-      .orderBy(desc(trainingBatches.completedAt))
-      .limit(1);
-    const lastCompleted = lastCompletedResult[0];
+    const lastCompleted = await db.trainingBatch.findFirst({
+      where: { AND: [{ status: 'completed' }, { completedAt: { not: null } }] },
+      orderBy: { completedAt: 'desc' },
+    });
 
     // Model stats
-    const latestModelResult = await db
-      .select()
-      .from(trainedModels)
-      .orderBy(desc(trainedModels.createdAt))
-      .limit(1);
-    const latestModel = latestModelResult[0];
+    const latestModel = await db.trainedModel.findFirst({
+      orderBy: { createdAt: 'desc' },
+    });
 
-    const deployedCountResult = await db
-      .select({ count: count() })
-      .from(trainedModels)
-      .where(eq(trainedModels.status, 'deployed'));
-    const deployedCount = deployedCountResult[0]?.count || 0;
+    const deployedCount = await db.trainedModel.count({
+      where: { status: 'deployed' },
+    });
 
-    const trainingCountResult = await db
-      .select({ count: count() })
-      .from(trainingBatches)
-      .where(eq(trainingBatches.status, 'training'));
-    const trainingCount = trainingCountResult[0]?.count || 0;
+    const trainingCount = await db.trainingBatch.count({
+      where: { status: 'training' },
+    });
 
     // Health checks - fail fast if unhealthy
-    await db.select({ count: count() }).from(users);
+    await db.user.count();
     const dbHealthy = true;
 
     await fs.access(this.config.modelStoragePath);
@@ -1136,16 +1081,16 @@ export class AutomationPipeline {
       },
       training: {
         currentJob: this.currentTrainingJob,
-        lastCompleted: lastCompleted?.completedAt || null,
-        nextScheduled: lastCompleted
+        lastCompleted: lastCompleted?.completedAt ?? null,
+        nextScheduled: lastCompleted?.completedAt
           ? new Date(
-              lastCompleted.completedAt!.getTime() +
+              new Date(String(lastCompleted.completedAt)).getTime() +
                 this.config.trainingInterval * 60 * 60 * 1000
             )
           : null,
       },
       models: {
-        latest: latestModel?.version || null,
+        latest: latestModel?.version ?? null,
         deployed: deployedCount,
         training: trainingCount,
       },

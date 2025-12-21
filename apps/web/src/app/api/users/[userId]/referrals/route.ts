@@ -240,7 +240,7 @@ export const GET = withErrorHandling(
       .from(tradingFees)
       .where(eq(tradingFees.referrerId, canonicalUserId));
 
-    const totalFeesEarned = Number(feeEarnings?.total || 0);
+    const totalFeesEarned = Number(feeEarnings?.total ?? 0);
 
     // Calculate weekly referral count (last 7 days) - only completed
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -257,7 +257,7 @@ export const GET = withErrorHandling(
         )
       );
 
-    const weeklyReferralCount = Number(weeklyCountResult?.count || 0);
+    const weeklyReferralCount = Number(weeklyCountResult?.count ?? 0);
 
     // Check if referrer (current user) is following the referred users
     const completedUserIds = completedReferralsData

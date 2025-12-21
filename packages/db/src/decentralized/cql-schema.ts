@@ -5,6 +5,12 @@
  * Handles type mapping and constraint generation.
  */
 
+import {
+  getTableConfig,
+  type PgColumn,
+  type PgTable,
+} from 'drizzle-orm/pg-core';
+import * as drizzleSchema from '../schema';
 import type { CQLColumn, CQLTableSchema } from './types';
 
 /** Map Drizzle types to CQL types */
@@ -78,8 +84,8 @@ export function generateIndexSQL(schema: CQLTableSchema): string[] {
   });
 }
 
-/** Define all Babylon tables for CovenantSQL */
-export const BABYLON_SCHEMAS: CQLTableSchema[] = [
+/** Legacy manual Babylon tables for CovenantSQL (deprecated). */
+export const LEGACY_BABYLON_SCHEMAS: CQLTableSchema[] = [
   // Users
   {
     name: 'User',
@@ -583,6 +589,196 @@ export const BABYLON_SCHEMAS: CQLTableSchema[] = [
     uniqueConstraints: [],
   },
 ];
+
+/**
+ * Generated Babylon tables for CovenantSQL (authoritative).
+ *
+ * Source of truth is Drizzle schema in `packages/db/src/schema/*`.
+ */
+const DRIZZLE_IS_TABLE = Symbol.for('drizzle:IsDrizzleTable');
+
+function isDrizzleTable(value: unknown): value is PgTable {
+  return (
+    typeof value === 'object' && value !== null && DRIZZLE_IS_TABLE in value
+  );
+}
+
+function mapPgTypeToCql(
+  sqlType: string
+): Pick<CQLColumn, 'type' | 'precision' | 'scale'> {
+  const normalized = sqlType.toLowerCase().trim();
+
+  // Arrays -> JSON (CQL doesn't support PG arrays)
+  if (normalized.endsWith('[]')) {
+    return { type: 'JSON' };
+  }
+
+  if (
+    normalized === 'text' ||
+    normalized.startsWith('varchar') ||
+    normalized.startsWith('character varying') ||
+    normalized === 'uuid'
+  ) {
+    return { type: 'TEXT' };
+  }
+
+  if (
+    normalized === 'integer' ||
+    normalized === 'int' ||
+    normalized === 'int4'
+  ) {
+    return { type: 'INTEGER' };
+  }
+
+  if (normalized === 'bigint' || normalized === 'int8') {
+    return { type: 'BIGINT' };
+  }
+
+  if (normalized === 'boolean') {
+    return { type: 'BOOLEAN' };
+  }
+
+  if (normalized.startsWith('timestamp')) {
+    return { type: 'TIMESTAMP' };
+  }
+
+  if (
+    normalized === 'double precision' ||
+    normalized === 'real' ||
+    normalized === 'float8' ||
+    normalized === 'float4'
+  ) {
+    return { type: 'DOUBLE' };
+  }
+
+  if (normalized === 'json' || normalized === 'jsonb') {
+    return { type: 'JSON' };
+  }
+
+  if (normalized.startsWith('numeric') || normalized.startsWith('decimal')) {
+    const match = normalized.match(/\((\d+)\s*,\s*(\d+)\)/);
+    if (match) {
+      const precision = Number.parseInt(match[1] ?? '', 10);
+      const scale = Number.parseInt(match[2] ?? '', 10);
+      if (Number.isFinite(precision) && Number.isFinite(scale)) {
+        return { type: 'DECIMAL', precision, scale };
+      }
+    }
+    return { type: 'DECIMAL' };
+  }
+
+  // Fallback: represent unknown/PG-specific types as TEXT
+  return { type: 'TEXT' };
+}
+
+function extractColumnDefault(
+  col: PgColumn,
+  cqlType: CQLColumn['type']
+): CQLColumn['default'] | undefined {
+  if (!col.hasDefault) return undefined;
+
+  const def = col.default;
+
+  if (
+    typeof def === 'string' ||
+    typeof def === 'number' ||
+    typeof def === 'boolean'
+  ) {
+    return def;
+  }
+
+  // Empty array/object defaults (e.g. text[].default([])) -> JSON literal
+  if (Array.isArray(def) || (typeof def === 'object' && def !== null)) {
+    if (cqlType === 'JSON') {
+      return JSON.stringify(def);
+    }
+    if (cqlType === 'TIMESTAMP') {
+      // Drizzle defaultNow() uses a SQL expression object (now()).
+      return 'NOW()';
+    }
+  }
+
+  return undefined;
+}
+
+function drizzleTableToCqlSchema(table: PgTable): CQLTableSchema {
+  const cfg = getTableConfig(table);
+
+  const columns: CQLColumn[] = cfg.columns.map((col) => {
+    const { type, precision, scale } = mapPgTypeToCql(col.getSQLType());
+    const defaultValue = extractColumnDefault(col, type);
+
+    const isPrimary = (col as { primary?: boolean }).primary === true;
+    const isUnique = (col as { isUnique?: boolean }).isUnique === true;
+
+    const cqlCol: CQLColumn = {
+      name: col.name,
+      type,
+      nullable: !col.notNull,
+    };
+
+    if (isPrimary) cqlCol.primaryKey = true;
+    if (isUnique && !isPrimary) cqlCol.unique = true;
+    if (defaultValue !== undefined) cqlCol.default = defaultValue;
+    if (precision !== undefined) cqlCol.precision = precision;
+    if (scale !== undefined) cqlCol.scale = scale;
+
+    return cqlCol;
+  });
+
+  const primaryKey = columns.filter((c) => c.primaryKey).map((c) => c.name);
+  const uniqueConstraints = cfg.uniqueConstraints.map((uc) => {
+    const name = uc.name;
+    if (!name) {
+      throw new Error(
+        `[CQL Schema] Unique constraint missing name on table "${cfg.name}"`
+      );
+    }
+    const columns = uc.columns.map((c) => {
+      const colName = (c as { name?: string }).name;
+      if (!colName) {
+        throw new Error(
+          `[CQL Schema] Unique constraint "${name}" has a column without a name on table "${cfg.name}"`
+        );
+      }
+      return colName;
+    });
+    return { name, columns };
+  });
+
+  const indexes = cfg.indexes.map((idx) => {
+    const name = idx.config.name;
+    if (!name) {
+      throw new Error(`[CQL Schema] Index missing name on table "${cfg.name}"`);
+    }
+    const columns = idx.config.columns.map((c) => {
+      const colName = (c as { name?: string }).name;
+      if (!colName) {
+        throw new Error(
+          `[CQL Schema] Index "${name}" has a column without a name on table "${cfg.name}"`
+        );
+      }
+      return colName;
+    });
+    return { name, columns, unique: idx.config.unique };
+  });
+
+  return {
+    name: cfg.name,
+    columns,
+    primaryKey,
+    uniqueConstraints,
+    indexes,
+  };
+}
+
+const DRIZZLE_SCHEMA_EXPORTS = Object.values(drizzleSchema) as unknown[];
+
+export const BABYLON_SCHEMAS: CQLTableSchema[] = DRIZZLE_SCHEMA_EXPORTS.filter(
+  isDrizzleTable
+)
+  .map(drizzleTableToCqlSchema)
+  .sort((a, b) => a.name.localeCompare(b.name));
 
 /** Generate all DDL statements for Babylon */
 export function generateAllDDL(): string[] {

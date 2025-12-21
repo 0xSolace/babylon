@@ -25,6 +25,13 @@ export {
   PrivacyMode,
   RunState,
 } from './decentralized-training';
+// Jeju RLAIF integration
+export type { BabylonRLAIFConfig } from './jeju-rlaif-adapter';
+export {
+  BabylonJejuAdapter,
+  createBabylonJejuAdapter,
+  trainWithJejuRLAIF,
+} from './jeju-rlaif-adapter';
 export type { TrainingRecord, TreasuryConfig } from './treasury-integration';
 // Treasury integration for on-chain training audit
 export {
@@ -34,7 +41,6 @@ export {
   recordTrainingOnChain,
   sendHeartbeat,
 } from './treasury-integration';
-
 export type {
   ComputeTrainingConfig,
   TrainingJobRequest,

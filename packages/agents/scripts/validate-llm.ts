@@ -15,16 +15,12 @@ async function main() {
 
   // 1. Check provider status
   console.log('1. Provider Status:');
-  try {
-    const status = await getAgentLLMStatus();
-    console.log(`   Provider: ${status.provider}`);
-    console.log(`   Configured: ${status.configured}`);
-    console.log(`   Available: ${status.available}`);
-    console.log(`   Details: ${JSON.stringify(status.details)}`);
-    console.log('   ✅ Status check passed');
-  } catch (error) {
-    console.log(`   ❌ Status check failed: ${error}`);
-  }
+  const status = await getAgentLLMStatus();
+  console.log(`   Provider: ${status.provider}`);
+  console.log(`   Configured: ${status.configured}`);
+  console.log(`   Available: ${status.available}`);
+  console.log(`   Details: ${JSON.stringify(status.details)}`);
+  console.log('   ✅ Status check passed');
   console.log('');
 
   // 2. Check exports

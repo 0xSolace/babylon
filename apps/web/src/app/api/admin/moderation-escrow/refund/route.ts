@@ -80,9 +80,13 @@ export async function POST(req: NextRequest) {
   const validation = RefundEscrowSchema.safeParse(body);
 
   if (!validation.success) {
+    const firstIssue = validation.error.issues[0];
+    if (!firstIssue) {
+      throw new Error('Validation failed but no error details available');
+    }
     return NextResponse.json(
       {
-        error: validation.error.issues[0]?.message || 'Invalid request data',
+        error: firstIssue.message,
       },
       { status: 400 }
     );
@@ -150,9 +154,12 @@ export async function POST(req: NextRequest) {
       where: { id: escrowId },
     });
 
-    if (!currentEscrow || currentEscrow.status !== 'paid') {
+    if (!currentEscrow) {
+      throw new Error('Escrow not found');
+    }
+    if (currentEscrow.status !== 'paid') {
       throw new Error(
-        `Cannot refund escrow with status: ${currentEscrow?.status || 'not found'}`
+        `Cannot refund escrow with status: ${currentEscrow.status}`
       );
     }
 

@@ -94,8 +94,8 @@ import {
 } from '@babylon/api';
 import { asUser } from '@babylon/db';
 import { logger } from '@babylon/shared';
-import { nanoid } from 'nanoid';
 import type { NextRequest } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
 const PromoteAdminSchema = z.object({
@@ -159,7 +159,7 @@ export const POST = withErrorHandling(
       // Promote to admin
       await db.userGroupAdmin.create({
         data: {
-          id: nanoid(),
+          id: uuidv4(),
           groupId,
           userId: data.userId,
           grantedBy: user.userId,
@@ -214,7 +214,10 @@ export const DELETE = withErrorHandling(
         where: { id: groupId },
       });
 
-      if (group?.createdById === userIdToRemove) {
+      if (!group) {
+        throw new ApiError('Group not found', 404);
+      }
+      if (group.createdById === userIdToRemove) {
         throw new ApiError(
           'Cannot remove admin status from group creator',
           400

@@ -189,7 +189,7 @@ export class EngagementService {
       .limit(1);
 
     if (existing) {
-      return existing;
+      return existing as DailyEngagement;
     }
 
     // Create new record
@@ -547,12 +547,12 @@ export class EngagementService {
     userId: string,
     limit = 30
   ): Promise<DailyEngagement[]> {
-    return db
+    return (await db
       .select()
       .from(dailyEngagement)
       .where(eq(dailyEngagement.userId, userId))
       .orderBy(dailyEngagement.dateKey)
-      .limit(limit);
+      .limit(limit)) as DailyEngagement[];
   }
 
   /**

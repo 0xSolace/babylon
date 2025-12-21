@@ -20,20 +20,17 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  ASSOCIATED_TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountInstruction,
   createMint,
   createMintToInstruction,
   getAssociatedTokenAddress,
   getMint,
-  TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
 import {
   Connection,
   Keypair,
   LAMPORTS_PER_SOL,
   PublicKey,
-  SystemProgram,
   sendAndConfirmTransaction,
   Transaction,
 } from '@solana/web3.js';
@@ -166,7 +163,7 @@ async function deploy(
           await connection.confirmTransaction(sig, 'confirmed');
           console.log(`   ✅ Airdrop complete: ${sig}`);
           break;
-        } catch (airdropError) {
+        } catch {
           if (attempt < 3) {
             console.log(
               `   ⚠️  Airdrop attempt ${attempt} failed, retrying in 5s...`

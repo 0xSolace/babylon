@@ -148,7 +148,10 @@ class CQLAdapterImpl implements CQLAdapter {
     const sql = `INSERT INTO "${table}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders}) RETURNING id`;
 
     const result = await this.getConnection().exec(sql, values);
-    return result.lastInsertId?.toString() ?? '';
+    if (result.lastInsertId === undefined || result.lastInsertId === null) {
+      throw new Error(`[CQLAdapter] Insert into "${table}" did not return an id`);
+    }
+    return result.lastInsertId.toString();
   }
 
   async insertMany<T extends Record<string, SQLValue>>(
@@ -219,7 +222,11 @@ class CQLAdapterImpl implements CQLAdapter {
       sql,
       params
     );
-    return result.rows[0]?.count ?? 0;
+    const row = result.rows[0];
+    if (row === undefined) {
+      throw new Error(`[CQLAdapter] COUNT query on "${table}" returned no rows`);
+    }
+    return row.count;
   }
 
   async exists(
@@ -281,7 +288,10 @@ class CQLAdapterImpl implements CQLAdapter {
         const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
         const sql = `INSERT INTO "${table}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders}) RETURNING id`;
         const result = await jejuTx.exec(sql, values);
-        return result.lastInsertId?.toString() ?? '';
+        if (result.lastInsertId === undefined || result.lastInsertId === null) {
+          throw new Error(`[CQLAdapter] Transaction insert into "${table}" did not return an id`);
+        }
+        return result.lastInsertId.toString();
       },
 
       update: async (

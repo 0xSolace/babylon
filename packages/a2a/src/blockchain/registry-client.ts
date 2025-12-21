@@ -4,19 +4,15 @@
  */
 
 import { type JsonValue, Logger } from '@babylon/shared';
-import { type Contract, ethers } from 'ethers';
+import {
+  createPublicClient,
+  type GetContractReturnType,
+  getContract,
+  http,
+  type PublicClient,
+} from 'viem';
 import { z } from 'zod';
 import type { AgentProfile, AgentReputation } from '../types/a2a';
-import type {
-  IdentityRegistryContract,
-  ReputationSystemContract,
-} from '../types/contracts';
-
-/**
- * Type helper to create a contract that implements our interface
- * ethers.Contract is dynamically typed, so we assert it implements our interface
- */
-type TypedContract<T> = Contract & T;
 
 const CapabilitiesSchema = z.object({
   strategies: z.array(z.string()).optional(),
@@ -29,22 +25,111 @@ const CapabilitiesSchema = z.object({
 
 // ERC-8004 Identity Registry ABI (minimal)
 const IDENTITY_ABI = [
-  'function getTokenId(address _address) external view returns (uint256)',
-  'function ownerOf(uint256 tokenId) external view returns (address)',
-  'function getAgentProfile(uint256 _tokenId) external view returns (string memory name, string memory endpoint, bytes32 capabilitiesHash, uint256 registeredAt, bool isActive, string memory metadata)',
-  'function isRegistered(address _address) external view returns (bool)',
-  'function getAllActiveAgents() external view returns (uint256[] memory)',
-  'function isEndpointActive(string memory endpoint) external view returns (bool)',
-  'function getAgentsByCapability(bytes32 capabilityHash) external view returns (uint256[] memory)',
-];
+  {
+    type: 'function',
+    name: 'getTokenId',
+    inputs: [{ name: '_address', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'ownerOf',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [{ type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getAgentProfile',
+    inputs: [{ name: '_tokenId', type: 'uint256' }],
+    outputs: [
+      { name: 'name', type: 'string' },
+      { name: 'endpoint', type: 'string' },
+      { name: 'capabilitiesHash', type: 'bytes32' },
+      { name: 'registeredAt', type: 'uint256' },
+      { name: 'isActive', type: 'bool' },
+      { name: 'metadata', type: 'string' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isRegistered',
+    inputs: [{ name: '_address', type: 'address' }],
+    outputs: [{ type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getAllActiveAgents',
+    inputs: [],
+    outputs: [{ type: 'uint256[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isEndpointActive',
+    inputs: [{ name: 'endpoint', type: 'string' }],
+    outputs: [{ type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getAgentsByCapability',
+    inputs: [{ name: 'capabilityHash', type: 'bytes32' }],
+    outputs: [{ type: 'uint256[]' }],
+    stateMutability: 'view',
+  },
+] as const;
 
 // Reputation System ABI (minimal)
 const REPUTATION_ABI = [
-  'function getReputation(uint256 _tokenId) external view returns (uint256 totalBets, uint256 winningBets, uint256 totalVolume, uint256 profitLoss, uint256 accuracyScore, uint256 trustScore, bool isBanned)',
-  'function getFeedbackCount(uint256 _tokenId) external view returns (uint256)',
-  'function getFeedback(uint256 _tokenId, uint256 _index) external view returns (address from, int8 rating, string memory comment, uint256 timestamp)',
-  'function getAgentsByMinScore(uint256 minScore) external view returns (uint256[] memory)',
-];
+  {
+    type: 'function',
+    name: 'getReputation',
+    inputs: [{ name: '_tokenId', type: 'uint256' }],
+    outputs: [
+      { name: 'totalBets', type: 'uint256' },
+      { name: 'winningBets', type: 'uint256' },
+      { name: 'totalVolume', type: 'uint256' },
+      { name: 'profitLoss', type: 'uint256' },
+      { name: 'accuracyScore', type: 'uint256' },
+      { name: 'trustScore', type: 'uint256' },
+      { name: 'isBanned', type: 'bool' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getFeedbackCount',
+    inputs: [{ name: '_tokenId', type: 'uint256' }],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getFeedback',
+    inputs: [
+      { name: '_tokenId', type: 'uint256' },
+      { name: '_index', type: 'uint256' },
+    ],
+    outputs: [
+      { name: 'from', type: 'address' },
+      { name: 'rating', type: 'int8' },
+      { name: 'comment', type: 'string' },
+      { name: 'timestamp', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getAgentsByMinScore',
+    inputs: [{ name: 'minScore', type: 'uint256' }],
+    outputs: [{ type: 'uint256[]' }],
+    stateMutability: 'view',
+  },
+] as const;
 
 export interface RegistryConfig {
   rpcUrl: string;
@@ -52,31 +137,39 @@ export interface RegistryConfig {
   reputationSystemAddress: string;
 }
 
+type IdentityContract = GetContractReturnType<
+  typeof IDENTITY_ABI,
+  PublicClient
+>;
+type ReputationContract = GetContractReturnType<
+  typeof REPUTATION_ABI,
+  PublicClient
+>;
+
 export class RegistryClient {
-  private readonly provider: ethers.Provider;
-  private readonly identityRegistry: IdentityRegistryContract;
-  private readonly reputationSystem: ReputationSystemContract;
+  private readonly client: PublicClient;
+  private readonly identityRegistry: IdentityContract;
+  private readonly reputationSystem: ReputationContract;
   private readonly logger: Logger;
 
   constructor(config: RegistryConfig) {
-    // Initialize all properties in constructor to satisfy strictPropertyInitialization
-    this.provider = new ethers.JsonRpcProvider(config.rpcUrl);
+    // Initialize viem public client
+    this.client = createPublicClient({
+      transport: http(config.rpcUrl),
+    });
 
-    // ethers.Contract is dynamically typed based on ABI
-    // We assert it implements our interface types since the ABI matches
-    const identityContract = new ethers.Contract(
-      config.identityRegistryAddress,
-      IDENTITY_ABI,
-      this.provider
-    ) as TypedContract<IdentityRegistryContract>;
-    this.identityRegistry = identityContract;
+    // Create typed contract instances
+    this.identityRegistry = getContract({
+      address: config.identityRegistryAddress as `0x${string}`,
+      abi: IDENTITY_ABI,
+      client: this.client,
+    });
 
-    const reputationContract = new ethers.Contract(
-      config.reputationSystemAddress,
-      REPUTATION_ABI,
-      this.provider
-    ) as TypedContract<ReputationSystemContract>;
-    this.reputationSystem = reputationContract;
+    this.reputationSystem = getContract({
+      address: config.reputationSystemAddress as `0x${string}`,
+      abi: REPUTATION_ABI,
+      client: this.client,
+    });
 
     this.logger = new Logger('info');
   }
@@ -85,18 +178,20 @@ export class RegistryClient {
    * Get agent profile by token ID
    */
   async getAgentProfile(tokenId: number): Promise<AgentProfile | null> {
-    const profile = await this.identityRegistry.getAgentProfile(tokenId);
+    const profile = await this.identityRegistry.read.getAgentProfile([
+      BigInt(tokenId),
+    ]);
     const reputation = await this.getAgentReputation(tokenId);
-    const address = await this.identityRegistry.ownerOf(tokenId);
+    const address = await this.identityRegistry.read.ownerOf([BigInt(tokenId)]);
 
     return {
       tokenId,
       address,
-      name: profile.name,
-      endpoint: profile.endpoint,
-      capabilities: this.parseCapabilities(profile.metadata),
+      name: profile[0], // name
+      endpoint: profile[1], // endpoint
+      capabilities: this.parseCapabilities(profile[5]), // metadata
       reputation,
-      isActive: profile.isActive,
+      isActive: profile[4], // isActive
     };
   }
 
@@ -106,7 +201,9 @@ export class RegistryClient {
   async getAgentProfileByAddress(
     address: string
   ): Promise<AgentProfile | null> {
-    const tokenId = await this.identityRegistry.getTokenId(address);
+    const tokenId = await this.identityRegistry.read.getTokenId([
+      address as `0x${string}`,
+    ]);
     if (tokenId === 0n) return null;
     return this.getAgentProfile(Number(tokenId));
   }
@@ -115,7 +212,9 @@ export class RegistryClient {
    * Get agent reputation
    */
   async getAgentReputation(tokenId: number): Promise<AgentReputation> {
-    const rep = await this.reputationSystem.getReputation(tokenId);
+    const rep = await this.reputationSystem.read.getReputation([
+      BigInt(tokenId),
+    ]);
 
     return {
       totalBets: Number(rep[0] || 0),
@@ -136,14 +235,14 @@ export class RegistryClient {
     minReputation?: number;
     markets?: string[];
   }): Promise<AgentProfile[]> {
-    let tokenIds: bigint[];
+    let tokenIds: readonly bigint[];
 
     if (filters?.minReputation) {
-      tokenIds = await this.reputationSystem.getAgentsByMinScore(
-        filters.minReputation
-      );
+      tokenIds = await this.reputationSystem.read.getAgentsByMinScore([
+        BigInt(filters.minReputation),
+      ]);
     } else {
-      tokenIds = await this.identityRegistry.getAllActiveAgents();
+      tokenIds = await this.identityRegistry.read.getAllActiveAgents();
     }
 
     const profiles: AgentProfile[] = [];
@@ -223,7 +322,7 @@ export class RegistryClient {
    * Verify agent address owns the token ID
    */
   async verifyAgent(address: string, tokenId: number): Promise<boolean> {
-    const owner = await this.identityRegistry.ownerOf(tokenId);
+    const owner = await this.identityRegistry.read.ownerOf([BigInt(tokenId)]);
     return owner.toLowerCase() === address.toLowerCase();
   }
 
@@ -231,7 +330,7 @@ export class RegistryClient {
    * Check if endpoint is active
    */
   async isEndpointActive(endpoint: string): Promise<boolean> {
-    return await this.identityRegistry.isEndpointActive(endpoint);
+    return await this.identityRegistry.read.isEndpointActive([endpoint]);
   }
 
   /**

@@ -125,16 +125,13 @@ export function isSubscriptionExpired(token: string): boolean {
 
 /**
  * Decode token without verification (for reading claims)
+ * Throws if token is invalid or malformed
  */
 export function decodeSubscriptionToken(
   token: string
-): RealtimeSubscriptionClaims | null {
-  try {
-    const decoded = JSON.parse(atob(token)) as RealtimeSubscriptionToken;
-    return decoded.claims;
-  } catch {
-    return null;
-  }
+): RealtimeSubscriptionClaims {
+  const decoded = JSON.parse(atob(token)) as RealtimeSubscriptionToken;
+  return decoded.claims;
 }
 
 /**
@@ -205,8 +202,9 @@ export class PermissionlessRealtimeManager {
 
   /**
    * Decode token without verification
+   * Throws if token is invalid or malformed
    */
-  decode(token: string): RealtimeSubscriptionClaims | null {
+  decode(token: string): RealtimeSubscriptionClaims {
     return decodeSubscriptionToken(token);
   }
 

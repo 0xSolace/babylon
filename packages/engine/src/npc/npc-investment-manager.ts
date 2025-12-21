@@ -88,22 +88,25 @@ export class NPCInvestmentManager {
 
     const openPositions = positionResults.filter((p) => p.closedAt === null);
     // Map database PoolPosition to PortfolioPosition interface
-    const positions: PortfolioPosition[] = openPositions.map((p) => ({
-      id: p.id,
-      poolId: p.poolId,
-      marketType:
-        p.marketType === 'perp' || p.marketType === 'prediction'
-          ? p.marketType
-          : 'prediction',
-      ticker: p.ticker ?? undefined,
-      marketId: p.marketId ?? undefined,
-      side: p.side,
-      size: Number(p.size),
-      entryPrice: Number(p.entryPrice),
-      currentPrice: Number(p.currentPrice),
-      unrealizedPnL: Number(p.unrealizedPnL),
-      leverage: p.leverage ?? undefined,
-    }));
+    const positions: PortfolioPosition[] = openPositions.map((p) => {
+      const marketType = String(p.marketType);
+      return {
+        id: String(p.id),
+        poolId: String(p.poolId),
+        marketType:
+          marketType === 'perp' || marketType === 'prediction'
+            ? marketType
+            : 'prediction',
+        ticker: p.ticker ? String(p.ticker) : undefined,
+        marketId: p.marketId ? String(p.marketId) : undefined,
+        side: String(p.side),
+        size: Number(p.size),
+        entryPrice: Number(p.entryPrice),
+        currentPrice: Number(p.currentPrice),
+        unrealizedPnL: Number(p.unrealizedPnL),
+        leverage: p.leverage ? Number(p.leverage) : undefined,
+      };
+    });
     const availableBalance = Number.parseFloat(
       pool.availableBalance?.toString() ?? '0'
     );
@@ -312,7 +315,7 @@ export class NPCInvestmentManager {
     }
 
     // Get open positions for these pools
-    const poolIds = activePoolsResult.map((p) => p.id);
+    const poolIds = activePoolsResult.map((p) => String(p.id));
     const allPositions = await db
       .select({
         id: poolPositions.id,
@@ -325,16 +328,19 @@ export class NPCInvestmentManager {
     const openPositionsByPool = new Map<string, { id: string }[]>();
     allPositions.forEach((pos) => {
       if (pos.closedAt === null) {
-        const existing = openPositionsByPool.get(pos.poolId) ?? [];
-        existing.push({ id: pos.id });
-        openPositionsByPool.set(pos.poolId, existing);
+        const poolId = String(pos.poolId);
+        const existing = openPositionsByPool.get(poolId) ?? [];
+        existing.push({ id: String(pos.id) });
+        openPositionsByPool.set(poolId, existing);
       }
     });
 
-    // Add position info to pools
+    // Add position info to pools - preserve pool properties with explicit typing
     const activePools = activePoolsResult.map((pool) => ({
-      ...pool,
-      PoolPosition: openPositionsByPool.get(pool.id) ?? [],
+      id: String(pool.id),
+      npcActorId: String(pool.npcActorId),
+      availableBalance: String(pool.availableBalance ?? '0'),
+      PoolPosition: openPositionsByPool.get(String(pool.id)) ?? [],
     }));
 
     const actorIds = Array.from(
@@ -551,19 +557,20 @@ export class NPCInvestmentManager {
 
     // Filter for open positions with leverage > 1
     const leveragedPositions = positionsResult.filter(
-      (p) => p.closedAt === null && (p.leverage ?? 0) > 1
+      (p) => p.closedAt === null && Number(p.leverage ?? 0) > 1
     );
 
     for (const position of leveragedPositions) {
+      const marketType = String(position.marketType);
       actions.push({
         type: 'close',
-        positionId: position.id,
-        marketType: position.marketType as 'perp' | 'prediction',
-        ticker: position.ticker || undefined,
-        marketId: position.marketId || undefined,
-        side: position.side,
+        positionId: String(position.id),
+        marketType: marketType === 'perp' ? 'perp' : 'prediction',
+        ticker: position.ticker ? String(position.ticker) : undefined,
+        marketId: position.marketId ? String(position.marketId) : undefined,
+        side: String(position.side),
         targetSize: 0,
-        reason: `De-risking: high leverage (${position.leverage}x)`,
+        reason: `De-risking: high leverage (${Number(position.leverage)}x)`,
       });
     }
 
@@ -588,32 +595,30 @@ export class NPCInvestmentManager {
     const lossyPositions: PortfolioPosition[] = [];
 
     for (const position of openPositions) {
-      const unrealizedPnL = Number.parseFloat(
-        position.unrealizedPnL?.toString() || '0'
-      );
-      const size = Number.parseFloat(position.size?.toString() || '0');
+      const unrealizedPnL = Number(position.unrealizedPnL ?? 0);
+      const size = Number(position.size ?? 0);
 
       if (size > 0) {
         const lossPercentage = unrealizedPnL / size;
 
         if (lossPercentage < -threshold) {
           // Map database PoolPosition to PortfolioPosition interface
+          const marketType = String(position.marketType);
           const portfolioPosition: PortfolioPosition = {
-            id: position.id,
-            poolId: position.poolId,
+            id: String(position.id),
+            poolId: String(position.poolId),
             marketType:
-              position.marketType === 'perp' ||
-              position.marketType === 'prediction'
-                ? position.marketType
+              marketType === 'perp' || marketType === 'prediction'
+                ? marketType
                 : 'prediction',
-            ticker: position.ticker ?? undefined,
-            marketId: position.marketId ?? undefined,
-            side: position.side,
+            ticker: position.ticker ? String(position.ticker) : undefined,
+            marketId: position.marketId ? String(position.marketId) : undefined,
+            side: String(position.side),
             size: Number(position.size),
             entryPrice: Number(position.entryPrice),
             currentPrice: Number(position.currentPrice),
             unrealizedPnL: Number(position.unrealizedPnL),
-            leverage: position.leverage ?? undefined,
+            leverage: position.leverage ? Number(position.leverage) : undefined,
           };
           lossyPositions.push(portfolioPosition);
         }
@@ -673,8 +678,10 @@ export class NPCInvestmentManager {
       .from(pools)
       .where(eq(pools.isActive, true));
 
-    // Get actors for pools
-    const actorIds = [...new Set(activePools.map((p) => p.npcActorId))];
+    // Get actors for pools - use Array.from for Set to avoid downlevelIteration issues
+    const actorIdSet = new Set<string>();
+    activePools.forEach((p) => actorIdSet.add(String(p.npcActorId)));
+    const actorIds = Array.from(actorIdSet);
     const actorsList =
       actorIds.length > 0
         ? StaticDataRegistry.getAllActors()
@@ -694,7 +701,9 @@ export class NPCInvestmentManager {
     );
 
     for (const pool of activePools) {
-      const actor = actorsMap.get(pool.npcActorId);
+      const poolId = String(pool.id);
+      const npcActorId = String(pool.npcActorId);
+      const actor = actorsMap.get(npcActorId);
       if (!actor) continue;
 
       // Determine strategy from actor personality
@@ -703,7 +712,7 @@ export class NPCInvestmentManager {
       );
 
       const actions = await NPCInvestmentManager.monitorPortfolio(
-        pool.id,
+        poolId,
         actor.id,
         strategy
       );
@@ -712,7 +721,7 @@ export class NPCInvestmentManager {
       for (const action of actions) {
         await NPCInvestmentManager.executeRebalanceAction(
           actor.id,
-          pool.id,
+          poolId,
           action
         );
       }

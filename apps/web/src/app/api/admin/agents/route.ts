@@ -100,7 +100,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   // Audit log the view
   logAdminView({
     adminId: admin.userId,
-    ipAddress: getClientIp(req.headers) ?? undefined,
+    ipAddress: getClientIp(req.headers) || undefined,
     resourceType: 'agents',
     metadata: { action: 'view_all_agents' },
   });
@@ -170,8 +170,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const formattedAgents = agents.map((agent) => {
     const config = configMap.get(agent.id);
     const metrics = metricsMap.get(agent.id);
-    const totalTrades = metrics?.totalTrades ?? 0;
-    const profitableTrades = metrics?.profitableTrades ?? 0;
+    const totalTrades = metrics?.totalTrades || 0;
+    const profitableTrades = metrics?.profitableTrades || 0;
     const autonomousEnabled =
       config?.autonomousTrading ||
       config?.autonomousPosting ||
@@ -207,9 +207,9 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
       lifetimePnL: Number(agent.lifetimePnL || 0),
       totalTrades,
       winRate,
-      reputationScore: metrics?.reputationScore ?? 50,
-      averageFeedbackScore: metrics?.averageFeedbackScore ?? 0,
-      totalFeedbackCount: metrics?.totalFeedbackCount ?? 0,
+      reputationScore: metrics?.reputationScore || 50,
+      averageFeedbackScore: metrics?.averageFeedbackScore || 0,
+      totalFeedbackCount: metrics?.totalFeedbackCount || 0,
 
       // Status
       agentStatus: config?.status,
@@ -253,7 +253,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
       type: 'EXTERNAL' as const,
       protocol: connection?.protocol || 'unknown',
       endpoint: connection?.endpoint || null,
-      isHealthy: connection?.isHealthy ?? false,
+      isHealthy: connection?.isHealthy || false,
       lastHealthCheck: connection?.lastHealthCheck || null,
 
       // Autonomous status (all false for external)

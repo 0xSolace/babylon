@@ -6,6 +6,7 @@ import {
 } from '@babylon/engine/client';
 import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
 import { cn, type JsonValue } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   BarChart3,
@@ -17,7 +18,7 @@ import {
   XCircle,
   Zap,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { FollowButton } from '@/components/interactions';
 import { useAuth } from '@/hooks/useAuth';
@@ -156,47 +157,63 @@ export function PositionDetailModal({
   const fetchPerpMarketsFromStore = usePerpMarketsStore(
     (state) => state.fetchMarkets
   );
-  const [perpMarket, setPerpMarket] = useState<PerpMarket | null>(null);
-  const [predictionMarket, setPredictionMarket] =
-    useState<PredictionMarket | null>(null);
 
-  const fetchPerpMarket = useCallback(
-    async (ticker: string) => {
+  // Query for perp market data
+  const { data: perpMarket } = useQuery({
+    queryKey: [
+      'perp',
+      'market',
+      type === 'perp' && data && 'ticker' in data ? data.ticker : null,
+    ],
+    queryFn: async (): Promise<PerpMarket | null> => {
+      if (type !== 'perp' || !data || !('ticker' in data)) return null;
+
       // Ensure store is populated
       await fetchPerpMarketsFromStore();
       // Get fresh markets from store
       const markets = usePerpMarketsStore.getState().markets;
       const market = markets.find(
-        (m) => m.ticker.toLowerCase() === ticker.toLowerCase()
+        (m) =>
+          m.ticker.toLowerCase() ===
+          (data as PerpPositionFromAPI).ticker.toLowerCase()
       );
-      if (market) {
-        setPerpMarket(market);
-        setSide('long');
-      }
+      return market || null;
     },
-    [fetchPerpMarketsFromStore]
-  );
+    enabled: isOpen && type === 'perp' && !!data && 'ticker' in data,
+  });
 
-  const fetchPredictionMarket = useCallback(async (marketId: string) => {
-    const response = await fetch(`/api/markets/predictions/${marketId}`);
-    if (response.ok) {
-      const marketData = await response.json();
-      setPredictionMarket(marketData);
-      setSide('yes');
-    }
-  }, []);
+  // Query for prediction market data
+  const { data: predictionMarket } = useQuery({
+    queryKey: [
+      'prediction',
+      'market',
+      type === 'prediction' && data && 'marketId' in data
+        ? data.marketId
+        : null,
+    ],
+    queryFn: async (): Promise<PredictionMarket | null> => {
+      if (type !== 'prediction' || !data || !('marketId' in data)) return null;
 
+      const response = await fetch(
+        `/api/markets/predictions/${(data as PredictionPosition).marketId}`
+      );
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled: isOpen && type === 'prediction' && !!data && 'marketId' in data,
+  });
+
+  // Reset tab and side when modal opens
   useEffect(() => {
     if (isOpen && data) {
       setActiveTab('details');
-      // Fetch market data if needed for trading
-      if (type === 'perp' && 'ticker' in data) {
-        fetchPerpMarket((data as PerpPositionFromAPI).ticker);
-      } else if (type === 'prediction' && 'marketId' in data) {
-        fetchPredictionMarket((data as PredictionPosition).marketId);
+      if (type === 'perp') {
+        setSide('long');
+      } else if (type === 'prediction') {
+        setSide('yes');
       }
     }
-  }, [isOpen, type, data, fetchPerpMarket, fetchPredictionMarket]);
+  }, [isOpen, type, data]);
 
   const handlePerpTrade = async () => {
     if (!user || !perpMarket) return;

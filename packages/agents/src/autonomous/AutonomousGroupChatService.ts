@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import { and, db, desc, eq, gte, messages, users } from '@babylon/db';
+import { db } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
@@ -19,69 +19,62 @@ import { generateSnowflakeId } from '../shared/snowflake';
 export class AutonomousGroupChatService {
   /**
    * Participates in group chats the agent is a member of
-   *
-   * @param agentUserId - Agent user ID
-   * @param _runtime - Agent runtime (reserved for future use)
-   * @returns Number of messages created
-   * @throws Error if agent not found
    */
   async participateInGroupChats(
     agentUserId: string,
     _runtime: IAgentRuntime
   ): Promise<number> {
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
+
     if (!agent?.isAgent) {
       throw new Error('Agent not found');
     }
 
     const config = await getAgentConfig(agentUserId);
+    const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
+    const username = agent.username ? String(agent.username) : 'agent';
 
     // Get agent's group chats
-    const groupChatsRaw = await db.query.chatParticipants.findMany({
-      where: (chatParticipants, { eq }) =>
-        eq(chatParticipants.userId, agentUserId),
-      with: {
-        chat: true,
-      },
+    const chatParticipants = await db.chatParticipant.findMany({
+      where: { userId: agentUserId },
     });
 
     let messagesCreated = 0;
 
-    for (const chatParticipant of groupChatsRaw) {
-      const chat = chatParticipant.chat;
+    for (const chatParticipant of chatParticipants) {
+      const chat = await db.chat.findUnique({
+        where: { id: String(chatParticipant.chatId) },
+      });
+
       if (!chat || !chat.isGroup) continue; // Skip DMs
 
       // Get recent messages in this group
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const recentMessages = await db
-        .select()
-        .from(messages)
-        .where(
-          and(eq(messages.chatId, chat.id), gte(messages.createdAt, oneHourAgo))
-        )
-        .orderBy(desc(messages.createdAt))
-        .limit(10);
+      const recentMessages = await db.message.findMany({
+        where: {
+          chatId: String(chat.id),
+          createdAt: { gte: oneHourAgo },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
 
       if (recentMessages.length === 0) continue;
 
       // Check if agent was mentioned or should respond
-      const agentMentioned = recentMessages.some(
-        (m: { content: string; senderId: string }) =>
-          m.content
-            .toLowerCase()
-            .includes(agent.username?.toLowerCase() || 'agent') ||
-          m.content
-            .toLowerCase()
-            .includes(agent.displayName?.toLowerCase() || 'agent')
-      );
+      const agentMentioned = recentMessages.some((m) => {
+        const content = String(m.content).toLowerCase();
+        return (
+          content.includes(username.toLowerCase()) ||
+          content.includes(displayName.toLowerCase())
+        );
+      });
 
       // Don't spam - only respond if mentioned or if it's been a while
       const agentLastMessage = recentMessages.find(
-        (m: { content: string; senderId: string }) => m.senderId === agentUserId
+        (m) => String(m.senderId) === agentUserId
       );
       if (!agentMentioned && agentLastMessage) {
         continue;
@@ -90,14 +83,14 @@ export class AutonomousGroupChatService {
       // Generate contextual response
       const prompt = `${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
-You are ${agent.displayName} in a group chat.
+You are ${displayName} in a group chat.
 
 Recent conversation:
 ${recentMessages
   .reverse()
   .map(
-    (m: { content: string; senderId: string }) =>
-      `${m.senderId === agentUserId ? 'You' : 'User'}: ${m.content}`
+    (m) =>
+      `${String(m.senderId) === agentUserId ? 'You' : 'User'}: ${String(m.content)}`
   )
   .join('\n')}
 
@@ -112,12 +105,12 @@ Generate ONLY the message text, or "SKIP" if you shouldn't respond.`;
       const responseContent = await callJejuDirect({
         prompt,
         system: config?.systemPrompt ?? undefined,
-        modelSize: 'large', // Important social content
-        runtime: _runtime, // Pass runtime to access W&B trained models AND trajectory context
+        modelSize: 'large',
+        runtime: _runtime,
         temperature: 0.8,
         maxTokens: 80,
         actionType: 'generate_group_chat_response',
-        purpose: 'response', // RLAIF: This is a response generation call
+        purpose: 'response',
       });
 
       const cleanContent = responseContent.trim().replace(/^["']|["']$/g, '');
@@ -127,17 +120,19 @@ Generate ONLY the message text, or "SKIP" if you shouldn't respond.`;
       }
 
       // Create group message
-      await db.insert(messages).values({
-        id: await generateSnowflakeId(),
-        chatId: chat.id,
-        senderId: agentUserId,
-        content: cleanContent,
-        createdAt: new Date(),
+      await db.message.create({
+        data: {
+          id: await generateSnowflakeId(),
+          chatId: String(chat.id),
+          senderId: agentUserId,
+          content: cleanContent,
+          createdAt: new Date(),
+        },
       });
 
       messagesCreated++;
       logger.info(
-        `Agent ${agent.displayName} participated in group chat ${chat.id}`,
+        `Agent ${displayName} participated in group chat ${chat.id}`,
         undefined,
         'AutonomousGroupChat'
       );

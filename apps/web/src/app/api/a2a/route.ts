@@ -114,7 +114,7 @@ function checkApiKey(request: NextRequest): NextResponse | null {
       headers: {
         get: (name: string) => request.headers.get(name),
       },
-      host: request.headers.get('host') ?? undefined,
+      host: request.headers.get('host') || undefined,
     },
     { requiredApiKey: getRequiredApiKey() }
   );

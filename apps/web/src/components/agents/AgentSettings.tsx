@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation } from '@tanstack/react-query';
 import { Copy, ExternalLink, Save, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -63,11 +64,17 @@ interface AgentSettingsProps {
   onUpdate: () => void;
 }
 
+interface UpdateAgentError {
+  error?: string;
+}
+
+interface DeleteAgentError {
+  error?: string;
+}
+
 export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
   const router = useRouter();
   const { getAccessToken } = useAuth();
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [formData, setFormData] = useState({
     name: agent.name,
     description: agent.description || '',
@@ -88,44 +95,87 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
     a2aEnabled: agent.a2aEnabled || false,
   });
 
-  const handleSave = async () => {
-    setSaving(true);
-    const token = await getAccessToken();
-    if (!token) {
-      toast.error('Authentication required');
-      setSaving(false);
-      return;
-    }
+  // Save mutation
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
 
-    const res = await fetch(`/api/agents/${agent.id}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        ...formData,
-        bio: formData.personality.trim() ? [formData.personality.trim()] : [], // Single array entry with entire personality
-        // Append trading strategy to system prompt
-        system: formData.tradingStrategy.trim()
-          ? `${formData.system}\n\nTrading Strategy: ${formData.tradingStrategy}`
-          : formData.system,
-      }),
-    });
+      const res = await fetch(`/api/agents/${agent.id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...formData,
+          bio: formData.personality.trim() ? [formData.personality.trim()] : [], // Single array entry with entire personality
+          // Append trading strategy to system prompt
+          system: formData.tradingStrategy.trim()
+            ? `${formData.system}\n\nTrading Strategy: ${formData.tradingStrategy}`
+            : formData.system,
+        }),
+      });
 
-    if (!res.ok) {
-      const error = (await res.json()) as { error?: string };
-      toast.error(error.error || 'Failed to update agent');
-      setSaving(false);
-      return;
-    }
+      if (!res.ok) {
+        const error: UpdateAgentError = await res.json();
+        throw new Error(error.error || 'Failed to update agent');
+      }
 
-    toast.success('Agent updated successfully');
-    onUpdate();
-    setSaving(false);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success('Agent updated successfully');
+      onUpdate();
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to update agent'
+      );
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const res = await fetch(`/api/agents/${agent.id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const error: DeleteAgentError = await res.json();
+        throw new Error(error.error || 'Failed to delete agent');
+      }
+
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success('Agent deleted successfully');
+      router.push('/agents');
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to delete agent'
+      );
+    },
+  });
+
+  const handleSave = () => {
+    saveMutation.mutate();
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (
       !confirm(
         `Are you sure you want to delete ${agent.name}? This cannot be undone.`
@@ -134,35 +184,7 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
       return;
     }
 
-    setDeleting(true);
-    const token = await getAccessToken();
-
-    if (!token) {
-      toast.error('Authentication required');
-      setDeleting(false);
-      return;
-    }
-
-    const res = await fetch(`/api/agents/${agent.id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }).catch(() => {
-      toast.error('Failed to delete agent');
-      setDeleting(false);
-      throw new Error('Failed to delete agent');
-    });
-
-    if (res.ok) {
-      toast.success('Agent deleted successfully');
-      router.push('/agents');
-    } else {
-      const error = await res.json();
-      toast.error(error.error || 'Failed to delete agent');
-    }
-
-    setDeleting(false);
+    deleteMutation.mutate();
   };
 
   return (
@@ -457,11 +479,11 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
       <div className="flex justify-end">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saveMutation.isPending}
           className="flex items-center gap-2 rounded-lg bg-[#0066FF] px-6 py-2 font-medium text-primary-foreground transition-all hover:bg-[#2952d9] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Save className="h-4 w-4" />
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
 
@@ -474,11 +496,11 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
 
         <button
           onClick={handleDelete}
-          disabled={deleting}
+          disabled={deleteMutation.isPending}
           className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-6 py-2 font-medium text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Trash2 className="h-4 w-4" />
-          {deleting ? 'Deleting...' : 'Delete Agent'}
+          {deleteMutation.isPending ? 'Deleting...' : 'Delete Agent'}
         </button>
       </div>
     </div>

@@ -92,7 +92,7 @@ export const GET = withErrorHandling(
       hasProfileImage: true,
     });
 
-    const canonicalUserId = dbUser?.id ?? userId;
+    const canonicalUserId = dbUser ? dbUser.id : userId;
 
     // Ensure requesting user matches the target user
     if (authUser.userId !== canonicalUserId) {
@@ -130,10 +130,10 @@ export const GET = withErrorHandling(
 
     return successResponse({
       needsSetup,
-      profileComplete: dbUser.profileComplete || false,
-      hasUsername: dbUser.hasUsername || false,
-      hasBio: dbUser.hasBio || false,
-      hasProfileImage: dbUser.hasProfileImage || false,
+      profileComplete: dbUser.profileComplete ?? false,
+      hasUsername: dbUser.hasUsername ?? false,
+      hasBio: dbUser.hasBio ?? false,
+      hasProfileImage: dbUser.hasProfileImage ?? false,
     });
   }
 );

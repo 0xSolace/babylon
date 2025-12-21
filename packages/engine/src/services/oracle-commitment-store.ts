@@ -91,10 +91,7 @@ export class CommitmentStore {
           commitment: commitment.commitment,
         })
         .where(eq(oracleCommitments.questionId, commitment.questionId))
-        .returning({
-          id: oracleCommitments.id,
-          questionId: oracleCommitments.questionId,
-        });
+        .returning();
 
       result = updated[0]!;
     } else {
@@ -109,10 +106,7 @@ export class CommitmentStore {
           commitment: commitment.commitment,
           createdAt: commitment.createdAt,
         })
-        .returning({
-          id: oracleCommitments.id,
-          questionId: oracleCommitments.questionId,
-        });
+        .returning();
 
       result = created[0]!;
     }
@@ -188,7 +182,7 @@ export class CommitmentStore {
     const result = await db
       .delete(oracleCommitments)
       .where(eq(oracleCommitments.questionId, questionId))
-      .returning({ id: oracleCommitments.id });
+      .returning();
 
     if (result.length > 0) {
       logger.info(

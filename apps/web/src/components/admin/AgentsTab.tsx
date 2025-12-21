@@ -1,6 +1,7 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   AlertCircle,
@@ -16,7 +17,7 @@ import {
   User,
   Zap,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 /**
@@ -84,6 +85,11 @@ interface AgentStats {
   externalHealthy?: number;
 }
 
+interface AgentsResponse {
+  agents: RunningAgent[];
+  stats: AgentStats;
+}
+
 /**
  * Agents tab component for managing and monitoring agents.
  *
@@ -105,9 +111,7 @@ interface AgentStats {
  * @returns Agents tab element
  */
 export function AgentsTab() {
-  const [agents, setAgents] = useState<RunningAgent[]>([]);
-  const [stats, setStats] = useState<AgentStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<
     'all' | 'running' | 'paused' | 'error'
@@ -117,73 +121,142 @@ export function AgentsTab() {
   >('reputation');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  const fetchData = useCallback(async () => {
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      logger.error('Not authenticated', undefined, 'AgentsTab');
-      toast.error('Failed to load agents');
-      setLoading(false);
-      return;
-    }
+  const { data, isLoading, refetch, isFetching } = useQuery<AgentsResponse>({
+    queryKey: ['admin', 'agents'],
+    queryFn: async () => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        logger.error('Not authenticated', undefined, 'AgentsTab');
+        throw new Error('Not authenticated');
+      }
 
-    const response = await fetch('/api/admin/agents', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      const response = await fetch('/api/admin/agents', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    if (!response.ok) {
-      logger.error(
-        'Failed to fetch agents',
-        { status: response.status },
-        'AgentsTab'
-      );
-      toast.error('Failed to load agents');
-      setLoading(false);
-      return;
-    }
+      if (!response.ok) {
+        logger.error(
+          'Failed to fetch agents',
+          { status: response.status },
+          'AgentsTab'
+        );
+        throw new Error('Failed to load agents');
+      }
 
-    const result = await response.json();
-    setAgents(result.data.agents);
-    setStats(result.data.stats);
-    setLoading(false);
-  }, []);
+      const result = await response.json();
+      return result.data;
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
 
-  useEffect(() => {
-    fetchData();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  if (!data) {
+    throw new Error('Failed to load agents data');
+  }
+  const agents = data.agents;
+  const stats = data.stats;
 
-  const handleToggleAgent = async (agentId: string, enable: boolean) => {
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      toast.error('Not authenticated');
-      return;
-    }
+  const toggleAgentMutation = useMutation({
+    mutationFn: async ({
+      agentId,
+      enable,
+    }: {
+      agentId: string;
+      enable: boolean;
+    }) => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
 
-    const response = await fetch(`/api/admin/agents/${agentId}/toggle`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ enabled: enable }),
-    });
+      const response = await fetch(`/api/admin/agents/${agentId}/toggle`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ enabled: enable }),
+      });
 
-    if (!response.ok) {
+      if (!response.ok) {
+        throw new Error('Failed to toggle agent');
+      }
+
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      toast.success(`Agent ${variables.enable ? 'enabled' : 'paused'}`);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] });
+    },
+    onError: () => {
       toast.error('Failed to toggle agent');
-      return;
-    }
+    },
+  });
 
-    toast.success(`Agent ${enable ? 'enabled' : 'paused'}`);
-    await fetchData();
-  };
+  const pauseAllMutation = useMutation({
+    mutationFn: async () => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
 
-  const handlePauseAll = async () => {
+      const response = await fetch('/api/admin/agents/pause-all', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to pause all agents');
+      }
+
+      return response.json();
+    },
+    onSuccess: (result) => {
+      toast.success(`Paused ${result.data.paused} agents`);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] });
+    },
+    onError: () => {
+      toast.error('Failed to pause all agents');
+    },
+  });
+
+  const resumeAllMutation = useMutation({
+    mutationFn: async () => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch('/api/admin/agents/resume-all', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to resume all agents');
+      }
+
+      return response.json();
+    },
+    onSuccess: (result) => {
+      toast.success(`Resumed ${result.data.resumed} agents`);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] });
+    },
+    onError: () => {
+      toast.error('Failed to resume all agents');
+    },
+  });
+
+  const handlePauseAll = () => {
     if (
       !confirm(
         '⚠️ EMERGENCY: Pause ALL autonomous agents? This will stop all autonomous trading, posting, and messaging immediately.'
@@ -191,32 +264,10 @@ export function AgentsTab() {
     ) {
       return;
     }
-
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      toast.error('Not authenticated');
-      return;
-    }
-
-    const response = await fetch('/api/admin/agents/pause-all', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      toast.error('Failed to pause all agents');
-      return;
-    }
-
-    const result = await response.json();
-    toast.success(`Paused ${result.data.paused} agents`);
-    await fetchData();
+    pauseAllMutation.mutate();
   };
 
-  const handleResumeAll = async () => {
+  const handleResumeAll = () => {
     if (
       !confirm(
         'Resume ALL autonomous agents? They will start trading, posting, and messaging again.'
@@ -224,29 +275,7 @@ export function AgentsTab() {
     ) {
       return;
     }
-
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      toast.error('Not authenticated');
-      return;
-    }
-
-    const response = await fetch('/api/admin/agents/resume-all', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      toast.error('Failed to resume all agents');
-      return;
-    }
-
-    const result = await response.json();
-    toast.success(`Resumed ${result.data.resumed} agents`);
-    await fetchData();
+    resumeAllMutation.mutate();
   };
 
   const filteredAgents = agents
@@ -264,7 +293,8 @@ export function AgentsTab() {
         searchQuery === '' ||
         a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         a.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.creatorName?.toLowerCase().includes(searchQuery.toLowerCase())
+        (a.creatorName &&
+          a.creatorName.toLowerCase().includes(searchQuery.toLowerCase()))
     )
     .sort((a, b) => {
       let aValue: number | string;
@@ -346,7 +376,7 @@ export function AgentsTab() {
     return 'Just now';
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-primary border-b-2" />
@@ -367,27 +397,28 @@ export function AgentsTab() {
         <div className="flex items-center gap-2">
           <button
             onClick={handlePauseAll}
-            className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 font-medium text-white transition-colors hover:bg-red-700"
+            disabled={pauseAllMutation.isPending}
+            className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
           >
             <Pause className="h-4 w-4" />
             Emergency: Pause All
           </button>
           <button
             onClick={handleResumeAll}
-            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700"
+            disabled={resumeAllMutation.isPending}
+            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
           >
             <Play className="h-4 w-4" />
             Resume All
           </button>
           <button
-            onClick={() => {
-              setLoading(true);
-              fetchData();
-            }}
-            disabled={loading}
+            onClick={() => refetch()}
+            disabled={isFetching}
             className="rounded-lg p-2 transition-colors hover:bg-accent"
           >
-            <RefreshCw className={cn('h-5 w-5', loading && 'animate-spin')} />
+            <RefreshCw
+              className={cn('h-5 w-5', isFetching && 'animate-spin')}
+            />
           </button>
         </div>
       </div>
@@ -744,8 +775,12 @@ export function AgentsTab() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleToggleAgent(agent.id, !agent.autonomousEnabled);
+                      toggleAgentMutation.mutate({
+                        agentId: agent.id,
+                        enable: !agent.autonomousEnabled,
+                      });
                     }}
+                    disabled={toggleAgentMutation.isPending}
                     className={cn(
                       'rounded-lg p-2 transition-colors',
                       agent.autonomousEnabled

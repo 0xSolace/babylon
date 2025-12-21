@@ -16,11 +16,7 @@ describe('Relationship Context Efficiency', () => {
   let llmClient: BabylonLLMClient;
 
   beforeAll(async () => {
-    try {
-      llmClient = new BabylonLLMClient();
-    } catch {
-      console.log('⚠️  No LLM client');
-    }
+    llmClient = new BabylonLLMClient();
 
     // Create test relationship
     await db.actorRelationship.deleteMany({

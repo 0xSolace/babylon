@@ -5,12 +5,7 @@
  * Recalculates reputation when cache is stale.
  */
 
-import { and, db, eq } from '@babylon/db';
-import {
-  agentPerformanceMetrics,
-  pointsTransactions,
-  users,
-} from '@babylon/db/schema';
+import { db } from '@babylon/db';
 import { recalculateReputation } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 
@@ -24,21 +19,18 @@ const CACHE_STALE_MS = CACHE_STALE_HOURS * 60 * 60 * 1000;
 export async function getCachedAgent0ReputationScore(
   userId: string
 ): Promise<number> {
-  const userResult = await db
-    .select({
-      id: users.id,
-      agent0TokenId: users.agent0TokenId,
-      isBanned: users.isBanned,
-      isScammer: users.isScammer,
-      isCSAM: users.isCSAM,
-      earnedPoints: users.earnedPoints,
-      reputationPoints: users.reputationPoints,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const user = userResult[0];
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      agent0TokenId: true,
+      isBanned: true,
+      isScammer: true,
+      isCSAM: true,
+      earnedPoints: true,
+      reputationPoints: true,
+    },
+  });
 
   if (!user) {
     logger.warn(
@@ -60,34 +52,36 @@ export async function getCachedAgent0ReputationScore(
   }
 
   // Get performance metrics separately
-  const metricsResult = await db
-    .select({
-      reputationScore: agentPerformanceMetrics.reputationScore,
-      lastActivityAt: agentPerformanceMetrics.lastActivityAt,
-      updatedAt: agentPerformanceMetrics.updatedAt,
-    })
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
-
-  const metrics = metricsResult[0];
+  const metrics = await db.agentPerformanceMetrics.findUnique({
+    where: { userId },
+    select: {
+      reputationScore: true,
+      lastActivityAt: true,
+      updatedAt: true,
+    },
+  });
 
   // Check if we have cached data
   if (metrics) {
-    const cacheAge = Date.now() - metrics.updatedAt.getTime();
+    const updatedAt =
+      metrics.updatedAt instanceof Date
+        ? metrics.updatedAt
+        : new Date(String(metrics.updatedAt));
+    const cacheAge = Date.now() - updatedAt.getTime();
 
     // If cache is fresh (< 24 hours), return cached score
     if (cacheAge < CACHE_STALE_MS) {
+      const score = Number(metrics.reputationScore);
       logger.debug(
         'Using cached reputation score',
         {
           userId,
-          score: metrics.reputationScore,
+          score,
           cacheAgeHours: cacheAge / (60 * 60 * 1000),
         },
         'Agent0ReputationCache'
       );
-      return metrics.reputationScore;
+      return score;
     }
   }
 
@@ -116,13 +110,12 @@ export async function getCachedAgent0ReputationScore(
   }
 
   // Return local reputation if Agent0 fetch failed or no token ID
-  const updatedMetricsResult = await db
-    .select({ reputationScore: agentPerformanceMetrics.reputationScore })
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+  const updatedMetrics = await db.agentPerformanceMetrics.findUnique({
+    where: { userId },
+    select: { reputationScore: true },
+  });
 
-  return updatedMetricsResult[0]?.reputationScore ?? 50; // Neutral default
+  return updatedMetrics ? Number(updatedMetrics.reputationScore) : 50; // Neutral default
 }
 
 /**
@@ -130,12 +123,12 @@ export async function getCachedAgent0ReputationScore(
  * Forces recalculation on next access
  */
 export async function invalidateReputationCache(userId: string): Promise<void> {
-  await db
-    .update(agentPerformanceMetrics)
-    .set({
+  await db.agentPerformanceMetrics.update({
+    where: { userId },
+    data: {
       updatedAt: new Date(Date.now() - CACHE_STALE_MS - 1), // Make it stale
-    })
-    .where(eq(agentPerformanceMetrics.userId, userId));
+    },
+  });
 
   logger.info(
     'Invalidated reputation cache',
@@ -148,41 +141,38 @@ export async function invalidateReputationCache(userId: string): Promise<void> {
  * Check if user has sent more points than earned (reputation loss condition)
  */
 export async function checkOverspending(userId: string): Promise<boolean> {
-  const userResult = await db
-    .select({
-      earnedPoints: users.earnedPoints,
-      reputationPoints: users.reputationPoints,
-      invitePoints: users.invitePoints,
-      bonusPoints: users.bonusPoints,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const user = userResult[0];
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      earnedPoints: true,
+      invitePoints: true,
+      bonusPoints: true,
+    },
+  });
 
   if (!user) {
     return false;
   }
 
   // Get points transactions for transfer_sent
-  const transactionsResult = await db
-    .select({ amount: pointsTransactions.amount })
-    .from(pointsTransactions)
-    .where(
-      and(
-        eq(pointsTransactions.userId, userId),
-        eq(pointsTransactions.reason, 'transfer_sent')
-      )
-    );
+  const transactions = await db.pointsTransaction.findMany({
+    where: {
+      userId,
+      reason: 'transfer_sent',
+    },
+    select: { amount: true },
+  });
 
   // Calculate total points sent (negative amounts)
   const totalSent = Math.abs(
-    transactionsResult.reduce((sum, tx) => sum + Math.min(0, tx.amount), 0)
+    transactions.reduce((sum, tx) => sum + Math.min(0, Number(tx.amount)), 0)
   );
 
   // Total earned = earnedPoints + invitePoints + bonusPoints
-  const totalEarned = user.earnedPoints + user.invitePoints + user.bonusPoints;
+  const totalEarned =
+    Number(user.earnedPoints) +
+    Number(user.invitePoints) +
+    Number(user.bonusPoints);
 
   // If sent more than earned, they're overspending
   return totalSent > totalEarned;
@@ -200,19 +190,16 @@ export async function checkOverspending(userId: string): Promise<boolean> {
 export async function calculateAgent0ReputationScore(
   userId: string
 ): Promise<number> {
-  const userResult = await db
-    .select({
-      id: users.id,
-      isBanned: users.isBanned,
-      isScammer: users.isScammer,
-      isCSAM: users.isCSAM,
-      earnedPoints: users.earnedPoints,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const user = userResult[0];
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      isBanned: true,
+      isScammer: true,
+      isCSAM: true,
+      earnedPoints: true,
+    },
+  });
 
   if (!user) {
     return 50; // Neutral default
@@ -229,23 +216,21 @@ export async function calculateAgent0ReputationScore(
   }
 
   // Get performance metrics
-  const metricsResult = await db
-    .select({
-      gamesPlayed: agentPerformanceMetrics.gamesPlayed,
-      totalFeedbackCount: agentPerformanceMetrics.totalFeedbackCount,
-      averageFeedbackScore: agentPerformanceMetrics.averageFeedbackScore,
-      normalizedPnL: agentPerformanceMetrics.normalizedPnL,
-      lastActivityAt: agentPerformanceMetrics.lastActivityAt,
-    })
-    .from(agentPerformanceMetrics)
-    .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+  const metrics = await db.agentPerformanceMetrics.findUnique({
+    where: { userId },
+    select: {
+      gamesPlayed: true,
+      totalFeedbackCount: true,
+      averageFeedbackScore: true,
+      normalizedPnL: true,
+      lastActivityAt: true,
+    },
+  });
 
-  const metrics = metricsResult[0];
   const hasActivity =
     metrics &&
-    (metrics.gamesPlayed > 0 ||
-      metrics.totalFeedbackCount > 0 ||
+    (Number(metrics.gamesPlayed) > 0 ||
+      Number(metrics.totalFeedbackCount) > 0 ||
       metrics.lastActivityAt !== null);
 
   // No activity = neutral score (50)
@@ -260,50 +245,48 @@ export async function calculateAgent0ReputationScore(
     const overspendingRatio = await calculateOverspendingRatio(userId);
     // Penalty: reduce score by up to 30 points based on overspending
     const penalty = Math.min(30, overspendingRatio * 30);
-    const baseScore = metrics?.averageFeedbackScore ?? 50;
+    const baseScore = metrics ? Number(metrics.averageFeedbackScore) : 50;
     return Math.max(0, baseScore - penalty);
   }
 
   // Use standard reputation calculation
   const updatedMetrics = await recalculateReputation(userId);
-  return updatedMetrics?.reputationScore ?? 50;
+  return Number(updatedMetrics?.reputationScore ?? 50);
 }
 
 /**
  * Calculate overspending ratio (0-1)
  */
 async function calculateOverspendingRatio(userId: string): Promise<number> {
-  const userResult = await db
-    .select({
-      earnedPoints: users.earnedPoints,
-      invitePoints: users.invitePoints,
-      bonusPoints: users.bonusPoints,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const user = userResult[0];
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      earnedPoints: true,
+      invitePoints: true,
+      bonusPoints: true,
+    },
+  });
 
   if (!user) {
     return 0;
   }
 
   // Get points transactions for transfer_sent
-  const transactionsResult = await db
-    .select({ amount: pointsTransactions.amount })
-    .from(pointsTransactions)
-    .where(
-      and(
-        eq(pointsTransactions.userId, userId),
-        eq(pointsTransactions.reason, 'transfer_sent')
-      )
-    );
+  const transactions = await db.pointsTransaction.findMany({
+    where: {
+      userId,
+      reason: 'transfer_sent',
+    },
+    select: { amount: true },
+  });
 
   const totalSent = Math.abs(
-    transactionsResult.reduce((sum, tx) => sum + Math.min(0, tx.amount), 0)
+    transactions.reduce((sum, tx) => sum + Math.min(0, Number(tx.amount)), 0)
   );
-  const totalEarned = user.earnedPoints + user.invitePoints + user.bonusPoints;
+  const totalEarned =
+    Number(user.earnedPoints) +
+    Number(user.invitePoints) +
+    Number(user.bonusPoints);
 
   if (totalEarned === 0) {
     return totalSent > 0 ? 1 : 0; // If they sent anything without earning, ratio is 1

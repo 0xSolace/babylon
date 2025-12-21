@@ -34,111 +34,98 @@ export async function initializeTrainingPackage(): Promise<void> {
 
   logger.info('Initializing training package...', {}, 'TrainingInit');
 
-  try {
-    // Dynamically import @babylon/agents to get real implementations
-    // @ts-ignore - Dynamic import of @babylon/agents (not a compile-time dependency)
-    const agentsModule = await import('@babylon/agents');
+  // Dynamically import @babylon/agents to get real implementations
+  // @ts-ignore - Dynamic import of @babylon/agents (not a compile-time dependency)
+  const agentsModule = await import('@babylon/agents');
 
-    // Get the agentService (implements IAgentService)
-    // The agentService from @babylon/agents has createAgent method matching IAgentService
-    const agentService = agentsModule.agentService as IAgentService;
+  // Get the agentService (implements IAgentService)
+  // The agentService from @babylon/agents has createAgent method matching IAgentService
+  const agentService = agentsModule.agentService as IAgentService;
 
-    // Get the agentRuntimeManager (implements IAgentRuntimeManager)
-    const runtimeManager = agentsModule.agentRuntimeManager;
-    const agentRuntimeManager: IAgentRuntimeManager = {
-      getRuntime: (agentId: string) => runtimeManager.getRuntime(agentId),
-      resetRuntime: async (agentId: string) => {
-        await runtimeManager.clearRuntime(agentId);
-      },
-    };
+  // Get the agentRuntimeManager (implements IAgentRuntimeManager)
+  const runtimeManager = agentsModule.agentRuntimeManager;
+  const agentRuntimeManager: IAgentRuntimeManager = {
+    getRuntime: (agentId: string) => runtimeManager.getRuntime(agentId),
+    resetRuntime: async (agentId: string) => {
+      await runtimeManager.clearRuntime(agentId);
+    },
+  };
 
-    // Get the autonomousCoordinator (implements IAutonomousCoordinator)
-    const coordinator = agentsModule.autonomousCoordinator;
-    const autonomousCoordinator: IAutonomousCoordinator = {
-      executeAutonomousTick: async (
+  // Get the autonomousCoordinator (implements IAutonomousCoordinator)
+  const coordinator = agentsModule.autonomousCoordinator;
+  const autonomousCoordinator: IAutonomousCoordinator = {
+    executeAutonomousTick: async (
+      agentUserId,
+      agentRuntime,
+      recordTrajectories
+    ) => {
+      const result = await coordinator.executeAutonomousTick(
         agentUserId,
         agentRuntime,
         recordTrajectories
-      ) => {
-        const result = await coordinator.executeAutonomousTick(
-          agentUserId,
-          agentRuntime,
-          recordTrajectories
-        );
-        return {
-          success: result.success,
-          actionsExecuted: result.actionsExecuted,
-          trajectoryId: result.trajectoryId,
-        };
-      },
-    };
+      );
+      return {
+        success: result.success,
+        actionsExecuted: result.actionsExecuted,
+        trajectoryId: result.trajectoryId,
+      };
+    },
+  };
 
-    // Get the LLM caller from agents (uses Jeju Compute)
-    const llmCaller: ILLMCaller = {
-      callGroqDirect: async (params) => {
-        // Route through Jeju Compute - NO centralized fallback
-        const jejuEndpoint =
-          process.env.JEJU_COMPUTE_API_URL ||
-          process.env.JEJU_COMPUTE_ENDPOINT ||
-          'http://localhost:4500';
+  // Get the LLM caller from agents (uses Jeju Compute)
+  const llmCaller: ILLMCaller = {
+    callGroqDirect: async (params) => {
+      // Route through Jeju Compute - NO centralized fallback
+      const jejuEndpoint =
+        process.env.JEJU_COMPUTE_API_URL ||
+        process.env.JEJU_COMPUTE_ENDPOINT ||
+        'http://localhost:4500';
 
-        const modelMap = {
-          small: 'llama-3.1-8b-instant',
-          medium: 'llama-3.1-70b-versatile',
-          large: 'llama-3.1-70b-versatile',
-        };
+      const modelMap = {
+        small: 'llama-3.1-8b-instant',
+        medium: 'llama-3.1-70b-versatile',
+        large: 'llama-3.1-70b-versatile',
+      };
 
-        const model = modelMap[params.modelSize || 'medium'];
+      const model = modelMap[params.modelSize || 'medium'];
 
-        const response = await fetch(`${jejuEndpoint}/v1/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: 'system', content: params.system },
-              { role: 'user', content: params.prompt },
-            ],
-            temperature: params.temperature ?? 0.7,
-            max_tokens: params.maxTokens ?? 1024,
-          }),
-        });
+      const response = await fetch(`${jejuEndpoint}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: params.system },
+            { role: 'user', content: params.prompt },
+          ],
+          temperature: params.temperature ?? 0.7,
+          max_tokens: params.maxTokens ?? 1024,
+        }),
+      });
 
-        if (!response.ok) {
-          throw new Error(`Jeju Compute error: ${response.status}`);
-        }
+      if (!response.ok) {
+        throw new Error(`Jeju Compute error: ${response.status}`);
+      }
 
-        const data = (await response.json()) as {
-          choices: Array<{ message: { content: string } }>;
-        };
-        return data.choices[0]?.message.content || '';
-      },
-    };
+      const data = (await response.json()) as {
+        choices: Array<{ message: { content: string } }>;
+      };
+      return data.choices[0]?.message.content || '';
+    },
+  };
 
-    // Configure all dependencies
-    configureTrainingDependencies({
-      agentService,
-      agentRuntimeManager,
-      autonomousCoordinator,
-      llmCaller,
-    });
+  // Configure all dependencies
+  configureTrainingDependencies({
+    agentService,
+    agentRuntimeManager,
+    autonomousCoordinator,
+    llmCaller,
+  });
 
-    initialized = true;
-    logger.info(
-      'Training package initialized successfully',
-      {},
-      'TrainingInit'
-    );
-  } catch (error) {
-    logger.error(
-      'Failed to initialize training package',
-      { error: error instanceof Error ? error.message : String(error) },
-      'TrainingInit'
-    );
-    throw error;
-  }
+  initialized = true;
+  logger.info('Training package initialized successfully', {}, 'TrainingInit');
 }
 
 /**

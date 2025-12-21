@@ -101,10 +101,13 @@ export async function GET(req: NextRequest) {
   });
 
   if (!validation.success) {
+    const firstIssue = validation.error.issues[0];
+    if (!firstIssue) {
+      throw new Error('Validation failed but no error details available');
+    }
     return NextResponse.json(
       {
-        error:
-          validation.error.issues[0]?.message || 'Invalid query parameters',
+        error: firstIssue.message,
       },
       { status: 400 }
     );

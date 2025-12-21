@@ -2,6 +2,7 @@
 
 import type { OnboardingProfilePayload } from '@babylon/shared';
 import { cn, logger } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
   Check,
@@ -15,7 +16,6 @@ import {
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
-import { apiFetch } from '@/utils/api-fetch';
 
 /**
  * Imported profile data structure from social platforms.
@@ -225,6 +225,35 @@ export function OnboardingModal({
     }
   }, [importedData, stage]);
 
+  // Fetch generated profile defaults
+  const { data: generatedProfile } = useQuery({
+    queryKey: ['onboarding', 'generateProfile'],
+    queryFn: async (): Promise<GeneratedProfileResponse> => {
+      const response = await fetch('/api/onboarding/generate-profile');
+      if (!response.ok) {
+        throw new Error('Failed to generate profile');
+      }
+      return response.json() as Promise<GeneratedProfileResponse>;
+    },
+    enabled: isOpen && stage === 'PROFILE' && !importedData,
+    staleTime: Infinity, // Don't refetch once loaded
+  });
+
+  // Fetch random assets
+  const { data: randomAssets } = useQuery({
+    queryKey: ['onboarding', 'randomAssets'],
+    queryFn: async (): Promise<RandomAssetsResponse> => {
+      const response = await fetch('/api/onboarding/random-assets');
+      if (!response.ok) {
+        throw new Error('Failed to fetch random assets');
+      }
+      return response.json() as Promise<RandomAssetsResponse>;
+    },
+    enabled: isOpen && stage === 'PROFILE' && !importedData,
+    staleTime: Infinity, // Don't refetch once loaded
+  });
+
+  // Apply generated profile and assets when they load
   useEffect(() => {
     if (!isOpen || stage !== 'PROFILE') return;
 
@@ -234,55 +263,43 @@ export function OnboardingModal({
       return;
     }
 
-    const initializeProfile = async () => {
-      setIsLoadingDefaults(true);
+    // Wait for both queries to complete
+    if (generatedProfile) {
+      setDisplayName(generatedProfile.name);
+      setUsername(generatedProfile.username);
+      setBio(generatedProfile.bio);
+    } else if (
+      !generatedProfile &&
+      isOpen &&
+      stage === 'PROFILE' &&
+      !importedData
+    ) {
+      // Fallback defaults if query fails
+      setDisplayName('New Babylonian');
+      setUsername(`user_${Math.random().toString(36).slice(2, 10)}`);
+      setBio('Just joined Babylon!');
+    }
 
-      const [profileResult, assetsResult] = await Promise.allSettled([
-        apiFetch('/api/onboarding/generate-profile', { auth: false }),
-        apiFetch('/api/onboarding/random-assets', { auth: false }),
-      ]).catch((initError: Error) => {
-        logger.warn(
-          'Failed to initialize onboarding defaults',
-          { error: initError },
-          'OnboardingModal'
-        );
-        return [
-          { status: 'rejected' as const, reason: initError },
-          { status: 'rejected' as const, reason: initError },
-        ];
-      });
+    if (randomAssets) {
+      setProfilePictureIndex(randomAssets.profilePictureIndex);
+      setBannerIndex(randomAssets.bannerIndex);
+    } else if (
+      !randomAssets &&
+      isOpen &&
+      stage === 'PROFILE' &&
+      !importedData
+    ) {
+      // Fallback defaults if query fails
+      setProfilePictureIndex(
+        Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
+      );
+      setBannerIndex(Math.floor(Math.random() * TOTAL_BANNERS) + 1);
+    }
 
-      if (profileResult.status === 'fulfilled' && profileResult.value.ok) {
-        const generated =
-          (await profileResult.value.json()) as GeneratedProfileResponse;
-        setDisplayName(generated.name);
-        setUsername(generated.username);
-        setBio(generated.bio);
-      } else {
-        setDisplayName('New Babylonian');
-        setUsername(`user_${Math.random().toString(36).slice(2, 10)}`);
-        setBio('Just joined Babylon!');
-      }
-
-      if (assetsResult.status === 'fulfilled' && assetsResult.value.ok) {
-        const assets =
-          (await assetsResult.value.json()) as RandomAssetsResponse;
-        setProfilePictureIndex(assets.profilePictureIndex);
-        setBannerIndex(assets.bannerIndex);
-      } else {
-        setProfilePictureIndex(
-          Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
-        );
-        setBannerIndex(Math.floor(Math.random() * TOTAL_BANNERS) + 1);
-      }
-
-      setUploadedProfileImage(null);
-      setUploadedBanner(null);
-      setIsLoadingDefaults(false);
-    };
-
-    void initializeProfile();
-  }, [isOpen, stage, importedData]);
+    setUploadedProfileImage(null);
+    setUploadedBanner(null);
+    setIsLoadingDefaults(false);
+  }, [isOpen, stage, importedData, generatedProfile, randomAssets]);
 
   // Initialize email from initialEmail prop when available
   useEffect(() => {
@@ -291,62 +308,64 @@ export function OnboardingModal({
     }
   }, [initialEmail, email, stage]);
 
+  // Debounced username for check
+  const [debouncedUsername, setDebouncedUsername] = useState(username);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedUsername(username);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [username]);
+
+  // Username availability check query
+  const { data: usernameCheckResult, isLoading: isCheckingUsernameQuery } =
+    useQuery({
+      queryKey: ['onboarding', 'checkUsername', debouncedUsername],
+      queryFn: async (): Promise<{
+        available: boolean;
+        suggestion?: string;
+      }> => {
+        const response = await fetch(
+          `/api/onboarding/check-username?username=${encodeURIComponent(debouncedUsername)}`
+        );
+        if (!response.ok) {
+          throw new Error('Failed to check username');
+        }
+        return response.json() as Promise<{
+          available: boolean;
+          suggestion?: string;
+        }>;
+      },
+      enabled:
+        stage === 'PROFILE' &&
+        !!debouncedUsername &&
+        debouncedUsername.length >= 3,
+    });
+
+  // Update username status from query result
   useEffect(() => {
     if (stage !== 'PROFILE') return;
-    if (!username || username.length < 3) {
+    if (!debouncedUsername || debouncedUsername.length < 3) {
       setUsernameStatus(null);
       setUsernameSuggestion(null);
       return;
     }
 
-    let cancelled = false;
+    if (usernameCheckResult) {
+      setUsernameStatus(usernameCheckResult.available ? 'available' : 'taken');
+      setUsernameSuggestion(
+        usernameCheckResult.available
+          ? null
+          : (usernameCheckResult.suggestion ?? null)
+      );
+    }
+  }, [stage, debouncedUsername, usernameCheckResult]);
 
-    const checkUsername = async () => {
-      setIsCheckingUsername(true);
-      let status: 'available' | 'taken' | null = null;
-      let suggestion: string | null = null;
-
-      const response = await apiFetch(
-        `/api/onboarding/check-username?username=${encodeURIComponent(username)}`,
-        { auth: false }
-      ).catch((checkError: Error) => {
-        logger.warn(
-          'Username availability check error',
-          { error: checkError },
-          'OnboardingModal'
-        );
-        return null;
-      });
-
-      if (response?.ok) {
-        const result = (await response.json()) as {
-          available?: boolean;
-          suggestion?: string;
-        };
-        status = result.available ? 'available' : 'taken';
-        suggestion = result.available ? null : (result.suggestion ?? null);
-      } else if (response) {
-        const body = await response.json();
-        logger.warn(
-          'Username availability check failed',
-          { status: response.status, body },
-          'OnboardingModal'
-        );
-      }
-
-      if (!cancelled) {
-        setUsernameStatus(status);
-        setUsernameSuggestion(suggestion);
-        setIsCheckingUsername(false);
-      }
-    };
-
-    void checkUsername();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [username, stage]);
+  // Sync isCheckingUsername with query loading state
+  useEffect(() => {
+    setIsCheckingUsername(isCheckingUsernameQuery);
+  }, [isCheckingUsernameQuery]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();

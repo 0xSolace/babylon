@@ -245,16 +245,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }));
 
   const qualifiedUsers = completedReferralsRaw
-    .filter((r) => r.userId !== null)
-    .map((r) => ({
-      id: r.userId as string,
-      username: r.username,
-      displayName: r.displayName,
-      profileImageUrl: r.profileImageUrl,
-      createdAt: r.userCreatedAt?.toISOString() ?? new Date().toISOString(),
-      completedAt: r.completedAt?.toISOString() ?? new Date().toISOString(),
-      status: 'qualified' as const,
-    }));
+    .filter(
+      (r) =>
+        r.userId !== null && r.userCreatedAt !== null && r.completedAt !== null
+    )
+    .map((r) => {
+      if (!r.userCreatedAt || !r.completedAt) {
+        throw new Error(`Referral ${r.id} missing required date fields`);
+      }
+      return {
+        id: r.userId as string,
+        username: r.username,
+        displayName: r.displayName,
+        profileImageUrl: r.profileImageUrl,
+        createdAt: r.userCreatedAt.toISOString(),
+        completedAt: r.completedAt.toISOString(),
+        status: 'qualified' as const,
+      };
+    });
 
   const responseBody: PositionResponse = {
     // IMPORTANT: Return leaderboardRank as "position" for UI compatibility

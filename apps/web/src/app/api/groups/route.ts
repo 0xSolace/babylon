@@ -149,8 +149,8 @@
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
 import { asUser } from '@babylon/db';
 import { logger } from '@babylon/shared';
-import { nanoid } from 'nanoid';
 import type { NextRequest } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
 const CreateGroupSchema = z.object({
@@ -214,8 +214,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       ),
     ]);
 
+    if (memberCounts.length !== groupIdsArray.length) {
+      throw new Error('Member count array length mismatch');
+    }
     const memberCountMap = new Map(
-      groupIdsArray.map((gid, i) => [gid, memberCounts[i] ?? 0])
+      groupIdsArray.map((gid, i) => [gid, memberCounts[i]!])
     );
     const adminMap = new Map<string, Set<string>>();
     allAdmins.forEach((admin) => {
@@ -231,7 +234,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       description: group.description,
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
-      memberCount: memberCountMap.get(group.id) ?? 0,
+      memberCount: memberCountMap.get(group.id) || 0,
       isAdmin: adminMap.get(group.id)?.has(user.userId) ?? false,
       isCreator: group.createdById === user.userId,
     }));
@@ -259,7 +262,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     // Create the group
     const newGroup = await db.userGroup.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         name: data.name,
         createdById: user.userId,
         updatedAt: new Date(),
@@ -269,7 +272,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     // Add creator as admin
     await db.userGroupAdmin.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         groupId: newGroup.id,
         userId: user.userId,
         grantedBy: user.userId,
@@ -280,7 +283,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     // Add creator as member
     await db.userGroupMember.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         groupId: newGroup.id,
         userId: user.userId,
         addedBy: user.userId,
@@ -294,7 +297,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         data: data.memberIds
           .filter((id) => id !== user.userId) // Don't add creator twice
           .map((userId) => ({
-            id: nanoid(),
+            id: uuidv4(),
             groupId: newGroup.id,
             userId,
             addedBy: user.userId,
@@ -306,7 +309,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     // Create associated chat for the group
     const chat = await db.chat.create({
       data: {
-        id: nanoid(),
+        id: uuidv4(),
         name: data.name,
         isGroup: true,
         groupId: newGroup.id, // Link chat to group
@@ -322,7 +325,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     ];
     await db.chatParticipant.createMany({
       data: allMemberIds.map((userId) => ({
-        id: nanoid(),
+        id: uuidv4(),
         chatId: chat.id,
         userId,
         joinedAt: new Date(),

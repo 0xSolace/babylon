@@ -137,25 +137,21 @@ describe('Agent Autonomous Tick Integration', () => {
     console.log('Initial state got.');
 
     // Verify agent can be found via AgentRegistry locally
-    try {
-      console.log('DATABASE_URL:', process.env.DATABASE_URL);
-      const { agentRegistry } = await import(
-        '@babylon/agents/services/agent-registry.service'
-      );
-      const { AgentType, AgentStatus } = await import('@babylon/agents');
-      const found = await agentRegistry.discoverAgents({
-        types: [AgentType.USER_CONTROLLED],
-        statuses: [AgentStatus.ACTIVE],
-        limit: 100, // Increase limit
-      });
-      console.log('Local AgentRegistry discovery count:', found.length);
-      const foundIds = found.map((a) => a.agentId);
-      console.log('Found IDs:', JSON.stringify(foundIds, null, 2));
-      console.log('Test Agent ID:', testAgentId);
-      console.log('Is found?', foundIds.includes(testAgentId));
-    } catch (e) {
-      console.log('Local AgentRegistry discovery failed:', e);
-    }
+    console.log('DATABASE_URL:', process.env.DATABASE_URL);
+    const { agentRegistry } = await import(
+      '@babylon/agents/services/agent-registry.service'
+    );
+    const { AgentType, AgentStatus } = await import('@babylon/agents');
+    const found = await agentRegistry.discoverAgents({
+      types: [AgentType.USER_CONTROLLED],
+      statuses: [AgentStatus.ACTIVE],
+      limit: 100, // Increase limit
+    });
+    console.log('Local AgentRegistry discovery count:', found.length);
+    const foundIds = found.map((a) => a.agentId);
+    console.log('Found IDs:', JSON.stringify(foundIds, null, 2));
+    console.log('Test Agent ID:', testAgentId);
+    console.log('Is found?', foundIds.includes(testAgentId));
 
     initialLastTickAt = config?.lastTickAt || null;
   });

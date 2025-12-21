@@ -136,7 +136,20 @@ async function callJejuCompute(
     choices: Array<{ message: { content: string } }>;
   };
 
-  return data.choices[0]?.message?.content?.trim() ?? '';
+  if (!data.choices || data.choices.length === 0) {
+    throw new Error('Jeju Compute returned no choices');
+  }
+
+  const firstChoice = data.choices[0];
+  if (!firstChoice || !firstChoice.message || !firstChoice.message.content) {
+    throw new Error('Jeju Compute returned invalid response structure');
+  }
+
+  const content = firstChoice.message.content.trim();
+  if (!content) {
+    throw new Error('Jeju Compute returned empty response');
+  }
+  return content;
 }
 
 export async function POST(req: NextRequest) {

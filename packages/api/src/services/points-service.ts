@@ -404,7 +404,8 @@ export class PointsService {
   ): Promise<AwardPointsResult> {
     // Count unqualified referrals with points already awarded (toward the limit)
     // Unqualified = completed AND qualifiedAt IS NULL AND signupPointsAwarded = true
-    const [unqualifiedCountResult] = await db
+    type CountResult = { count: number };
+    const [unqualifiedCountResult] = (await db
       .select({ count: count() })
       .from(referrals)
       .where(
@@ -414,9 +415,9 @@ export class PointsService {
           isNull(referrals.qualifiedAt),
           eq(referrals.signupPointsAwarded, true)
         )
-      );
+      )) as unknown as CountResult[];
 
-    const unqualifiedCount = unqualifiedCountResult?.count ?? 0;
+    const unqualifiedCount = Number(unqualifiedCountResult?.count ?? 0);
     const shouldAwardPoints = unqualifiedCount < UNQUALIFIED_REFERRAL_LIMIT;
 
     if (!shouldAwardPoints) {
@@ -663,7 +664,7 @@ export class PointsService {
     referrerId: string
   ): Promise<AwardPointsResult | null> {
     // Check current unqualified count to see if there's a slot available
-    const [unqualifiedCountResult] = await db
+    const [unqualifiedCountResult2] = (await db
       .select({ count: count() })
       .from(referrals)
       .where(
@@ -673,9 +674,9 @@ export class PointsService {
           isNull(referrals.qualifiedAt),
           eq(referrals.signupPointsAwarded, true)
         )
-      );
+      )) as unknown as { count: number }[];
 
-    const unqualifiedCount = unqualifiedCountResult?.count ?? 0;
+    const unqualifiedCount = Number(unqualifiedCountResult2?.count ?? 0);
 
     // If still at or above limit, no slot available
     if (unqualifiedCount >= UNQUALIFIED_REFERRAL_LIMIT) {
@@ -1056,7 +1057,7 @@ export class PointsService {
         id: user.id,
         username: user.username,
         displayName: user.displayName,
-        profileImageUrl: user.profileImageUrl,
+        profileImageUrl: user.profileImageUrl ?? '',
         allPoints: user.reputationPoints,
         invitePoints: user.invitePoints,
         earnedPoints: user.earnedPoints,
@@ -1068,7 +1069,7 @@ export class PointsService {
         isActor: false,
         tier: null as string | null,
         onChainRegistered: user.onChainRegistered,
-        nftTokenId: user.nftTokenId,
+        nftTokenId: user.nftTokenId ?? 0,
       })),
     ];
 
@@ -1093,8 +1094,7 @@ export class PointsService {
               id: state.id,
               username: state.id,
               displayName: staticActor.name,
-              profileImageUrl:
-                staticActor.profileImageUrl ?? (null as string | null),
+              profileImageUrl: staticActor.profileImageUrl ?? '',
               allPoints: state.reputationPoints,
               invitePoints: 0,
               earnedPoints: 0,
@@ -1106,7 +1106,7 @@ export class PointsService {
               isActor: true,
               tier: staticActor.tier,
               onChainRegistered: false,
-              nftTokenId: null as number | null,
+              nftTokenId: 0,
             };
           })
           .filter((a): a is NonNullable<typeof a> => a !== null)
@@ -1180,7 +1180,7 @@ export class PointsService {
     }
 
     // Count users with more points
-    const [higherUsersResult] = await db
+    const [higherUsersResult] = (await db
       .select({ count: count() })
       .from(users)
       .where(
@@ -1188,16 +1188,20 @@ export class PointsService {
           gt(users.reputationPoints, user.reputationPoints),
           eq(users.isActor, false)
         )
-      );
+      )) as unknown as { count: number }[];
 
     // Count actors with more points using actorState table
-    const [higherActorsResult] = await db
+    const [higherActorsResult] = (await db
       .select({ count: count() })
       .from(actorState)
-      .where(gt(actorState.reputationPoints, user.reputationPoints));
+      .where(
+        gt(actorState.reputationPoints, user.reputationPoints)
+      )) as unknown as {
+      count: number;
+    }[];
 
-    const higherUsersCount = higherUsersResult?.count ?? 0;
-    const higherActorsCount = higherActorsResult?.count ?? 0;
+    const higherUsersCount = Number(higherUsersResult?.count ?? 0);
+    const higherActorsCount = Number(higherActorsResult?.count ?? 0);
 
     return higherUsersCount + higherActorsCount + 1;
   }

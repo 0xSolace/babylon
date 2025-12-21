@@ -5,8 +5,8 @@
  */
 
 import { SDK } from 'agent0-sdk';
-import { Wallet } from 'ethers';
 import fs from 'fs';
+import { privateKeyToAccount } from 'viem/accounts';
 
 const IDENTITY_FILE = './agent-identity.json';
 
@@ -79,12 +79,14 @@ export async function registerAgent(): Promise<AgentIdentity> {
   const tokenId = Number.parseInt(parts[1]!);
 
   // Get wallet address from private key
-  const wallet = new Wallet(process.env.AGENT0_PRIVATE_KEY!);
+  const account = privateKeyToAccount(
+    process.env.AGENT0_PRIVATE_KEY as `0x${string}`
+  );
 
   // Save identity
   const identity: AgentIdentity = {
     tokenId,
-    address: wallet.address,
+    address: account.address,
     agentId: registration.agentId!,
     metadataCID: registration.agentURI?.replace('ipfs://', ''),
     txHash: '',

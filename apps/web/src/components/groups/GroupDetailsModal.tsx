@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Crown,
   Loader2,
@@ -38,7 +39,6 @@ import {
  * />
  * ```
  */
-import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 
@@ -67,6 +67,10 @@ interface GroupDetails {
   isCurrentUserAdmin: boolean;
 }
 
+interface GroupDetailsResponse {
+  data: GroupDetails;
+}
+
 interface GroupDetailsModalProps {
   groupId: string;
   onClose: () => void;
@@ -78,77 +82,94 @@ export function GroupDetailsModal({
   onClose,
   onGroupUpdated,
 }: GroupDetailsModalProps) {
-  const [group, setGroup] = useState<GroupDetails | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const loadGroup = useCallback(async () => {
-    const response = await fetch(`/api/user-groups/${groupId}`);
-    const data = await response.json();
+  const { data: group, isLoading } = useQuery({
+    queryKey: ['user-group', groupId],
+    queryFn: async (): Promise<GroupDetails> => {
+      const response = await fetch(`/api/user-groups/${groupId}`);
+      const data: GroupDetailsResponse = await response.json();
 
-    if (!response.ok) {
-      toast.error('Failed to load group details');
-      onClose();
-      throw new Error(data.error || 'Failed to load group');
-    }
+      if (!response.ok) {
+        toast.error('Failed to load group details');
+        onClose();
+        throw new Error('Failed to load group');
+      }
 
-    setGroup(data.data);
-    setIsLoading(false);
-  }, [groupId, onClose]);
+      return data.data;
+    },
+  });
 
-  useEffect(() => {
-    loadGroup();
-  }, [loadGroup]);
+  const removeMemberMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await fetch(
+        `/api/user-groups/${groupId}/members/${userId}`,
+        {
+          method: 'DELETE',
+        }
+      );
 
-  const handleRemoveMember = async (userId: string) => {
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to remove member');
+      }
+    },
+    onSuccess: () => {
+      toast.success('Member removed');
+      queryClient.invalidateQueries({ queryKey: ['user-group', groupId] });
+      onGroupUpdated();
+    },
+  });
+
+  const toggleAdminMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      isCurrentlyAdmin,
+    }: {
+      userId: string;
+      isCurrentlyAdmin: boolean;
+    }) => {
+      const url = isCurrentlyAdmin
+        ? `/api/user-groups/${groupId}/admins/${userId}`
+        : `/api/user-groups/${groupId}/admins`;
+
+      const response = await fetch(url, {
+        method: isCurrentlyAdmin ? 'DELETE' : 'POST',
+        headers: isCurrentlyAdmin
+          ? undefined
+          : {
+              'Content-Type': 'application/json',
+            },
+        body: isCurrentlyAdmin ? undefined : JSON.stringify({ userId }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to update admin status');
+      }
+
+      return { isCurrentlyAdmin };
+    },
+    onSuccess: (data) => {
+      toast.success(
+        data.isCurrentlyAdmin
+          ? 'Admin privileges revoked'
+          : 'Admin privileges granted'
+      );
+      queryClient.invalidateQueries({ queryKey: ['user-group', groupId] });
+      onGroupUpdated();
+    },
+  });
+
+  const handleRemoveMember = (userId: string) => {
     if (!confirm('Are you sure you want to remove this member?')) {
       return;
     }
-
-    const response = await fetch(
-      `/api/user-groups/${groupId}/members/${userId}`,
-      {
-        method: 'DELETE',
-      }
-    );
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || 'Failed to remove member');
-    }
-
-    toast.success('Member removed');
-    loadGroup();
-    onGroupUpdated();
+    removeMemberMutation.mutate(userId);
   };
 
-  const handleToggleAdmin = async (
-    userId: string,
-    isCurrentlyAdmin: boolean
-  ) => {
-    const url = isCurrentlyAdmin
-      ? `/api/user-groups/${groupId}/admins/${userId}`
-      : `/api/user-groups/${groupId}/admins`;
-
-    const response = await fetch(url, {
-      method: isCurrentlyAdmin ? 'DELETE' : 'POST',
-      headers: isCurrentlyAdmin
-        ? undefined
-        : {
-            'Content-Type': 'application/json',
-          },
-      body: isCurrentlyAdmin ? undefined : JSON.stringify({ userId }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || 'Failed to update admin status');
-    }
-
-    toast.success(
-      isCurrentlyAdmin ? 'Admin privileges revoked' : 'Admin privileges granted'
-    );
-    loadGroup();
-    onGroupUpdated();
+  const handleToggleAdmin = (userId: string, isCurrentlyAdmin: boolean) => {
+    toggleAdminMutation.mutate({ userId, isCurrentlyAdmin });
   };
 
   return (
@@ -207,6 +228,9 @@ export function GroupDetailsModal({
                 <div className="space-y-2">
                   {group.members.map((member) => {
                     const isCreator = member.userId === group.createdById;
+                    const isMutating =
+                      removeMemberMutation.isPending ||
+                      toggleAdminMutation.isPending;
                     return (
                       <div
                         key={member.userId}
@@ -245,7 +269,8 @@ export function GroupDetailsModal({
                               onClick={() =>
                                 handleToggleAdmin(member.userId, member.isAdmin)
                               }
-                              className="rounded-md p-2 transition-colors hover:bg-background"
+                              disabled={isMutating}
+                              className="rounded-md p-2 transition-colors hover:bg-background disabled:opacity-50"
                               title={
                                 member.isAdmin ? 'Remove Admin' : 'Make Admin'
                               }
@@ -261,7 +286,8 @@ export function GroupDetailsModal({
                             </button>
                             <button
                               onClick={() => handleRemoveMember(member.userId)}
-                              className="rounded-md p-2 transition-colors hover:bg-background"
+                              disabled={isMutating}
+                              className="rounded-md p-2 transition-colors hover:bg-background disabled:opacity-50"
                               title="Remove Member"
                             >
                               <UserMinus className="h-4 w-4 text-red-500" />

@@ -14,26 +14,7 @@
  */
 
 import { generateSnowflakeId } from '@babylon/shared';
-import {
-  actorState,
-  and,
-  count,
-  db,
-  desc,
-  eq,
-  games,
-  gte,
-  inArray,
-  isNull,
-  lt,
-  lte,
-  organizationState,
-  posts,
-  questions,
-  stockPrices,
-  users,
-  worldEvents,
-} from './index';
+import { db } from './index';
 import { logger } from './logger';
 import type {
   ActorStateRow,
@@ -74,31 +55,26 @@ class DatabaseService {
    * @returns The game instance (existing or newly created)
    */
   async initializeGame() {
-    const existing = await db
-      .select()
-      .from(games)
-      .where(eq(games.isContinuous, true))
-      .limit(1);
+    const existing = await db.game.findFirst({
+      where: { isContinuous: true },
+    });
 
-    if (existing.length > 0 && existing[0]) {
-      logger.info(`Game already initialized (${existing[0].id})`);
-      return existing[0];
+    if (existing) {
+      logger.info(`Game already initialized (${existing.id})`);
+      return existing;
     }
 
     const gameId = await generateSnowflakeId();
-    const created = await db
-      .insert(games)
-      .values({
+    const game = await db.game.create({
+      data: {
         id: gameId,
         isContinuous: true,
         isRunning: true,
         currentDate: new Date(),
         speed: 60000,
         updatedAt: new Date(),
-      })
-      .returning();
-
-    const game = created[0]!;
+      },
+    });
     logger.info(`Game initialized (${game.id})`);
     return game;
   }
@@ -109,12 +85,7 @@ class DatabaseService {
    * @returns The current game state or null if no game exists
    */
   async getGameState() {
-    const result = await db
-      .select()
-      .from(games)
-      .where(eq(games.isContinuous, true))
-      .limit(1);
-    return result[0] ?? null;
+    return db.game.findFirst({ where: { isContinuous: true } });
   }
 
   /**
@@ -134,13 +105,10 @@ class DatabaseService {
     const game = await this.getGameState();
     if (!game) throw new Error('Game not initialized');
 
-    const updated = await db
-      .update(games)
-      .set(data)
-      .where(eq(games.id, game.id))
-      .returning();
-
-    return updated[0]!;
+    return db.game.update({
+      where: { id: game.id },
+      data: { ...data, updatedAt: new Date() },
+    });
   }
 
   // ========== POSTS ==========
@@ -152,19 +120,16 @@ class DatabaseService {
    * @returns The created post record
    */
   async createPost(post: FeedPost & { gameId?: string; dayNumber?: number }) {
-    const created = await db
-      .insert(posts)
-      .values({
+    return db.post.create({
+      data: {
         id: post.id,
         content: post.content,
         authorId: post.author,
         gameId: post.gameId,
         dayNumber: post.dayNumber,
         timestamp: new Date(post.timestamp),
-      })
-      .returning();
-
-    return created[0]!;
+      },
+    });
   }
 
   /**
@@ -207,9 +172,8 @@ class DatabaseService {
       });
     }
 
-    const created = await db
-      .insert(posts)
-      .values({
+    return db.post.create({
+      data: {
         id: data.id,
         type: data.type || 'post',
         content: data.content,
@@ -227,10 +191,8 @@ class DatabaseService {
         commentOnPostId: data.commentOnPostId,
         parentCommentId: data.parentCommentId,
         originalPostId: data.originalPostId,
-      })
-      .returning();
-
-    return created[0]!;
+      },
+    });
   }
 
   /**
@@ -270,7 +232,7 @@ class DatabaseService {
       };
     });
 
-    await db.insert(posts).values(values).onConflictDoNothing();
+    await db.post.createMany({ data: values, skipDuplicates: true });
 
     return { count: postsData.length };
   }
@@ -297,30 +259,26 @@ class DatabaseService {
 
     const now = new Date();
 
-    const conditions = [isNull(posts.deletedAt)];
-
-    if (cursor) {
-      conditions.push(lt(posts.timestamp, new Date(cursor)));
-      conditions.push(lte(posts.timestamp, now));
-    } else {
-      conditions.push(lte(posts.timestamp, now));
-    }
-
-    const allPosts = await db
-      .select()
-      .from(posts)
-      .where(and(...conditions))
-      .limit(limit * 2)
-      .offset(cursor ? 0 : offset)
-      .orderBy(desc(posts.timestamp));
+    const cursorDate = cursor ? new Date(cursor) : null;
+    const allPosts = await db.post.findMany({
+      where: {
+        deletedAt: null,
+        timestamp: cursorDate ? { lt: cursorDate, lte: now } : { lte: now },
+      },
+      take: limit * 2,
+      skip: cursor ? 0 : offset,
+      orderBy: { timestamp: 'desc' },
+    });
 
     const authorIds = [...new Set(allPosts.map((p) => p.authorId))];
 
     // Check users table for isTest flag
-    const testUsers = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(and(inArray(users.id, authorIds), eq(users.isTest, true)));
+    const testUsers = await db.user.findMany({
+      where: {
+        id: { in: authorIds },
+        isTest: true,
+      },
+    });
 
     // For actors, use ID pattern: test actors have IDs starting with 'test-'
     const testActorIds = authorIds.filter((id) => id.startsWith('test-'));
@@ -374,14 +332,10 @@ class DatabaseService {
     });
 
     // Check if it's a test user from users table or test actor by ID pattern
-    const user = await db
-      .select({ isTest: users.isTest })
-      .from(users)
-      .where(eq(users.id, authorId))
-      .limit(1);
+    const user = await db.user.findUnique({ where: { id: authorId } });
 
     // Test actors have IDs starting with 'test-'
-    const isTestUser = user[0]?.isTest || authorId.startsWith('test-') || false;
+    const isTestUser = Boolean(user?.isTest) || authorId.startsWith('test-');
 
     if (isTestUser) {
       logger.info('DatabaseService.getPostsByActor - test user filtered', {
@@ -393,22 +347,17 @@ class DatabaseService {
 
     const now = new Date();
 
-    const conditions = [eq(posts.authorId, authorId), isNull(posts.deletedAt)];
-
-    if (cursor) {
-      conditions.push(lt(posts.timestamp, new Date(cursor)));
-      conditions.push(lte(posts.timestamp, now));
-    } else {
-      conditions.push(lte(posts.timestamp, now));
-    }
-
-    const result = await db
-      .select()
-      .from(posts)
-      .where(and(...conditions))
-      .limit(limit)
-      .offset(cursor ? 0 : offset)
-      .orderBy(desc(posts.timestamp));
+    const cursorDate = cursor ? new Date(cursor) : null;
+    const result = await db.post.findMany({
+      where: {
+        authorId,
+        deletedAt: null,
+        timestamp: cursorDate ? { lt: cursorDate, lte: now } : { lte: now },
+      },
+      take: limit,
+      skip: cursor ? 0 : offset,
+      orderBy: { timestamp: 'desc' },
+    });
 
     logger.info('DatabaseService.getPostsByActor completed', {
       authorId,
@@ -427,8 +376,7 @@ class DatabaseService {
    * @returns Total number of posts
    */
   async getTotalPosts() {
-    const result = await db.select({ count: count() }).from(posts);
-    return Number(result[0]?.count ?? 0);
+    return db.post.count();
   }
 
   // ========== QUESTIONS ==========
@@ -450,9 +398,8 @@ class DatabaseService {
     resolvedOutcome?: boolean;
     questionNumber: number;
   }) {
-    const created = await db
-      .insert(questions)
-      .values({
+    return db.question.create({
+      data: {
         id: await generateSnowflakeId(),
         questionNumber: question.questionNumber,
         text: question.text,
@@ -464,10 +411,8 @@ class DatabaseService {
         status: question.status || 'active',
         resolvedOutcome: question.resolvedOutcome,
         updatedAt: new Date(),
-      })
-      .returning();
-
-    return created[0]!;
+      },
+    });
   }
 
   /**
@@ -508,40 +453,45 @@ class DatabaseService {
    */
   async getActiveQuestions(timeframe?: string) {
     const now = new Date();
-    const conditions = [eq(questions.status, 'active')];
-
-    if (timeframe) {
-      let endDate: Date | undefined;
-
-      switch (timeframe) {
-        case '24h':
-          endDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-          conditions.push(gte(questions.resolutionDate, now));
-          conditions.push(lte(questions.resolutionDate, endDate));
-          break;
-        case '7d':
-          endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-          conditions.push(gte(questions.resolutionDate, now));
-          conditions.push(lte(questions.resolutionDate, endDate));
-          break;
-        case '30d':
-          endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-          conditions.push(gte(questions.resolutionDate, now));
-          conditions.push(lte(questions.resolutionDate, endDate));
-          break;
-        case '30d+': {
-          const startDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-          conditions.push(gte(questions.resolutionDate, startDate));
-          break;
-        }
-      }
+    if (!timeframe) {
+      const result = await db.question.findMany({
+        where: { status: 'active' },
+        orderBy: { createdDate: 'desc' },
+      });
+      return result.map((q) => this.adaptQuestion(q));
     }
 
-    const result = await db
-      .select()
-      .from(questions)
-      .where(and(...conditions))
-      .orderBy(desc(questions.createdDate));
+    if (timeframe === '30d+') {
+      const startDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const result = await db.question.findMany({
+        where: { status: 'active', resolutionDate: { gte: startDate } },
+        orderBy: { createdDate: 'desc' },
+      });
+      return result.map((q) => this.adaptQuestion(q));
+    }
+
+    const deltaMs =
+      timeframe === '24h'
+        ? 24 * 60 * 60 * 1000
+        : timeframe === '7d'
+          ? 7 * 24 * 60 * 60 * 1000
+          : timeframe === '30d'
+            ? 30 * 24 * 60 * 60 * 1000
+            : null;
+
+    if (deltaMs === null) {
+      const result = await db.question.findMany({
+        where: { status: 'active' },
+        orderBy: { createdDate: 'desc' },
+      });
+      return result.map((q) => this.adaptQuestion(q));
+    }
+
+    const endDate = new Date(now.getTime() + deltaMs);
+    const result = await db.question.findMany({
+      where: { status: 'active', resolutionDate: { gte: now, lte: endDate } },
+      orderBy: { createdDate: 'desc' },
+    });
 
     return result.map((q) => this.adaptQuestion(q));
   }
@@ -552,15 +502,12 @@ class DatabaseService {
    * @returns Array of questions ready for resolution
    */
   async getQuestionsToResolve() {
-    const result = await db
-      .select()
-      .from(questions)
-      .where(
-        and(
-          eq(questions.status, 'active'),
-          lte(questions.resolutionDate, new Date())
-        )
-      );
+    const result = await db.question.findMany({
+      where: {
+        status: 'active',
+        resolutionDate: { lte: new Date() },
+      },
+    });
 
     return result.map((q) => this.adaptQuestion(q));
   }
@@ -571,10 +518,9 @@ class DatabaseService {
    * @returns Array of all questions
    */
   async getAllQuestions() {
-    const result = await db
-      .select()
-      .from(questions)
-      .orderBy(desc(questions.createdDate));
+    const result = await db.question.findMany({
+      orderBy: { createdDate: 'desc' },
+    });
 
     return result.map((q) => this.adaptQuestion(q));
   }
@@ -587,16 +533,14 @@ class DatabaseService {
    * @returns The updated question record
    */
   async resolveQuestion(id: string, resolvedOutcome: boolean) {
-    const updated = await db
-      .update(questions)
-      .set({
+    return db.question.update({
+      where: { id },
+      data: {
         status: 'resolved',
         resolvedOutcome,
-      })
-      .where(eq(questions.id, id))
-      .returning();
-
-    return updated[0]!;
+        updatedAt: new Date(),
+      },
+    });
   }
 
   // ========== ORGANIZATION STATE ==========
@@ -614,34 +558,19 @@ class DatabaseService {
     id: string,
     currentPrice: number | null
   ): Promise<OrganizationStateRow> {
-    const existing = await db
-      .select({ id: organizationState.id })
-      .from(organizationState)
-      .where(eq(organizationState.id, id))
-      .limit(1);
-
-    if (existing.length > 0) {
-      const updated = await db
-        .update(organizationState)
-        .set({
-          currentPrice,
-          updatedAt: new Date(),
-        })
-        .where(eq(organizationState.id, id))
-        .returning();
-      return updated[0]!;
-    }
-
-    const created = await db
-      .insert(organizationState)
-      .values({
+    const now = new Date();
+    return db.organizationState.upsert({
+      where: { id },
+      create: {
         id,
         currentPrice,
-        updatedAt: new Date(),
-      })
-      .returning();
-
-    return created[0]!;
+        updatedAt: now,
+      },
+      update: {
+        currentPrice,
+        updatedAt: now,
+      },
+    });
   }
 
   /**
@@ -665,12 +594,7 @@ class DatabaseService {
    * @returns The organization state or null if not found
    */
   async getOrganizationState(id: string): Promise<OrganizationStateRow | null> {
-    const result = await db
-      .select()
-      .from(organizationState)
-      .where(eq(organizationState.id, id))
-      .limit(1);
-    return result[0] ?? null;
+    return db.organizationState.findUnique({ where: { id } });
   }
 
   /**
@@ -679,7 +603,7 @@ class DatabaseService {
    * @returns Array of all organization state records
    */
   async getAllOrganizationStates(): Promise<OrganizationStateRow[]> {
-    return db.select().from(organizationState);
+    return db.organizationState.findMany();
   }
 
   /**
@@ -689,10 +613,9 @@ class DatabaseService {
    * @returns Array of organization states ordered by price descending
    */
   async getOrganizationsByPrice(): Promise<OrganizationStateRow[]> {
-    return db
-      .select()
-      .from(organizationState)
-      .orderBy(desc(organizationState.currentPrice));
+    return db.organizationState.findMany({
+      orderBy: { currentPrice: 'desc' },
+    });
   }
 
   // ========== STOCK PRICES ==========
@@ -712,9 +635,8 @@ class DatabaseService {
     change: number,
     changePercent: number
   ) {
-    const created = await db
-      .insert(stockPrices)
-      .values({
+    return db.stockPrice.create({
+      data: {
         id: await generateSnowflakeId(),
         organizationId,
         price,
@@ -722,10 +644,8 @@ class DatabaseService {
         changePercent,
         timestamp: new Date(),
         isSnapshot: false,
-      })
-      .returning();
-
-    return created[0]!;
+      },
+    });
   }
 
   /**
@@ -745,9 +665,8 @@ class DatabaseService {
       volume: number;
     }
   ) {
-    const created = await db
-      .insert(stockPrices)
-      .values({
+    return db.stockPrice.create({
+      data: {
         id: await generateSnowflakeId(),
         organizationId,
         price: data.closePrice,
@@ -760,10 +679,8 @@ class DatabaseService {
         highPrice: data.highPrice,
         lowPrice: data.lowPrice,
         volume: data.volume,
-      })
-      .returning();
-
-    return created[0]!;
+      },
+    });
   }
 
   /**
@@ -774,12 +691,11 @@ class DatabaseService {
    * @returns Array of price records ordered by timestamp (newest first)
    */
   async getPriceHistory(organizationId: string, limit = 1440) {
-    return await db
-      .select()
-      .from(stockPrices)
-      .where(eq(stockPrices.organizationId, organizationId))
-      .limit(limit)
-      .orderBy(desc(stockPrices.timestamp));
+    return db.stockPrice.findMany({
+      where: { organizationId },
+      take: limit,
+      orderBy: { timestamp: 'desc' },
+    });
   }
 
   /**
@@ -790,17 +706,11 @@ class DatabaseService {
    * @returns Array of daily snapshot records
    */
   async getDailySnapshots(organizationId: string, days = 30) {
-    return await db
-      .select()
-      .from(stockPrices)
-      .where(
-        and(
-          eq(stockPrices.organizationId, organizationId),
-          eq(stockPrices.isSnapshot, true)
-        )
-      )
-      .limit(days)
-      .orderBy(desc(stockPrices.timestamp));
+    return db.stockPrice.findMany({
+      where: { organizationId, isSnapshot: true },
+      take: days,
+      orderBy: { timestamp: 'desc' },
+    });
   }
 
   // ========== EVENTS ==========
@@ -869,9 +779,8 @@ class DatabaseService {
       });
     }
 
-    const created = await db
-      .insert(worldEvents)
-      .values({
+    return db.worldEvent.create({
+      data: {
         id: event.id,
         eventType: event.eventType,
         description: descriptionString,
@@ -881,10 +790,8 @@ class DatabaseService {
         visibility: event.visibility,
         gameId: event.gameId,
         dayNumber: safeDayNumber,
-      })
-      .returning();
-
-    return created[0]!;
+      },
+    });
   }
 
   /**
@@ -894,11 +801,10 @@ class DatabaseService {
    * @returns Array of recent events
    */
   async getRecentEvents(limit = 100) {
-    return await db
-      .select()
-      .from(worldEvents)
-      .limit(limit)
-      .orderBy(desc(worldEvents.timestamp));
+    return db.worldEvent.findMany({
+      take: limit,
+      orderBy: { timestamp: 'desc' },
+    });
   }
 
   // ========== ACTOR STATE ==========
@@ -915,45 +821,30 @@ class DatabaseService {
   async upsertActorState(
     state: Partial<ActorStateRow> & { id: string }
   ): Promise<ActorStateRow> {
-    const existing = await db
-      .select({ id: actorState.id })
-      .from(actorState)
-      .where(eq(actorState.id, state.id))
-      .limit(1);
+    const now = new Date();
+    const update: Partial<ActorStateRow> = { updatedAt: now };
 
-    if (existing.length > 0) {
-      const updated = await db
-        .update(actorState)
-        .set({
-          ...(state.tradingBalance !== undefined && {
-            tradingBalance: String(state.tradingBalance),
-          }),
-          ...(state.reputationPoints !== undefined && {
-            reputationPoints: state.reputationPoints,
-          }),
-          ...(state.hasPool !== undefined && {
-            hasPool: state.hasPool,
-          }),
-          updatedAt: new Date(),
-        })
-        .where(eq(actorState.id, state.id))
-        .returning();
-
-      return updated[0]!;
+    if (state.tradingBalance !== undefined) {
+      update.tradingBalance = String(state.tradingBalance);
+    }
+    if (state.reputationPoints !== undefined) {
+      update.reputationPoints = state.reputationPoints;
+    }
+    if (state.hasPool !== undefined) {
+      update.hasPool = state.hasPool;
     }
 
-    const created = await db
-      .insert(actorState)
-      .values({
+    return db.actorState.upsert({
+      where: { id: state.id },
+      create: {
         id: state.id,
         tradingBalance: String(state.tradingBalance ?? 10000),
         reputationPoints: state.reputationPoints ?? 10000,
         hasPool: state.hasPool ?? false,
-        updatedAt: new Date(),
-      })
-      .returning();
-
-    return created[0]!;
+        updatedAt: now,
+      },
+      update,
+    });
   }
 
   /**
@@ -963,7 +854,7 @@ class DatabaseService {
    * @returns Array of all actor state records
    */
   async getAllActorStates(): Promise<ActorStateRow[]> {
-    return await db.select().from(actorState);
+    return await db.actorState.findMany({});
   }
 
   /**
@@ -974,12 +865,7 @@ class DatabaseService {
    * @returns The actor state record or null if not found
    */
   async getActorState(id: string): Promise<ActorStateRow | null> {
-    const result = await db
-      .select()
-      .from(actorState)
-      .where(eq(actorState.id, id))
-      .limit(1);
-    return result[0] ?? null;
+    return await db.actorState.findUnique({ where: { id } });
   }
 
   // ========== UTILITY ==========
@@ -998,27 +884,11 @@ class DatabaseService {
       totalActors,
       gameState,
     ] = await Promise.all([
-      db
-        .select({ count: count() })
-        .from(posts)
-        .then((r) => Number(r[0]?.count ?? 0)),
-      db
-        .select({ count: count() })
-        .from(questions)
-        .then((r) => Number(r[0]?.count ?? 0)),
-      db
-        .select({ count: count() })
-        .from(questions)
-        .where(eq(questions.status, 'active'))
-        .then((r) => Number(r[0]?.count ?? 0)),
-      db
-        .select({ count: count() })
-        .from(organizationState)
-        .then((r) => Number(r[0]?.count ?? 0)),
-      db
-        .select({ count: count() })
-        .from(actorState)
-        .then((r) => Number(r[0]?.count ?? 0)),
+      db.post.count({}),
+      db.question.count({}),
+      db.question.count({ where: { status: 'active' } }),
+      db.organizationState.count({}),
+      db.actorState.count({}),
       this.getGameState(),
     ]);
 
@@ -1039,7 +909,9 @@ class DatabaseService {
    * @returns Array of all game records
    */
   async getAllGames() {
-    return await db.select().from(games).orderBy(desc(games.createdAt));
+    return await db.game.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }
 

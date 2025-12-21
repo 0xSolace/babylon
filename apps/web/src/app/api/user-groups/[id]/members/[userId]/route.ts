@@ -61,7 +61,7 @@
  * ```
  */
 
-import { authenticate, withErrorHandling } from '@babylon/api';
+import { authenticate, NotFoundError, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -123,7 +123,11 @@ export const DELETE = withErrorHandling(
       select: { createdById: true, name: true },
     });
 
-    if (group?.createdById === targetUserId) {
+    if (!group) {
+      throw new NotFoundError('Group', groupId);
+    }
+
+    if (group.createdById === targetUserId) {
       return NextResponse.json(
         { error: 'Cannot remove group creator' },
         { status: 400 }
@@ -149,7 +153,7 @@ export const DELETE = withErrorHandling(
     // Remove from chat participants
     const chat = await db.chat.findFirst({
       where: {
-        name: group?.name,
+        name: group.name,
         isGroup: true,
       },
     });

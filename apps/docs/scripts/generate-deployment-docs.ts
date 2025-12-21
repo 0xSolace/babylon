@@ -102,15 +102,15 @@ function generateMarkdown(deployments: DeploymentInfo[]): string {
   md += '## Integration Guide\n\n';
   md += '### TypeScript\n\n';
   md += '```typescript\n';
-  md += `import { ethers } from 'ethers';\n\n`;
-  md += 'const provider = new ethers.JsonRpcProvider(RPC_URL);\n';
-  md += 'const contract = new ethers.Contract(\n';
-  md += `  '0x...',  // Contract address\n`;
-  md += '  ABI,      // Contract ABI\n';
-  md += '  provider\n';
-  md += ');\n\n';
+  md += `import { createPublicClient, getContract, http } from 'viem';\n\n`;
+  md += 'const client = createPublicClient({ transport: http(RPC_URL) });\n';
+  md += 'const contract = getContract({\n';
+  md += `  address: '0x...',  // Contract address\n`;
+  md += '  abi: ABI,           // Contract ABI\n';
+  md += '  client,\n';
+  md += '});\n\n';
   md += '// Call contract method\n';
-  md += 'const result = await contract.methodName(args);\n';
+  md += 'const result = await contract.read.methodName([args]);\n';
   md += '```\n\n';
 
   md += '### Contract ABIs\n\n';

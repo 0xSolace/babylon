@@ -251,11 +251,7 @@ function createRelationships(_actors: Actor[]): ActorRelationship[] {
 const OUTPUT_DIR = '/tmp/babylon-feed-tests';
 
 async function ensureOutputDir(): Promise<void> {
-  try {
-    await mkdir(OUTPUT_DIR, { recursive: true });
-  } catch {
-    // Directory exists
-  }
+  await mkdir(OUTPUT_DIR, { recursive: true });
 }
 
 interface OutputData {

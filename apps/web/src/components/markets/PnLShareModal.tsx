@@ -1,6 +1,7 @@
 'use client';
 
 import { getReferralUrl, trackExternalShare } from '@babylon/shared';
+import { useMutation } from '@tanstack/react-query';
 import { Download, LogOut, Twitter, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -101,6 +102,22 @@ const categoryLabels: Record<MarketCategory, string> = {
   predictions: 'Prediction Markets',
 };
 
+/**
+ * Response from Twitter tweet API.
+ */
+interface TweetApiResponse {
+  tweetUrl: string;
+}
+
+/**
+ * Payload for posting a tweet.
+ */
+interface PostTweetPayload {
+  text: string;
+  contentType: string;
+  contentId: string;
+}
+
 export function PnLShareModal({
   isOpen,
   onClose,
@@ -114,7 +131,6 @@ export function PnLShareModal({
   const [sharing, setSharing] = useState<'twitter' | 'farcaster' | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [isPostingToTwitter, setIsPostingToTwitter] = useState(false);
   const [showTwitterConfirm, setShowTwitterConfirm] = useState(false);
   const [tweetText, setTweetText] = useState('');
   const offscreenCardRef = useRef<HTMLDivElement>(null);
@@ -256,59 +272,67 @@ export function PnLShareModal({
     }
   };
 
-  const handleTwitterPost = async () => {
+  // Mutation for posting tweet
+  const tweetMutation = useMutation({
+    mutationFn: async (
+      payload: PostTweetPayload
+    ): Promise<TweetApiResponse> => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('/api/twitter/tweet', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as { error?: string };
+        throw new Error(errorData.error || 'Failed to post tweet');
+      }
+
+      return response.json() as Promise<TweetApiResponse>;
+    },
+    onSuccess: async (tweetData) => {
+      toast.success('Successfully shared to X!');
+
+      if (shareableLink && user) {
+        await trackExternalShare({
+          platform: 'twitter',
+          contentType: 'market',
+          contentId,
+          url: shareableLink,
+          userId: user.id,
+        });
+      }
+
+      if (tweetData.tweetUrl) {
+        window.open(tweetData.tweetUrl, '_blank');
+      }
+
+      setShowTwitterConfirm(false);
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleTwitterPost = () => {
     if (!user || !authStatus?.connected || !shareableLink) return;
 
-    setIsPostingToTwitter(true);
-
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      setIsPostingToTwitter(false);
-      return;
-    }
-
     toast.info('Posting to X...');
-
-    const tweetResponse = await fetch('/api/twitter/tweet', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        text: tweetText,
-        contentType: 'market',
-        contentId,
-      }),
-    });
-
-    if (!tweetResponse.ok) {
-      const error = await tweetResponse.json();
-      toast.error(error.error || 'Failed to post tweet');
-      setIsPostingToTwitter(false);
-      return;
-    }
-
-    const tweetData = (await tweetResponse.json()) as { tweetUrl: string };
-
-    toast.success('Successfully shared to X!');
-
-    await trackExternalShare({
-      platform: 'twitter',
+    tweetMutation.mutate({
+      text: tweetText,
       contentType: 'market',
       contentId,
-      url: shareableLink,
-      userId: user.id,
     });
-
-    if (tweetData.tweetUrl) {
-      window.open(tweetData.tweetUrl, '_blank');
-    }
-
-    setShowTwitterConfirm(false);
-    onClose();
-    setIsPostingToTwitter(false);
   };
 
   const handleDisconnectTwitter = async () => {
@@ -466,7 +490,9 @@ export function PnLShareModal({
       {showTwitterConfirm && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-          onClick={() => !isPostingToTwitter && setShowTwitterConfirm(false)}
+          onClick={() =>
+            !tweetMutation.isPending && setShowTwitterConfirm(false)
+          }
           role="dialog"
           aria-modal="true"
         >
@@ -484,9 +510,9 @@ export function PnLShareModal({
               <button
                 type="button"
                 onClick={() =>
-                  !isPostingToTwitter && setShowTwitterConfirm(false)
+                  !tweetMutation.isPending && setShowTwitterConfirm(false)
                 }
-                disabled={isPostingToTwitter}
+                disabled={tweetMutation.isPending}
                 className="rounded-lg p-2 text-muted-foreground transition hover:bg-sidebar-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Close modal"
               >
@@ -524,7 +550,7 @@ export function PnLShareModal({
                   onChange={(e) => setTweetText(e.target.value)}
                   maxLength={280}
                   rows={4}
-                  disabled={isPostingToTwitter}
+                  disabled={tweetMutation.isPending}
                   className="w-full resize-none rounded-lg border border-border bg-muted/30 px-4 py-3 text-foreground placeholder-muted-foreground focus:border-border focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   placeholder="What's on your mind?"
                 />
@@ -545,7 +571,7 @@ export function PnLShareModal({
                 <button
                   type="button"
                   onClick={() => setShowTwitterConfirm(false)}
-                  disabled={isPostingToTwitter}
+                  disabled={tweetMutation.isPending}
                   className="rounded-lg border border-border px-6 py-2.5 text-foreground transition hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
@@ -554,13 +580,13 @@ export function PnLShareModal({
                   type="button"
                   onClick={handleTwitterPost}
                   disabled={
-                    isPostingToTwitter ||
+                    tweetMutation.isPending ||
                     !tweetText.trim() ||
                     tweetText.length > 280
                   }
                   className="flex items-center gap-2 rounded-lg bg-sky-500 px-6 py-2.5 font-medium text-foreground transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isPostingToTwitter ? (
+                  {tweetMutation.isPending ? (
                     <>
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground" />
                       Posting...

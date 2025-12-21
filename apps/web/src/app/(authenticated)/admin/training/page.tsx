@@ -29,6 +29,7 @@
 
 'use client';
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   Cpu,
@@ -37,7 +38,6 @@ import {
   PlayCircle,
   TrendingUp,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -112,6 +112,12 @@ interface TrainingStatus {
   };
 }
 
+interface TrainingTriggerResponse {
+  success: boolean;
+  jobId?: string;
+  error?: string;
+}
+
 /**
  * Training Dashboard Component
  *
@@ -122,55 +128,59 @@ interface TrainingStatus {
  * @returns {JSX.Element} Training dashboard page
  */
 export default function TrainingDashboard() {
-  const [status, setStatus] = useState<TrainingStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [training, setTraining] = useState(false);
+  const queryClient = useQueryClient();
 
-  const loadStatus = useCallback(async () => {
-    const res = await fetch('/api/admin/training/status');
+  const { data: status, isLoading: loading } = useQuery({
+    queryKey: ['admin', 'training', 'status'],
+    queryFn: async (): Promise<TrainingStatus | null> => {
+      const res = await fetch('/api/admin/training/status');
 
-    if (!res.ok) {
-      console.error('Failed to load status: Failed to load training status');
-      setLoading(false);
-      return;
-    }
+      if (!res.ok) {
+        console.error('Failed to load status: Failed to load training status');
+        return null;
+      }
 
-    const data = await res.json();
-    setStatus(data);
-    setLoading(false);
-  }, []);
+      return (await res.json()) as TrainingStatus;
+    },
+    refetchInterval: 5000, // Refresh every 5s
+  });
 
-  useEffect(() => {
-    loadStatus();
-    const interval = setInterval(loadStatus, 5000); // Refresh every 5s
-    return () => clearInterval(interval);
-  }, [loadStatus]);
+  const triggerMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/admin/training/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: false }),
+      });
 
-  async function triggerTraining() {
-    setTraining(true);
+      if (!res.ok) {
+        const errorData = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errorData.error || 'Failed to trigger training');
+      }
 
-    const res = await fetch('/api/admin/training/trigger', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ force: false }),
-    });
+      return (await res.json()) as TrainingTriggerResponse;
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        alert(`Training started! Job ID: ${result.jobId}`);
+        void queryClient.invalidateQueries({
+          queryKey: ['admin', 'training', 'status'],
+        });
+      } else {
+        alert(`Failed to start training: ${result.error || 'Unknown error'}`);
+      }
+    },
+    onError: (error: Error) => {
+      alert(`Error: ${error.message}`);
+    },
+  });
 
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      setTraining(false);
-      alert(`Error: ${errorData.error || 'Failed to trigger training'}`);
-      return;
-    }
+  const training = triggerMutation.isPending;
 
-    const result = await res.json();
-
-    if (result.success) {
-      alert(`Training started! Job ID: ${result.jobId}`);
-      await loadStatus();
-    } else {
-      alert(`Failed to start training: ${result.error || 'Unknown error'}`);
-    }
-    setTraining(false);
+  function triggerTraining() {
+    triggerMutation.mutate();
   }
 
   if (loading) {

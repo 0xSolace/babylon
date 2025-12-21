@@ -243,7 +243,7 @@ export const POST = withErrorHandling(
         platform,
         contentType,
         contentId,
-        shareId: shareAction?.id,
+        shareId: shareAction.id,
       },
       'POST /api/users/[userId]/share'
     );

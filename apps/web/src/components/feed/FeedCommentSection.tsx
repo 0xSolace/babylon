@@ -2,6 +2,7 @@
 
 import type { CommentData, CommentWithReplies } from '@babylon/shared';
 import { cn } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageCircle, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -41,22 +42,28 @@ import { useInteractionStore } from '@/stores/interactionStore';
  * />
  * ```
  */
+interface PostData {
+  id: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  authorUsername?: string | null;
+  authorProfileImageUrl?: string | null;
+  timestamp: string;
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+  isLiked: boolean;
+  isShared: boolean;
+}
+
+interface PostResponse {
+  data: PostData;
+}
+
 interface FeedCommentSectionProps {
   postId: string | null;
-  postData?: {
-    id: string;
-    content: string;
-    authorId: string;
-    authorName: string;
-    authorUsername?: string | null;
-    authorProfileImageUrl?: string | null;
-    timestamp: string;
-    likeCount: number;
-    commentCount: number;
-    shareCount: number;
-    isLiked: boolean;
-    isShared: boolean;
-  };
+  postData?: PostData;
   onClose?: () => void;
 }
 
@@ -67,23 +74,8 @@ export function FeedCommentSection({
 }: FeedCommentSectionProps) {
   const { user } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [comments, setComments] = useState<CommentWithReplies[]>([]);
-  const [post, setPost] = useState<{
-    id: string;
-    content: string;
-    authorId: string;
-    authorName: string;
-    authorUsername?: string | null;
-    authorProfileImageUrl?: string | null;
-    timestamp: string;
-    likeCount: number;
-    commentCount: number;
-    shareCount: number;
-    isLiked: boolean;
-    isShared: boolean;
-  } | null>(postData || null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingPost, setIsLoadingPost] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'popular'>(
     'newest'
   );
@@ -109,57 +101,41 @@ export function FeedCommentSection({
     };
   }, [onClose]);
 
-  // Load comments data function - defined before useEffect that uses it
+  // Fetch post data
+  const { data: post, isLoading: isLoadingPost } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: async (): Promise<PostData | null> => {
+      if (!postId) return null;
+      // Use provided postData if available
+      if (postData) return postData;
+
+      const response = await fetch(`/api/posts/${postId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch post');
+      }
+      const result: PostResponse = await response.json();
+      return result.data;
+    },
+    enabled: !!postId,
+    initialData: postData || undefined,
+  });
+
+  // Load comments using the interaction store
   const loadCommentsData = useCallback(async () => {
     if (!postId) return;
-
-    setIsLoading(true);
     const loadedComments = await loadComments(postId);
     setComments(loadedComments);
-    setIsLoading(false);
   }, [postId, loadComments]);
 
-  // Load post data when postId changes
-  useEffect(() => {
-    const loadPostData = async () => {
-      if (!postId) {
-        setPost(null);
-        return;
-      }
-
-      // Use provided postData if available
-      if (postData) {
-        setPost(postData);
-        return;
-      }
-
-      setIsLoadingPost(true);
-      const response = await fetch(`/api/posts/${postId}`);
-      if (response.ok) {
-        const result = await response.json();
-        setPost(result.data);
-      }
-      setIsLoadingPost(false);
-    };
-
-    loadPostData();
-  }, [postId, postData]);
-
-  // Update internal post state when postData prop changes
-  useEffect(() => {
-    if (postData) {
-      setPost(postData);
-    }
-  }, [postData]);
-
-  // Load comments when postId changes
-  useEffect(() => {
-    if (postId) {
-      loadCommentsData();
-    } else {
-      setComments([]);
-    }
-  }, [postId, loadCommentsData]);
+  // Query for comments loading state
+  const { isLoading: isLoadingComments } = useQuery({
+    queryKey: ['comments', postId],
+    queryFn: async () => {
+      await loadCommentsData();
+      return true;
+    },
+    enabled: !!postId,
+  });
 
   // Reload comments when comment count changes (e.g., from SSE updates)
   useEffect(() => {
@@ -310,9 +286,8 @@ export function FeedCommentSection({
       onClose();
       router.push(`/post/${postId}`);
     }
-    // If not modal (inline view on post page), the comment count change
-    // will trigger the useEffect that watches post.commentCount,
-    // which will automatically reload comments
+    // Invalidate queries to refresh data
+    queryClient.invalidateQueries({ queryKey: ['comments', postId] });
   };
 
   const sortedComments = useMemo(() => {
@@ -473,7 +448,7 @@ export function FeedCommentSection({
 
           {/* Comments list */}
           <div className="flex-1 overflow-y-auto px-4 py-3">
-            {isLoading ? (
+            {isLoadingComments ? (
               <div className="flex items-center justify-center py-8">
                 <div className="w-full space-y-3">
                   <Skeleton className="h-20 w-full" />

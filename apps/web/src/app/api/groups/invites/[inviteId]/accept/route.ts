@@ -51,8 +51,8 @@ import {
 } from '@babylon/api';
 import { asUser } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
-import { nanoid } from 'nanoid';
 import type { NextRequest } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * POST /api/groups/invites/[inviteId]/accept
@@ -155,7 +155,7 @@ export const POST = withErrorHandling(
 
       await db.userGroupMember.create({
         data: {
-          id: nanoid(),
+          id: uuidv4(),
           groupId: invite.groupId,
           userId: user.userId,
           addedBy: invite.invitedBy,
@@ -171,7 +171,7 @@ export const POST = withErrorHandling(
       if (chat) {
         await db.chatParticipant.create({
           data: {
-            id: nanoid(),
+            id: uuidv4(),
             chatId: chat.id,
             userId: user.userId,
             joinedAt: new Date(),
@@ -189,7 +189,11 @@ export const POST = withErrorHandling(
         data: { read: true },
       });
 
-      return { groupId: invite.groupId, chatId: chat?.id, isNpcGroup: false };
+      return {
+        groupId: invite.groupId,
+        chatId: chat?.id || null,
+        isNpcGroup: false,
+      };
     });
 
     logger.info(

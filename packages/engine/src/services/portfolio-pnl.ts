@@ -64,7 +64,14 @@ export async function calculatePortfolioPnL(
     );
 
   // For prediction positions, we need to join with markets
-  const predictionPositionResults = await db
+  type PredictionPositionWithMarket = {
+    shares: string;
+    avgPrice: string;
+    side: boolean;
+    marketYesShares: string | null;
+    marketNoShares: string | null;
+  };
+  const predictionPositionResults = (await db
     .select({
       shares: positions.shares,
       avgPrice: positions.avgPrice,
@@ -74,7 +81,9 @@ export async function calculatePortfolioPnL(
     })
     .from(positions)
     .innerJoin(markets, eq(positions.marketId, markets.id))
-    .where(and(eq(positions.userId, userId), eq(markets.resolved, false)));
+    .where(
+      and(eq(positions.userId, userId), eq(markets.resolved, false))
+    )) as unknown as PredictionPositionWithMarket[];
 
   const totalDeposited = toNumber(user.totalDeposited);
   const totalWithdrawn = toNumber(user.totalWithdrawn);

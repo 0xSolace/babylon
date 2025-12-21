@@ -10,15 +10,9 @@ import {
   logger,
   type PaymentVerificationParams,
   type PaymentVerificationResult,
+  randomBytesHex,
 } from '@babylon/shared';
-import {
-  formatEther,
-  hexlify,
-  JsonRpcProvider,
-  type Provider,
-  parseEther,
-  randomBytes,
-} from 'ethers';
+import { createPublicClient, http, type PublicClient } from 'viem';
 import { z } from 'zod';
 import type { PaymentRequest } from '../types/a2a';
 import { PaymentRequestSchema } from '../types/a2a';
@@ -55,14 +49,14 @@ const PendingPaymentSchema = z.object({
 const REDIS_PREFIX = 'x402:payment:';
 
 export class X402Manager {
-  private provider: Provider;
+  private provider: PublicClient;
   private config: Required<Omit<X402Config, 'redis'>> & { redis?: RedisClient };
   private readonly DEFAULT_MIN_PAYMENT = '1000000000000000'; // 0.001 ETH
   private readonly DEFAULT_TIMEOUT = 5 * 60 * 1000; // 5 minutes
   private inMemoryStore: Map<string, PendingPayment> = new Map();
 
   constructor(config: X402Config) {
-    this.provider = new JsonRpcProvider(config.rpcUrl);
+    this.provider = createPublicClient({ transport: http(config.rpcUrl) });
     this.config = {
       rpcUrl: config.rpcUrl,
       minPaymentAmount: config.minPaymentAmount || this.DEFAULT_MIN_PAYMENT,
@@ -200,8 +194,8 @@ export class X402Manager {
     metadata?: Record<string, string | number | boolean | null>
   ): Promise<PaymentRequest> {
     // Validate amount meets minimum
-    const amountBn = parseEther(formatEther(amount));
-    const minAmountBn = parseEther(formatEther(this.config.minPaymentAmount));
+    const amountBn = BigInt(amount);
+    const minAmountBn = BigInt(this.config.minPaymentAmount);
 
     if (amountBn < minAmountBn) {
       throw new Error(
@@ -253,19 +247,21 @@ export class X402Manager {
       return { verified: false, error: 'Payment request expired' };
     }
 
-    const tx = await this.provider.getTransaction(verificationData.txHash);
+    const tx = await this.provider.getTransaction({
+      hash: verificationData.txHash as `0x${string}`,
+    });
     if (!tx) {
       return { verified: false, error: 'Transaction not found on blockchain' };
     }
 
-    const txReceipt = await this.provider.getTransactionReceipt(
-      verificationData.txHash
-    );
+    const txReceipt = await this.provider.getTransactionReceipt({
+      hash: verificationData.txHash as `0x${string}`,
+    });
     if (!txReceipt) {
       return { verified: false, error: 'Transaction not yet confirmed' };
     }
 
-    if (txReceipt.status !== 1) {
+    if (txReceipt.status !== 'success') {
       return { verified: false, error: 'Transaction failed on blockchain' };
     }
 
@@ -362,7 +358,7 @@ export class X402Manager {
    * Generate unique request ID
    */
   private generateRequestId(): string {
-    return `x402-${Date.now()}-${hexlify(randomBytes(16))}`;
+    return `x402-${Date.now()}-${randomBytesHex(16)}`;
   }
 
   /**

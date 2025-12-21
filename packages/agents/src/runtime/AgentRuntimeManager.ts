@@ -151,7 +151,7 @@ export class AgentRuntimeManager {
 
     const parseBio = (): string[] => {
       if (!agentConfig?.messageExamples) {
-        return [agentUser.bio || ''];
+        return [agentUser.bio ? String(agentUser.bio) : ''];
       }
 
       const parsed =
@@ -169,7 +169,7 @@ export class AgentRuntimeManager {
         },
         'AgentRuntimeManager'
       );
-      return [agentUser.bio || ''];
+      return [agentUser.bio ? String(agentUser.bio) : ''];
     };
 
     const parseStyle = (): Record<string, JsonValue> | undefined => {
@@ -195,8 +195,15 @@ export class AgentRuntimeManager {
 
     // Build character from agent user config
     // All inference routes through Jeju Compute marketplace
+    const agentDisplayName = agentUser.displayName
+      ? String(agentUser.displayName)
+      : null;
+    const agentUsername = agentUser.username
+      ? String(agentUser.username)
+      : null;
+    const agentName = agentDisplayName || agentUsername || 'Agent';
     const character: Character = {
-      name: agentUser.displayName || agentUser.username || 'Agent',
+      name: agentName,
       system: agentConfig?.systemPrompt || 'You are a helpful AI agent',
       bio: parseBio(),
       messageExamples: [],
@@ -267,26 +274,26 @@ export class AgentRuntimeManager {
     if (!runtime.logger || !runtime.logger.log) {
       const customLogger = {
         log: (msg: string) =>
-          logger.info(msg, undefined, `Agent[${agentUser.displayName}]`),
+          logger.info(msg, undefined, `Agent[${agentName}]`),
         info: (msg: string) =>
-          logger.info(msg, undefined, `Agent[${agentUser.displayName}]`),
+          logger.info(msg, undefined, `Agent[${agentName}]`),
         warn: (msg: string) =>
-          logger.warn(msg, undefined, `Agent[${agentUser.displayName}]`),
+          logger.warn(msg, undefined, `Agent[${agentName}]`),
         error: (msg: string) =>
-          logger.error(msg, new Error(msg), `Agent[${agentUser.displayName}]`),
+          logger.error(msg, new Error(msg), `Agent[${agentName}]`),
         debug: (msg: string) =>
-          logger.debug(msg, undefined, `Agent[${agentUser.displayName}]`),
+          logger.debug(msg, undefined, `Agent[${agentName}]`),
         success: (msg: string) =>
-          logger.info(`✓ ${msg}`, undefined, `Agent[${agentUser.displayName}]`),
+          logger.info(`✓ ${msg}`, undefined, `Agent[${agentName}]`),
         notice: (msg: string) =>
-          logger.info(msg, undefined, `Agent[${agentUser.displayName}]`),
+          logger.info(msg, undefined, `Agent[${agentName}]`),
         level: 'info' as const,
         trace: (msg: string) =>
-          logger.debug(msg, undefined, `Agent[${agentUser.displayName}]`),
+          logger.debug(msg, undefined, `Agent[${agentName}]`),
         fatal: (msg: string) =>
-          logger.error(msg, new Error(msg), `Agent[${agentUser.displayName}]`),
+          logger.error(msg, new Error(msg), `Agent[${agentName}]`),
         progress: (msg: string) =>
-          logger.info(msg, undefined, `Agent[${agentUser.displayName}]`),
+          logger.info(msg, undefined, `Agent[${agentName}]`),
         clear: () => (console.clear ? console.clear() : undefined),
         child: () => customLogger,
       };
@@ -370,7 +377,7 @@ export class AgentRuntimeManager {
     // Parse bio from messageExamples or bio field
     const parseBio = (): string[] => {
       if (!userAgentConfig?.messageExamples) {
-        return [agentUser.bio || ''];
+        return [agentUser.bio ? String(agentUser.bio) : ''];
       }
 
       const parsed =
@@ -380,7 +387,7 @@ export class AgentRuntimeManager {
       if (Array.isArray(parsed)) {
         return parsed;
       }
-      return [agentUser.bio || ''];
+      return [agentUser.bio ? String(agentUser.bio) : ''];
     };
 
     // Parse style

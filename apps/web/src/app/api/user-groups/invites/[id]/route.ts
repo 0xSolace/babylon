@@ -201,11 +201,18 @@ export const POST = withErrorHandling(
       .limit(1);
     const group = groupResult[0];
 
+    if (!group) {
+      return NextResponse.json(
+        { error: 'Group no longer exists' },
+        { status: 404 }
+      );
+    }
+
     // Find the chat for this group
     const chatResult = await db
       .select()
       .from(chats)
-      .where(and(eq(chats.name, group?.name ?? ''), eq(chats.isGroup, true)))
+      .where(and(eq(chats.name, group.name), eq(chats.isGroup, true)))
       .limit(1);
     const chat = chatResult[0];
 
@@ -247,7 +254,7 @@ export const POST = withErrorHandling(
       data: {
         message: 'Invite accepted',
         groupId: invite.groupId,
-        chatId: chat?.id,
+        chatId: chat ? chat.id : null,
       },
     });
   }
@@ -403,7 +410,7 @@ export const GET = withErrorHandling(
         inviter: inviter
           ? {
               id: inviter.id,
-              name: inviter.displayName || inviter.username,
+              name: inviter.displayName ?? inviter.username ?? null,
               username: inviter.username,
               profileImageUrl: inviter.profileImageUrl,
             }

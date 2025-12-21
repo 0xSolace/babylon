@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -38,6 +39,14 @@ interface RegistryEntity {
   bio?: string;
   imageUrl?: string;
   type: 'user' | 'actor';
+}
+
+/**
+ * Registry search API response.
+ */
+interface RegistrySearchResponse {
+  users?: ApiUser[];
+  actors?: ApiActor[];
 }
 
 /**
@@ -89,65 +98,70 @@ export function EntitySearchAutocomplete({
   searchType = 'all',
 }: EntitySearchAutocompleteProps) {
   const router = useRouter();
-  const [suggestions, setSuggestions] = useState<RegistryEntity[]>([]);
+  const [debouncedValue, setDebouncedValue] = useState(value);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [loading, setLoading] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Debounce the search value
   useEffect(() => {
-    const fetchSuggestions = async () => {
-      if (!value.trim()) {
-        setSuggestions([]);
-        setIsOpen(false);
-        setSelectedIndex(-1);
-        return;
+    const timer = setTimeout(() => {
+      setDebouncedValue(value);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [value]);
+
+  const { data: suggestions = [], isLoading: loading } = useQuery({
+    queryKey: ['entitySearch', debouncedValue, searchType],
+    queryFn: async (): Promise<RegistryEntity[]> => {
+      if (!debouncedValue.trim()) {
+        return [];
       }
 
-      setLoading(true);
       const params = new URLSearchParams({
-        search: value,
+        search: debouncedValue,
         type: searchType,
       });
       const response = await fetch(`/api/registry/all?${params.toString()}`);
-      if (response.ok) {
-        const data = await response.json();
-        const users: RegistryEntity[] = (data.users || []).map(
-          (u: ApiUser) => ({
-            id: u.id,
-            name: u.name,
-            username: u.username,
-            bio: u.bio,
-            imageUrl: u.imageUrl,
-            type: 'user' as const,
-          })
-        );
-        const actors: RegistryEntity[] = (data.actors || []).map(
-          (a: ApiActor) => ({
-            id: a.id,
-            name: a.name,
-            username: undefined,
-            bio: a.description || a.role,
-            imageUrl: a.imageUrl,
-            type: 'actor' as const,
-          })
-        );
-        const allEntities = [...users, ...actors];
-        setSuggestions(allEntities.slice(0, 10));
-        setIsOpen(true);
-        setSelectedIndex(allEntities.length ? 0 : -1);
-      } else {
-        setSuggestions([]);
-        setIsOpen(false);
-        setSelectedIndex(-1);
+      if (!response.ok) {
+        return [];
       }
-      setLoading(false);
-    };
 
-    const timer = setTimeout(fetchSuggestions, 250);
-    return () => clearTimeout(timer);
-  }, [value, searchType]);
+      const data: RegistrySearchResponse = await response.json();
+      const users: RegistryEntity[] = (data.users || []).map((u: ApiUser) => ({
+        id: u.id,
+        name: u.name,
+        username: u.username,
+        bio: u.bio,
+        imageUrl: u.imageUrl,
+        type: 'user' as const,
+      }));
+      const actors: RegistryEntity[] = (data.actors || []).map(
+        (a: ApiActor) => ({
+          id: a.id,
+          name: a.name,
+          username: undefined,
+          bio: a.description || a.role,
+          imageUrl: a.imageUrl,
+          type: 'actor' as const,
+        })
+      );
+      return [...users, ...actors].slice(0, 10);
+    },
+    enabled: !!debouncedValue.trim(),
+  });
+
+  // Handle opening/closing dropdown based on suggestions
+  useEffect(() => {
+    if (suggestions.length > 0 && debouncedValue.trim()) {
+      setIsOpen(true);
+      setSelectedIndex(0);
+    } else {
+      setIsOpen(false);
+      setSelectedIndex(-1);
+    }
+  }, [suggestions, debouncedValue]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -260,7 +274,7 @@ export function EntitySearchAutocomplete({
         <button
           onClick={() => {
             onChange('');
-            setSuggestions([]);
+            setDebouncedValue('');
             setIsOpen(false);
             setSelectedIndex(-1);
           }}

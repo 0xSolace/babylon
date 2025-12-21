@@ -9,6 +9,10 @@
 
 import { logger } from '@babylon/shared';
 import { CQLClient, type ExecResult, getCQL, type QueryParam } from '@jeju/db';
+import {
+  createDrizzleTransaction,
+  type DrizzleTransaction,
+} from './drizzle-compat';
 
 // ============================================================================
 // Types
@@ -44,11 +48,19 @@ export interface DeleteOptions {
   where: WhereCondition;
 }
 
+/**
+ * Transaction context for raw SQL operations
+ */
 export interface TransactionContext {
   query<T>(sql: string, params?: QueryParam[]): Promise<T[]>;
   queryOne<T>(sql: string, params?: QueryParam[]): Promise<T | null>;
   exec(sql: string, params?: QueryParam[]): Promise<ExecResult>;
 }
+
+/**
+ * Extended transaction context with Drizzle-like chainable methods
+ */
+export type DrizzleTransactionContext = DrizzleTransaction;
 
 // ============================================================================
 // Decentralized Database Client
@@ -285,22 +297,31 @@ class DecentralizedDB {
     }
 
     const result = await this.queryOne<{ count: number }>(sql, params);
-    return result?.count ?? 0;
+    if (result === null) {
+      throw new Error(`[DB] COUNT query on "${table}" returned no rows`);
+    }
+    return result.count;
   }
 
   // ============================================================================
   // Transaction Support
   // ============================================================================
 
+  /**
+   * Execute operations within a transaction.
+   * The callback receives a DrizzleTransactionContext that supports both:
+   * - Raw SQL: tx.query(), tx.queryOne(), tx.exec()
+   * - Drizzle-style: tx.update(table).set({}).where(), tx.insert(table).values()
+   */
   async transaction<T>(
-    fn: (ctx: TransactionContext) => Promise<T>
+    fn: (ctx: DrizzleTransactionContext) => Promise<T>
   ): Promise<T> {
     const client = this.requireClient();
     const conn = await client.connect();
     const tx = await conn.beginTransaction();
 
     try {
-      const ctx: TransactionContext = {
+      const rawCtx: TransactionContext = {
         query: async <R>(sql: string, params?: QueryParam[]): Promise<R[]> => {
           const result = await tx.query<R>(sql, params);
           return result.rows;
@@ -314,7 +335,10 @@ class DecentralizedDB {
         },
         exec: (sql: string, params?: QueryParam[]) => tx.exec(sql, params),
       };
-      const result = await fn(ctx);
+
+      // Wrap with Drizzle-compatible transaction
+      const drizzleTx = createDrizzleTransaction(rawCtx);
+      const result = await fn(drizzleTx);
       await tx.commit();
       return result;
     } catch (error) {

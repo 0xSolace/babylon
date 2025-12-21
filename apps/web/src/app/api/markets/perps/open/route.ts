@@ -10,6 +10,7 @@
 
 import {
   authenticate,
+  BusinessLogicError,
   EngagementService,
   successResponse,
   withErrorHandling,
@@ -49,6 +50,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     maxSlippage,
   });
 
+  // Validate required field exists after open operation
+  if (result.marginPaid === undefined) {
+    throw new BusinessLogicError(
+      'Open operation failed: margin not calculated',
+      'OPEN_CALCULATION_ERROR',
+      { ticker, size: numericSize }
+    );
+  }
+
+  const { marginPaid } = result;
+
   void trackServerEvent(user.userId, 'trade_opened', {
     type: 'perp',
     ticker,
@@ -56,7 +68,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     size: numericSize,
     leverage,
     entryPrice: result.entryPrice,
-    marginPaid: result.marginPaid ?? 0,
+    marginPaid,
     feeCharged: result.feePaid,
     positionId: result.positionId,
   });
@@ -67,7 +79,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   return successResponse(
     {
       position: result,
-      marginPaid: result.marginPaid,
+      marginPaid,
       fee: {
         amount: result.feePaid,
         referrerPaid: 0,

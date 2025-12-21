@@ -12,9 +12,9 @@
  * @packageDocumentation
  */
 
-import { db, eq, users } from '@babylon/db';
+import { db } from '@babylon/db';
 import { type StaticActor, StaticDataRegistry } from '@babylon/engine';
-import { ethers } from 'ethers';
+import { generateRandomWallet, keccak256 } from '@babylon/shared';
 import { type Address, type Hex } from 'viem';
 import { logger } from '../shared/logger';
 
@@ -262,23 +262,24 @@ export class NPCIdentityService {
     const actor = StaticDataRegistry.getActor(actorId);
     if (!actor) return null;
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, actorId))
-      .limit(1);
+    const user = await db.user.findUnique({ where: { id: actorId } });
 
     if (!user) return null;
 
     const identity: NPCIdentity = {
       actorId,
-      userId: user.id,
-      walletAddress: user.walletAddress as Address,
-      farcasterFid: user.farcasterFid ? parseInt(user.farcasterFid) : null,
+      userId: String(user.id),
+      walletAddress: String(user.walletAddress) as Address,
+      farcasterFid: user.farcasterFid
+        ? parseInt(String(user.farcasterFid))
+        : null,
       farcasterSignerKeyId: null, // Would need to load from KMS
       encryptionKeyId: null, // Would need to load from KMS
       encryptionPublicKey: null,
-      registeredAt: user.createdAt,
+      registeredAt:
+        user.createdAt instanceof Date
+          ? user.createdAt
+          : new Date(String(user.createdAt)),
       fullyInitialized: !!(user.walletAddress && user.farcasterFid),
     };
 
@@ -291,30 +292,28 @@ export class NPCIdentityService {
    */
   private async ensureUserRecord(actor: StaticActor): Promise<string> {
     // Check if user already exists
-    const [existing] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, actor.id))
-      .limit(1);
+    const existing = await db.user.findUnique({ where: { id: actor.id } });
 
     if (existing) {
-      return existing.id;
+      return String(existing.id);
     }
 
     // Create new user record for NPC
     const userId = actor.id; // Use actor ID as user ID for consistency
     const now = new Date();
 
-    await db.insert(users).values({
-      id: userId,
-      username: actor.name.toLowerCase().replace(/\s+/g, '-'),
-      displayName: actor.name,
-      bio: actor.description ?? '',
-      profileImageUrl: actor.profileImageUrl ?? null,
-      isActor: true,
-      isAgent: false, // NPCs are actors, not user-controlled agents
-      createdAt: now,
-      updatedAt: now,
+    await db.user.create({
+      data: {
+        id: userId,
+        username: actor.name.toLowerCase().replace(/\s+/g, '-'),
+        displayName: actor.name,
+        bio: actor.description ?? '',
+        profileImageUrl: actor.profileImageUrl ?? null,
+        isActor: true,
+        isAgent: false, // NPCs are actors, not user-controlled agents
+        createdAt: now,
+        updatedAt: now,
+      },
     });
 
     logger.info(
@@ -334,14 +333,10 @@ export class NPCIdentityService {
     actorId: string
   ): Promise<Address> {
     // Check if wallet already exists
-    const [user] = await db
-      .select({ walletAddress: users.walletAddress })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await db.user.findUnique({ where: { id: userId } });
 
     if (user?.walletAddress) {
-      return user.walletAddress as Address;
+      return String(user.walletAddress) as Address;
     }
 
     // Generate wallet via KMS
@@ -357,10 +352,10 @@ export class NPCIdentityService {
     const address = this.publicKeyToAddress(key.publicKey);
 
     // Update user record
-    await db
-      .update(users)
-      .set({ walletAddress: address, updatedAt: new Date() })
-      .where(eq(users.id, userId));
+    await db.user.update({
+      where: { id: userId },
+      data: { walletAddress: address, updatedAt: new Date() },
+    });
 
     logger.info(
       `Created wallet for NPC: ${actorId} -> ${address}`,
@@ -383,13 +378,11 @@ export class NPCIdentityService {
     walletAddress: Address
   ): Promise<{ fid: number; signerKeyId: string }> {
     // Check if already has FID (from manual registration or previous run)
-    const [user] = await db
-      .select({ farcasterFid: users.farcasterFid })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await db.user.findUnique({ where: { id: userId } });
 
-    const existingFid = user?.farcasterFid ? parseInt(user.farcasterFid) : 0;
+    const existingFid = user?.farcasterFid
+      ? parseInt(String(user.farcasterFid))
+      : 0;
 
     // Generate signer key via KMS (ready for when FID is registered)
     const kms = await this.getKMS();
@@ -485,7 +478,7 @@ export class NPCIdentityService {
     // Remove 0x prefix and the first byte (04 prefix for uncompressed)
     const pubKeyWithoutPrefix = publicKey.slice(4);
     // Keccak256 hash of public key, take last 20 bytes
-    const hash = ethers.keccak256('0x' + pubKeyWithoutPrefix);
+    const hash = keccak256(('0x' + pubKeyWithoutPrefix) as Hex);
     return ('0x' + hash.slice(-40)) as Address;
   }
 }
@@ -502,15 +495,31 @@ class KMSClient {
   }
 
   async connect(): Promise<void> {
-    // Health check
+    // Health check - if KMS is unavailable, fall back to local mode
+    // Network errors are expected when KMS isn't running locally
+    let response: Response;
     try {
-      const response = await fetch(`${this.endpoint}/health`, {
+      response = await fetch(`${this.endpoint}/health`, {
         signal: AbortSignal.timeout(5000),
       });
-      this.connected = response.ok;
-    } catch {
-      // Fall back to local mode
-      this.connected = true;
+    } catch (error) {
+      // Network error (KMS not running) - fall back to local mode
+      logger.info(
+        'KMS not reachable, using local key generation',
+        { endpoint: this.endpoint, error: (error as Error).message },
+        'NPCIdentityService'
+      );
+      this.connected = false;
+      return;
+    }
+
+    this.connected = response.ok;
+    if (!response.ok) {
+      logger.warn(
+        `KMS health check failed: ${response.status} ${response.statusText}`,
+        { endpoint: this.endpoint },
+        'NPCIdentityService'
+      );
     }
   }
 
@@ -522,7 +531,8 @@ class KMSClient {
   }): Promise<KMSGeneratedKey> {
     if (!this.connected) await this.connect();
 
-    try {
+    // Try KMS if connected
+    if (this.connected) {
       const response = await fetch(`${this.endpoint}/keys/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -533,13 +543,22 @@ class KMSClient {
       if (response.ok) {
         return response.json() as Promise<KMSGeneratedKey>;
       }
-    } catch {
-      // Fall back to local key generation
+
+      logger.warn(
+        `KMS key generation failed: ${response.status} ${response.statusText}`,
+        { endpoint: this.endpoint, label: params.label },
+        'NPCIdentityService'
+      );
     }
 
-    // Local fallback - generate key locally
-    const privateKey = ethers.hexlify(ethers.randomBytes(32)) as Hex;
-    const wallet = new ethers.Wallet(privateKey);
+    // Local fallback - generate key locally (KMS unavailable)
+    logger.info(
+      'Using local key generation (KMS not available)',
+      { label: params.label },
+      'NPCIdentityService'
+    );
+
+    const { address } = generateRandomWallet();
 
     return {
       metadata: {
@@ -550,7 +569,8 @@ class KMSClient {
         owner: params.owner,
         providerType: 'local',
       },
-      publicKey: wallet.signingKey.publicKey as Hex,
+      // Use address for now - proper public key requires raw key extraction
+      publicKey: address as Hex,
     };
   }
 

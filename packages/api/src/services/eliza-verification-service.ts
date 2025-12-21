@@ -235,7 +235,7 @@ export class ElizaVerificationService {
 
     return {
       address,
-      isHolder: total > 0n,
+      isHolder: total > BigInt(0),
       totalBalance: total,
       balanceByChain: byChain,
       qualifiesForBonus,
@@ -255,8 +255,8 @@ export class ElizaVerificationService {
     const status = await this.checkHolderStatus(walletAddress);
 
     const bonusAmount = status.qualifiesForBonus
-      ? (baseAllocation * BigInt(this.bonusBps)) / 10000n
-      : 0n;
+      ? (baseAllocation * BigInt(this.bonusBps)) / BigInt(10000)
+      : BigInt(0);
 
     const totalAllocation = baseAllocation + bonusAmount;
 
@@ -338,18 +338,24 @@ export class ElizaVerificationService {
 
     if (!record) return null;
 
+    const totalBalance = BigInt(String(record.totalBalance ?? '0'));
+    const qualifies = Boolean(record.qualifiesForBonus);
+
     return {
       address: record.walletAddress as Address,
-      isHolder: BigInt(record.totalBalance) > 0n,
-      totalBalance: BigInt(record.totalBalance),
+      isHolder: totalBalance > BigInt(0),
+      totalBalance,
       balanceByChain: {
-        mainnet: BigInt(record.mainnetBalance),
-        base: BigInt(record.baseBalance),
-        bsc: BigInt(record.bscBalance),
+        mainnet: BigInt(String(record.mainnetBalance ?? '0')),
+        base: BigInt(String(record.baseBalance ?? '0')),
+        bsc: BigInt(String(record.bscBalance ?? '0')),
       },
-      qualifiesForBonus: record.qualifiesForBonus,
-      bonusMultiplierBps: record.qualifiesForBonus ? this.bonusBps : 0,
-      verifiedAt: record.verifiedAt,
+      qualifiesForBonus: qualifies,
+      bonusMultiplierBps: qualifies ? this.bonusBps : 0,
+      verifiedAt:
+        record.verifiedAt instanceof Date
+          ? record.verifiedAt
+          : new Date(String(record.verifiedAt ?? Date.now())),
     };
   }
 
@@ -366,7 +372,7 @@ export class ElizaVerificationService {
     const result: BatchVerificationResult = {
       processed: 0,
       qualified: 0,
-      totalBonusAllocated: 0n,
+      totalBonusAllocated: BigInt(0),
       errors: [],
     };
 

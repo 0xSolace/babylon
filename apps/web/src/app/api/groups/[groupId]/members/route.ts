@@ -144,8 +144,8 @@ import {
 } from '@babylon/api';
 import { asUser } from '@babylon/db';
 import { logger } from '@babylon/shared';
-import { nanoid } from 'nanoid';
 import type { NextRequest } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
 const AddMemberSchema = z.object({
@@ -212,10 +212,13 @@ export const POST = withErrorHandling(
         where: { id: groupId },
         select: { name: true },
       });
-      groupName = group?.name || 'Unknown';
+      if (!group) {
+        throw new ApiError('Group not found', 404);
+      }
+      groupName = group.name;
 
       // Create invite - handle unique constraint race condition
-      inviteId = nanoid();
+      inviteId = uuidv4();
       await db.userGroupInvite.create({
         data: {
           id: inviteId,
@@ -285,7 +288,10 @@ export const DELETE = withErrorHandling(
         where: { id: groupId },
       });
 
-      if (group?.createdById === userIdToRemove) {
+      if (!group) {
+        throw new ApiError('Group not found', 404);
+      }
+      if (group.createdById === userIdToRemove) {
         throw new ApiError('Cannot remove the group creator', 400);
       }
 

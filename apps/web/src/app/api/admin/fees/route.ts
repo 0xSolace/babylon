@@ -331,7 +331,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           userData = {
             username: actor.name,
             displayName: actor.name,
-            profileImageUrl: actor.profileImageUrl ?? null,
+            profileImageUrl: actor.profileImageUrl || null,
             isActor: true,
           };
         }
@@ -380,9 +380,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const trendMap = new Map<string, { totalFees: number; tradeCount: number }>();
 
   for (const record of dailyFeeRecords) {
-    const dayKey = record.createdAt?.toISOString().split('T')[0];
-    if (!dayKey) continue;
-    const existing = trendMap.get(dayKey) ?? { totalFees: 0, tradeCount: 0 };
+    const dayKey = record.createdAt.toISOString().split('T')[0];
+    const existing = trendMap.get(dayKey) || { totalFees: 0, tradeCount: 0 };
 
     existing.totalFees += Number(record.feeAmount || 0);
     existing.tradeCount += 1;

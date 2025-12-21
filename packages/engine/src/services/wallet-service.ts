@@ -371,8 +371,7 @@ export class WalletService {
           userId,
           newLifetimePnL,
           tradeType,
-          relatedId,
-          tx
+          relatedId
         );
 
       return {

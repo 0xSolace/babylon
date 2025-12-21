@@ -216,8 +216,15 @@ export const POST = withErrorHandling(
             .where(eq(users.id, canonicalUserId))
             .limit(1);
 
+          if (!user) {
+            throw new BusinessLogicError(
+              'User record not found',
+              'USER_NOT_FOUND'
+            );
+          }
+
           // VALIDATION 1: Check if user has linked Twitter account
-          if (!user?.twitterUsername) {
+          if (!user.twitterUsername) {
             verificationError =
               'Please link your Twitter/X account first to verify posts.';
             logger.warn(
@@ -413,7 +420,14 @@ export const POST = withErrorHandling(
               .where(eq(users.id, canonicalUserId))
               .limit(1);
 
-            if (!user?.farcasterUsername && !user?.farcasterFid) {
+            if (!user) {
+              throw new BusinessLogicError(
+                'User record not found',
+                'USER_NOT_FOUND'
+              );
+            }
+
+            if (!user.farcasterUsername && !user.farcasterFid) {
               verificationError =
                 'Please link your Farcaster account first to verify casts.';
               logger.warn(
@@ -576,8 +590,9 @@ export const POST = withErrorHandling(
       },
       message: verified
         ? `Share verified successfully! You earned ${pointsAwarded} points.`
-        : verificationError ||
-          'Could not verify share. Please provide a valid post URL.',
+        : verificationError
+          ? verificationError
+          : 'Could not verify share. Please provide a valid post URL.',
     });
   }
 );

@@ -4,13 +4,10 @@
  * Uploads trained RL models to HuggingFace Hub with benchmark results and model cards.
  */
 
-import { benchmarkResults, db, desc, eq, trainedModels } from '@babylon/db';
+import { db } from '@babylon/db';
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import {
-  type JsonValue,
-  parseSimulationMetrics,
-} from '../benchmark/parseSimulationMetrics';
+import { parseSimulationMetrics } from '../benchmark/parseSimulationMetrics';
 import type { SimulationMetrics } from '../benchmark/SimulationEngine';
 import { logger } from '../utils';
 import {
@@ -85,13 +82,9 @@ export class HuggingFaceModelUploader {
       this.huggingFaceToken = token;
 
       // Step 1: Load model from database
-      const modelResult = await db
-        .select()
-        .from(trainedModels)
-        .where(eq(trainedModels.modelId, options.modelId))
-        .limit(1);
-
-      const model = modelResult[0];
+      const model = await db.trainedModel.findUnique({
+        where: { modelId: options.modelId },
+      });
 
       if (!model) {
         throw new Error(`Model not found: ${options.modelId}`);
@@ -109,12 +102,16 @@ export class HuggingFaceModelUploader {
 
       // Step 3: Prepare model card data
       const cardData: ModelCardData = {
-        modelId: model.modelId,
+        modelId: String(model.modelId),
         modelName: options.modelName,
-        version: model.version,
-        baseModel: model.baseModel,
-        trainedAt: model.createdAt,
-        trainingRunId: model.trainingBatch || undefined,
+        version: String(model.version),
+        baseModel: String(model.baseModel),
+        trainedAt: model.createdAt
+          ? new Date(String(model.createdAt))
+          : new Date(),
+        trainingRunId: model.trainingBatch
+          ? String(model.trainingBatch)
+          : undefined,
         benchmarkResults: modelBenchmarks,
         metrics: this.calculateAverageMetrics(modelBenchmarks),
       };
@@ -131,19 +128,26 @@ export class HuggingFaceModelUploader {
 
       // Step 6: Save metadata
       const metadataPath = path.join(outputDir, 'model_metadata.json');
+      const trainedAt = model.createdAt
+        ? new Date(String(model.createdAt))
+        : new Date();
       await fs.writeFile(
         metadataPath,
         JSON.stringify(
           {
-            modelId: model.modelId,
-            version: model.version,
-            baseModel: model.baseModel,
-            storagePath: model.storagePath,
-            trainingBatch: model.trainingBatch,
-            trainedAt: model.createdAt.toISOString(),
-            benchmarkScore: model.benchmarkScore,
-            avgReward: model.avgReward,
-            accuracy: model.accuracy,
+            modelId: String(model.modelId),
+            version: String(model.version),
+            baseModel: String(model.baseModel),
+            storagePath: String(model.storagePath),
+            trainingBatch: model.trainingBatch
+              ? String(model.trainingBatch)
+              : null,
+            trainedAt: trainedAt.toISOString(),
+            benchmarkScore: model.benchmarkScore
+              ? Number(model.benchmarkScore)
+              : null,
+            avgReward: model.avgReward ? Number(model.avgReward) : null,
+            accuracy: model.accuracy ? Number(model.accuracy) : null,
           },
           null,
           2
@@ -181,13 +185,14 @@ export class HuggingFaceModelUploader {
       logger.info('Model uploaded successfully', { modelUrl, filesUploaded });
 
       // Update model status in database
-      await db
-        .update(trainedModels)
-        .set({
+      await db.trainedModel.update({
+        where: { modelId: options.modelId },
+        data: {
           status: 'deployed',
           deployedAt: new Date(),
-        })
-        .where(eq(trainedModels.modelId, options.modelId));
+          updatedAt: new Date(),
+        },
+      });
 
       return {
         success: true,
@@ -214,17 +219,18 @@ export class HuggingFaceModelUploader {
   ): Promise<ModelCardBenchmarkResult[]> {
     // Query benchmark results from database
     try {
-      const results = await db
-        .select()
-        .from(benchmarkResults)
-        .where(eq(benchmarkResults.modelId, modelId))
-        .orderBy(desc(benchmarkResults.runAt));
+      const results = await db.benchmarkResult.findMany({
+        where: { modelId },
+        orderBy: { runAt: 'desc' },
+      });
 
       return results.map((r) => ({
-        benchmarkId: r.benchmarkId,
-        runAt: r.runAt.toISOString(),
+        benchmarkId: String(r.benchmarkId),
+        runAt: r.runAt
+          ? new Date(String(r.runAt)).toISOString()
+          : new Date().toISOString(),
         // detailedMetrics is stored as JSON in database, validate it matches SimulationMetrics
-        metrics: parseSimulationMetrics(r.detailedMetrics as JsonValue),
+        metrics: parseSimulationMetrics(r.detailedMetrics),
       }));
     } catch (error) {
       logger.warn('Could not load benchmark results from database', { error });
@@ -512,27 +518,12 @@ For questions or issues, please contact the Babylon team or open an issue on the
       throw new Error('HuggingFace token not configured');
     }
 
-    try {
-      // Use shared upload utility
-      return await HuggingFaceUploadUtil.uploadDirectory(
-        modelName,
-        'model',
-        localDir,
-        this.huggingFaceToken
-      );
-    } catch (error) {
-      logger.error('Failed to upload to HuggingFace Hub', { error });
-
-      // Provide helpful manual upload instructions
-      const instructions = HuggingFaceUploadUtil.getManualUploadInstructions(
-        modelName,
-        'model',
-        localDir
-      );
-
-      logger.info('To upload manually:', { instructions });
-
-      throw error;
-    }
+    // Use shared upload utility - let errors propagate
+    return await HuggingFaceUploadUtil.uploadDirectory(
+      modelName,
+      'model',
+      localDir,
+      this.huggingFaceToken
+    );
   }
 }

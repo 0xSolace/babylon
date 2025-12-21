@@ -1,7 +1,8 @@
 'use client';
 
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Activity, AlertCircle } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FeedSkeleton } from '@/components/shared/Skeleton';
 import { type Trade, TradeCard } from './TradeCard';
 
@@ -17,6 +18,14 @@ const SCROLL_THRESHOLD = 100; // pixels from top to consider "at top"
  * Polling interval for fetching new trades (10 seconds).
  */
 const POLL_INTERVAL = 10000; // 10 seconds
+
+/**
+ * Trades API response structure.
+ */
+interface TradesResponse {
+  trades: Trade[];
+  hasMore: boolean;
+}
 
 /**
  * Trades feed component for displaying paginated list of trades.
@@ -51,27 +60,23 @@ interface TradesFeedProps {
 }
 
 export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
   const [isAtTop, setIsAtTop] = useState(true);
-  const [shouldPoll, setShouldPoll] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null
-  );
 
-  // Fetch trades from API
-  const fetchTrades = useCallback(
-    async (requestOffset: number, append = false) => {
-      setError(null);
+  const {
+    data,
+    isLoading: loading,
+    isFetchingNextPage: loadingMore,
+    hasNextPage: hasMore,
+    fetchNextPage,
+    error,
+    refetch: _refetch,
+  } = useInfiniteQuery({
+    queryKey: ['trades', 'feed', userId],
+    queryFn: async ({ pageParam = 0 }): Promise<TradesResponse> => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
-        offset: requestOffset.toString(),
+        offset: pageParam.toString(),
       });
 
       if (userId) {
@@ -80,68 +85,26 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
 
       const response = await fetch(`/api/trades?${params.toString()}`);
       if (!response.ok) {
-        setError(`Failed to load trades: ${response.status}`);
-        setLoading(false);
-        setLoadingMore(false);
-        return;
+        throw new Error(`Failed to load trades: ${response.status}`);
       }
 
-      const data = await response.json();
-      const newTrades = data.trades || [];
-
-      if (append) {
-        setTrades((prev) => {
-          // Deduplicate trades by ID
-          const existingIds = new Set(prev.map((t) => t.id));
-          const uniqueNewTrades = newTrades.filter(
-            (t: Trade) => !existingIds.has(t.id)
-          );
-          return [...prev, ...uniqueNewTrades];
-        });
-        setLoadingMore(false);
-      } else {
-        setTrades(newTrades);
-        setLoading(false);
-      }
-
-      setHasMore(data.hasMore || false);
-      setOffset(requestOffset + newTrades.length);
+      return response.json() as Promise<TradesResponse>;
     },
-    [userId]
-  );
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage.hasMore) return undefined;
+      return allPages.reduce((acc, page) => acc + page.trades.length, 0);
+    },
+    initialPageParam: 0,
+    refetchInterval: isAtTop ? POLL_INTERVAL : false,
+  });
 
-  // Refresh trades (used by polling and pull-to-refresh)
-  const refreshTrades = useCallback(async () => {
-    // Silent refresh - don't show loading state
-    const params = new URLSearchParams({
-      limit: PAGE_SIZE.toString(),
-      offset: '0',
-    });
-
-    if (userId) {
-      params.append('userId', userId);
-    }
-
-    const response = await fetch(`/api/trades?${params.toString()}`);
-    if (!response.ok) return;
-
-    const data = await response.json();
-    const newTrades = data.trades || [];
-
-    // Only update if we have new trades
-    if (newTrades.length > 0) {
-      setTrades(newTrades);
-      setHasMore(data.hasMore || false);
-      setOffset(newTrades.length);
-    }
-  }, [userId]);
-
-  // Initial load
-  useEffect(() => {
-    setOffset(0);
-    setHasMore(true);
-    fetchTrades(0, false);
-  }, [fetchTrades]);
+  // Flatten all pages into a single array of trades, deduplicating by ID
+  const trades =
+    data?.pages.reduce<Trade[]>((acc, page) => {
+      const existingIds = new Set(acc.map((t) => t.id));
+      const uniqueTrades = page.trades.filter((t) => !existingIds.has(t.id));
+      return [...acc, ...uniqueTrades];
+    }, []) ?? [];
 
   // Handle scroll to detect if user is at top
   useEffect(() => {
@@ -151,41 +114,12 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
     const handleScroll = () => {
       const scrollTop = container.scrollTop;
       const isNearTop = scrollTop <= SCROLL_THRESHOLD;
-
       setIsAtTop(isNearTop);
-      setShouldPoll(isNearTop);
     };
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
   }, [containerRef]);
-
-  // Polling: refresh when at top
-  useEffect(() => {
-    if (!shouldPoll || !isAtTop) {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-      return;
-    }
-
-    // Only poll if page is visible
-    const pollIfVisible = () => {
-      if (document.visibilityState === 'visible') {
-        refreshTrades();
-      }
-    };
-
-    pollingIntervalRef.current = setInterval(pollIfVisible, POLL_INTERVAL);
-
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-    };
-  }, [shouldPoll, isAtTop, refreshTrades]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -194,8 +128,7 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setLoadingMore(true);
-          fetchTrades(offset, true);
+          fetchNextPage();
         }
       },
       { threshold: 0.1 }
@@ -203,7 +136,7 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
 
     observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
-  }, [hasMore, loadingMore, offset, fetchTrades]);
+  }, [hasMore, loadingMore, fetchNextPage]);
 
   if (loading) {
     return (
@@ -222,15 +155,11 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
         <h3 className="mb-2 font-semibold text-foreground text-lg">
           Failed to load trades
         </h3>
-        <p className="mb-4 max-w-sm text-muted-foreground text-sm">{error}</p>
+        <p className="mb-4 max-w-sm text-muted-foreground text-sm">
+          {error instanceof Error ? error.message : 'An error occurred'}
+        </p>
         <button
-          onClick={() => {
-            setLoading(true);
-            setError(null);
-            setOffset(0);
-            setHasMore(true);
-            fetchTrades(0, false);
-          }}
+          onClick={() => retryTrades()}
           className="rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
         >
           Try Again

@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -58,11 +59,35 @@ interface PredictionPositionsListProps {
   onPositionSold?: () => void;
 }
 
+/**
+ * Payload for selling prediction shares.
+ */
+interface SellPredictionPayload {
+  marketId: string;
+  shares: number;
+  positionId: string;
+}
+
+/**
+ * Response from selling prediction shares.
+ */
+interface SellPredictionResponse {
+  success: boolean;
+  pnl: number;
+}
+
+/**
+ * Error response structure from API.
+ */
+interface ApiErrorResponse {
+  error?: string | { message?: string };
+  message?: string;
+}
+
 export function PredictionPositionsList({
   positions,
   onPositionSold,
 }: PredictionPositionsListProps) {
-  const [sellingId, setSellingId] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingSell, setPendingSell] = useState<{
     position: PredictionPosition;
@@ -70,6 +95,59 @@ export function PredictionPositionsList({
     unrealizedPnL: number;
     unrealizedPnLPercent: number;
   } | null>(null);
+  const queryClient = useQueryClient();
+
+  // Mutation for selling prediction shares
+  const sellMutation = useMutation({
+    mutationFn: async (
+      payload: SellPredictionPayload
+    ): Promise<SellPredictionResponse> => {
+      const response = await fetch(
+        `/api/markets/predictions/${payload.marketId}/sell`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${window.__oauth3AccessToken || ''}`,
+          },
+          body: JSON.stringify({
+            shares: payload.shares,
+            positionId: payload.positionId,
+          }),
+        }
+      );
+
+      const data = (await response.json()) as SellPredictionResponse &
+        ApiErrorResponse;
+
+      if (!response.ok) {
+        const errorMessage =
+          typeof data.error === 'object'
+            ? data.error.message || 'Failed to sell shares'
+            : data.error || data.message || 'Failed to sell shares';
+        throw new Error(errorMessage);
+      }
+
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!pendingSell) return;
+      toast.success('Shares sold!', {
+        description: `Sold ${pendingSell.position.shares.toFixed(2)} ${pendingSell.position.side} shares for ${data.pnl >= 0 ? '+' : ''}$${data.pnl.toFixed(2)} PnL`,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['markets', 'predictions'],
+      });
+      void queryClient.invalidateQueries({ queryKey: ['positions'] });
+      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
+      onPositionSold?.();
+      setPendingSell(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+      setPendingSell(null);
+    },
+  });
 
   const handleSellClick = (
     position: PredictionPosition,
@@ -86,50 +164,15 @@ export function PredictionPositionsList({
     setConfirmDialogOpen(true);
   };
 
-  const handleConfirmSell = async () => {
+  const handleConfirmSell = () => {
     if (!pendingSell) return;
 
-    const position = pendingSell.position;
-    setSellingId(position.id);
     setConfirmDialogOpen(false);
-
-    const response = await fetch(
-      `/api/markets/predictions/${position.marketId}/sell`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${window.__oauth3AccessToken || ''}`,
-        },
-        body: JSON.stringify({
-          shares: position.shares,
-          positionId: position.id,
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      // Handle error response - extract message from error object
-      const errorMessage =
-        typeof data.error === 'object'
-          ? data.error.message || 'Failed to sell shares'
-          : data.error || data.message || 'Failed to sell shares';
-      setSellingId(null);
-      setPendingSell(null);
-      toast.error(errorMessage);
-      return;
-    }
-
-    const pnl = data.pnl || 0;
-    toast.success('Shares sold!', {
-      description: `Sold ${position.shares.toFixed(2)} ${position.side} shares for ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} PnL`,
+    sellMutation.mutate({
+      marketId: pendingSell.position.marketId,
+      shares: pendingSell.position.shares,
+      positionId: pendingSell.position.id,
     });
-
-    if (onPositionSold) onPositionSold();
-    setSellingId(null);
-    setPendingSell(null);
   };
 
   const formatPrice = (price: number) => `$${price.toFixed(3)}`;
@@ -146,15 +189,12 @@ export function PredictionPositionsList({
   return (
     <div className="space-y-3">
       {positions.map((position) => {
-        const currentValue =
-          position.currentValue ?? position.shares * position.currentPrice;
-        const costBasis =
-          position.costBasis ?? position.shares * position.avgPrice;
-        const unrealizedPnL =
-          position.unrealizedPnL ?? currentValue - costBasis;
+        const { currentValue, costBasis, unrealizedPnL } = position;
         const pnlPercent =
           costBasis !== 0 ? (unrealizedPnL / costBasis) * 100 : 0;
-        const isSelling = sellingId === position.id;
+        const isSelling =
+          sellMutation.isPending &&
+          sellMutation.variables?.positionId === position.id;
 
         return (
           <div key={position.id} className="rounded bg-muted/40 p-4">
@@ -264,7 +304,7 @@ export function PredictionPositionsList({
         open={confirmDialogOpen}
         onOpenChange={setConfirmDialogOpen}
         onConfirm={handleConfirmSell}
-        isSubmitting={sellingId !== null}
+        isSubmitting={sellMutation.isPending}
         tradeDetails={
           pendingSell
             ? ({

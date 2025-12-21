@@ -350,9 +350,12 @@ export async function GET(request: NextRequest) {
             .sort((a, b) => b.totalTokens - a.totalTokens),
           byModel: Array.from(modelMap.entries())
             .map(([key, data]) => {
-              const [, model] = key.split(':');
+              const parts = key.split(':');
+              if (parts.length !== 2 || !parts[1]) {
+                throw new Error(`Invalid model key format: ${key}`);
+              }
               return {
-                model: model ?? 'unknown',
+                model: parts[1],
                 provider: data.provider,
                 callCount: data.callCount,
                 totalInputTokens: data.totalInputTokens,

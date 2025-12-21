@@ -71,10 +71,11 @@ describe('Autonomous Babylon Agent - Integration', () => {
 
     it('should validate environment variables', () => {
       // These are optional in test environment
+      // Now checks for Jeju Compute instead of centralized API keys
       const hasConfig = !!(
         process.env.AGENT0_RPC_URL &&
         process.env.AGENT0_PRIVATE_KEY &&
-        process.env.GROQ_API_KEY
+        (process.env.JEJU_GATEWAY_URL || process.env.JEJU_COMPUTE_ENDPOINT)
       );
       expect(typeof hasConfig).toBe('boolean');
     });

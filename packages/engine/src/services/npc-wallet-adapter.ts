@@ -6,9 +6,7 @@
  * managing balances in the actorState table.
  */
 import type { WalletPort } from '@babylon/core/markets/shared';
-import { actorState, db as defaultDb, eq, type Transaction } from '@babylon/db';
-
-type DbClient = typeof defaultDb | Transaction;
+import { actorState, type DbClient, db as defaultDb, eq } from '@babylon/db';
 
 /**
  * Creates a WalletPort implementation for NPC actors.

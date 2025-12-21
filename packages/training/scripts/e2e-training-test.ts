@@ -544,7 +544,4 @@ async function main() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-main().catch((err) => {
-  console.error('E2E test failed:', err);
-  process.exit(1);
-});
+main();

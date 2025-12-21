@@ -1,7 +1,8 @@
 'use client';
 
 import type { PerpPosition } from '@babylon/shared';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 /**
  * Represents a user's position in a prediction market.
@@ -81,6 +82,16 @@ interface ApiPredictionPositionPayload {
   resolution?: boolean | null;
 }
 
+interface PositionsApiResponse {
+  perpetuals?: {
+    positions?: ApiPerpPositionPayload[];
+    stats?: PerpStats;
+  };
+  predictions?: {
+    positions?: ApiPredictionPositionPayload[];
+  };
+}
+
 /**
  * Options for configuring user positions loading.
  */
@@ -105,8 +116,7 @@ const createDefaultState = (): PositionsState => ({
  * Hook for fetching and managing user trading positions.
  *
  * Loads all positions (both perpetual and prediction markets) for a given user.
- * Automatically refreshes when the userId changes. Supports cancellation of
- * in-flight requests and error handling.
+ * Automatically refreshes when the userId changes.
  *
  * @param userId - The user ID to fetch positions for, or null/undefined to clear positions
  * @param options - Configuration options including enabled flag
@@ -138,118 +148,89 @@ export function useUserPositions(
   options: UseUserPositionsOptions = {}
 ) {
   const { enabled = true } = options;
-  const [state, setState] = useState<PositionsState>(createDefaultState);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
+  const queryClient = useQueryClient();
 
-  const refresh = useCallback(async () => {
-    if (!userId || !enabled) {
-      setState(createDefaultState());
-      setLoading(false);
-      setError(null);
-      return;
-    }
+  const {
+    data = createDefaultState(),
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['userPositions', userId],
+    queryFn: async (): Promise<PositionsState> => {
+      const response = await fetch(
+        `/api/markets/positions/${encodeURIComponent(userId!)}`
+      );
 
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
+      const responseData = (await response.json()) as PositionsApiResponse;
 
-    setLoading(true);
-    setError(null);
+      const perpetuals = responseData?.perpetuals ?? {};
+      const predictions = responseData?.predictions ?? {};
 
-    const response = await fetch(
-      `/api/markets/positions/${encodeURIComponent(userId)}`,
-      { signal: controller.signal }
-    );
-
-    // Check if request was aborted before parsing
-    if (controller.signal.aborted) {
-      return;
-    }
-
-    const data = await response.json();
-
-    // Check if request was aborted after parsing
-    if (controller.signal.aborted) {
-      return;
-    }
-
-    const perpetuals = data?.perpetuals ?? {};
-    const predictions = data?.predictions ?? {};
-
-    const normalizedPerps = (perpetuals.positions ?? []).map(
-      (pos: ApiPerpPositionPayload) => ({
-        id: pos.id,
-        userId: pos.userId,
-        ticker: pos.ticker,
-        organizationId: pos.organizationId,
-        side: pos.side,
-        entryPrice: toNumber(pos.entryPrice),
-        currentPrice: toNumber(pos.currentPrice),
-        size: toNumber(pos.size),
-        leverage: toNumber(pos.leverage),
-        liquidationPrice: toNumber(pos.liquidationPrice),
-        unrealizedPnL: toNumber(pos.unrealizedPnL),
-        unrealizedPnLPercent: toNumber(pos.unrealizedPnLPercent),
-        fundingPaid: toNumber(pos.fundingPaid),
-        openedAt: pos.openedAt,
-        lastUpdated: pos.lastUpdated ?? pos.openedAt,
-      })
-    ) as PerpPosition[];
-
-    const normalizedPredictions = (predictions.positions ?? []).map(
-      (pos: ApiPredictionPositionPayload) => {
-        const shares = toNumber(pos.shares);
-        const avgPrice = toNumber(pos.avgPrice);
-        return {
+      const normalizedPerps = (perpetuals.positions ?? []).map(
+        (pos: ApiPerpPositionPayload) => ({
           id: pos.id,
-          marketId: pos.marketId,
-          question: pos.question,
+          userId: pos.userId,
+          ticker: pos.ticker,
+          organizationId: pos.organizationId,
           side: pos.side,
-          shares,
-          avgPrice,
+          entryPrice: toNumber(pos.entryPrice),
           currentPrice: toNumber(pos.currentPrice),
-          currentValue: toNumber(pos.currentValue ?? 0),
-          costBasis: toNumber(pos.costBasis ?? shares * avgPrice),
-          unrealizedPnL: toNumber(pos.unrealizedPnL ?? 0),
-          resolved: Boolean(pos.resolved),
-          resolution: pos.resolution ?? null,
-        };
-      }
-    ) as UserPredictionPosition[];
+          size: toNumber(pos.size),
+          leverage: toNumber(pos.leverage),
+          liquidationPrice: toNumber(pos.liquidationPrice),
+          unrealizedPnL: toNumber(pos.unrealizedPnL),
+          unrealizedPnLPercent: toNumber(pos.unrealizedPnLPercent),
+          fundingPaid: toNumber(pos.fundingPaid),
+          openedAt: pos.openedAt,
+          lastUpdated: pos.lastUpdated ?? pos.openedAt,
+        })
+      ) as PerpPosition[];
 
-    setState({
-      perpPositions: normalizedPerps,
-      predictionPositions: normalizedPredictions,
-      perpStats: perpetuals.stats ?? { ...DEFAULT_STATS },
-    });
+      const normalizedPredictions = (predictions.positions ?? []).map(
+        (pos: ApiPredictionPositionPayload) => {
+          const shares = toNumber(pos.shares);
+          const avgPrice = toNumber(pos.avgPrice);
+          return {
+            id: pos.id,
+            marketId: pos.marketId,
+            question: pos.question,
+            side: pos.side,
+            shares,
+            avgPrice,
+            currentPrice: toNumber(pos.currentPrice),
+            currentValue: toNumber(pos.currentValue ?? 0),
+            costBasis: toNumber(pos.costBasis ?? shares * avgPrice),
+            unrealizedPnL: toNumber(pos.unrealizedPnL ?? 0),
+            resolved: Boolean(pos.resolved),
+            resolution: pos.resolution ?? null,
+          };
+        }
+      ) as UserPredictionPosition[];
 
-    if (!controller.signal.aborted) {
-      setLoading(false);
+      return {
+        perpPositions: normalizedPerps,
+        predictionPositions: normalizedPredictions,
+        perpStats: perpetuals.stats ?? { ...DEFAULT_STATS },
+      };
+    },
+    enabled: enabled && !!userId,
+    staleTime: 30000,
+  });
+
+  const refresh = useCallback(() => {
+    if (userId && enabled) {
+      void queryClient.invalidateQueries({
+        queryKey: ['userPositions', userId],
+      });
     }
-  }, [userId, enabled]);
-
-  useEffect(() => {
-    if (enabled && userId) {
-      void refresh();
-    } else {
-      setState(createDefaultState());
-      setLoading(false);
-      setError(null);
-    }
-
-    return () => {
-      controllerRef.current?.abort();
-    };
-  }, [refresh, enabled, userId]);
+  }, [queryClient, userId, enabled]);
 
   return {
-    perpPositions: state.perpPositions,
-    predictionPositions: state.predictionPositions,
-    perpStats: state.perpStats,
-    loading,
-    error,
+    perpPositions: data.perpPositions,
+    predictionPositions: data.predictionPositions,
+    perpStats: data.perpStats,
+    loading: isLoading,
+    error: error as Error | null,
     refresh,
   };
 }

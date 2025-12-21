@@ -82,18 +82,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const txHash =
     typeof (body as OnchainRequestBody).txHash === 'string'
-      ? (body as OnchainRequestBody).txHash?.trim() || null
+      ? (body as OnchainRequestBody).txHash.trim() || null
       : null;
   const walletOverride =
     typeof (body as OnchainRequestBody).walletAddress === 'string'
-      ? (body as OnchainRequestBody).walletAddress?.trim() || null
+      ? (body as OnchainRequestBody).walletAddress.trim() || null
       : null;
   const referralCode =
     typeof (body as OnchainRequestBody).referralCode === 'string'
-      ? (body as OnchainRequestBody).referralCode?.trim() || null
+      ? (body as OnchainRequestBody).referralCode.trim() || null
       : null;
 
-  const canonicalUserId = authUser.dbUserId ?? authUser.userId;
+  if (!authUser.dbUserId && !authUser.userId) {
+    throw new Error('Database user ID not found in authentication');
+  }
+  const canonicalUserId = authUser.dbUserId || authUser.userId;
 
   const [dbUser] = await db
     .select({
@@ -127,10 +130,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  const walletAddress =
-    walletOverride?.toLowerCase() ??
-    dbUser.walletAddress ??
-    authUser.walletAddress;
+  const walletAddress = walletOverride
+    ? walletOverride.toLowerCase()
+    : dbUser.walletAddress
+      ? dbUser.walletAddress
+      : authUser.walletAddress;
   if (!walletAddress) {
     throw new BusinessLogicError(
       'Wallet address is required for on-chain registration.',
@@ -143,9 +147,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     walletAddress,
     username: dbUser.username,
     displayName: dbUser.displayName,
-    bio: dbUser.bio ?? undefined,
-    profileImageUrl: dbUser.profileImageUrl ?? undefined,
-    coverImageUrl: dbUser.coverImageUrl ?? undefined,
+    bio: dbUser.bio ? dbUser.bio : undefined,
+    profileImageUrl: dbUser.profileImageUrl
+      ? dbUser.profileImageUrl
+      : undefined,
+    coverImageUrl: dbUser.coverImageUrl ? dbUser.coverImageUrl : undefined,
     referralCode,
     txHash,
   });

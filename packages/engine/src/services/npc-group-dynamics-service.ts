@@ -177,7 +177,9 @@ export class NPCGroupDynamicsService {
 
       // Add related actors as members
       for (const rel of relationships) {
-        const memberId = rel.actor1Id === npc.id ? rel.actor2Id : rel.actor1Id;
+        const relActor1Id = String(rel.actor1Id);
+        const relActor2Id = String(rel.actor2Id);
+        const memberId = relActor1Id === npc.id ? relActor2Id : relActor1Id;
         memberIds.add(memberId);
       }
 
@@ -235,25 +237,30 @@ export class NPCGroupDynamicsService {
       .where(eq(chats.isGroup, true));
 
     for (const group of groupList) {
+      const joinGroupId = String(group.id);
+
       // Get participants for this group
       const participants = await db
         .select({ userId: chatParticipants.userId })
         .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
+        .where(eq(chatParticipants.chatId, joinGroupId));
 
       // Don't add to full groups
       if (participants.length >= NPCGroupDynamicsConfig.maxGroupSize) {
         continue;
       }
 
-      const currentMemberIds = new Set(participants.map((p) => p.userId));
+      const currentMemberIds = new Set(
+        participants.map((p) => String(p.userId))
+      );
       const memberIdsArray = Array.from(currentMemberIds);
 
       // Get NPCs who could join from static registry
       const allActors = StaticDataRegistry.getAllActors();
+      const memberIdsSet = new Set(memberIdsArray.map(String));
       const potentialMembers =
         memberIdsArray.length > 0
-          ? allActors.filter((a) => !memberIdsArray.includes(a.id)).slice(0, 5)
+          ? allActors.filter((a) => !memberIdsSet.has(a.id)).slice(0, 5)
           : allActors.slice(0, 5);
 
       for (const candidate of potentialMembers) {
@@ -290,7 +297,7 @@ export class NPCGroupDynamicsService {
           // Add to group
           await db.insert(chatParticipants).values({
             id: await generateSnowflakeId(),
-            chatId: group.id,
+            chatId: joinGroupId,
             userId: candidate.id,
           });
 
@@ -300,7 +307,7 @@ export class NPCGroupDynamicsService {
             {
               npcId: candidate.id,
               npcName: candidate.name,
-              chatName: group.name,
+              chatName: group.name ? String(group.name) : '',
               friendsInGroup: relationships.length,
             },
             'NPCGroupDynamicsService'
@@ -327,11 +334,13 @@ export class NPCGroupDynamicsService {
       .where(eq(chats.isGroup, true));
 
     for (const chat of groupChats) {
+      const leaveChatId = String(chat.id);
+
       // Get all participants for this chat
       const participantList = await db
         .select()
         .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, chat.id));
+        .where(eq(chatParticipants.chatId, leaveChatId));
 
       // Don't process if group would become too small
       if (participantList.length <= NPCGroupDynamicsConfig.minGroupSize) {
@@ -344,15 +353,19 @@ export class NPCGroupDynamicsService {
           continue;
         }
 
+        const membershipUserId = String(membership.userId);
+        const membershipId = String(membership.id);
+        const chatName = chat.name ? String(chat.name) : '';
+
         // Check if NPC is the group creator (don't leave own group)
-        if (chat.name?.includes(membership.userId)) {
+        if (chatName.includes(membershipUserId)) {
           continue;
         }
 
         // Check if NPC has negative relationships with members
         const memberIds = participantList
-          .map((p) => p.userId)
-          .filter((id) => id !== membership.userId);
+          .map((p) => String(p.userId))
+          .filter((id) => id !== membershipUserId);
 
         if (memberIds.length === 0) continue;
 
@@ -363,11 +376,11 @@ export class NPCGroupDynamicsService {
             and(
               or(
                 and(
-                  eq(actorRelationships.actor1Id, membership.userId),
+                  eq(actorRelationships.actor1Id, membershipUserId),
                   inArray(actorRelationships.actor2Id, memberIds)
                 ),
                 and(
-                  eq(actorRelationships.actor2Id, membership.userId),
+                  eq(actorRelationships.actor2Id, membershipUserId),
                   inArray(actorRelationships.actor1Id, memberIds)
                 )
               ),
@@ -379,14 +392,14 @@ export class NPCGroupDynamicsService {
         if (negativeRelationships.length >= 2) {
           await db
             .delete(chatParticipants)
-            .where(eq(chatParticipants.id, membership.id));
+            .where(eq(chatParticipants.id, membershipId));
 
           leavesProcessed++;
           logger.info(
             'NPC left group',
             {
-              npcId: membership.userId,
-              chatName: chat.name,
+              npcId: membershipUserId,
+              chatName,
               reason: `${negativeRelationships.length} negative relationships`,
             },
             'NPCGroupDynamicsService'
@@ -426,22 +439,25 @@ export class NPCGroupDynamicsService {
         continue;
       }
 
+      const groupId = String(group.id);
+      const groupName = group.name ? String(group.name) : '';
+
       // Get participants
       const participantList = await db
         .select()
         .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
+        .where(eq(chatParticipants.chatId, groupId));
 
       // Get recent messages
       const recentMsgs = await db
         .select()
         .from(messages)
-        .where(eq(messages.chatId, group.id))
+        .where(eq(messages.chatId, groupId))
         .orderBy(desc(messages.createdAt))
         .limit(10);
 
       // Get user details for participants
-      const participantUserIds = participantList.map((p) => p.userId);
+      const participantUserIds = participantList.map((p) => String(p.userId));
       const participantUsers =
         participantUserIds.length > 0
           ? await db
@@ -465,20 +481,25 @@ export class NPCGroupDynamicsService {
       const randomNpc = npcUsers[Math.floor(Math.random() * npcUsers.length)];
       if (!randomNpc) continue;
 
+      const randomNpcId = String(randomNpc.id);
+      const randomNpcDisplayName = randomNpc.displayName
+        ? String(randomNpc.displayName)
+        : 'Unknown';
+
       // Get full NPC actor data from static registry
-      const npcActor = StaticDataRegistry.getActor(randomNpc.id);
+      const npcActor = StaticDataRegistry.getActor(randomNpcId);
 
       // Get NPC's current positions for insider trading context
       const npcPositions = await db
         .select()
         .from(poolPositions)
-        .where(eq(poolPositions.poolId, randomNpc.id))
+        .where(eq(poolPositions.poolId, randomNpcId))
         .limit(5);
 
       // Get NPC-specific events (things that happened to THIS NPC)
-      const npcName = npcActor?.name || randomNpc.displayName || 'Unknown';
+      const npcName = npcActor?.name || randomNpcDisplayName;
       const npcEvents = await marketContextService.getEventsForNPC(
-        randomNpc.id,
+        randomNpcId,
         npcName
       );
 
@@ -492,7 +513,9 @@ export class NPCGroupDynamicsService {
           : '';
 
       // Get sender details for recent messages
-      const messageSenderIds = recentMsgs.slice(0, 5).map((m) => m.senderId);
+      const messageSenderIds = recentMsgs
+        .slice(0, 5)
+        .map((m) => String(m.senderId));
       const senders =
         messageSenderIds.length > 0
           ? await db
@@ -504,14 +527,20 @@ export class NPCGroupDynamicsService {
               .where(inArray(users.id, messageSenderIds))
           : [];
       const senderMap = new Map(
-        senders.map((s) => [s.id, s.displayName || 'Someone'])
+        senders.map((s) => [
+          String(s.id),
+          s.displayName ? String(s.displayName) : 'Someone',
+        ])
       );
 
       // Build conversation context from recent messages
       const recentMessages = recentMsgs
         .slice(0, 5)
         .reverse()
-        .map((m) => `${senderMap.get(m.senderId) || 'Someone'}: ${m.content}`)
+        .map(
+          (m) =>
+            `${senderMap.get(String(m.senderId)) || 'Someone'}: ${String(m.content ?? '')}`
+        )
         .join('\n');
 
       const conversationContext = recentMessages
@@ -522,10 +551,14 @@ export class NPCGroupDynamicsService {
       const positionContext =
         npcPositions.length > 0
           ? `YOUR CURRENT POSITIONS (share strategically):\n${npcPositions
-              .map(
-                (p) =>
-                  `- ${p.marketType === 'perp' ? p.ticker : `Question #${p.marketId}`}: ${p.side} position, ${p.unrealizedPnL > 0 ? 'up' : 'down'} $${Math.abs(Number(p.unrealizedPnL)).toFixed(0)}`
-              )
+              .map((p) => {
+                const pMarketType = String(p.marketType);
+                const pTicker = p.ticker ? String(p.ticker) : '';
+                const pMarketId = p.marketId ? String(p.marketId) : '';
+                const pSide = String(p.side);
+                const pUnrealizedPnL = Number(p.unrealizedPnL ?? 0);
+                return `- ${pMarketType === 'perp' ? pTicker : `Question #${pMarketId}`}: ${pSide} position, ${pUnrealizedPnL > 0 ? 'up' : 'down'} $${Math.abs(pUnrealizedPnL).toFixed(0)}`;
+              })
               .join('\n')}`
           : '';
 
@@ -637,8 +670,8 @@ Return your response as XML:
       await db.insert(messages).values({
         id: await generateSnowflakeId(),
         content: messageContent,
-        chatId: group.id,
-        senderId: randomNpc.id,
+        chatId: groupId,
+        senderId: randomNpcId,
         createdAt: new Date(),
       });
 
@@ -646,16 +679,16 @@ Return your response as XML:
       await db
         .update(chats)
         .set({ updatedAt: new Date() })
-        .where(eq(chats.id, group.id));
+        .where(eq(chats.id, groupId));
 
       messagesPosted++;
       logger.debug(
         'NPC posted to group',
         {
-          npcId: randomNpc.id,
-          npcName: randomNpc.displayName,
-          chatId: group.id,
-          chatName: group.name,
+          npcId: randomNpcId,
+          npcName: randomNpcDisplayName,
+          chatId: groupId,
+          chatName: groupName,
         },
         'NPCGroupDynamicsService'
       );
@@ -714,7 +747,7 @@ Return your response as XML:
     };
 
     // 1. Check follows (all-time)
-    const [followResult] =
+    const followResultArr =
       npcIds.length > 0
         ? await db
             .select({ count: count() })
@@ -726,7 +759,9 @@ Return your response as XML:
               )
             )
         : [{ count: 0 }];
-    const followCount = followResult?.count ?? 0;
+    const followResult = followResultArr[0];
+    const followCount =
+      followResult && 'count' in followResult ? Number(followResult.count) : 0;
     breakdown.follows = followCount * 5;
     score += breakdown.follows;
 
@@ -741,7 +776,7 @@ Return your response as XML:
         : [];
     const npcPostIds = npcPosts.map((p) => p.id);
 
-    const [commentResult] =
+    const commentResultArr =
       npcPostIds.length > 0
         ? await db
             .select({ count: count() })
@@ -754,7 +789,11 @@ Return your response as XML:
               )
             )
         : [{ count: 0 }];
-    const commentCount = commentResult?.count ?? 0;
+    const commentResult = commentResultArr[0];
+    const commentCount =
+      commentResult && 'count' in commentResult
+        ? Number(commentResult.count)
+        : 0;
 
     // Ideal: 1-3 comments per week
     if (commentCount >= 1 && commentCount <= 3) {
@@ -775,7 +814,7 @@ Return your response as XML:
     }
 
     // 3. Count likes on NPC posts (last 7 days)
-    const [likeResult] =
+    const likeResultArr =
       npcPostIds.length > 0
         ? await db
             .select({ count: count() })
@@ -789,7 +828,9 @@ Return your response as XML:
               )
             )
         : [{ count: 0 }];
-    const likeCount = likeResult?.count ?? 0;
+    const likeResult = likeResultArr[0];
+    const likeCount =
+      likeResult && 'count' in likeResult ? Number(likeResult.count) : 0;
 
     // Ideal: 3-10 likes per week
     if (likeCount >= 3 && likeCount <= 10) {
@@ -814,7 +855,7 @@ Return your response as XML:
     }
 
     // 4. Count reposts/shares of NPC posts (last 7 days)
-    const [repostResult] =
+    const repostResultArr =
       npcPostIds.length > 0
         ? await db
             .select({ count: count() })
@@ -827,7 +868,9 @@ Return your response as XML:
               )
             )
         : [{ count: 0 }];
-    const repostCount = repostResult?.count ?? 0;
+    const repostResult = repostResultArr[0];
+    const repostCount =
+      repostResult && 'count' in repostResult ? Number(repostResult.count) : 0;
 
     // Ideal: 1-2 reposts per week
     if (repostCount >= 1 && repostCount <= 2) {
@@ -926,8 +969,12 @@ Return your response as XML:
         );
 
       for (const rel of relationships) {
+        const relSentiment = Number(rel.sentiment ?? 0);
+        const relActor1Id = String(rel.actor1Id);
+        const relActor2Id = String(rel.actor2Id);
+
         // Enemy relationship: reduce invite chance
-        if (rel.sentiment < -0.3) {
+        if (relSentiment < -0.3) {
           modifier *= 0.8; // 20% reduction per enemy
           enemyPenalties++;
           logger.debug(
@@ -936,15 +983,15 @@ Return your response as XML:
               userId,
               targetNpcId,
               enemyNpcId:
-                rel.actor1Id === targetNpcId ? rel.actor2Id : rel.actor1Id,
-              sentiment: rel.sentiment,
+                relActor1Id === targetNpcId ? relActor2Id : relActor1Id,
+              sentiment: relSentiment,
               newModifier: modifier,
             },
             'NPCGroupDynamicsService'
           );
         }
         // Friend relationship: boost invite chance slightly
-        else if (rel.sentiment > 0.5) {
+        else if (relSentiment > 0.5) {
           modifier *= 1.1; // 10% boost per friend
           friendBoosts++;
           logger.debug(
@@ -953,8 +1000,8 @@ Return your response as XML:
               userId,
               targetNpcId,
               friendNpcId:
-                rel.actor1Id === targetNpcId ? rel.actor2Id : rel.actor1Id,
-              sentiment: rel.sentiment,
+                relActor1Id === targetNpcId ? relActor2Id : relActor1Id,
+              sentiment: relSentiment,
               newModifier: modifier,
             },
             'NPCGroupDynamicsService'
@@ -1035,11 +1082,13 @@ Return your response as XML:
       .where(eq(chats.isGroup, true));
 
     for (const group of groupList) {
+      const kickGroupId = String(group.id);
+
       // Get participants for this group
       const participantList = await db
         .select()
         .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
+        .where(eq(chatParticipants.chatId, kickGroupId));
 
       // Get recent messages
       const recentMsgs = await db
@@ -1047,13 +1096,13 @@ Return your response as XML:
         .from(messages)
         .where(
           and(
-            eq(messages.chatId, group.id),
+            eq(messages.chatId, kickGroupId),
             gte(messages.createdAt, sevenDaysAgo)
           )
         );
 
       // Get user details for participants (both users and agents, excluding NPCs)
-      const participantUserIds = participantList.map((p) => p.userId);
+      const participantUserIds = participantList.map((p) => String(p.userId));
       const participantUsers =
         participantUserIds.length > 0
           ? await db
@@ -1079,9 +1128,10 @@ Return your response as XML:
       const messageCounts = new Map<string, number>();
 
       for (const msg of recentMsgs) {
+        const msgSenderId = String(msg.senderId);
         messageCounts.set(
-          msg.senderId,
-          (messageCounts.get(msg.senderId) || 0) + 1
+          msgSenderId,
+          (messageCounts.get(msgSenderId) || 0) + 1
         );
       }
 
@@ -1090,8 +1140,8 @@ Return your response as XML:
 
       // Calculate kick probabilities for each non-NPC participant
       for (const participant of participantUsers) {
-        const userId = participant.id;
-        const userMessageCount = messageCounts.get(userId) || 0;
+        const participantUserId = String(participant.id);
+        const userMessageCount = messageCounts.get(participantUserId) || 0;
 
         const {
           probability: kickProbability,
@@ -1119,8 +1169,8 @@ Return your response as XML:
             .delete(chatParticipants)
             .where(
               and(
-                eq(chatParticipants.chatId, group.id),
-                eq(chatParticipants.userId, userId)
+                eq(chatParticipants.chatId, kickGroupId),
+                eq(chatParticipants.userId, participantUserId)
               )
             );
 
@@ -1134,8 +1184,8 @@ Return your response as XML:
             })
             .where(
               and(
-                eq(groupChatMemberships.chatId, group.id),
-                eq(groupChatMemberships.userId, userId)
+                eq(groupChatMemberships.chatId, kickGroupId),
+                eq(groupChatMemberships.userId, participantUserId)
               )
             );
 
@@ -1143,11 +1193,13 @@ Return your response as XML:
           logger.info(
             'User kicked from group with weighted logic',
             {
-              userId,
-              userName: participant.displayName,
+              userId: participantUserId,
+              userName: participant.displayName
+                ? String(participant.displayName)
+                : 'Unknown',
               isAgent: participant.isAgent,
-              chatId: group.id,
-              chatName: group.name,
+              chatId: kickGroupId,
+              chatName: group.name ? String(group.name) : '',
               reason,
               category,
               kickProbability: kickProbability.toFixed(2),
@@ -1177,11 +1229,13 @@ Return your response as XML:
     avgGroupSize: number;
   }> {
     // Get total group count
-    const [countResult] = await db
+    const countResultArr = await db
       .select({ count: count() })
       .from(chats)
       .where(eq(chats.isGroup, true));
-    const totalGroups = countResult?.count ?? 0;
+    const countResult = countResultArr[0];
+    const totalGroups =
+      countResult && 'count' in countResult ? Number(countResult.count) : 0;
 
     // Get all groups
     const groupList = await db
@@ -1194,11 +1248,16 @@ Return your response as XML:
     let totalMembers = 0;
 
     for (const group of groupList) {
-      const [partCountResult] = await db
+      const statsGroupId = String(group.id);
+      const partCountResultArr = await db
         .select({ count: count() })
         .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, group.id));
-      const participantCount = partCountResult?.count ?? 0;
+        .where(eq(chatParticipants.chatId, statsGroupId));
+      const partCountResult = partCountResultArr[0];
+      const participantCount =
+        partCountResult && 'count' in partCountResult
+          ? Number(partCountResult.count)
+          : 0;
 
       if (participantCount >= NPCGroupDynamicsConfig.minGroupSize) {
         activeGroups++;

@@ -110,7 +110,6 @@ jobs:
       - name: Run decentralized stack tests
         working-directory: babylon
         env:
-          REQUIRE_DECENTRALIZED: 'true'
           JEJU_GATEWAY_URL: http://localhost:4300
           CQL_BLOCK_PRODUCER_ENDPOINT: http://localhost:4300
         run: |

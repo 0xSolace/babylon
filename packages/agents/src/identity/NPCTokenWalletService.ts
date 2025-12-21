@@ -11,8 +11,9 @@
  * @packageDocumentation
  */
 
-import { actorState, db, eq } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { db } from '@babylon/db';
+import { StaticDataRegistry } from '@babylon/engine';
+import { type ActorTier, logger } from '@babylon/shared';
 
 /**
  * Paymaster client interface for gasless transactions.
@@ -61,6 +62,20 @@ export const STOP_LOSS_CONFIG = {
   /** Check interval in milliseconds */
   CHECK_INTERVAL_MS: 60_000, // 1 minute
 } as const;
+
+/** Map actor tier to allocation amount */
+function getTierAllocation(tier: ActorTier | null | undefined): bigint {
+  switch (tier) {
+    case 'S_TIER':
+      return NPC_TIER_ALLOCATIONS.TIER_1;
+    case 'A_TIER':
+      return NPC_TIER_ALLOCATIONS.TIER_2;
+    case 'B_TIER':
+    case 'C_TIER':
+    default:
+      return NPC_TIER_ALLOCATIONS.TIER_3;
+  }
+}
 
 /** Contract addresses - loaded from env */
 interface ContractAddresses {
@@ -147,6 +162,26 @@ export class NPCTokenWalletService {
       transport: http(this.rpcUrl),
     });
     this.addresses = getContractAddresses();
+  }
+
+  // ---------------------------------------------------------------------------
+  // TIER ALLOCATION
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get the allocation amount for an actor based on their tier
+   */
+  getAllocationForActor(actorId: string): bigint {
+    const actor = StaticDataRegistry.getActor(actorId);
+    if (!actor) {
+      logger.warn(
+        `Actor ${actorId} not found in registry, using default tier 3`,
+        { actorId },
+        'NPCTokenWalletService'
+      );
+      return NPC_TIER_ALLOCATIONS.TIER_3;
+    }
+    return getTierAllocation(actor.tier);
   }
 
   // ---------------------------------------------------------------------------
@@ -253,13 +288,13 @@ export class NPCTokenWalletService {
   async syncBalanceToDb(actorId: string): Promise<void> {
     const balance = await this.getBalance(actorId);
 
-    await db
-      .update(actorState)
-      .set({
+    await db.actorState.update({
+      where: { id: actorId },
+      data: {
         tradingBalance: formatUnits(balance.totalValue, 18),
         updatedAt: new Date(),
-      })
-      .where(eq(actorState.id, actorId));
+      },
+    });
 
     logger.info(
       `Synced NPC balance`,
@@ -286,9 +321,8 @@ export class NPCTokenWalletService {
       throw new Error(`NPC ${actorId} has no wallet`);
     }
 
-    // Actors are stored in static registry, not DB. Use default tier 3.
-    // TODO: Integrate tier from actorState when available
-    const amount = NPC_TIER_ALLOCATIONS.TIER_3;
+    // Get tier from static registry
+    const amount = this.getAllocationForActor(actorId);
 
     // Check current balance
     const currentBalance = await this.getBalance(actorId);
@@ -353,7 +387,7 @@ export class NPCTokenWalletService {
     totalAmount: bigint;
     errors: Array<{ actorId: string; error: string }>;
   }> {
-    const allActors = await db.select({ id: actorState.id }).from(actorState);
+    const allActors = await db.actorState.findMany();
     const result = {
       funded: 0,
       skipped: 0,
@@ -362,9 +396,10 @@ export class NPCTokenWalletService {
     };
 
     for (const actor of allActors) {
+      const actorId = String(actor.id);
       try {
         const { amount } = await this.fundNPCFromTreasury(
-          actor.id,
+          actorId,
           treasuryPrivateKey
         );
         if (amount > 0n) {
@@ -375,7 +410,7 @@ export class NPCTokenWalletService {
         }
       } catch (error) {
         result.errors.push({
-          actorId: actor.id,
+          actorId,
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -663,14 +698,15 @@ export class NPCTokenWalletService {
    * Run stop-loss check for all NPCs
    */
   private async runStopLossCheck(): Promise<void> {
-    const allActors = await db.select({ id: actorState.id }).from(actorState);
+    const allActors = await db.actorState.findMany();
 
     for (const actor of allActors) {
+      const actorId = String(actor.id);
       try {
-        await this.checkStopLossForNPC(actor.id);
+        await this.checkStopLossForNPC(actorId);
       } catch (error) {
         logger.warn(
-          `Stop-loss check failed for NPC ${actor.id}`,
+          `Stop-loss check failed for NPC ${actorId}`,
           { error },
           'NPCTokenWalletService'
         );
@@ -701,15 +737,16 @@ export class NPCTokenWalletService {
     }
 
     // Get daily starting balance from database
-    const [actorStateRow] = await db
-      .select({ tradingBalance: actorState.tradingBalance })
-      .from(actorState)
-      .where(eq(actorState.id, actorId))
-      .limit(1);
+    const actorStateRow = await db.actorState.findUnique({
+      where: { id: actorId },
+    });
 
     if (!actorStateRow) return result;
 
-    const startingBalance = parseUnits(actorStateRow.tradingBalance, 18);
+    const startingBalance = parseUnits(
+      String(actorStateRow.tradingBalance),
+      18
+    );
     const currentBalance = balance.totalValue;
 
     // Calculate daily loss percentage

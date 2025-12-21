@@ -6,8 +6,8 @@
  * @packageDocumentation
  */
 
-import { db, eq, like, userAgentConfigs, users } from '@babylon/db';
-import { ethers } from 'ethers';
+import { db } from '@babylon/db';
+import { generateRandomWallet } from '@babylon/shared';
 import { agentRegistry } from '../services/agent-registry.service';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
@@ -64,22 +64,17 @@ export async function createTestAgent(
   } = config;
 
   // Try to find existing agent with same prefix
-  let agentResult;
+  let agent;
   if (username) {
-    agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, username))
-      .limit(1);
+    agent = await db.user.findFirst({
+      where: { username },
+    });
   } else {
-    agentResult = await db
-      .select()
-      .from(users)
-      .where(like(users.username, `${prefix}%`))
-      .limit(1);
+    agent = await db.user.findFirst({
+      where: { username: { startsWith: prefix } },
+    });
   }
 
-  let agent = agentResult[0];
   let created = false;
 
   if (!agent) {
@@ -88,116 +83,113 @@ export async function createTestAgent(
     const finalUsername = username || `${prefix}-${agentId.slice(-6)}`;
 
     // Insert user record
-    const newAgentResult = await db
-      .insert(users)
-      .values({
+    agent = await db.user.create({
+      data: {
         id: agentId,
         privyId: `did:privy:${prefix}-${agentId}`,
         username: finalUsername,
         displayName,
-        walletAddress: ethers.Wallet.createRandom().address,
+        walletAddress: generateRandomWallet().address,
         isAgent: true,
         virtualBalance: String(virtualBalance),
         reputationPoints: 1000,
         isTest: true,
         updatedAt: new Date(),
-      })
-      .returning();
-
-    agent = newAgentResult[0]!;
+      },
+    });
 
     // Insert agent config record
     const configId = await generateSnowflakeId();
-    await db.insert(userAgentConfigs).values({
-      id: configId,
-      userId: agentId,
-      autonomousTrading,
-      autonomousPosting,
-      autonomousCommenting,
-      autonomousDMs,
-      autonomousGroupChats,
-      systemPrompt,
-      modelTier,
-      pointsBalance,
-      updatedAt: new Date(),
+    await db.userAgentConfig.create({
+      data: {
+        id: configId,
+        userId: agentId,
+        autonomousTrading,
+        autonomousPosting,
+        autonomousCommenting,
+        autonomousDMs,
+        autonomousGroupChats,
+        systemPrompt,
+        modelTier,
+        pointsBalance,
+        updatedAt: new Date(),
+      },
     });
 
     created = true;
 
     logger.info('Created test agent', {
-      agentId: agent.id,
-      username: agent.username,
-      displayName: agent.displayName,
+      agentId: String(agent.id),
+      username: String(agent.username),
+      displayName: agent.displayName ? String(agent.displayName) : null,
     });
   } else {
     logger.info('Using existing test agent', {
-      agentId: agent.id,
-      username: agent.username,
+      agentId: String(agent.id),
+      username: String(agent.username),
     });
   }
 
   // Register in Agent Registry if not already registered
-  if (agent.isAgent) {
-    try {
-      // Check if already registered
-      const existingReg = await agentRegistry.getAgentById(agent.id);
+  const agentIdStr = String(agent.id);
+  const usernameStr = String(agent.username);
+  const displayNameStr = agent.displayName ? String(agent.displayName) : null;
+  const isAgentBool = Boolean(agent.isAgent);
 
-      if (!existingReg) {
-        logger.info('Registering user agent...', { userId: agent.id });
+  if (isAgentBool) {
+    // Check if already registered before attempting registration
+    const existingReg = await agentRegistry.getAgentById(agentIdStr);
 
-        // Get agent config for system prompt
-        const agentConfig = await getAgentConfig(agent.id);
+    if (!existingReg) {
+      logger.info('Registering user agent...', { userId: agentIdStr });
 
-        await agentRegistry.registerUserAgent({
-          userId: agent.id,
-          name: agent.displayName || agent.username || 'Test Agent',
-          systemPrompt:
-            agentConfig?.systemPrompt ||
-            'You are a helpful AI agent on Babylon prediction market.',
-          capabilities: {
-            strategies: [
-              'prediction_markets',
-              'social_interaction',
-              'trading_analysis',
-            ],
-            markets: ['prediction', 'perpetual', 'spot'],
-            actions: [
-              'trade',
-              'post',
-              'comment',
-              'like',
-              'message',
-              'analyze_market',
-              'manage_portfolio',
-            ],
-            version: '1.0.0',
-            x402Support: true,
-            platform: 'babylon',
-            userType: 'user_controlled',
-            skills: [],
-            domains: [],
-          },
-        });
-        logger.info('Registered test agent in registry', {
-          agentId: agent.id,
-        });
-      }
-    } catch (err) {
-      // Registration may fail if already registered, that's ok
-      logger.debug('Agent registry registration', {
-        error: err instanceof Error ? err.message : String(err),
+      // Get agent config for system prompt
+      const agentConfig = await getAgentConfig(agentIdStr);
+
+      await agentRegistry.registerUserAgent({
+        userId: agentIdStr,
+        name: displayNameStr || usernameStr || 'Test Agent',
+        systemPrompt:
+          agentConfig?.systemPrompt ||
+          'You are a helpful AI agent on Babylon prediction market.',
+        capabilities: {
+          strategies: [
+            'prediction_markets',
+            'social_interaction',
+            'trading_analysis',
+          ],
+          markets: ['prediction', 'perpetual', 'spot'],
+          actions: [
+            'trade',
+            'post',
+            'comment',
+            'like',
+            'message',
+            'analyze_market',
+            'manage_portfolio',
+          ],
+          version: '1.0.0',
+          x402Support: true,
+          platform: 'babylon',
+          userType: 'user_controlled',
+          skills: [],
+          domains: [],
+        },
+      });
+      logger.info('Registered test agent in registry', {
+        agentId: agentIdStr,
       });
     }
   }
 
   return {
-    agentId: agent.id,
+    agentId: agentIdStr,
     created,
     agent: {
-      id: agent.id,
-      username: agent.username!,
-      displayName: agent.displayName,
-      isAgent: agent.isAgent,
+      id: agentIdStr,
+      username: usernameStr,
+      displayName: displayNameStr,
+      isAgent: isAgentBool,
     },
   };
 }
@@ -235,10 +227,9 @@ export async function cleanupTestAgents(
   prefix = 'test-agent'
 ): Promise<number> {
   // Get test agents
-  const testAgents = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(like(users.username, `${prefix}%`));
+  const testAgents = await db.user.findMany({
+    where: { username: { startsWith: prefix } },
+  });
 
   if (testAgents.length === 0) {
     return 0;
@@ -246,17 +237,16 @@ export async function cleanupTestAgents(
 
   // Delete agent configs first
   for (const agent of testAgents) {
-    await db
-      .delete(userAgentConfigs)
-      .where(eq(userAgentConfigs.userId, agent.id));
+    await db.userAgentConfig.deleteMany({
+      where: { userId: String(agent.id) },
+    });
   }
 
   // Delete the agents
-  const result = await db
-    .delete(users)
-    .where(like(users.username, `${prefix}%`))
-    .returning({ id: users.id });
+  const result = await db.user.deleteMany({
+    where: { username: { startsWith: prefix } },
+  });
 
-  logger.info(`Cleaned up ${result.length} test agents`);
-  return result.length;
+  logger.info(`Cleaned up ${result.count} test agents`);
+  return result.count;
 }

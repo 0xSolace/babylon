@@ -100,21 +100,19 @@ export async function navigateTo(page: Page, route: string): Promise<void> {
  * @param page - Playwright page instance
  */
 export async function hideNextDevOverlay(page: Page): Promise<void> {
-  await page
-    .evaluate(() => {
-      const overlay = document.querySelector('nextjs-portal');
-      if (overlay instanceof HTMLElement) {
-        overlay.style.pointerEvents = 'none';
-        overlay.style.display = 'none';
+  await page.evaluate(() => {
+    const overlay = document.querySelector('nextjs-portal');
+    if (overlay instanceof HTMLElement) {
+      overlay.style.pointerEvents = 'none';
+      overlay.style.display = 'none';
+    }
+    // Also hide any error overlays
+    document.querySelectorAll('[data-nextjs-dev-overlay]').forEach((el) => {
+      if (el instanceof HTMLElement) {
+        el.style.pointerEvents = 'none';
       }
-      // Also hide any error overlays
-      document.querySelectorAll('[data-nextjs-dev-overlay]').forEach((el) => {
-        if (el instanceof HTMLElement) {
-          el.style.pointerEvents = 'none';
-        }
-      });
-    })
-    .catch(() => {});
+    });
+  });
 }
 
 /**
@@ -149,13 +147,13 @@ export async function waitForPageLoad(
 
     if (!hasButtons) {
       // Try reloading the page once
-      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000);
       // Hide overlay again after reload
       await hideNextDevOverlay(page);
     }
-  } catch (_e) {
-    // Continue anyway
+  } catch {
+    // waitForLoadState timeout is acceptable - page may still be functional
   }
 }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Loader2, Users, X } from 'lucide-react';
 /**
  * Group invite notification component for displaying group invitations in notifications.
@@ -54,46 +55,55 @@ export function GroupInviteNotification({
   onAccept,
   onDecline,
 }: GroupInviteNotificationProps) {
-  const [isLoading, setIsLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [isResponded, setIsResponded] = useState(false);
 
-  const handleAccept = async () => {
-    setIsLoading(true);
-    const response = await fetch(`/api/user-groups/invites/${inviteId}`, {
-      method: 'POST',
-    });
+  const acceptMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/user-groups/invites/${inviteId}`, {
+        method: 'POST',
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      setIsLoading(false);
-      throw new Error(data.error || 'Failed to accept invite');
-    }
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to accept invite');
+      }
 
-    toast.success(`You joined ${groupName}!`);
-    setIsResponded(true);
-    onAccept?.();
-    setIsLoading(false);
-  };
+      return data;
+    },
+    onSuccess: () => {
+      toast.success(`You joined ${groupName}!`);
+      setIsResponded(true);
+      queryClient.invalidateQueries({ queryKey: ['group-invites'] });
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onAccept?.();
+    },
+  });
 
-  const handleDecline = async () => {
-    setIsLoading(true);
-    const response = await fetch(`/api/user-groups/invites/${inviteId}`, {
-      method: 'DELETE',
-    });
+  const declineMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/user-groups/invites/${inviteId}`, {
+        method: 'DELETE',
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      setIsLoading(false);
-      throw new Error(data.error || 'Failed to decline invite');
-    }
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to decline invite');
+      }
 
-    toast.success('Invite declined');
-    setIsResponded(true);
-    onDecline?.();
-    setIsLoading(false);
-  };
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Invite declined');
+      setIsResponded(true);
+      queryClient.invalidateQueries({ queryKey: ['group-invites'] });
+      onDecline?.();
+    },
+  });
+
+  const isLoading = acceptMutation.isPending || declineMutation.isPending;
 
   if (isResponded) {
     return null;
@@ -135,11 +145,11 @@ export function GroupInviteNotification({
 
           <div className="flex gap-2">
             <button
-              onClick={handleAccept}
+              onClick={() => acceptMutation.mutate()}
               disabled={isLoading}
               className="flex-1 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
-              {isLoading ? (
+              {acceptMutation.isPending ? (
                 <Loader2 className="inline h-4 w-4 animate-spin" />
               ) : (
                 <>
@@ -149,11 +159,11 @@ export function GroupInviteNotification({
               )}
             </button>
             <button
-              onClick={handleDecline}
+              onClick={() => declineMutation.mutate()}
               disabled={isLoading}
               className="flex-1 rounded-lg border border-border bg-background px-4 py-2 font-medium text-sm transition-colors hover:bg-accent disabled:opacity-50"
             >
-              {isLoading ? (
+              {declineMutation.isPending ? (
                 <Loader2 className="inline h-4 w-4 animate-spin" />
               ) : (
                 <>

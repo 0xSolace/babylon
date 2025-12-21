@@ -242,7 +242,7 @@ async function checkTimeWindowHasContent(
   windowStart: Date,
   windowEnd: Date
 ): Promise<boolean> {
-  const [result] = await db
+  const [result] = (await db
     .select({ count: count() })
     .from(posts)
     .where(
@@ -251,7 +251,7 @@ async function checkTimeWindowHasContent(
         lt(posts.timestamp, windowEnd),
         isNull(posts.deletedAt)
       )
-    );
+    )) as unknown as { count: number }[];
 
   const existingPosts = result?.count ?? 0;
 

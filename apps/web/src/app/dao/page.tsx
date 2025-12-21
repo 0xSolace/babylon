@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   AlertCircle,
@@ -12,7 +13,6 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 // =============================================================================
 // TYPES
@@ -50,6 +50,16 @@ interface BuybackRecord {
   txHash: string | null;
   initiatedAt: string;
   completedAt: string | null;
+}
+
+interface DAOResponse {
+  success: boolean;
+  overview: DAOOverview;
+}
+
+interface BuybacksResponse {
+  success: boolean;
+  buybacks: BuybackRecord[];
 }
 
 // =============================================================================
@@ -245,32 +255,29 @@ function BuybacksTable({ buybacks }: { buybacks: BuybackRecord[] }) {
 // =============================================================================
 
 export default function DAOPage() {
-  const [overview, setOverview] = useState<DAOOverview | null>(null);
-  const [buybacks, setBuybacks] = useState<BuybackRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: daoData, isLoading: daoLoading } = useQuery({
+    queryKey: ['dao', 'overview'],
+    queryFn: async (): Promise<DAOOverview | null> => {
+      const res = await fetch('/api/dao');
+      if (!res.ok) throw new Error('Failed to fetch DAO data');
+      const data = (await res.json()) as DAOResponse;
+      return data.success ? data.overview : null;
+    },
+  });
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
+  const { data: buybacksData, isLoading: buybacksLoading } = useQuery({
+    queryKey: ['dao', 'buybacks'],
+    queryFn: async (): Promise<BuybackRecord[]> => {
+      const res = await fetch('/api/dao/buybacks');
+      if (!res.ok) throw new Error('Failed to fetch buybacks');
+      const data = (await res.json()) as BuybacksResponse;
+      return data.success ? data.buybacks : [];
+    },
+  });
 
-      const [daoRes, buybacksRes] = await Promise.all([
-        fetch('/api/dao').then((r) => r.json()),
-        fetch('/api/dao/buybacks').then((r) => r.json()),
-      ]);
-
-      if (daoRes.success) {
-        setOverview(daoRes.overview);
-      }
-
-      if (buybacksRes.success) {
-        setBuybacks(buybacksRes.buybacks);
-      }
-
-      setLoading(false);
-    }
-
-    fetchData();
-  }, []);
+  const overview = daoData;
+  const buybacks = buybacksData;
+  const loading = daoLoading || buybacksLoading;
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -291,34 +298,42 @@ export default function DAOPage() {
 
       {/* AI CEO Status */}
       <div className="mb-8">
-        <AIChiefCard aiCEO={overview?.aiCEO ?? null} loading={loading} />
+        <AIChiefCard aiCEO={overview?.aiCEO || null} loading={loading} />
       </div>
 
       {/* Stats Grid */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Treasury ETH"
-          value={`${overview?.treasury.ethBalance ?? '0'} ETH`}
+          value={overview ? `${overview.treasury.ethBalance} ETH` : '0 ETH'}
           subtitle="Protocol reserves"
           icon={Wallet}
         />
         <StatCard
           title="Treasury BBLN"
-          value={`${Number(overview?.treasury.bblnBalance ?? 0).toLocaleString()} BBLN`}
+          value={
+            overview
+              ? `${Number(overview.treasury.bblnBalance).toLocaleString()} BBLN`
+              : '0 BBLN'
+          }
           subtitle="Token reserves"
           icon={Coins}
         />
         <StatCard
           title="Total Revenue"
-          value={`${overview?.revenue.totalReceived ?? '0'} ETH`}
+          value={overview ? `${overview.revenue.totalReceived} ETH` : '0 ETH'}
           subtitle="All-time fees collected"
           icon={TrendingUp}
           trend="up"
         />
         <StatCard
           title="Buybacks Executed"
-          value={String(overview?.revenue.totalBuybacks ?? 0)}
-          subtitle={`${overview?.revenue.bblnBought ?? '0'} BBLN bought`}
+          value={overview ? String(overview.revenue.totalBuybacks) : '0'}
+          subtitle={
+            overview
+              ? `${overview.revenue.bblnBought} BBLN bought`
+              : '0 BBLN bought'
+          }
           icon={Activity}
         />
       </div>
@@ -333,7 +348,7 @@ export default function DAOPage() {
             </div>
             <p className="font-medium">BBLN Buyback</p>
             <p className="text-muted-foreground text-sm">
-              {overview?.revenue.bblnBought ?? '0'} BBLN bought
+              {overview ? overview.revenue.bblnBought : '0'} BBLN bought
             </p>
           </div>
           <div className="text-center">
@@ -342,7 +357,7 @@ export default function DAOPage() {
             </div>
             <p className="font-medium">ELIZA Buyback</p>
             <p className="text-muted-foreground text-sm">
-              {overview?.revenue.elizaBought ?? '0'} ELIZA bought
+              {overview ? overview.revenue.elizaBought : '0'} ELIZA bought
             </p>
           </div>
           <div className="text-center">
@@ -351,7 +366,8 @@ export default function DAOPage() {
             </div>
             <p className="font-medium">Treasury</p>
             <p className="text-muted-foreground text-sm">
-              {overview?.treasury.totalDistributed ?? '0'} ETH distributed
+              {overview ? overview.treasury.totalDistributed : '0'} ETH
+              distributed
             </p>
           </div>
         </div>
@@ -364,8 +380,8 @@ export default function DAOPage() {
                 Next Buyback Threshold
               </p>
               <p className="font-semibold">
-                {overview?.revenue.accumulated ?? '0'} /{' '}
-                {overview?.revenue.threshold ?? '1'} ETH
+                {overview ? overview.revenue.accumulated : '0'} /{' '}
+                {overview ? overview.revenue.threshold : '1'} ETH
               </p>
             </div>
             <div className="mx-4 flex-1">
@@ -373,12 +389,14 @@ export default function DAOPage() {
                 <div
                   className="h-2 rounded-full bg-primary transition-all"
                   style={{
-                    width: `${Math.min(
-                      100,
-                      (Number(overview?.revenue.accumulated ?? 0) /
-                        Number(overview?.revenue.threshold ?? 1)) *
-                        100
-                    )}%`,
+                    width: overview
+                      ? `${Math.min(
+                          100,
+                          (Number(overview.revenue.accumulated) /
+                            Number(overview.revenue.threshold)) *
+                            100
+                        )}%`
+                      : '0%',
                   }}
                 />
               </div>
@@ -400,7 +418,7 @@ export default function DAOPage() {
             View on Explorer <ExternalLink className="h-3 w-3" />
           </a>
         </div>
-        <BuybacksTable buybacks={buybacks} />
+        <BuybacksTable buybacks={buybacks ?? []} />
       </div>
 
       {/* Governance Links */}

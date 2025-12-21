@@ -144,6 +144,10 @@ export const POST = withErrorHandling(
         showWalletPublic: users.showWalletPublic,
       });
 
+    if (!updatedUser) {
+      throw new Error('Failed to update user visibility preferences');
+    }
+
     logger.info(
       `User ${canonicalUserId} updated ${platform} visibility to ${visible}`,
       { userId: canonicalUserId, platform, visible },
@@ -153,9 +157,9 @@ export const POST = withErrorHandling(
     return successResponse({
       success: true,
       visibility: {
-        twitter: updatedUser?.showTwitterPublic ?? false,
-        farcaster: updatedUser?.showFarcasterPublic ?? false,
-        wallet: updatedUser?.showWalletPublic ?? false,
+        twitter: updatedUser.showTwitterPublic,
+        farcaster: updatedUser.showFarcasterPublic,
+        wallet: updatedUser.showWalletPublic,
       },
     });
   }

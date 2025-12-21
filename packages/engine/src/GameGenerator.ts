@@ -29,7 +29,13 @@
  * Per-actor context preserved (personality, mood, luck)
  */
 
-import { logger } from '@babylon/shared';
+import {
+  DayTimelineSchema,
+  logger,
+  QuestionSchema,
+  ScenarioSchema,
+} from '@babylon/shared';
+import { z } from 'zod';
 import { generateActorContext } from './EmotionSystem';
 import { FeedGenerator } from './FeedGenerator';
 import { BabylonLLMClient } from './llm/openai-client';
@@ -1410,63 +1416,16 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       throw new Error('LLM returned no scenarios');
     }
 
-    // Validate scenarios array exists
-    if (!scenarios || scenarios.length === 0) {
-      logger.error(
-        'No scenarios returned from LLM',
-        undefined,
-        'GameGenerator'
+    // Validate scenarios using Zod
+    try {
+      const validatedScenarios = z.array(ScenarioSchema).parse(scenarios);
+      return validatedScenarios;
+    } catch (error) {
+      logger.error('Scenario validation failed', { error }, 'GameGenerator');
+      throw new Error(
+        `LLM returned invalid scenarios structure: ${(error as Error).message}`
       );
-      throw new Error('LLM returned empty scenarios');
     }
-
-    // Validate each scenario has required fields
-    for (const scenario of scenarios) {
-      // Handle XML nested structures in mainActors
-      if (scenario.mainActors) {
-        if (
-          typeof scenario.mainActors === 'object' &&
-          'actorId' in scenario.mainActors
-        ) {
-          const actorIds = scenario.mainActors.actorId;
-          scenario.mainActors = Array.isArray(actorIds) ? actorIds : [actorIds];
-        }
-      }
-
-      // Handle XML nested structures in involvedOrganizations
-      if (
-        scenario.involvedOrganizations &&
-        typeof scenario.involvedOrganizations === 'object'
-      ) {
-        if ('orgId' in scenario.involvedOrganizations) {
-          const orgIds = scenario.involvedOrganizations.orgId;
-          scenario.involvedOrganizations = Array.isArray(orgIds)
-            ? orgIds
-            : [orgIds];
-        }
-      }
-
-      if (!scenario.mainActors || !Array.isArray(scenario.mainActors)) {
-        logger.error(
-          'Scenario missing mainActors:',
-          JSON.stringify(scenario, null, 2),
-          'GameGenerator'
-        );
-        throw new Error(
-          `Scenario "${scenario.title}" is missing mainActors array`
-        );
-      }
-      if (!scenario.title || !scenario.description) {
-        logger.error(
-          'Scenario missing required fields:',
-          JSON.stringify(scenario, null, 2),
-          'GameGenerator'
-        );
-        throw new Error('Scenario is missing title or description');
-      }
-    }
-
-    return scenarios;
   }
 
   /**
@@ -1570,7 +1529,18 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       rank: q.rank || i + 1, // Default rank if not provided
     }));
 
-    return questionsWithOutcomes;
+    // Validate using Zod
+    try {
+      const validatedQuestions = z
+        .array(QuestionSchema)
+        .parse(questionsWithOutcomes);
+      return validatedQuestions;
+    } catch (error) {
+      logger.error('Question validation failed', { error }, 'GameGenerator');
+      throw new Error(
+        `Generated questions failed validation: ${(error as Error).message}`
+      );
+    }
   }
 
   /**
@@ -2164,7 +2134,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       }
     }
 
-    return {
+    const dayTimeline = {
       day,
       summary: `${dateStr}: ${phase} phase - ${events.length} events, ${feedPosts.length} posts, ${Object.values(groupMessages).flat().length} group messages`,
       events,
@@ -2173,6 +2143,17 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       luckChanges,
       moodChanges,
     };
+
+    try {
+      DayTimelineSchema.parse(dayTimeline);
+    } catch (error) {
+      logger.error('DayTimeline validation failed', { error }, 'GameGenerator');
+      throw new Error(
+        `DayTimeline validation failed: ${(error as Error).message}`
+      );
+    }
+
+    return dayTimeline;
   }
 
   /**
@@ -2361,7 +2342,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
     }
 
     // Validate and sanitize events
-    return events.map((e, i) => ({
+    const sanitizedEvents = events.map((e, i) => ({
       eventNumber: e.eventNumber || i + 1,
       event:
         typeof e.event === 'string' && e.event.length > 0
@@ -2369,6 +2350,26 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
           : 'Generic event involving actors',
       pointsToward: e.pointsToward || null,
     }));
+
+    // Validate internal structure
+    try {
+      z.array(
+        z.object({
+          eventNumber: z.number(),
+          event: z.string(),
+          pointsToward: z.enum(['YES', 'NO']).nullable(),
+        })
+      ).parse(sanitizedEvents);
+    } catch (error) {
+      logger.error(
+        'Day events batch validation failed',
+        { error },
+        'GameGenerator'
+      );
+      throw error;
+    }
+
+    return sanitizedEvents;
   }
 
   /**

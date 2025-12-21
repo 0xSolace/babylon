@@ -197,8 +197,9 @@ export class NPCInteractionTracker {
 
     // Count likes
     let likeCount = 0;
+    type CountResult = { count: number };
     if (npcPostIds.length > 0) {
-      const [likeResult] = await db
+      const [likeResult] = (await db
         .select({ count: count() })
         .from(reactions)
         .where(
@@ -209,14 +210,14 @@ export class NPCInteractionTracker {
             gte(reactions.createdAt, startDate),
             lte(reactions.createdAt, endDate)
           )
-        );
+        )) as unknown as CountResult[];
       likeCount = likeResult?.count ?? 0;
     }
 
     // Count shares
     let shareCount = 0;
     if (npcPostIds.length > 0) {
-      const [shareResult] = await db
+      const [shareResult] = (await db
         .select({ count: count() })
         .from(shares)
         .where(
@@ -226,7 +227,7 @@ export class NPCInteractionTracker {
             gte(shares.createdAt, startDate),
             lte(shares.createdAt, endDate)
           )
-        );
+        )) as unknown as CountResult[];
       shareCount = shareResult?.count ?? 0;
     }
 

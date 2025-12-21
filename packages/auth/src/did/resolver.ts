@@ -112,7 +112,7 @@ export class DIDResolver {
 
     await Promise.all(
       dids.map(async (did) => {
-        const doc = await this.resolve(did).catch(() => null);
+        const doc = await this.resolve(did);
         results.set(did, doc);
       })
     );

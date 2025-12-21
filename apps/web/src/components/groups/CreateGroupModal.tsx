@@ -2,6 +2,7 @@
 
 import { useJejuAuth } from '@babylon/auth/client';
 import { cn } from '@babylon/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Loader2, Search, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
@@ -53,6 +54,17 @@ interface CreateGroupModalProps {
   onGroupCreated: (groupId: string, chatId: string) => void;
 }
 
+interface CreateGroupResponse {
+  group: {
+    id: string;
+    chatId: string;
+  };
+}
+
+interface SearchUsersResponse {
+  users: User[];
+}
+
 export function CreateGroupModal({
   isOpen,
   onClose,
@@ -60,13 +72,12 @@ export function CreateGroupModal({
 }: CreateGroupModalProps) {
   const { getAccessToken } = useJejuAuth();
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
   const [groupName, setGroupName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
   const [searching, setSearching] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -75,11 +86,10 @@ export function CreateGroupModal({
       setSearchQuery('');
       setSearchResults([]);
       setSelectedUsers([]);
-      setError(null);
     }
   }, [isOpen]);
 
-  // Search for users
+  // Search for users with debounce
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
       setSearchResults([]);
@@ -99,7 +109,7 @@ export function CreateGroupModal({
       );
 
       if (response.ok) {
-        const data = await response.json();
+        const data: SearchUsersResponse = await response.json();
         setSearchResults(data.users || []);
       }
       setSearching(false);
@@ -109,9 +119,40 @@ export function CreateGroupModal({
     return () => clearTimeout(debounce);
   }, [searchQuery, getAccessToken]);
 
-  const handleAddUser = (user: User) => {
-    if (!selectedUsers.find((u) => u.id === user.id)) {
-      setSelectedUsers([...selectedUsers, user]);
+  const createGroupMutation = useMutation({
+    mutationFn: async (
+      finalGroupName: string
+    ): Promise<CreateGroupResponse> => {
+      const token = await getAccessToken();
+      const response = await fetch('/api/groups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: finalGroupName,
+          memberIds: selectedUsers.map((u) => u.id),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to create group');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      onGroupCreated(data.group.id, data.group.chatId);
+      onClose();
+    },
+  });
+
+  const handleAddUser = (userToAdd: User) => {
+    if (!selectedUsers.find((u) => u.id === userToAdd.id)) {
+      setSelectedUsers([...selectedUsers, userToAdd]);
     }
     setSearchQuery('');
     setSearchResults([]);
@@ -121,7 +162,7 @@ export function CreateGroupModal({
     setSelectedUsers(selectedUsers.filter((u) => u.id !== userId));
   };
 
-  const handleCreateGroup = async () => {
+  const handleCreateGroup = () => {
     // Generate group name if not provided
     let finalGroupName = groupName.trim();
 
@@ -133,8 +174,7 @@ export function CreateGroupModal({
       const currentUserName = user?.displayName || user?.username || 'You';
 
       if (selectedUsers.length === 0) {
-        setError('Please add at least one member or enter a group name');
-        return;
+        return; // Button should be disabled anyway
       } else if (selectedUsers.length === 1) {
         finalGroupName = `${currentUserName}, ${memberNames[0]}`;
       } else if (selectedUsers.length === 2) {
@@ -144,37 +184,13 @@ export function CreateGroupModal({
       }
     }
 
-    setCreating(true);
-    setError(null);
-
-    const token = await getAccessToken();
-    const response = await fetch('/api/groups', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        name: finalGroupName,
-        memberIds: selectedUsers.map((u) => u.id),
-      }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      setCreating(false);
-      throw new Error(data.error || 'Failed to create group');
-    }
-
-    const data = await response.json();
-    onGroupCreated(data.group.id, data.group.chatId);
-    onClose();
+    createGroupMutation.mutate(finalGroupName);
   };
 
   if (!isOpen) return null;
 
   const handleClose = () => {
-    if (creating) return; // Prevent closing during creation
+    if (createGroupMutation.isPending) return; // Prevent closing during creation
     onClose();
   };
 
@@ -200,7 +216,7 @@ export function CreateGroupModal({
           <button
             onClick={handleClose}
             className="text-muted-foreground transition-colors hover:text-foreground"
-            disabled={creating}
+            disabled={createGroupMutation.isPending}
           >
             <X className="h-5 w-5" />
           </button>
@@ -208,9 +224,11 @@ export function CreateGroupModal({
 
         {/* Content */}
         <div className="p-6">
-          {error && (
+          {createGroupMutation.isError && (
             <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 p-3">
-              <p className="text-red-500 text-sm">{error}</p>
+              <p className="text-red-500 text-sm">
+                {createGroupMutation.error.message}
+              </p>
             </div>
           )}
 
@@ -231,7 +249,7 @@ export function CreateGroupModal({
                 onChange={(e) => setGroupName(e.target.value)}
                 maxLength={100}
                 className="w-full rounded-lg border border-border bg-sidebar px-4 py-3 transition-colors focus:border-primary focus:outline-none"
-                disabled={creating}
+                disabled={createGroupMutation.isPending}
               />
               {groupName && (
                 <p className="mt-1 text-muted-foreground text-xs">
@@ -247,21 +265,27 @@ export function CreateGroupModal({
                   Members ({selectedUsers.length})
                 </label>
                 <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-sidebar p-3">
-                  {selectedUsers.map((user) => (
+                  {selectedUsers.map((selectedUser) => (
                     <div
-                      key={user.id}
+                      key={selectedUser.id}
                       className="flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5"
                     >
                       <Avatar
-                        imageUrl={user.profileImageUrl || undefined}
-                        name={user.username || user.displayName || '?'}
+                        imageUrl={selectedUser.profileImageUrl || undefined}
+                        name={
+                          selectedUser.username ||
+                          selectedUser.displayName ||
+                          '?'
+                        }
                         size="sm"
                       />
                       <span className="text-sm">
-                        {user.displayName || user.username || 'Unknown'}
+                        {selectedUser.displayName ||
+                          selectedUser.username ||
+                          'Unknown'}
                       </span>
                       <button
-                        onClick={() => handleRemoveUser(user.id)}
+                        onClick={() => handleRemoveUser(selectedUser.id)}
                         className="ml-1 text-muted-foreground hover:text-foreground"
                       >
                         <X className="h-3 w-3" />
@@ -295,14 +319,14 @@ export function CreateGroupModal({
             {/* Search Results */}
             {searchResults.length > 0 && (
               <div className="max-h-[200px] overflow-hidden overflow-y-auto rounded-lg border border-border">
-                {searchResults.map((user) => {
+                {searchResults.map((searchUser) => {
                   const isSelected = selectedUsers.find(
-                    (u) => u.id === user.id
+                    (u) => u.id === searchUser.id
                   );
                   return (
                     <button
-                      key={user.id}
-                      onClick={() => !isSelected && handleAddUser(user)}
+                      key={searchUser.id}
+                      onClick={() => !isSelected && handleAddUser(searchUser)}
                       className={cn(
                         'flex w-full items-center gap-3 p-3 text-left transition-colors',
                         isSelected
@@ -312,17 +336,21 @@ export function CreateGroupModal({
                       disabled={!!isSelected}
                     >
                       <Avatar
-                        imageUrl={user.profileImageUrl || undefined}
-                        name={user.username || user.displayName || '?'}
+                        imageUrl={searchUser.profileImageUrl || undefined}
+                        name={
+                          searchUser.username || searchUser.displayName || '?'
+                        }
                         size="sm"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium text-sm">
-                          {user.displayName || user.username || 'Unknown'}
+                          {searchUser.displayName ||
+                            searchUser.username ||
+                            'Unknown'}
                         </div>
-                        {user.username && (
+                        {searchUser.username && (
                           <div className="truncate text-muted-foreground text-xs">
-                            @{user.username}
+                            @{searchUser.username}
                           </div>
                         )}
                       </div>
@@ -381,20 +409,22 @@ export function CreateGroupModal({
             <button
               onClick={handleClose}
               className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-3 transition-colors hover:bg-accent"
-              disabled={creating}
+              disabled={createGroupMutation.isPending}
             >
               Cancel
             </button>
             <button
               onClick={handleCreateGroup}
-              disabled={creating || selectedUsers.length === 0}
+              disabled={
+                createGroupMutation.isPending || selectedUsers.length === 0
+              }
               className={cn(
                 'flex-1 rounded-lg px-4 py-3 font-medium transition-colors',
                 'bg-primary text-primary-foreground hover:bg-primary/90',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
             >
-              {creating ? (
+              {createGroupMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                   Creating...

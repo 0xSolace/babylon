@@ -1,6 +1,7 @@
 'use client';
 
 import { formatCurrency } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,7 +10,7 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { OnChainBadge } from '@/components/profile/OnChainBadge';
 import { Avatar } from '@/components/shared/Avatar';
 import { PageContainer } from '@/components/shared/PageContainer';
@@ -54,10 +55,6 @@ interface LeaderboardData {
 
 export default function LeaderboardPage() {
   const { authenticated, user } = useAuth();
-  const [leaderboardData, setLeaderboardData] =
-    useState<LeaderboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTab, setSelectedTab] = useState<LeaderboardTab>('all');
   const tabs: Array<{
@@ -85,29 +82,26 @@ export default function LeaderboardPage() {
   const baseMinPoints = 500;
   const minPoints = selectedTab === 'all' ? baseMinPoints : 0; // Only gate All Points view
 
-  // Fetch leaderboard data
-  useEffect(() => {
-    async function fetchLeaderboard() {
-      setLoading(true);
-      setError(null);
-
+  const {
+    data: leaderboardData,
+    isLoading: loading,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['leaderboard', currentPage, minPoints, selectedTab],
+    queryFn: async (): Promise<LeaderboardData> => {
       const response = await fetch(
         `/api/leaderboard?page=${currentPage}&pageSize=${pageSize}&minPoints=${minPoints}&pointsType=${selectedTab}`
       );
 
       if (!response.ok) {
-        setError('Failed to fetch leaderboard');
-        setLoading(false);
-        return;
+        throw new Error('Failed to fetch leaderboard');
       }
 
-      const data = await response.json();
-      setLeaderboardData(data);
-      setLoading(false);
-    }
+      return (await response.json()) as LeaderboardData;
+    },
+  });
 
-    fetchLeaderboard();
-  }, [currentPage, minPoints, selectedTab]);
+  const error = queryError ? (queryError as Error).message : null;
 
   const handleTabChange = (tab: LeaderboardTab) => {
     if (tab === selectedTab) {
@@ -270,9 +264,7 @@ export default function LeaderboardPage() {
                         : selectedTab === 'earned'
                           ? player.earnedPoints
                           : player.invitePoints;
-                    const formattedPoints = (
-                      displayPoints ?? 0
-                    ).toLocaleString();
+                    const formattedPoints = displayPoints.toLocaleString();
                     const absolutePnL = Math.abs(player.lifetimePnL);
                     const formattedPnL = formatCurrency(absolutePnL);
                     const pnlDisplay =
@@ -336,9 +328,9 @@ export default function LeaderboardPage() {
                               ) : (
                                 <OnChainBadge
                                   isRegistered={
-                                    player.onChainRegistered ?? false
+                                    player.onChainRegistered || false
                                   }
-                                  nftTokenId={player.nftTokenId ?? null}
+                                  nftTokenId={player.nftTokenId || null}
                                   size="sm"
                                 />
                               )}
@@ -604,9 +596,7 @@ export default function LeaderboardPage() {
                         : selectedTab === 'earned'
                           ? player.earnedPoints
                           : player.invitePoints;
-                    const formattedPoints = (
-                      displayPoints ?? 0
-                    ).toLocaleString();
+                    const formattedPoints = displayPoints.toLocaleString();
                     const absolutePnL = Math.abs(player.lifetimePnL);
                     const formattedPnL = formatCurrency(absolutePnL);
                     const pnlDisplay =
@@ -667,9 +657,9 @@ export default function LeaderboardPage() {
                               ) : (
                                 <OnChainBadge
                                   isRegistered={
-                                    player.onChainRegistered ?? false
+                                    player.onChainRegistered || false
                                   }
-                                  nftTokenId={player.nftTokenId ?? null}
+                                  nftTokenId={player.nftTokenId || null}
                                   size="sm"
                                 />
                               )}

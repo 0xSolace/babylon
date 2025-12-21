@@ -153,7 +153,7 @@ const BABYLON_DAO_ABI = [
     stateMutability: 'view',
   },
   {
-    name: 'proposalCount',
+    name: 'getProposalCount',
     type: 'function',
     inputs: [],
     outputs: [{ type: 'uint256' }],
@@ -173,6 +173,25 @@ const BABYLON_DAO_ABI = [
     outputs: [{ type: 'bool' }],
     stateMutability: 'view',
   },
+  {
+    name: 'getProposalsByStatus',
+    type: 'function',
+    inputs: [{ type: 'uint8', name: 'status' }],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'getAICEOStats',
+    type: 'function',
+    inputs: [],
+    outputs: [
+      { type: 'uint256', name: 'totalDecisions' },
+      { type: 'uint256', name: 'approvedDecisions' },
+      { type: 'uint256', name: 'rejectedDecisions' },
+      { type: 'uint256', name: 'lastDecisionTimestamp' },
+    ],
+    stateMutability: 'view',
+  },
 ] as const;
 
 const BABYLON_TREASURY_ABI = [
@@ -185,6 +204,13 @@ const BABYLON_TREASURY_ABI = [
   },
   {
     name: 'totalBBLNDistributed',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'getApprovedVaultsCount',
     type: 'function',
     inputs: [],
     outputs: [{ type: 'uint256' }],
@@ -368,25 +394,42 @@ export class DAOService {
 
     const client = DAOService.getClient();
 
-    const [aiCEOAddress, agentId, emergencyPaused] = await Promise.all([
-      client.readContract({
-        address: config.daoAddress,
-        abi: BABYLON_DAO_ABI,
-        functionName: 'aiCEO',
-      }),
-      client.readContract({
-        address: config.daoAddress,
-        abi: BABYLON_DAO_ABI,
-        functionName: 'aiCEOAgentId',
-      }),
-      client.readContract({
-        address: config.daoAddress,
-        abi: BABYLON_DAO_ABI,
-        functionName: 'emergencyPaused',
-      }),
-    ]);
+    const [aiCEOAddress, agentId, emergencyPaused, ceoStats] =
+      await Promise.all([
+        client.readContract({
+          address: config.daoAddress,
+          abi: BABYLON_DAO_ABI,
+          functionName: 'aiCEO',
+        }),
+        client.readContract({
+          address: config.daoAddress,
+          abi: BABYLON_DAO_ABI,
+          functionName: 'aiCEOAgentId',
+        }),
+        client.readContract({
+          address: config.daoAddress,
+          abi: BABYLON_DAO_ABI,
+          functionName: 'emergencyPaused',
+        }),
+        client
+          .readContract({
+            address: config.daoAddress,
+            abi: BABYLON_DAO_ABI,
+            functionName: 'getAICEOStats',
+          })
+          .catch(() => [0n, 0n, 0n, 0n] as const),
+      ]);
 
-    // TODO: Fetch actual decision stats from on-chain events or database
+    const totalDecisions = Number(ceoStats[0]);
+    const approvedDecisions = Number(ceoStats[1]);
+    const rejectedDecisions = Number(ceoStats[2]);
+    const lastDecisionTimestamp = Number(ceoStats[3]);
+
+    const approvalRate =
+      totalDecisions > 0
+        ? `${Math.round((approvedDecisions / totalDecisions) * 100)}%`
+        : '100%';
+
     return {
       address: aiCEOAddress,
       agentId: agentId.toString(),
@@ -396,13 +439,16 @@ export class DAOService {
         provider: 'Jeju Compute',
       },
       stats: {
-        totalDecisions: 0,
-        approvedDecisions: 0,
-        rejectedDecisions: 0,
-        approvalRate: '100%',
+        totalDecisions,
+        approvedDecisions,
+        rejectedDecisions,
+        approvalRate,
       },
       isActive: !emergencyPaused,
-      lastDecisionAt: null,
+      lastDecisionAt:
+        lastDecisionTimestamp > 0
+          ? new Date(lastDecisionTimestamp * 1000)
+          : null,
     };
   }
 
@@ -423,33 +469,45 @@ export class DAOService {
 
     const client = DAOService.getClient();
 
-    const [ethBalance, bblnBalance, totalETHDistributed, totalBBLNDistributed] =
-      await Promise.all([
-        client.getBalance({ address: config.treasuryAddress }),
-        client.readContract({
-          address: config.bblnTokenAddress,
-          abi: ERC20_ABI,
-          functionName: 'balanceOf',
-          args: [config.treasuryAddress],
-        }),
-        client.readContract({
+    const [
+      ethBalance,
+      bblnBalance,
+      totalETHDistributed,
+      totalBBLNDistributed,
+      approvedVaultsCount,
+    ] = await Promise.all([
+      client.getBalance({ address: config.treasuryAddress }),
+      client.readContract({
+        address: config.bblnTokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [config.treasuryAddress],
+      }),
+      client.readContract({
+        address: config.treasuryAddress,
+        abi: BABYLON_TREASURY_ABI,
+        functionName: 'totalETHDistributed',
+      }),
+      client.readContract({
+        address: config.treasuryAddress,
+        abi: BABYLON_TREASURY_ABI,
+        functionName: 'totalBBLNDistributed',
+      }),
+      client
+        .readContract({
           address: config.treasuryAddress,
           abi: BABYLON_TREASURY_ABI,
-          functionName: 'totalETHDistributed',
-        }),
-        client.readContract({
-          address: config.treasuryAddress,
-          abi: BABYLON_TREASURY_ABI,
-          functionName: 'totalBBLNDistributed',
-        }),
-      ]);
+          functionName: 'getApprovedVaultsCount',
+        })
+        .catch(() => 0n),
+    ]);
 
     return {
       ethBalance,
       bblnBalance,
       totalETHDistributed,
       totalBBLNDistributed,
-      approvedVaultsCount: 0, // TODO: Count from contract
+      approvedVaultsCount: Number(approvedVaultsCount),
     };
   }
 
@@ -460,20 +518,23 @@ export class DAOService {
     const config = DAOService.config;
     if (!config) {
       // Fallback to database if contract not configured
-      const [accumulator] = await db
+      const result = await db
         .select()
         .from(feeAccumulator)
         .where(eq(feeAccumulator.id, 'singleton'))
         .limit(1);
+      const accumulator = result[0];
 
       return {
-        accumulatedFees: BigInt(accumulator?.accumulatedFees ?? '0'),
-        buybackThreshold: BigInt(accumulator?.buybackThreshold ?? '0'),
-        totalFeesReceived: BigInt(accumulator?.totalFeesAccumulated ?? '0'),
+        accumulatedFees: BigInt(String(accumulator?.accumulatedFees ?? '0')),
+        buybackThreshold: BigInt(String(accumulator?.buybackThreshold ?? '0')),
+        totalFeesReceived: BigInt(
+          String(accumulator?.totalFeesAccumulated ?? '0')
+        ),
         totalBBLNBought: 0n,
         totalELIZABought: 0n,
         totalTreasuryETH: 0n,
-        totalBuybacks: accumulator?.totalBuybacksExecuted ?? 0,
+        totalBuybacks: Number(accumulator?.totalBuybacksExecuted ?? 0),
         canExecuteBuyback: false,
         isPaused: false,
       };
@@ -523,15 +584,15 @@ export class DAOService {
       .limit(limit);
 
     return records.map((r) => ({
-      id: r.id,
-      totalEthInput: r.totalEthInput,
-      bblnBought: r.bblnReceived,
-      elizaBought: r.elizaReceived,
-      treasuryEth: r.treasuryEthAmount,
-      status: r.status,
-      txHash: r.bblnSwapTxHash,
-      initiatedAt: r.initiatedAt,
-      completedAt: r.completedAt,
+      id: String(r.id),
+      totalEthInput: String(r.totalEthInput),
+      bblnBought: r.bblnReceived ? String(r.bblnReceived) : null,
+      elizaBought: r.elizaReceived ? String(r.elizaReceived) : null,
+      treasuryEth: String(r.treasuryEthAmount),
+      status: String(r.status),
+      txHash: r.bblnSwapTxHash ? String(r.bblnSwapTxHash) : null,
+      initiatedAt: r.initiatedAt as Date,
+      completedAt: r.completedAt as Date | null,
     }));
   }
 
@@ -539,25 +600,77 @@ export class DAOService {
    * Get DAO overview with all stats
    */
   static async getOverview(): Promise<DAOOverview> {
-    const [aiCEO, treasury, revenue] = await Promise.all([
+    const [aiCEO, treasury, revenue, proposals] = await Promise.all([
       DAOService.getAICEOStatus(),
       DAOService.getTreasuryStats(),
       DAOService.getRevenueStats(),
+      DAOService.getProposalCounts(),
     ]);
-
-    // TODO: Fetch actual proposal counts from contract
-    const proposals = {
-      total: 0,
-      pending: 0,
-      approved: 0,
-      executed: 0,
-    };
 
     return {
       aiCEO,
       treasury,
       revenue,
       proposals,
+    };
+  }
+
+  /**
+   * Get proposal counts by status from contract
+   */
+  static async getProposalCounts(): Promise<{
+    total: number;
+    pending: number;
+    approved: number;
+    executed: number;
+  }> {
+    const config = DAOService.config;
+    if (!config) {
+      return { total: 0, pending: 0, approved: 0, executed: 0 };
+    }
+
+    const client = DAOService.getClient();
+
+    // Proposal status enum: PENDING=0, APPROVED=1, EXECUTED=2, VETOED=3, EXPIRED=4
+    const [total, pending, approved, executed] = await Promise.all([
+      client
+        .readContract({
+          address: config.daoAddress,
+          abi: BABYLON_DAO_ABI,
+          functionName: 'getProposalCount',
+        })
+        .catch(() => 0n),
+      client
+        .readContract({
+          address: config.daoAddress,
+          abi: BABYLON_DAO_ABI,
+          functionName: 'getProposalsByStatus',
+          args: [0],
+        })
+        .catch(() => 0n),
+      client
+        .readContract({
+          address: config.daoAddress,
+          abi: BABYLON_DAO_ABI,
+          functionName: 'getProposalsByStatus',
+          args: [1],
+        })
+        .catch(() => 0n),
+      client
+        .readContract({
+          address: config.daoAddress,
+          abi: BABYLON_DAO_ABI,
+          functionName: 'getProposalsByStatus',
+          args: [2],
+        })
+        .catch(() => 0n),
+    ]);
+
+    return {
+      total: Number(total),
+      pending: Number(pending),
+      approved: Number(approved),
+      executed: Number(executed),
     };
   }
 

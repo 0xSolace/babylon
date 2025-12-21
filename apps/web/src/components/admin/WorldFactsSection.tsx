@@ -1,8 +1,9 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Edit, Globe, Newspaper, RefreshCw, Save, X, Zap } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 
 /**
@@ -58,51 +59,47 @@ interface WorldFactsData {
  * @returns World facts section element
  */
 export function WorldFactsSection() {
-  const [data, setData] = useState<WorldFactsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [editingFact, setEditingFact] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [newFactValue, setNewFactValue] = useState<string>('');
+  const [newFactCategory, setNewFactCategory] = useState<'general'>('general');
 
-  const fetchData = useCallback(async () => {
-    const response = await fetch('/api/admin/world-facts');
-    if (!response.ok) {
-      setError('Failed to fetch world facts');
-      setLoading(false);
-      return;
-    }
-    const result = await response.json();
-    setData(result);
-    setError(null);
-    setLoading(false);
-  }, []);
+  const { data, isLoading, error, refetch } = useQuery<WorldFactsData>({
+    queryKey: ['admin', 'world-facts'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/world-facts');
+      if (!response.ok) {
+        throw new Error('Failed to fetch world facts');
+      }
+      return response.json();
+    },
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const actionMutation = useMutation({
+    mutationFn: async ({
+      action,
+      actionData,
+    }: {
+      action: string;
+      actionData?: Record<string, unknown>;
+    }) => {
+      const response = await fetch('/api/admin/world-facts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, data: actionData }),
+      });
 
-  const handleAction = async (
-    action: string,
-    actionData?: Record<string, unknown>
-  ) => {
-    setActionLoading(true);
-    const response = await fetch('/api/admin/world-facts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, data: actionData }),
-    });
+      if (!response.ok) {
+        throw new Error(`Failed to ${action}`);
+      }
 
-    if (!response.ok) {
-      setError(`Failed to ${action}`);
-      setActionLoading(false);
-      return;
-    }
-
-    await fetchData();
-    setActionLoading(false);
-  };
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'world-facts'] });
+    },
+  });
 
   const startEditing = (fact: WorldFact) => {
     setEditingFact(fact.id);
@@ -110,26 +107,30 @@ export function WorldFactsSection() {
   };
 
   const saveEdit = async (fact: WorldFact) => {
-    await handleAction('update_fact', {
-      id: fact.id,
-      value: editValue,
+    await actionMutation.mutateAsync({
+      action: 'update_fact',
+      actionData: {
+        id: fact.id,
+        value: editValue,
+      },
     });
     setEditingFact(null);
     setEditValue('');
   };
 
-  const [newFactCategory, setNewFactCategory] = useState<'general'>('general');
-
   const addFact = async () => {
     if (!newFactValue.trim()) return;
-    await handleAction('add_fact', {
-      value: newFactValue.trim(),
-      category: newFactCategory,
+    await actionMutation.mutateAsync({
+      action: 'add_fact',
+      actionData: {
+        value: newFactValue.trim(),
+        category: newFactCategory,
+      },
     });
     setNewFactValue('');
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-24 w-full" />
@@ -141,7 +142,7 @@ export function WorldFactsSection() {
   if (error || !data) {
     return (
       <div className="p-8 text-center text-red-500">
-        {error || 'Failed to load world facts'}
+        {error instanceof Error ? error.message : 'Failed to load world facts'}
       </div>
     );
   }
@@ -163,12 +164,15 @@ export function WorldFactsSection() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => fetchData()}
-              disabled={actionLoading}
+              onClick={() => refetch()}
+              disabled={actionMutation.isPending}
               className="rounded-lg bg-blue-500/20 px-4 py-2 text-blue-500 transition-colors hover:bg-blue-500/30 disabled:opacity-50"
             >
               <RefreshCw
-                className={cn('h-4 w-4', actionLoading && 'animate-spin')}
+                className={cn(
+                  'h-4 w-4',
+                  actionMutation.isPending && 'animate-spin'
+                )}
               />
             </button>
           </div>
@@ -177,8 +181,8 @@ export function WorldFactsSection() {
         {/* Action Buttons */}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <button
-            onClick={() => handleAction('fetch_rss')}
-            disabled={actionLoading}
+            onClick={() => actionMutation.mutate({ action: 'fetch_rss' })}
+            disabled={actionMutation.isPending}
             className="flex items-center justify-center gap-2 rounded-lg bg-orange-500/20 px-4 py-3 text-orange-500 transition-colors hover:bg-orange-500/30 disabled:opacity-50"
           >
             <Newspaper className="h-5 w-5" />
@@ -186,8 +190,10 @@ export function WorldFactsSection() {
           </button>
 
           <button
-            onClick={() => handleAction('generate_parodies')}
-            disabled={actionLoading}
+            onClick={() =>
+              actionMutation.mutate({ action: 'generate_parodies' })
+            }
+            disabled={actionMutation.isPending}
             className="flex items-center justify-center gap-2 rounded-lg bg-purple-500/20 px-4 py-3 text-purple-500 transition-colors hover:bg-purple-500/30 disabled:opacity-50"
           >
             <Zap className="h-5 w-5" />
@@ -195,8 +201,10 @@ export function WorldFactsSection() {
           </button>
 
           <button
-            onClick={() => handleAction('refresh_mappings')}
-            disabled={actionLoading}
+            onClick={() =>
+              actionMutation.mutate({ action: 'refresh_mappings' })
+            }
+            disabled={actionMutation.isPending}
             className="flex items-center justify-center gap-2 rounded-lg bg-green-500/20 px-4 py-3 text-green-500 transition-colors hover:bg-green-500/30 disabled:opacity-50"
           >
             <RefreshCw className="h-5 w-5" />
@@ -242,7 +250,7 @@ export function WorldFactsSection() {
               />
               <button
                 onClick={addFact}
-                disabled={actionLoading || !newFactValue.trim()}
+                disabled={actionMutation.isPending || !newFactValue.trim()}
                 className="rounded-lg bg-green-500/20 px-4 py-2 text-green-500 transition-colors hover:bg-green-500/30 disabled:opacity-50"
               >
                 Add
@@ -283,7 +291,7 @@ export function WorldFactsSection() {
                       <>
                         <button
                           onClick={() => saveEdit(fact)}
-                          disabled={actionLoading}
+                          disabled={actionMutation.isPending}
                           className="rounded-lg bg-green-500/20 p-2 text-green-500 transition-colors hover:bg-green-500/30 disabled:opacity-50"
                         >
                           <Save className="h-4 w-4" />
@@ -308,9 +316,12 @@ export function WorldFactsSection() {
                         </button>
                         <button
                           onClick={() =>
-                            handleAction('delete_fact', { id: fact.id })
+                            actionMutation.mutate({
+                              action: 'delete_fact',
+                              actionData: { id: fact.id },
+                            })
                           }
-                          disabled={actionLoading}
+                          disabled={actionMutation.isPending}
                           className="rounded-lg bg-red-500/20 p-2 text-red-500 transition-colors hover:bg-red-500/30 disabled:opacity-50"
                         >
                           <X className="h-4 w-4" />

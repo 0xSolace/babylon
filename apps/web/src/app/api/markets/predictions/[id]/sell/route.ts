@@ -157,6 +157,7 @@ export const POST = withErrorHandling(
       calculation,
       updatedMarket,
       sellSide,
+      soldPositionId,
     } = await asUser(user, async (db) => {
       // Get or find market
       let market = await db.market.findUnique({
@@ -350,6 +351,7 @@ export const POST = withErrorHandling(
         calculation,
         updatedMarket,
         sellSide,
+        soldPositionId: position.id,
       };
     });
 
@@ -379,9 +381,9 @@ export const POST = withErrorHandling(
     );
 
     // Record fee contribution for buyback (platform share goes to buyback)
-    if (feeResult.platformReceived > 0 && positionId) {
+    if (feeResult.platformReceived > 0) {
       void BuybackService.recordFeeContribution(
-        positionId,
+        soldPositionId,
         user.userId,
         BigInt(Math.floor(feeResult.platformReceived * 1e18)),
         'pred_sell',
@@ -415,7 +417,7 @@ export const POST = withErrorHandling(
       noPrice: calculation.newNoPrice,
       yesShares: calculation.newYesShares,
       noShares: calculation.newNoShares,
-      liquidity: Number(updatedMarket.liquidity ?? 0),
+      liquidity: Number(updatedMarket.liquidity),
       eventType: 'trade',
       source: 'user_trade',
     }).catch((error) => {
@@ -437,7 +439,7 @@ export const POST = withErrorHandling(
     // Record engagement for airdrop qualification
     await EngagementService.recordTrade(
       user.userId,
-      positionId ?? marketId,
+      soldPositionId,
       'prediction'
     ).catch((error) => {
       logger.warn('Failed to record trade engagement', { error });
@@ -449,7 +451,7 @@ export const POST = withErrorHandling(
       noPrice: calculation.newNoPrice,
       yesShares: Number(updatedMarket.yesShares),
       noShares: Number(updatedMarket.noShares),
-      liquidity: Number(updatedMarket.liquidity ?? 0),
+      liquidity: Number(updatedMarket.liquidity),
       trade: {
         actorType: 'user',
         actorId: user.userId,

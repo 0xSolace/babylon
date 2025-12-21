@@ -25,9 +25,8 @@
     "@babylon/shared": "workspace:*",
     "@babylon/contracts": "workspace:*",
     "ai": "^5.0.92",
-    "ethers": "^6.15.0",
-    "ws": "^8.18.3",
-    "dotenv": "^17.2.3"
+    "viem": "^2.41.2",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

@@ -47,25 +47,26 @@ loadEnvFile('.env');
 loadEnvFile('.env.test');
 loadEnvFile('.env.local');
 
-const hasLLMKey = !!(
-  (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
+// Check if Jeju Compute is available for inference
+const hasJejuCompute = !!(
+  (process.env.JEJU_GATEWAY_URL?.trim() ?? '') !== '' ||
+  (process.env.JEJU_COMPUTE_ENDPOINT?.trim() ?? '') !== ''
 );
 
-const requireLLMKey = () => {
-  if (!hasLLMKey) {
+const requireJejuCompute = () => {
+  if (!hasJejuCompute) {
     throw new Error(
-      'ENGINE COMPONENT TESTS REQUIRE LLM API KEY. ' +
-        'Set GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY to run these tests. ' +
-        'These tests validate actual engine functionality and MUST NOT be skipped.'
+      'ENGINE COMPONENT TESTS REQUIRE JEJU COMPUTE. ' +
+        'Set JEJU_GATEWAY_URL or JEJU_COMPUTE_ENDPOINT to run these tests. ' +
+        'These tests validate actual engine functionality and MUST NOT be skipped. ' +
+        'Start Jeju with: cd /path/to/jeju && bun run dev'
     );
   }
 };
 
 describe('Engine Components Validation', () => {
   beforeAll(() => {
-    requireLLMKey();
+    requireJejuCompute();
     console.log('\n🔧 Testing Individual Engine Components');
     console.log('==========================================\n');
   });

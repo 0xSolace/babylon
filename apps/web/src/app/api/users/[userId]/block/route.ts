@@ -225,7 +225,7 @@ export const POST = withErrorHandling(
         {
           userId: authUser.userId,
           targetUserId,
-          blockId: block?.id,
+          blockId: block.id,
         },
         'POST /api/users/[userId]/block'
       );
@@ -296,7 +296,7 @@ export const GET = withErrorHandling(
 
     return successResponse({
       isBlocked: !!block,
-      block: block ?? null,
+      block: block || null,
     });
   }
 );

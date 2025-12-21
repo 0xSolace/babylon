@@ -4,7 +4,7 @@
  */
 
 import type { AgentCard } from '@a2a-js/sdk';
-import { db, eq, userAgentConfigs, users } from '@babylon/db';
+import { db } from '@babylon/db';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5007';
 
@@ -126,50 +126,55 @@ function createAgentCardObject(
  * Generate an agent card for a specific agent
  */
 export async function generateAgentCard(agentId: string): Promise<AgentCard> {
-  // Get user and agent config from separate tables
-  const [user] = await db
-    .select({
-      id: users.id,
-      displayName: users.displayName,
-      bio: users.bio,
-      profileImageUrl: users.profileImageUrl,
-      isAgent: users.isAgent,
-    })
-    .from(users)
-    .where(eq(users.id, agentId))
-    .limit(1);
+  // Get user
+  const user = await db.user.findUnique({
+    where: { id: agentId },
+    select: {
+      id: true,
+      displayName: true,
+      bio: true,
+      profileImageUrl: true,
+      isAgent: true,
+    },
+  });
 
   if (!user || !user.isAgent) {
     throw new Error(`Agent ${agentId} not found`);
   }
 
   // Get agent config
-  const [agentConfig] = await db
-    .select({
-      systemPrompt: userAgentConfigs.systemPrompt,
-      personality: userAgentConfigs.personality,
-      tradingStrategy: userAgentConfigs.tradingStrategy,
-      a2aEnabled: userAgentConfigs.a2aEnabled,
-    })
-    .from(userAgentConfigs)
-    .where(eq(userAgentConfigs.userId, agentId))
-    .limit(1);
+  const agentConfig = await db.userAgentConfig.findUnique({
+    where: { userId: agentId },
+    select: {
+      systemPrompt: true,
+      personality: true,
+      tradingStrategy: true,
+      a2aEnabled: true,
+    },
+  });
 
   if (!agentConfig?.a2aEnabled) {
     throw new Error(`Agent ${agentId} does not have A2A enabled`);
   }
 
-  const agentName = user.displayName || `Agent ${agentId.substring(0, 8)}`;
+  const displayName = user.displayName ? String(user.displayName) : null;
+  const bio = user.bio ? String(user.bio) : null;
+  const profileImageUrl = user.profileImageUrl
+    ? String(user.profileImageUrl)
+    : null;
+  const systemPrompt = agentConfig.systemPrompt
+    ? String(agentConfig.systemPrompt)
+    : null;
+
+  const agentName = displayName || `Agent ${agentId.substring(0, 8)}`;
   const agentDescription =
-    user.bio ||
-    agentConfig.systemPrompt ||
-    'Autonomous agent on Babylon platform';
+    bio || systemPrompt || 'Autonomous agent on Babylon platform';
 
   return createAgentCardObject(
     agentId,
     agentName,
     agentDescription,
-    user.profileImageUrl
+    profileImageUrl
   );
 }
 

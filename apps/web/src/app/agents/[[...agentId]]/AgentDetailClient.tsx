@@ -29,6 +29,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   ArrowLeft,
@@ -41,7 +42,7 @@ import {
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { AgentChat } from '@/components/agents/AgentChat';
 import { AgentLogs } from '@/components/agents/AgentLogs';
@@ -102,13 +103,11 @@ interface Agent {
 export default function AgentDetailClient() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { authenticated, ready, getAccessToken } = useAuth();
   // Catch-all route: params.agentId is string[] or undefined
   const agentIdParam = params.agentId;
   const agentId = Array.isArray(agentIdParam) ? agentIdParam[0] : agentIdParam;
-
-  const [agent, setAgent] = useState<Agent | null>(null);
-  const [loading, setLoading] = useState(true);
 
   // Redirect to agents list if no agent ID provided
   useEffect(() => {
@@ -117,48 +116,48 @@ export default function AgentDetailClient() {
     }
   }, [agentId, router]);
 
-  const handleBalanceUpdate = useCallback((newBalance: number) => {
-    setAgent((prev) => (prev ? { ...prev, pointsBalance: newBalance } : prev));
-  }, []);
+  const {
+    data: agent,
+    isLoading: loading,
+    refetch: fetchAgent,
+  } = useQuery({
+    queryKey: ['agent', agentId],
+    queryFn: async () => {
+      const token = await getAccessToken();
 
-  const fetchAgent = useCallback(async () => {
-    setLoading(true);
-    const token = await getAccessToken();
+      if (!token) {
+        console.error('No access token available');
+        toast.error('Authentication required');
+        router.push('/agents');
+        throw new Error('No access token available');
+      }
 
-    if (!token) {
-      console.error('No access token available');
-      toast.error('Authentication required');
-      router.push('/agents');
-      setLoading(false);
-      return;
-    }
+      const res = await fetch(`/api/agents/${agentId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    const res = await fetch(`/api/agents/${agentId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }).catch(() => {
-      toast.error('Failed to load agent');
-      setLoading(false);
-      throw new Error('Failed to load agent');
-    });
+      if (!res.ok) {
+        toast.error('Agent not found');
+        router.push('/agents');
+        throw new Error('Agent not found');
+      }
 
-    if (res.ok) {
       const data = await res.json();
-      setAgent(data.agent);
-    } else {
-      toast.error('Agent not found');
-      router.push('/agents');
-    }
+      return data.agent as Agent;
+    },
+    enabled: !!agentId && ready && authenticated,
+  });
 
-    setLoading(false);
-  }, [agentId, getAccessToken, router]);
-
-  useEffect(() => {
-    if (ready && authenticated && agentId) {
-      fetchAgent();
-    }
-  }, [ready, authenticated, agentId, fetchAgent]);
+  const handleBalanceUpdate = useCallback(
+    (newBalance: number) => {
+      queryClient.setQueryData(['agent', agentId], (prev: Agent | undefined) =>
+        prev ? { ...prev, pointsBalance: newBalance } : prev
+      );
+    },
+    [queryClient, agentId]
+  );
 
   if (!ready || !authenticated) {
     return (

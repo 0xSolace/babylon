@@ -144,30 +144,23 @@ describe('E2E Auth Flow (Permissionless)', () => {
 
     const password = 'secure-backup-password-123';
 
-    try {
-      // Create backup
-      const backup = await backupManager.createBackup(createdDID, password);
-      expect(backup.userId).toBe(createdDID);
-      expect(backup.encryptedKey).toBeDefined();
-      expect(backup.salt).toBeDefined();
-      expect(backup.iv).toBeDefined();
+    // Create backup
+    const backup = await backupManager.createBackup(createdDID, password);
+    expect(backup.userId).toBe(createdDID);
+    expect(backup.encryptedKey).toBeDefined();
+    expect(backup.salt).toBeDefined();
+    expect(backup.iv).toBeDefined();
 
-      // Verify backup
-      const isValid = await backupManager.verifyBackup(backup, password);
-      expect(isValid).toBe(true);
+    // Verify backup
+    const isValid = await backupManager.verifyBackup(backup, password);
+    expect(isValid).toBe(true);
 
-      // Export and import as JSON
-      const json = KeyBackupManager.exportToJSON(backup);
-      const imported = KeyBackupManager.importFromJSON(json);
-      expect(imported.userId).toBe(createdDID);
+    // Export and import as JSON
+    const json = KeyBackupManager.exportToJSON(backup);
+    const imported = KeyBackupManager.importFromJSON(json);
+    expect(imported.userId).toBe(createdDID);
 
-      console.log(`  ✅ Backup created and verified`);
-    } catch (err) {
-      // Crypto operations may fail in some test environments
-      console.log(
-        `  ⚠️ Backup test skipped: ${err instanceof Error ? err.message : 'crypto error'}`
-      );
-    }
+    console.log(`  ✅ Backup created and verified`);
   });
 
   it('Step 5: Verify permissionless token verification (no shared state)', async () => {

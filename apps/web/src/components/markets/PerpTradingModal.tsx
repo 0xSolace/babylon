@@ -2,6 +2,7 @@
 
 import { FEE_CONFIG } from '@babylon/engine/client';
 import { cn } from '@babylon/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   TrendingDown,
@@ -70,6 +71,16 @@ interface PerpTradingModalProps {
   onSuccess?: () => void;
 }
 
+/**
+ * Payload for opening a perpetual position.
+ */
+interface OpenPerpPayload {
+  ticker: string;
+  side: 'long' | 'short';
+  size: number;
+  leverage: number;
+}
+
 export function PerpTradingModal({
   market,
   isOpen,
@@ -80,8 +91,8 @@ export function PerpTradingModal({
   const [side, setSide] = useState<'long' | 'short'>('long');
   const [size, setSize] = useState('100');
   const [leverage, setLeverage] = useState(10);
-  const [loading, setLoading] = useState(false);
   const { openPosition } = usePerpTrade({ getAccessToken });
+  const queryClient = useQueryClient();
   const {
     balance,
     loading: balanceLoading,
@@ -95,7 +106,7 @@ export function PerpTradingModal({
     }
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !loading) {
+      if (event.key === 'Escape' && !openMutation.isPending) {
         onClose();
       }
     };
@@ -107,7 +118,7 @@ export function PerpTradingModal({
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
     };
-  }, [isOpen, loading, onClose]);
+  }, [isOpen, openMutation.isPending, onClose]);
 
   useEffect(() => {
     return () => {
@@ -143,7 +154,28 @@ export function PerpTradingModal({
   const showBalanceWarning =
     authenticated && sizeNum > 0 && balance < totalRequired;
 
-  const handleSubmit = async () => {
+  // Mutation for opening perpetual position
+  const openMutation = useMutation({
+    mutationFn: async (payload: OpenPerpPayload) => {
+      return openPosition(payload);
+    },
+    onSuccess: () => {
+      toast.success('Position opened!', {
+        description: `Opened ${leverage}x ${side} on ${market.ticker} at $${market.currentPrice.toFixed(2)}`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ['markets', 'perps'] });
+      void queryClient.invalidateQueries({ queryKey: ['positions'] });
+      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
+      refreshBalance();
+      onSuccess?.();
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleSubmit = () => {
     if (!authenticated) {
       login?.();
       return;
@@ -161,23 +193,12 @@ export function PerpTradingModal({
       return;
     }
 
-    setLoading(true);
-
-    await openPosition({
+    openMutation.mutate({
       ticker: market.ticker,
       side,
       size: sizeNum,
       leverage,
     });
-
-    toast.success('Position opened!', {
-      description: `Opened ${leverage}x ${side} on ${market.ticker} at $${market.currentPrice.toFixed(2)}`,
-    });
-
-    await refreshBalance();
-    onSuccess?.();
-    onClose();
-    setLoading(false);
   };
 
   const formatPrice = (price: number) => {
@@ -391,7 +412,7 @@ export function PerpTradingModal({
           <button
             onClick={handleSubmit}
             disabled={
-              loading ||
+              openMutation.isPending ||
               sizeNum < market.minOrderSize ||
               showBalanceWarning ||
               balanceLoading
@@ -401,14 +422,14 @@ export function PerpTradingModal({
               side === 'long'
                 ? 'bg-green-600 hover:bg-green-700'
                 : 'bg-red-600 hover:bg-red-700',
-              (loading ||
+              (openMutation.isPending ||
                 sizeNum < market.minOrderSize ||
                 showBalanceWarning ||
                 balanceLoading) &&
                 'cursor-not-allowed opacity-50'
             )}
           >
-            {loading ? (
+            {openMutation.isPending ? (
               <>
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                 Opening Position...

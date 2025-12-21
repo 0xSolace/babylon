@@ -77,61 +77,23 @@ export async function register() {
 
     // Initialize Jeju CQL (CovenantSQL) - PRIMARY DATABASE
     const { initializeDB } = await import('@babylon/db/decentralized');
-    try {
-      await initializeDB();
-      console.log(
-        '[CQL] CovenantSQL initialized - decentralized database ready'
-      );
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `[CQL] FATAL: CovenantSQL required but failed to initialize. ` +
-          `Error: ${msg}. ` +
-          `Ensure CQL_BLOCK_PRODUCER_ENDPOINT is set and Jeju services are running.`
-      );
-    }
+    await initializeDB();
+    console.log('[CQL] CovenantSQL initialized - decentralized database ready');
 
     // Initialize Jeju decentralized cache service
     const { initializeCache } = await import('@babylon/api');
-    try {
-      await initializeCache();
-      console.log('[Cache] Decentralized cache initialized');
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `[Cache] FATAL: Decentralized cache required but failed to initialize. ` +
-          `Error: ${msg}. ` +
-          `Ensure JEJU_CACHE_SERVICE_URL is set and Jeju services are running.`
-      );
-    }
+    await initializeCache();
+    console.log('[Cache] Decentralized cache initialized');
 
     // Initialize Jeju decentralized storage
     const { initializeStorage } = await import('@babylon/api');
-    try {
-      await initializeStorage();
-      console.log('[Storage] Decentralized storage initialized');
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `[Storage] FATAL: Decentralized storage required but failed to initialize. ` +
-          `Error: ${msg}. ` +
-          `Ensure JEJU_STORAGE_SERVICE_URL is set and Jeju services are running.`
-      );
-    }
+    await initializeStorage();
+    console.log('[Storage] Decentralized storage initialized');
 
     // Initialize Jeju KMS for secrets
     const { initializeKMS } = await import('@babylon/api');
-    try {
-      await initializeKMS();
-      console.log('[KMS] Decentralized key management initialized');
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `[KMS] FATAL: Decentralized KMS required but failed to initialize. ` +
-          `Error: ${msg}. ` +
-          `Ensure JEJU_KMS_SERVICE_URL is set and Jeju services are running.`
-      );
-    }
+    await initializeKMS();
+    console.log('[KMS] Decentralized key management initialized');
 
     console.log(
       '[Decentralized] All Jeju services initialized - running 100% decentralized'

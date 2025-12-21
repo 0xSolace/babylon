@@ -31,6 +31,7 @@
 'use client';
 
 import { getProfileUrl } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import {
   AlertCircle,
@@ -40,7 +41,6 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 
 /**
  * Feedback item structure for feedback history.
@@ -63,6 +63,12 @@ interface FeedbackItem {
   };
 }
 
+interface FeedbackResponse {
+  success: boolean;
+  feedback?: FeedbackItem[];
+  averageScore?: number;
+}
+
 interface FeedbackHistoryProps {
   userId: string;
   limit?: number;
@@ -76,13 +82,12 @@ export function FeedbackHistory({
   showAutoFeedback = true,
   className = '',
 }: FeedbackHistoryProps) {
-  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [averageScore, setAverageScore] = useState<number>(0);
-
-  useEffect(() => {
-    const fetchFeedbackHistory = async () => {
-      setLoading(true);
+  const { data, isLoading } = useQuery({
+    queryKey: ['feedback', 'history', userId, limit, showAutoFeedback],
+    queryFn: async (): Promise<{
+      feedbackItems: FeedbackItem[];
+      averageScore: number;
+    }> => {
       const params = new URLSearchParams({
         limit: limit.toString(),
         includeAuto: showAutoFeedback.toString(),
@@ -90,20 +95,20 @@ export function FeedbackHistory({
       const response = await fetch(
         `/api/feedback/received/${encodeURIComponent(userId)}?${params}`
       );
-      const data = await response.json();
-
-      if (data.success) {
-        setFeedbackItems(data.feedback || []);
-        setAverageScore(data.averageScore || 0);
+      if (!response.ok) {
+        throw new Error('Failed to fetch feedback');
       }
-      setLoading(false);
-    };
+      const data: FeedbackResponse = await response.json();
+      return {
+        feedbackItems: data.success ? (data.feedback ?? []) : [],
+        averageScore: data.averageScore ?? 0,
+      };
+    },
+    refetchInterval: 60000,
+  });
 
-    fetchFeedbackHistory();
-    // Refresh every 60 seconds
-    const interval = setInterval(fetchFeedbackHistory, 60000);
-    return () => clearInterval(interval);
-  }, [userId, limit, showAutoFeedback]);
+  const feedbackItems = data?.feedbackItems ?? [];
+  const averageScore = data?.averageScore ?? 0;
 
   const getStarRating = (score: number): number => {
     // Convert 0-100 score to 0-5 stars
@@ -150,7 +155,7 @@ export function FeedbackHistory({
             Feedback History
           </h2>
         </div>
-        {!loading && feedbackItems.length > 0 && (
+        {!isLoading && feedbackItems.length > 0 && (
           <div className="flex items-center gap-1 text-muted-foreground text-sm">
             <Star className="h-4 w-4 text-yellow-500" fill="currentColor" />
             <span className="font-semibold">
@@ -161,7 +166,7 @@ export function FeedbackHistory({
         )}
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div className="text-muted-foreground text-sm">Loading feedback...</div>
       ) : feedbackItems.length === 0 ? (
         <div className="text-muted-foreground text-sm">
@@ -263,39 +268,42 @@ interface FeedbackSummaryCardProps {
   className?: string;
 }
 
+interface StatsResponse {
+  success: boolean;
+  averageScore?: number;
+  totalCount?: number;
+  recentTrend?: number;
+}
+
 export function FeedbackSummaryCard({
   userId,
   className = '',
 }: FeedbackSummaryCardProps) {
-  const [stats, setStats] = useState({
-    averageScore: 0,
-    totalFeedback: 0,
-    recentTrend: 0,
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchStats = async () => {
+  const { data, isLoading } = useQuery({
+    queryKey: ['feedback', 'stats', userId],
+    queryFn: async (): Promise<{
+      averageScore: number;
+      totalFeedback: number;
+      recentTrend: number;
+    }> => {
       const response = await fetch(
         `/api/feedback/stats/${encodeURIComponent(userId)}`
       );
-      const data = await response.json();
-
-      if (data.success) {
-        setStats({
-          averageScore: data.averageScore || 0,
-          totalFeedback: data.totalCount || 0,
-          recentTrend: data.recentTrend || 0,
-        });
+      if (!response.ok) {
+        throw new Error('Failed to fetch stats');
       }
-      setLoading(false);
-    };
+      const data: StatsResponse = await response.json();
+      return {
+        averageScore: data.averageScore ?? 0,
+        totalFeedback: data.totalCount ?? 0,
+        recentTrend: data.recentTrend ?? 0,
+      };
+    },
+  });
 
-    fetchStats();
-  }, [userId]);
+  if (isLoading) return null;
 
-  if (loading) return null;
-
+  const stats = data ?? { averageScore: 0, totalFeedback: 0, recentTrend: 0 };
   const starRating = Math.round((stats.averageScore / 100) * 5 * 10) / 10;
 
   return (

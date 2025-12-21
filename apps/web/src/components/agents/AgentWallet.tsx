@@ -1,8 +1,9 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowUpFromLine, History } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,6 +19,19 @@ interface Transaction {
   balanceAfter: number;
   description: string;
   createdAt: string;
+}
+
+interface TransactionsResponse {
+  success: boolean;
+  transactions: Transaction[];
+}
+
+interface TransactionResult {
+  message: string;
+}
+
+interface TransactionError {
+  error?: string;
 }
 
 /**
@@ -61,43 +75,77 @@ interface AgentWalletProps {
 
 export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
   const { user, getAccessToken } = useAuth();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [amount, setAmount] = useState('');
   const [action, setAction] = useState<'deposit' | 'withdraw'>('deposit');
-  const [processing, setProcessing] = useState(false);
 
-  const fetchTransactions = useCallback(async () => {
-    setLoading(true);
-    const token = await getAccessToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+  // Fetch transactions
+  const { data: transactions = [], isLoading } = useQuery({
+    queryKey: ['agent', 'wallet', 'transactions', agent.id],
+    queryFn: async (): Promise<Transaction[]> => {
+      const token = await getAccessToken();
+      if (!token) return [];
 
-    const res = await fetch(`/api/agents/${agent.id}/wallet`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      const res = await fetch(`/api/agents/${agent.id}/wallet`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    if (res.ok) {
-      const data = (await res.json()) as {
-        success: boolean;
-        transactions: Transaction[];
-      };
-      if (data.success && data.transactions) {
-        setTransactions(data.transactions);
+      if (!res.ok) {
+        logger.error('Failed to fetch transactions', undefined, 'AgentWallet');
+        return [];
       }
-    } else {
-      logger.error('Failed to fetch transactions', undefined, 'AgentWallet');
-    }
-    setLoading(false);
-  }, [agent.id, getAccessToken]);
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+      const data: TransactionsResponse = await res.json();
+      return data.success && data.transactions ? data.transactions : [];
+    },
+  });
+
+  // Transaction mutation
+  const transactionMutation = useMutation({
+    mutationFn: async ({
+      action,
+      amount,
+    }: {
+      action: 'deposit' | 'withdraw';
+      amount: number;
+    }): Promise<TransactionResult> => {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const res = await fetch(`/api/agents/${agent.id}/wallet`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action, amount }),
+      });
+
+      if (!res.ok) {
+        const error: TransactionError = await res.json();
+        throw new Error(error.error || 'Transaction failed');
+      }
+
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setAmount('');
+      queryClient.invalidateQueries({
+        queryKey: ['agent', 'wallet', 'transactions', agent.id],
+      });
+      onUpdate();
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Transaction failed'
+      );
+    },
+  });
 
   const handleTransaction = async () => {
     const amountNum = parseInt(amount);
@@ -121,34 +169,7 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
       return;
     }
 
-    setProcessing(true);
-    const token = await getAccessToken();
-    if (!token) {
-      setProcessing(false);
-      throw new Error('Authentication required');
-    }
-
-    const res = await fetch(`/api/agents/${agent.id}/wallet`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action, amount: amountNum }),
-    });
-
-    if (!res.ok) {
-      const error = await res.json();
-      setProcessing(false);
-      throw new Error(error.error || 'Transaction failed');
-    }
-
-    const data = await res.json();
-    toast.success(data.message);
-    setAmount('');
-    fetchTransactions();
-    onUpdate();
-    setProcessing(false);
+    transactionMutation.mutate({ action, amount: amountNum });
   };
 
   const userTotalPoints = user?.reputationPoints || 0;
@@ -234,10 +255,10 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
           />
           <button
             onClick={handleTransaction}
-            disabled={processing || !amount}
+            disabled={transactionMutation.isPending || !amount}
             className="h-12 w-full rounded-lg bg-[#0066FF] px-6 font-medium text-primary-foreground transition-all hover:bg-[#2952d9] disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:w-auto"
           >
-            {processing
+            {transactionMutation.isPending
               ? 'Processing...'
               : action === 'deposit'
                 ? 'Deposit'
@@ -259,7 +280,7 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
           <h3 className="font-semibold text-lg">Transaction History</h3>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="py-8 text-center text-muted-foreground">
             Loading...
           </div>

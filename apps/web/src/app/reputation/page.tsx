@@ -1,8 +1,8 @@
 'use client';
 
 import { IDENTITY_REGISTRY_BASE_SEPOLIA } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Award, Medal, Target, Trophy } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -15,6 +15,19 @@ interface ReputationStats {
   averageFeedbackScore: number;
   totalFeedbackReceived: number;
   trustLevel: string;
+}
+
+interface ReputationApiResponse {
+  reputationPoints?: number;
+  performance?: {
+    gamesPlayed?: number;
+    gamesWon?: number;
+    winRate?: number;
+    averageGameScore?: number;
+  };
+  averageFeedbackScore?: number;
+  totalFeedbackReceived?: number;
+  trustLevel?: string;
 }
 
 const emptyStats: ReputationStats = {
@@ -30,33 +43,24 @@ const emptyStats: ReputationStats = {
 
 export default function ReputationPage() {
   const { user, authenticated } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<ReputationStats>(emptyStats);
 
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setLoading(false);
-      return;
-    }
-
-    const fetchReputation = async () => {
-      setLoading(true);
+  const { data: stats = emptyStats, isLoading: loading } = useQuery({
+    queryKey: ['reputation', user?.id],
+    queryFn: async (): Promise<ReputationStats> => {
       const response = await fetch(
-        `/api/reputation/${encodeURIComponent(user.id)}`
+        `/api/reputation/${encodeURIComponent(user!.id)}`
       );
       if (!response.ok) {
-        setStats(emptyStats);
-        setLoading(false);
-        return;
+        return emptyStats;
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as ReputationApiResponse;
       const gamesPlayed = data.performance?.gamesPlayed ?? 0;
       const gamesWon = data.performance?.gamesWon ?? 0;
       const wins = Math.max(0, gamesWon);
       const losses = Math.max(0, gamesPlayed - gamesWon);
 
-      setStats({
+      return {
         currentReputation: Math.round(data.reputationPoints ?? 0),
         totalWins: wins,
         totalLosses: losses,
@@ -65,15 +69,11 @@ export default function ReputationPage() {
         averageFeedbackScore: data.averageFeedbackScore ?? 0,
         totalFeedbackReceived: data.totalFeedbackReceived ?? 0,
         trustLevel: data.trustLevel ?? 'UNRATED',
-      });
-      setLoading(false);
-    };
-
-    void fetchReputation();
-
-    const interval = setInterval(fetchReputation, 30000);
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
+      };
+    },
+    enabled: authenticated && !!user?.id,
+    refetchInterval: 30000, // Poll every 30 seconds
+  });
 
   const hasNft = Boolean(user?.nftTokenId || user?.onChainRegistered);
 

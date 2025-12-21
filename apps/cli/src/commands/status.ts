@@ -28,8 +28,10 @@ import {
   worldEvents,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
+import { formatEther, formatUnits } from '@babylon/shared';
 import { execSync } from 'child_process';
-import { ethers } from 'ethers';
+import { createPublicClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';
 
@@ -70,7 +72,7 @@ async function checkGameStatus(): Promise<void> {
   const actorStateCount = await db
     .select({ count: drizzleCount() })
     .from(actorState);
-  const stateCount = Number(actorStateCount[0]?.count || 0);
+  const stateCount = Number(actorStateCount[0]!.count);
   console.log(`Actors: ${staticActorCount} static, ${stateCount} with state`);
 
   if (staticActorCount === 0) {
@@ -80,25 +82,25 @@ async function checkGameStatus(): Promise<void> {
   const questionCountResult = await db
     .select({ count: drizzleCount() })
     .from(questions);
-  const questionCount = Number(questionCountResult[0]?.count || 0);
+  const questionCount = Number(questionCountResult[0]!.count);
 
   const activeQuestionsResult = await db
     .select({ count: drizzleCount() })
     .from(questions)
     .where(eq(questions.status, 'active'));
-  const activeQuestions = Number(activeQuestionsResult[0]?.count || 0);
+  const activeQuestions = Number(activeQuestionsResult[0]!.count);
   console.log(`Questions: ${questionCount} total, ${activeQuestions} active`);
 
   const postCountResult = await db
     .select({ count: drizzleCount() })
     .from(posts);
-  const postCount = Number(postCountResult[0]?.count || 0);
+  const postCount = Number(postCountResult[0]!.count);
 
   const recentPostsResult = await db
     .select({ count: drizzleCount() })
     .from(posts)
     .where(gte(posts.createdAt, new Date(Date.now() - 5 * 60 * 1000)));
-  const recentPosts = Number(recentPostsResult[0]?.count || 0);
+  const recentPosts = Number(recentPostsResult[0]!.count);
   console.log(`Posts: ${postCount} total, ${recentPosts} in last 5 minutes`);
 
   if (recentPosts === 0 && postCount > 0) {
@@ -134,13 +136,13 @@ async function checkGameStatus(): Promise<void> {
   const eventCountResult = await db
     .select({ count: drizzleCount() })
     .from(worldEvents);
-  const eventCount = Number(eventCountResult[0]?.count || 0);
+  const eventCount = Number(eventCountResult[0]!.count);
 
   const recentEventsResult = await db
     .select({ count: drizzleCount() })
     .from(worldEvents)
     .where(gte(worldEvents.createdAt, new Date(Date.now() - 5 * 60 * 1000)));
-  const recentEvents = Number(recentEventsResult[0]?.count || 0);
+  const recentEvents = Number(recentEventsResult[0]!.count);
   console.log(
     `\nEvents: ${eventCount} total, ${recentEvents} in last 5 minutes`
   );
@@ -154,7 +156,7 @@ async function checkGameStatus(): Promise<void> {
     .select({ count: drizzleCount() })
     .from(organizationState)
     .where(isNotNull(organizationState.currentPrice));
-  const orgsWithPrices = Number(orgsWithPricesResult[0]?.count || 0);
+  const orgsWithPrices = Number(orgsWithPricesResult[0]!.count);
   console.log(
     `Organizations: ${staticOrgCount} total, ${companyCount} companies, ${orgsWithPrices} with prices`
   );
@@ -179,20 +181,23 @@ async function checkWalletStatus(): Promise<void> {
     process.env.SEPOLIA_RPC_URL ||
     'https://ethereum-sepolia-rpc.publicnode.com';
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const wallet = new ethers.Wallet(gamePrivateKey, provider);
+  const account = privateKeyToAccount(gamePrivateKey as `0x${string}`);
+  const client = createPublicClient({ transport: http(rpcUrl) });
 
-  console.log(`Wallet: ${wallet.address}`);
+  console.log(`Wallet: ${account.address}`);
   console.log(`Expected: ${gameWalletAddress}`);
 
-  const balance = await provider.getBalance(wallet.address);
-  console.log(`\n💰 Balance: ${ethers.formatEther(balance)} ETH`);
+  const balance = await client.getBalance({ address: account.address });
+  console.log(`\n💰 Balance: ${formatEther(balance)} ETH`);
 
-  const nonce = await provider.getTransactionCount(wallet.address, 'latest');
-  const pendingNonce = await provider.getTransactionCount(
-    wallet.address,
-    'pending'
-  );
+  const nonce = await client.getTransactionCount({
+    address: account.address,
+    blockTag: 'latest',
+  });
+  const pendingNonce = await client.getTransactionCount({
+    address: account.address,
+    blockTag: 'pending',
+  });
 
   console.log(`📊 Nonce (confirmed): ${nonce}`);
   console.log(`📊 Nonce (pending): ${pendingNonce}`);
@@ -203,24 +208,24 @@ async function checkWalletStatus(): Promise<void> {
     logger.success('No pending transactions');
   }
 
-  const feeData = await provider.getFeeData();
+  const feeData = await client.estimateFeesPerGas();
   console.log('\n⛽ Current Gas Price:');
   console.log(
-    `   Max Fee: ${feeData.maxFeePerGas ? ethers.formatUnits(feeData.maxFeePerGas, 'gwei') : 'N/A'} gwei`
+    `   Max Fee: ${feeData.maxFeePerGas ? formatUnits(feeData.maxFeePerGas, 9) : 'N/A'} gwei`
   );
   console.log(
-    `   Max Priority Fee: ${feeData.maxPriorityFeePerGas ? ethers.formatUnits(feeData.maxPriorityFeePerGas, 'gwei') : 'N/A'} gwei`
+    `   Max Priority Fee: ${feeData.maxPriorityFeePerGas ? formatUnits(feeData.maxPriorityFeePerGas, 9) : 'N/A'} gwei`
   );
 
-  const blockNumber = await provider.getBlockNumber();
-  const block = await provider.getBlock(blockNumber);
+  const blockNumber = await client.getBlockNumber();
+  const block = await client.getBlock({ blockNumber });
   console.log('\n🌐 Network Status:');
   console.log(`   Latest Block: ${blockNumber}`);
   console.log(
-    `   Block Time: ${new Date(block!.timestamp * 1000).toISOString()}`
+    `   Block Time: ${new Date(Number(block.timestamp) * 1000).toISOString()}`
   );
   console.log(
-    `   Base Fee: ${block!.baseFeePerGas ? ethers.formatUnits(block!.baseFeePerGas, 'gwei') : 'N/A'} gwei`
+    `   Base Fee: ${block.baseFeePerGas ? formatUnits(block.baseFeePerGas, 9) : 'N/A'} gwei`
   );
 }
 

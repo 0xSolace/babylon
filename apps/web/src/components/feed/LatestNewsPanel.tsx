@@ -1,11 +1,11 @@
 'use client';
 
 import { logger } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, Newspaper, TrendingUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
-// ArticleDetailModal removed - articles now use /post/[id] page
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { useSSEChannel } from '@/hooks/useSSE';
 import { useWidgetCacheStore } from '@/stores/widgetCacheStore';
@@ -27,6 +27,25 @@ interface ArticleItem {
   biasScore?: number;
 }
 
+interface PostFromAPI {
+  id: string;
+  type?: string;
+  articleTitle?: string | null;
+  authorId: string;
+  authorName?: string;
+  byline?: string | null;
+  sentiment?: string | null;
+  category?: string | null;
+  timestamp: string;
+  biasScore?: number | null;
+  slant?: string | null;
+  content: string;
+}
+
+interface ArticlesResponse {
+  posts?: PostFromAPI[];
+}
+
 /**
  * Latest news panel component for displaying recent articles.
  *
@@ -45,13 +64,9 @@ interface ArticleItem {
  */
 export function LatestNewsPanel() {
   const router = useRouter();
-  const [articles, setArticles] = useState<ArticleItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const { getLatestNews, setLatestNews } = useWidgetCacheStore();
   const { registerRefresh, unregisterRefresh } = useWidgetRefresh();
-
-  // Use ref to store fetchArticles function to break dependency chain
-  const fetchArticlesRef = useRef<(() => void) | null>(null);
 
   /**
    * Deduplicate articles about the same event
@@ -179,20 +194,9 @@ export function LatestNewsPanel() {
     []
   );
 
-  const fetchArticles = useCallback(
-    async (skipCache = false) => {
-      // Check cache first (unless explicitly skipping)
-      if (!skipCache) {
-        const cached = getLatestNews();
-        // Only use cache if it has data (don't cache empty arrays)
-        if (cached && Array.isArray(cached) && cached.length > 0) {
-          setArticles(cached as ArticleItem[]);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Query posts API with type filter for articles - fetch more for deduplication
+  const { data: articles = [], isLoading } = useQuery({
+    queryKey: ['feed', 'latest-news'],
+    queryFn: async (): Promise<ArticleItem[]> => {
       const response = await fetch('/api/posts?type=article&limit=15');
 
       if (!response.ok) {
@@ -201,12 +205,10 @@ export function LatestNewsPanel() {
           { status: response.status },
           'LatestNewsPanel'
         );
-        setArticles([]);
-        setLoading(false);
-        return;
+        return [];
       }
 
-      const data = await response.json();
+      const data: ArticlesResponse = await response.json();
 
       logger.info(
         'Articles API response:',
@@ -221,33 +223,19 @@ export function LatestNewsPanel() {
       if (data.posts && Array.isArray(data.posts) && data.posts.length > 0) {
         // Transform posts to ArticleItem format
         const articlesData: ArticleItem[] = data.posts
-          .filter((post: { type?: string }) => post.type === 'article') // Double-check type
-          .map(
-            (post: {
-              id: string;
-              articleTitle?: string | null;
-              authorId: string;
-              authorName?: string;
-              byline?: string | null;
-              sentiment?: string | null;
-              category?: string | null;
-              timestamp: string;
-              biasScore?: number | null;
-              slant?: string | null;
-              content: string;
-            }) => ({
-              id: post.id,
-              title: post.articleTitle || 'Untitled Article',
-              summary: post.content,
-              authorOrgName: post.authorName || post.authorId,
-              byline: post.byline || undefined,
-              sentiment: post.sentiment || undefined,
-              category: post.category || undefined,
-              publishedAt: post.timestamp,
-              slant: post.slant || undefined,
-              biasScore: post.biasScore !== null ? post.biasScore : undefined,
-            })
-          );
+          .filter((post) => post.type === 'article')
+          .map((post) => ({
+            id: post.id,
+            title: post.articleTitle || 'Untitled Article',
+            summary: post.content,
+            authorOrgName: post.authorName || post.authorId,
+            byline: post.byline || undefined,
+            sentiment: post.sentiment || undefined,
+            category: post.category || undefined,
+            publishedAt: post.timestamp,
+            slant: post.slant || undefined,
+            biasScore: post.biasScore !== null ? post.biasScore : undefined,
+          }));
 
         // Deduplicate articles about the same event
         const uniqueArticles = deduplicateArticles(articlesData).slice(0, 5);
@@ -257,60 +245,58 @@ export function LatestNewsPanel() {
           { count: uniqueArticles.length, articles: uniqueArticles },
           'LatestNewsPanel'
         );
-        setArticles(uniqueArticles);
-        setLatestNews(uniqueArticles); // Cache the data
-      } else {
-        logger.warn(
-          'No articles in response',
-          {
-            hasData: !!data,
-            hasPosts: !!data.posts,
-            isArray: Array.isArray(data.posts),
-            length: data.posts?.length,
-          },
-          'LatestNewsPanel'
-        );
-        setArticles([]);
+        setLatestNews(uniqueArticles);
+        return uniqueArticles;
       }
-      setLoading(false);
+
+      logger.warn(
+        'No articles in response',
+        {
+          hasData: !!data,
+          hasPosts: !!data.posts,
+          isArray: Array.isArray(data.posts),
+          length: data.posts?.length,
+        },
+        'LatestNewsPanel'
+      );
+      return [];
     },
-    [getLatestNews, setLatestNews, deduplicateArticles]
-  );
+    initialData: () => {
+      const cached = getLatestNews();
+      return cached && Array.isArray(cached) && cached.length > 0
+        ? (cached as ArticleItem[])
+        : undefined;
+    },
+    staleTime: 30000,
+  });
 
-  // Update ref when fetchArticles changes
-  useEffect(() => {
-    fetchArticlesRef.current = () => fetchArticles(true); // Skip cache on manual refresh
-  }, [fetchArticles]);
-
-  useEffect(() => {
-    fetchArticles();
-  }, [fetchArticles]);
+  const refetch = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['feed', 'latest-news'] });
+  }, [queryClient]);
 
   // Register refresh function
   useEffect(() => {
-    const refresh = () => fetchArticles(true);
-    registerRefresh('latest-news', refresh);
+    registerRefresh('latest-news', refetch);
     return () => unregisterRefresh('latest-news');
-  }, [registerRefresh, unregisterRefresh, fetchArticles]);
+  }, [registerRefresh, unregisterRefresh, refetch]);
 
   // Real-time refresh on feed/breaking-news events
-  useSSEChannel('feed', () => {
-    void fetchArticles(true);
-  });
-  useSSEChannel('breaking-news', () => {
-    void fetchArticles(true);
-  });
+  useSSEChannel('feed', refetch);
+  useSSEChannel('breaking-news', refetch);
 
-  const getSentimentIcon = (sentiment?: string) => {
-    switch (sentiment) {
-      case 'positive':
-        return <TrendingUp className="h-4 w-4 text-green-500" />;
-      case 'negative':
-        return <AlertCircle className="h-4 w-4 text-red-500" />;
-      default:
-        return <Newspaper className="h-4 w-4 text-[#0066FF]" />;
-    }
-  };
+  const getSentimentIcon = useMemo(
+    () => (sentiment?: string) => {
+      switch (sentiment) {
+        case 'positive':
+          return <TrendingUp className="h-4 w-4 text-green-500" />;
+        case 'negative':
+          return <AlertCircle className="h-4 w-4 text-red-500" />;
+        default:
+          return <Newspaper className="h-4 w-4 text-[#0066FF]" />;
+      }
+    },
+    []
+  );
 
   const getTimeAgo = (timestamp: string) => {
     const now = Date.now();
@@ -342,7 +328,7 @@ export function LatestNewsPanel() {
         <h2 className="mb-3 text-left font-bold text-foreground text-lg">
           Latest News
         </h2>
-        {loading ? (
+        {isLoading ? (
           <div className="flex-1 space-y-3 pl-3">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-16 w-full" />

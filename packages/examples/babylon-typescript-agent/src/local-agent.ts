@@ -9,7 +9,7 @@
  */
 
 import dotenv from 'dotenv';
-import { ethers } from 'ethers';
+import { privateKeyToAccount } from 'viem/accounts';
 
 dotenv.config({ path: '.env.local' });
 
@@ -28,8 +28,8 @@ class LocalA2AClient {
     this.baseUrl = config.baseUrl;
 
     // Derive address from private key
-    const wallet = new ethers.Wallet(config.privateKey);
-    this.address = wallet.address;
+    const account = privateKeyToAccount(config.privateKey as `0x${string}`);
+    this.address = account.address;
 
     // Use timestamp-based token ID for uniqueness
     this.tokenId = Math.floor(Date.now() / 1000) % 1000000;
@@ -456,184 +456,174 @@ async function runAgent() {
     console.log(`   Reasoning: ${decision.reasoning}`);
 
     // Execute action
-    try {
-      switch (decision.action) {
-        case 'BUY_YES':
-        case 'BUY_NO': {
-          if (marketsData.predictions.length > 0 && portfolio.balance >= 10) {
-            const market =
-              marketsData.predictions[
-                Math.floor(Math.random() * marketsData.predictions.length)
-              ];
-            const outcome = decision.action === 'BUY_YES' ? 'YES' : 'NO';
-            const amount = Math.min(50, portfolio.balance * 0.1);
-            const trade = await client.buyShares(market.id, outcome, amount);
-            console.log(
-              `✅ Bought ${trade.shares.toFixed(2)} ${outcome} shares @ $${trade.price.toFixed(2)}`
-            );
-            console.log(`   Market: ${market.question.substring(0, 50)}...`);
-          } else {
-            console.log('⏭️ Skipped: insufficient balance or no markets');
-          }
-          break;
-        }
-
-        case 'SELL_SHARES': {
-          if (positions.positions.length > 0) {
-            const position = positions.positions[0];
-            const sharesToSell = Math.min(
-              position.shares,
-              position.shares * 0.5
-            );
-            const sale = await client.sellShares(
-              position.marketId,
-              position.outcome as 'YES' | 'NO',
-              sharesToSell
-            );
-            console.log(
-              `✅ Sold ${sale.shares.toFixed(2)} shares, received $${sale.totalCost.toFixed(2)}`
-            );
-          } else {
-            console.log('⏭️ No positions to sell');
-          }
-          break;
-        }
-
-        case 'CREATE_POST': {
-          const messages = [
-            `Market analysis tick #${tickCount}: Looking for opportunities 📈`,
-            `Agent ${client.getAgentId()} reporting in! Markets looking interesting today.`,
-            `Autonomous trading in action 🤖 Balance: $${portfolio.balance.toFixed(2)}`,
-            `DeFi never sleeps, and neither do I! Current P&L: $${portfolio.pnl.toFixed(2)}`,
-            `Exploring prediction markets... so many possibilities!`,
-          ];
-          const content = messages[Math.floor(Math.random() * messages.length)];
-          const post = await client.createPost(content);
-          console.log(`✅ Posted: "${post.content.substring(0, 50)}..."`);
-          break;
-        }
-
-        case 'LIKE_POST': {
-          if (feed.posts.length > 0) {
-            const post =
-              feed.posts[Math.floor(Math.random() * feed.posts.length)];
-            const result = await client.likePost(post.id);
-            console.log(
-              `✅ Liked post ${post.id} (${result.likesCount} likes)`
-            );
-          } else {
-            console.log('⏭️ No posts to like');
-          }
-          break;
-        }
-
-        case 'COMMENT_POST': {
-          if (feed.posts.length > 0) {
-            const post =
-              feed.posts[Math.floor(Math.random() * feed.posts.length)];
-            const comments = [
-              'Great insight! 🔥',
-              'Interesting take on this market.',
-              'Thanks for sharing!',
-              'I agree with this analysis.',
-              'Following this closely...',
+    switch (decision.action) {
+      case 'BUY_YES':
+      case 'BUY_NO': {
+        if (marketsData.predictions.length > 0 && portfolio.balance >= 10) {
+          const market =
+            marketsData.predictions[
+              Math.floor(Math.random() * marketsData.predictions.length)
             ];
-            const content =
-              comments[Math.floor(Math.random() * comments.length)];
-            const comment = await client.commentPost(post.id, content);
-            console.log(`✅ Commented on ${post.id}: "${content}"`);
-            console.log(`   Comment ID: ${comment.id}`);
-          } else {
-            console.log('⏭️ No posts to comment on');
-          }
-          break;
-        }
-
-        case 'VIEW_FEED': {
-          console.log(`📰 Feed (${feed.posts.length} posts):`);
-          for (const post of feed.posts.slice(0, 3)) {
-            console.log(
-              `   - [${post.authorName}] ${post.content.substring(0, 50)}... (${post.likesCount}❤️)`
-            );
-          }
-          break;
-        }
-
-        case 'DISCOVER_AGENTS': {
-          const agents = await client.discover();
-          console.log(`🔍 Discovered ${agents.agents.length} agents:`);
-          for (const agent of agents.agents.slice(0, 3)) {
-            console.log(`   - ${agent.name} (${agent.id})`);
-          }
-          break;
-        }
-
-        case 'SEARCH_USERS': {
-          const queries = ['agent', 'trader', 'bot', 'system'];
-          const query = queries[Math.floor(Math.random() * queries.length)];
-          const users = await client.searchUsers(query);
+          const outcome = decision.action === 'BUY_YES' ? 'YES' : 'NO';
+          const amount = Math.min(50, portfolio.balance * 0.1);
+          const trade = await client.buyShares(market.id, outcome, amount);
           console.log(
-            `🔍 Searched "${query}" - found ${users.users.length} users:`
+            `✅ Bought ${trade.shares.toFixed(2)} ${outcome} shares @ $${trade.price.toFixed(2)}`
           );
-          for (const user of users.users.slice(0, 3)) {
-            console.log(`   - ${user.displayName} (${user.id})`);
-          }
-          break;
+          console.log(`   Market: ${market.question.substring(0, 50)}...`);
+        } else {
+          console.log('⏭️ Skipped: insufficient balance or no markets');
         }
-
-        case 'CHECK_LEADERBOARD': {
-          const leaderboard = await client.getLeaderboard(5);
-          console.log(`🏆 Leaderboard (top 5):`);
-          for (const entry of leaderboard.entries) {
-            console.log(
-              `   #${entry.rank} ${entry.displayName}: $${entry.pnl.toFixed(2)} P&L`
-            );
-          }
-          break;
-        }
-
-        case 'CHECK_NOTIFICATIONS': {
-          const notifications = await client.getNotifications();
-          console.log(
-            `🔔 Notifications (${notifications.notifications.length}):`
-          );
-          for (const notif of notifications.notifications.slice(0, 3)) {
-            const status = notif.isRead ? '✓' : '•';
-            console.log(`   ${status} [${notif.type}] ${notif.title}`);
-            if (!notif.isRead) {
-              await client.markNotificationRead(notif.id);
-            }
-          }
-          break;
-        }
-
-        case 'VIEW_MARKET_DATA': {
-          if (marketsData.predictions.length > 0) {
-            const market = marketsData.predictions[0];
-            const data = await client.getMarketData(market.id);
-            console.log(`📊 Market: ${data.question}`);
-            console.log(
-              `   YES: $${data.yesPrice.toFixed(2)} | NO: $${data.noPrice.toFixed(2)}`
-            );
-
-            if (marketsData.predictions.length > 1) {
-              const prices = await client.getMarketPrices(
-                marketsData.predictions.map((m) => m.id)
-              );
-              console.log(
-                `   All prices: ${Object.keys(prices).length} markets fetched`
-              );
-            }
-          }
-          break;
-        }
-
-        case 'HOLD':
-          console.log('⏸️ Holding - no action taken');
-          break;
+        break;
       }
-    } catch (error) {
-      console.error('Error executing action:', error);
+
+      case 'SELL_SHARES': {
+        if (positions.positions.length > 0) {
+          const position = positions.positions[0];
+          const sharesToSell = Math.min(position.shares, position.shares * 0.5);
+          const sale = await client.sellShares(
+            position.marketId,
+            position.outcome as 'YES' | 'NO',
+            sharesToSell
+          );
+          console.log(
+            `✅ Sold ${sale.shares.toFixed(2)} shares, received $${sale.totalCost.toFixed(2)}`
+          );
+        } else {
+          console.log('⏭️ No positions to sell');
+        }
+        break;
+      }
+
+      case 'CREATE_POST': {
+        const messages = [
+          `Market analysis tick #${tickCount}: Looking for opportunities 📈`,
+          `Agent ${client.getAgentId()} reporting in! Markets looking interesting today.`,
+          `Autonomous trading in action 🤖 Balance: $${portfolio.balance.toFixed(2)}`,
+          `DeFi never sleeps, and neither do I! Current P&L: $${portfolio.pnl.toFixed(2)}`,
+          `Exploring prediction markets... so many possibilities!`,
+        ];
+        const content = messages[Math.floor(Math.random() * messages.length)];
+        const post = await client.createPost(content);
+        console.log(`✅ Posted: "${post.content.substring(0, 50)}..."`);
+        break;
+      }
+
+      case 'LIKE_POST': {
+        if (feed.posts.length > 0) {
+          const post =
+            feed.posts[Math.floor(Math.random() * feed.posts.length)];
+          const result = await client.likePost(post.id);
+          console.log(`✅ Liked post ${post.id} (${result.likesCount} likes)`);
+        } else {
+          console.log('⏭️ No posts to like');
+        }
+        break;
+      }
+
+      case 'COMMENT_POST': {
+        if (feed.posts.length > 0) {
+          const post =
+            feed.posts[Math.floor(Math.random() * feed.posts.length)];
+          const comments = [
+            'Great insight! 🔥',
+            'Interesting take on this market.',
+            'Thanks for sharing!',
+            'I agree with this analysis.',
+            'Following this closely...',
+          ];
+          const content = comments[Math.floor(Math.random() * comments.length)];
+          const comment = await client.commentPost(post.id, content);
+          console.log(`✅ Commented on ${post.id}: "${content}"`);
+          console.log(`   Comment ID: ${comment.id}`);
+        } else {
+          console.log('⏭️ No posts to comment on');
+        }
+        break;
+      }
+
+      case 'VIEW_FEED': {
+        console.log(`📰 Feed (${feed.posts.length} posts):`);
+        for (const post of feed.posts.slice(0, 3)) {
+          console.log(
+            `   - [${post.authorName}] ${post.content.substring(0, 50)}... (${post.likesCount}❤️)`
+          );
+        }
+        break;
+      }
+
+      case 'DISCOVER_AGENTS': {
+        const agents = await client.discover();
+        console.log(`🔍 Discovered ${agents.agents.length} agents:`);
+        for (const agent of agents.agents.slice(0, 3)) {
+          console.log(`   - ${agent.name} (${agent.id})`);
+        }
+        break;
+      }
+
+      case 'SEARCH_USERS': {
+        const queries = ['agent', 'trader', 'bot', 'system'];
+        const query = queries[Math.floor(Math.random() * queries.length)];
+        const users = await client.searchUsers(query);
+        console.log(
+          `🔍 Searched "${query}" - found ${users.users.length} users:`
+        );
+        for (const user of users.users.slice(0, 3)) {
+          console.log(`   - ${user.displayName} (${user.id})`);
+        }
+        break;
+      }
+
+      case 'CHECK_LEADERBOARD': {
+        const leaderboard = await client.getLeaderboard(5);
+        console.log(`🏆 Leaderboard (top 5):`);
+        for (const entry of leaderboard.entries) {
+          console.log(
+            `   #${entry.rank} ${entry.displayName}: $${entry.pnl.toFixed(2)} P&L`
+          );
+        }
+        break;
+      }
+
+      case 'CHECK_NOTIFICATIONS': {
+        const notifications = await client.getNotifications();
+        console.log(
+          `🔔 Notifications (${notifications.notifications.length}):`
+        );
+        for (const notif of notifications.notifications.slice(0, 3)) {
+          const status = notif.isRead ? '✓' : '•';
+          console.log(`   ${status} [${notif.type}] ${notif.title}`);
+          if (!notif.isRead) {
+            await client.markNotificationRead(notif.id);
+          }
+        }
+        break;
+      }
+
+      case 'VIEW_MARKET_DATA': {
+        if (marketsData.predictions.length > 0) {
+          const market = marketsData.predictions[0];
+          const data = await client.getMarketData(market.id);
+          console.log(`📊 Market: ${data.question}`);
+          console.log(
+            `   YES: $${data.yesPrice.toFixed(2)} | NO: $${data.noPrice.toFixed(2)}`
+          );
+
+          if (marketsData.predictions.length > 1) {
+            const prices = await client.getMarketPrices(
+              marketsData.predictions.map((m) => m.id)
+            );
+            console.log(
+              `   All prices: ${Object.keys(prices).length} markets fetched`
+            );
+          }
+        }
+        break;
+      }
+
+      case 'HOLD':
+        console.log('⏸️ Holding - no action taken');
+        break;
     }
 
     console.log(`⏳ Next tick in ${tickInterval / 1000}s...`);

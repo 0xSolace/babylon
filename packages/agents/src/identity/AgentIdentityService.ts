@@ -10,14 +10,7 @@
  * @packageDocumentation
  */
 
-import {
-  agentLogs,
-  db,
-  eq,
-  type JsonValue,
-  type User,
-  users,
-} from '@babylon/db';
+import { db, type JsonValue, type User } from '@babylon/db';
 import { getAgent0Client } from '../agent0/Agent0Client';
 import { syncAfterAgent0Registration } from '../agent0/reputation/agent0-reputation-sync';
 import { getAgentConfig } from '../shared/agent-config';
@@ -48,11 +41,9 @@ export class AgentIdentityService {
       'AgentIdentityService'
     );
 
-    const [agentUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agentUser = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
 
     if (!agentUser || !agentUser.isAgent) {
       throw new Error('Agent user not found');
@@ -87,11 +78,9 @@ export class AgentIdentityService {
       'AgentIdentityService'
     );
 
-    const [agentUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agentUser = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
 
     if (!agentUser || !agentUser.isAgent)
       throw new Error('Agent user not found');
@@ -132,23 +121,31 @@ export class AgentIdentityService {
     const individualAgentA2AEndpoint = `${baseUrl}/api/agents/${agentUserId}/a2a`;
 
     const registration = await agent0Client.registerAgent({
-      name: agentUser.displayName || agentUser.username || 'Agent',
-      description: agentUser.bio || 'Autonomous AI agent in Babylon',
-      imageUrl: agentUser.profileImageUrl || undefined,
-      walletAddress: agentUser.walletAddress,
+      name: agentUser.displayName
+        ? String(agentUser.displayName)
+        : agentUser.username
+          ? String(agentUser.username)
+          : 'Agent',
+      description: agentUser.bio
+        ? String(agentUser.bio)
+        : 'Autonomous AI agent in Babylon',
+      imageUrl: agentUser.profileImageUrl
+        ? String(agentUser.profileImageUrl)
+        : undefined,
+      walletAddress: String(agentUser.walletAddress),
       a2aEndpoint: individualAgentA2AEndpoint,
       capabilities,
     });
 
-    await db
-      .update(users)
-      .set({
+    await db.user.update({
+      where: { id: agentUserId },
+      data: {
         agent0TokenId: registration.tokenId,
         agent0MetadataCID: registration.metadataCID ?? null,
         registrationTxHash: registration.txHash,
         onChainRegistered: true,
-      })
-      .where(eq(users.id, agentUserId));
+      },
+    });
 
     // Fire-and-forget reputation sync; log but do not block registration
     syncAfterAgent0Registration(agentUserId, registration.tokenId).catch(
@@ -161,17 +158,19 @@ export class AgentIdentityService {
       }
     );
 
-    await db.insert(agentLogs).values({
-      id: await generateSnowflakeId(),
-      agentUserId,
-      type: 'system',
-      level: 'info',
-      message: `Agent registered on Agent0: Token ID ${registration.tokenId}`,
-      metadata: {
-        tokenId: registration.tokenId,
-        metadataCID: registration.metadataCID,
-        txHash: registration.txHash,
-      } as JsonValue,
+    await db.agentLog.create({
+      data: {
+        id: await generateSnowflakeId(),
+        agentUserId,
+        type: 'system',
+        level: 'info',
+        message: `Agent registered on Agent0: Token ID ${registration.tokenId}`,
+        metadata: {
+          tokenId: registration.tokenId,
+          metadataCID: registration.metadataCID,
+          txHash: registration.txHash,
+        } as JsonValue,
+      },
     });
 
     logger.info(
@@ -226,16 +225,14 @@ export class AgentIdentityService {
       }
     }
 
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
 
     if (!agent) {
       throw new Error('Agent not found after identity setup');
     }
-    return agent;
+    return agent as User;
   }
 
   /**
@@ -243,11 +240,9 @@ export class AgentIdentityService {
    * Returns false on failure instead of throwing (verification is non-critical).
    */
   async verifyAgentIdentity(agentUserId: string): Promise<boolean> {
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
 
     if (!agent || !agent.isAgent || !agent.agent0TokenId) {
       logger.debug(
@@ -258,9 +253,10 @@ export class AgentIdentityService {
       return false;
     }
 
+    const agent0TokenId = Number(agent.agent0TokenId);
     // Verification is a non-critical check operation - catch errors and return false
     const verificationResult = await getAgent0Client()
-      .getAgentProfile(agent.agent0TokenId)
+      .getAgentProfile(agent0TokenId)
       .then((profile) => profile !== null)
       .catch((error) => {
         logger.warn(
@@ -274,7 +270,7 @@ export class AgentIdentityService {
     if (verificationResult) {
       logger.info(
         `Agent ${agentUserId} verified on Agent0`,
-        { tokenId: agent.agent0TokenId },
+        { tokenId: agent0TokenId },
         'AgentIdentityService'
       );
     }

@@ -150,37 +150,33 @@ describe('A2A Endpoints Integration Tests', () => {
     };
 
     // Create test NPCs (assuming Actor records exist)
-    try {
+    // Check if agents already exist before registering
+    const existingTrader = await agentRegistry.getAgentById(testTraderAgentId);
+    if (!existingTrader) {
       await agentRegistry.registerNpcAgent({
         actorId: testTraderAgentId,
         systemPrompt: 'Test trader NPC for A2A integration tests',
         capabilities: traderCapabilities,
       });
-
-      await agentRegistry.updateAgentStatus(
-        testTraderAgentId,
-        AgentStatus.ACTIVE
-      );
-    } catch (error) {
-      // Agent may already exist from previous test runs
-      console.log('Test trader agent setup:', error);
     }
+    await agentRegistry.updateAgentStatus(
+      testTraderAgentId,
+      AgentStatus.ACTIVE
+    );
 
-    try {
+    const existingAnalyst =
+      await agentRegistry.getAgentById(testAnalystAgentId);
+    if (!existingAnalyst) {
       await agentRegistry.registerNpcAgent({
         actorId: testAnalystAgentId,
         systemPrompt: 'Test analyst NPC for A2A integration tests',
         capabilities: analystCapabilities,
       });
-
-      await agentRegistry.updateAgentStatus(
-        testAnalystAgentId,
-        AgentStatus.ACTIVE
-      );
-    } catch (error) {
-      // Agent may already exist from previous test runs
-      console.log('Test analyst agent setup:', error);
     }
+    await agentRegistry.updateAgentStatus(
+      testAnalystAgentId,
+      AgentStatus.ACTIVE
+    );
 
     // IMPORTANT: Verify that our test agents are actually visible to the server
     // If the server is a separate process, it won't see our in-memory registry changes

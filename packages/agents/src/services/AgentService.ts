@@ -14,20 +14,9 @@
  */
 
 import {
-  agentLogs,
-  agentMessages,
-  agentPerformanceMetrics,
-  agentPointsTransactions,
-  agentTrades,
-  and,
   db,
-  desc,
-  eq,
-  pointsTransactions,
   type User,
   type UserAgentConfig,
-  userAgentConfigs,
-  users,
   withTransaction,
 } from '@babylon/db';
 import type { AgentCapabilities } from '@babylon/shared';
@@ -54,12 +43,9 @@ export type UserWithConfig = User & { agentConfig: UserAgentConfig | null };
 export async function getAgentConfig(
   userId: string
 ): Promise<UserAgentConfig | null> {
-  const result = await db
-    .select()
-    .from(userAgentConfigs)
-    .where(eq(userAgentConfigs.userId, userId))
-    .limit(1);
-  return result[0] ?? null;
+  return db.userAgentConfig.findUnique({
+    where: { userId },
+  });
 }
 
 /**
@@ -68,17 +54,14 @@ export async function getAgentConfig(
 export async function getUserWithConfig(
   userId: string
 ): Promise<UserWithConfig | null> {
-  const userResult = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  const user = await db.user.findUnique({
+    where: { id: userId },
+  });
 
-  const user = userResult[0];
   if (!user) return null;
 
   const config = await getAgentConfig(userId);
-  return { ...user, agentConfig: config };
+  return { ...user, agentConfig: config } as UserWithConfig;
 }
 
 /**
@@ -110,17 +93,14 @@ export class AgentServiceV2 {
       initialDeposit,
     } = params;
 
-    const managerResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, managerUserId))
-      .limit(1);
+    const manager = await db.user.findUnique({
+      where: { id: managerUserId },
+    });
 
-    const manager = managerResult[0];
     if (!manager) throw new Error('Manager user not found');
 
     if (initialDeposit && initialDeposit > 0) {
-      const totalPoints = manager.reputationPoints;
+      const totalPoints = Number(manager.reputationPoints);
       if (totalPoints < initialDeposit) {
         throw new Error(
           `Insufficient points. Have: ${totalPoints}, Need: ${initialDeposit}`
@@ -138,87 +118,120 @@ export class AgentServiceV2 {
 
     const agent = await withTransaction(async (tx) => {
       // Create the user record
-      const newAgentResult = await tx
-        .insert(users)
-        .values({
-          id: agentUserId,
-          username: agentUsername,
-          displayName: name,
-          bio:
-            description ||
-            `AI agent managed by ${manager.displayName || manager.username}`,
-          profileImageUrl: profileImageUrl || null,
-          coverImageUrl: coverImageUrl || null,
-          isAgent: true,
-          managedBy: managerUserId,
-          virtualBalance: '0',
-          totalDeposited: '0',
-          reputationPoints: 0,
-          profileComplete: true,
-          hasUsername: true,
-          hasBio: Boolean(description),
-          hasProfileImage: Boolean(profileImageUrl),
-          updatedAt: new Date(),
-        })
-        .returning();
+      const userInsertResult = await tx.query<User>(
+        `INSERT INTO "users" (
+          "id", "username", "displayName", "bio", "profileImageUrl", "coverImageUrl",
+          "isAgent", "managedBy", "virtualBalance", "totalDeposited", "reputationPoints",
+          "profileComplete", "hasUsername", "hasBio", "hasProfileImage", "updatedAt"
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+        ) RETURNING *`,
+        [
+          agentUserId,
+          agentUsername,
+          name,
+          description ||
+            `AI agent managed by ${String(manager.displayName || manager.username)}`,
+          profileImageUrl || null,
+          coverImageUrl || null,
+          true,
+          managerUserId,
+          '0',
+          '0',
+          0,
+          true,
+          true,
+          Boolean(description),
+          Boolean(profileImageUrl),
+          new Date().toISOString(),
+        ]
+      );
 
-      const newAgent = newAgentResult[0]!;
+      const newAgent = userInsertResult[0];
+      if (!newAgent) throw new Error('Failed to create agent user');
 
       // Create the agent config record
-      await tx.insert(userAgentConfigs).values({
-        id: await generateSnowflakeId(),
-        userId: agentUserId,
-        systemPrompt: system ?? null,
-        personality: personality ?? null,
-        tradingStrategy: tradingStrategy ?? null,
-        messageExamples: bio ? JSON.parse(JSON.stringify(bio)) : null,
-        pointsBalance: initialDeposit || 0,
-        totalDeposited: initialDeposit || 0,
-        a2aEnabled: true, // Enable A2A by default for all agents
-        updatedAt: new Date(),
-      });
+      const configId = await generateSnowflakeId();
+      await tx.exec(
+        `INSERT INTO "userAgentConfigs" (
+          "id", "userId", "systemPrompt", "personality", "tradingStrategy",
+          "messageExamples", "pointsBalance", "totalDeposited", "a2aEnabled", "updatedAt"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          configId,
+          agentUserId,
+          system ?? null,
+          personality ?? null,
+          tradingStrategy ?? null,
+          bio ? JSON.stringify(bio) : null,
+          initialDeposit || 0,
+          initialDeposit || 0,
+          true,
+          new Date().toISOString(),
+        ]
+      );
 
       if (initialDeposit && initialDeposit > 0) {
-        const initialManagerPoints = manager.reputationPoints;
+        const initialManagerPoints = Number(manager.reputationPoints);
 
-        await tx
-          .update(users)
-          .set({
-            reputationPoints: manager.reputationPoints - initialDeposit,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, managerUserId));
+        await tx.exec(
+          `UPDATE "users" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
+          [
+            initialManagerPoints - initialDeposit,
+            new Date().toISOString(),
+            managerUserId,
+          ]
+        );
 
-        await tx.insert(agentPointsTransactions).values({
-          id: await generateSnowflakeId(),
-          agentUserId,
-          managerUserId,
-          type: 'deposit',
-          amount: initialDeposit,
-          balanceBefore: 0,
-          balanceAfter: initialDeposit,
-          description: 'Initial deposit',
-        });
+        const agentPointsTxId = await generateSnowflakeId();
+        await tx.exec(
+          `INSERT INTO "agentPointsTransactions" (
+            "id", "agentUserId", "managerUserId", "type", "amount",
+            "balanceBefore", "balanceAfter", "description"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            agentPointsTxId,
+            agentUserId,
+            managerUserId,
+            'deposit',
+            initialDeposit,
+            0,
+            initialDeposit,
+            'Initial deposit',
+          ]
+        );
 
-        await tx.insert(pointsTransactions).values({
-          id: await generateSnowflakeId(),
-          userId: managerUserId,
-          amount: -initialDeposit,
-          pointsBefore: initialManagerPoints,
-          pointsAfter: initialManagerPoints - initialDeposit,
-          reason: `Deposit to agent: ${name}`,
-          metadata: JSON.stringify({ agentUserId, agentName: name }),
-        });
+        const pointsTxId = await generateSnowflakeId();
+        await tx.exec(
+          `INSERT INTO "pointsTransactions" (
+            "id", "userId", "amount", "pointsBefore", "pointsAfter", "reason", "metadata"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            pointsTxId,
+            managerUserId,
+            -initialDeposit,
+            initialManagerPoints,
+            initialManagerPoints - initialDeposit,
+            `Deposit to agent: ${name}`,
+            JSON.stringify({ agentUserId, agentName: name }),
+          ]
+        );
       }
 
-      await tx.insert(agentLogs).values({
-        id: await generateSnowflakeId(),
-        agentUserId,
-        type: 'system',
-        level: 'info',
-        message: `Agent created: ${name}`,
-        metadata: { initialDeposit: initialDeposit || 0 },
-      });
+      const logId = await generateSnowflakeId();
+      await tx.exec(
+        `INSERT INTO "agentLogs" (
+          "id", "agentUserId", "type", "level", "message", "metadata"
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          logId,
+          agentUserId,
+          'system',
+          'info',
+          `Agent created: ${name}`,
+          JSON.stringify({ initialDeposit: initialDeposit || 0 }),
+        ]
+      );
 
       return newAgent;
     });
@@ -289,13 +302,10 @@ export class AgentServiceV2 {
     agentUserId: string,
     managerUserId?: string
   ): Promise<User | null> {
-    const agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
 
-    const agent = agentResult[0];
     if (!agent) return null;
     if (!agent.isAgent) throw new Error('User is not an agent');
     if (managerUserId && agent.managedBy !== managerUserId) {
@@ -305,7 +315,7 @@ export class AgentServiceV2 {
         'chat'
       );
     }
-    return agent;
+    return agent as User;
   }
 
   /**
@@ -326,29 +336,27 @@ export class AgentServiceV2 {
     managerUserId: string,
     filters?: { autonomousTrading?: boolean }
   ): Promise<User[]> {
-    // If filtering by autonomousTrading, we need to join with userAgentConfigs
+    // If filtering by autonomousTrading, we need to use raw SQL for the join
     if (filters?.autonomousTrading !== undefined) {
-      const results = await db
-        .select({ user: users })
-        .from(users)
-        .innerJoin(userAgentConfigs, eq(users.id, userAgentConfigs.userId))
-        .where(
-          and(
-            eq(users.isAgent, true),
-            eq(users.managedBy, managerUserId),
-            eq(userAgentConfigs.autonomousTrading, filters.autonomousTrading)
-          )
-        )
-        .orderBy(desc(users.createdAt));
-
-      return results.map((r) => r.user);
+      const results = await db.query<User>(
+        `SELECT u.* FROM "users" u
+         INNER JOIN "userAgentConfigs" uac ON u."id" = uac."userId"
+         WHERE u."isAgent" = true
+         AND u."managedBy" = $1
+         AND uac."autonomousTrading" = $2
+         ORDER BY u."createdAt" DESC`,
+        [managerUserId, filters.autonomousTrading]
+      );
+      return results;
     }
 
-    return db
-      .select()
-      .from(users)
-      .where(and(eq(users.isAgent, true), eq(users.managedBy, managerUserId)))
-      .orderBy(desc(users.createdAt));
+    return db.user.findMany({
+      where: {
+        isAgent: true,
+        managedBy: managerUserId,
+      },
+      orderBy: { createdAt: 'desc' },
+    }) as Promise<User[]>;
   }
 
   async updateAgent(
@@ -383,18 +391,25 @@ export class AgentServiceV2 {
     }
 
     // Update user fields
-    const userUpdates: Record<string, unknown> = { updatedAt: new Date() };
+    const userUpdates: Record<string, unknown> = {
+      updatedAt: new Date().toISOString(),
+    };
     if (updates.name) userUpdates.displayName = updates.name;
     if (updates.description) userUpdates.bio = updates.description;
     if (updates.profileImageUrl !== undefined)
       userUpdates.profileImageUrl = updates.profileImageUrl;
 
     if (Object.keys(userUpdates).length > 1) {
-      await db.update(users).set(userUpdates).where(eq(users.id, agentUserId));
+      await db.user.update({
+        where: { id: agentUserId },
+        data: userUpdates,
+      });
     }
 
     // Update agent config fields
-    const configUpdates: Record<string, unknown> = { updatedAt: new Date() };
+    const configUpdates: Record<string, unknown> = {
+      updatedAt: new Date().toISOString(),
+    };
     if (updates.system) configUpdates.systemPrompt = updates.system;
     if (updates.bio)
       configUpdates.messageExamples = JSON.stringify(updates.bio);
@@ -416,31 +431,29 @@ export class AgentServiceV2 {
       configUpdates.a2aEnabled = updates.a2aEnabled;
 
     if (Object.keys(configUpdates).length > 1) {
-      await db
-        .update(userAgentConfigs)
-        .set(configUpdates)
-        .where(eq(userAgentConfigs.userId, agentUserId));
+      await db.userAgentConfig.update({
+        where: { userId: agentUserId },
+        data: configUpdates,
+      });
     }
 
-    const updatedAgentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const updatedAgent = await db.user.findUniqueOrThrow({
+      where: { id: agentUserId },
+    });
 
-    const updatedAgent = updatedAgentResult[0]!;
-
-    await db.insert(agentLogs).values({
-      id: await generateSnowflakeId(),
-      agentUserId,
-      type: 'system',
-      level: 'info',
-      message: 'Agent configuration updated',
-      metadata: updates,
+    await db.agentLog.create({
+      data: {
+        id: await generateSnowflakeId(),
+        agentUserId,
+        type: 'system',
+        level: 'info',
+        message: 'Agent configuration updated',
+        metadata: JSON.stringify(updates),
+      },
     });
 
     logger.info(`Agent updated: ${agentUserId}`, undefined, 'AgentService');
-    return updatedAgent;
+    return updatedAgent as User;
   }
 
   async deleteAgent(agentUserId: string, managerUserId: string): Promise<void> {
@@ -450,48 +463,55 @@ export class AgentServiceV2 {
     );
     if (!agentWithConfig) throw new Error('Agent not found');
 
-    const pointsBalance = agentWithConfig.agentConfig?.pointsBalance ?? 0;
+    const pointsBalance =
+      Number(agentWithConfig.agentConfig?.pointsBalance) || 0;
 
     await withTransaction(async (tx) => {
       // Return remaining points to manager
       if (pointsBalance > 0) {
-        const managerResult = await tx
-          .select({ reputationPoints: users.reputationPoints })
-          .from(users)
-          .where(eq(users.id, managerUserId))
-          .limit(1);
+        const managerResult = await tx.queryOne<{ reputationPoints: number }>(
+          `SELECT "reputationPoints" FROM "users" WHERE "id" = $1`,
+          [managerUserId]
+        );
 
-        const currentPoints = managerResult[0]?.reputationPoints || 0;
+        const currentPoints = Number(managerResult?.reputationPoints) || 0;
 
-        await tx
-          .update(users)
-          .set({
-            reputationPoints: currentPoints + pointsBalance,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, managerUserId));
+        await tx.exec(
+          `UPDATE "users" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
+          [
+            currentPoints + pointsBalance,
+            new Date().toISOString(),
+            managerUserId,
+          ]
+        );
 
-        await tx.insert(pointsTransactions).values({
-          id: await generateSnowflakeId(),
-          userId: managerUserId,
-          amount: pointsBalance,
-          pointsBefore: currentPoints,
-          pointsAfter: currentPoints + pointsBalance,
-          reason: `Agent deleted, points returned: ${agentWithConfig.displayName}`,
-          metadata: JSON.stringify({
-            agentUserId,
-            agentName: agentWithConfig.displayName,
-          }),
-        });
+        const pointsTxId = await generateSnowflakeId();
+        await tx.exec(
+          `INSERT INTO "pointsTransactions" (
+            "id", "userId", "amount", "pointsBefore", "pointsAfter", "reason", "metadata"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            pointsTxId,
+            managerUserId,
+            pointsBalance,
+            currentPoints,
+            currentPoints + pointsBalance,
+            `Agent deleted, points returned: ${String(agentWithConfig.displayName)}`,
+            JSON.stringify({
+              agentUserId,
+              agentName: agentWithConfig.displayName,
+            }),
+          ]
+        );
       }
 
       // Delete agent config
-      await tx
-        .delete(userAgentConfigs)
-        .where(eq(userAgentConfigs.userId, agentUserId));
+      await tx.exec(`DELETE FROM "userAgentConfigs" WHERE "userId" = $1`, [
+        agentUserId,
+      ]);
 
       // Delete agent user
-      await tx.delete(users).where(eq(users.id, agentUserId));
+      await tx.exec(`DELETE FROM "users" WHERE "id" = $1`, [agentUserId]);
     });
 
     // Clear runtime from agent runtime manager
@@ -515,63 +535,74 @@ export class AgentServiceV2 {
     const config = agentWithConfig.agentConfig;
     if (!config) throw new Error('Agent config not found');
 
-    const managerResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, managerUserId))
-      .limit(1);
+    const manager = await db.user.findUnique({
+      where: { id: managerUserId },
+    });
 
-    const manager = managerResult[0];
     if (!manager) throw new Error('Manager not found');
 
-    const totalPoints = manager.reputationPoints;
+    const totalPoints = Number(manager.reputationPoints);
     if (totalPoints < amount) {
       throw new Error(
         `Insufficient points. Have: ${totalPoints}, Need: ${amount}`
       );
     }
 
+    const configPointsBalance = Number(config.pointsBalance);
+    const configTotalDeposited = Number(config.totalDeposited);
+
     await withTransaction(async (tx) => {
-      await tx
-        .update(userAgentConfigs)
-        .set({
-          pointsBalance: config.pointsBalance + amount,
-          totalDeposited: config.totalDeposited + amount,
-          updatedAt: new Date(),
-        })
-        .where(eq(userAgentConfigs.userId, agentUserId));
-
-      await tx
-        .update(users)
-        .set({
-          reputationPoints: manager.reputationPoints - amount,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, managerUserId));
-
-      await tx.insert(agentPointsTransactions).values({
-        id: await generateSnowflakeId(),
-        agentUserId,
-        managerUserId,
-        type: 'deposit',
-        amount,
-        balanceBefore: config.pointsBalance,
-        balanceAfter: config.pointsBalance + amount,
-        description: 'Points deposit',
-      });
-
-      await tx.insert(pointsTransactions).values({
-        id: await generateSnowflakeId(),
-        userId: managerUserId,
-        amount: -amount,
-        pointsBefore: totalPoints,
-        pointsAfter: totalPoints - amount,
-        reason: `Deposit to agent: ${agentWithConfig.displayName}`,
-        metadata: JSON.stringify({
+      await tx.exec(
+        `UPDATE "userAgentConfigs" SET "pointsBalance" = $1, "totalDeposited" = $2, "updatedAt" = $3 WHERE "userId" = $4`,
+        [
+          configPointsBalance + amount,
+          configTotalDeposited + amount,
+          new Date().toISOString(),
           agentUserId,
-          agentName: agentWithConfig.displayName,
-        }),
-      });
+        ]
+      );
+
+      await tx.exec(
+        `UPDATE "users" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
+        [totalPoints - amount, new Date().toISOString(), managerUserId]
+      );
+
+      const agentPointsTxId = await generateSnowflakeId();
+      await tx.exec(
+        `INSERT INTO "agentPointsTransactions" (
+          "id", "agentUserId", "managerUserId", "type", "amount",
+          "balanceBefore", "balanceAfter", "description"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          agentPointsTxId,
+          agentUserId,
+          managerUserId,
+          'deposit',
+          amount,
+          configPointsBalance,
+          configPointsBalance + amount,
+          'Points deposit',
+        ]
+      );
+
+      const pointsTxId = await generateSnowflakeId();
+      await tx.exec(
+        `INSERT INTO "pointsTransactions" (
+          "id", "userId", "amount", "pointsBefore", "pointsAfter", "reason", "metadata"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          pointsTxId,
+          managerUserId,
+          -amount,
+          totalPoints,
+          totalPoints - amount,
+          `Deposit to agent: ${String(agentWithConfig.displayName)}`,
+          JSON.stringify({
+            agentUserId,
+            agentName: agentWithConfig.displayName,
+          }),
+        ]
+      );
     });
 
     logger.info(
@@ -580,12 +611,10 @@ export class AgentServiceV2 {
       'AgentService'
     );
 
-    const result = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-    return result[0]!;
+    const result = await db.user.findUniqueOrThrow({
+      where: { id: agentUserId },
+    });
+    return result as User;
   }
 
   async withdrawPoints(
@@ -603,61 +632,74 @@ export class AgentServiceV2 {
     const config = agentWithConfig.agentConfig;
     if (!config) throw new Error('Agent config not found');
 
-    if (config.pointsBalance < amount) {
+    const configPointsBalance = Number(config.pointsBalance);
+    const configTotalWithdrawn = Number(config.totalWithdrawn);
+
+    if (configPointsBalance < amount) {
       throw new Error(
-        `Insufficient balance. Have: ${config.pointsBalance}, Need: ${amount}`
+        `Insufficient balance. Have: ${configPointsBalance}, Need: ${amount}`
       );
     }
 
     await withTransaction(async (tx) => {
-      await tx
-        .update(userAgentConfigs)
-        .set({
-          pointsBalance: config.pointsBalance - amount,
-          totalWithdrawn: config.totalWithdrawn + amount,
-          updatedAt: new Date(),
-        })
-        .where(eq(userAgentConfigs.userId, agentUserId));
-
-      const managerResult = await tx
-        .select({ reputationPoints: users.reputationPoints })
-        .from(users)
-        .where(eq(users.id, managerUserId))
-        .limit(1);
-
-      const managerPoints = managerResult[0]?.reputationPoints || 0;
-
-      await tx
-        .update(users)
-        .set({
-          reputationPoints: managerPoints + amount,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, managerUserId));
-
-      await tx.insert(agentPointsTransactions).values({
-        id: await generateSnowflakeId(),
-        agentUserId,
-        managerUserId,
-        type: 'withdraw',
-        amount: -amount,
-        balanceBefore: config.pointsBalance,
-        balanceAfter: config.pointsBalance - amount,
-        description: 'Points withdrawal',
-      });
-
-      await tx.insert(pointsTransactions).values({
-        id: await generateSnowflakeId(),
-        userId: managerUserId,
-        amount,
-        pointsBefore: managerPoints,
-        pointsAfter: managerPoints + amount,
-        reason: `Withdrawal from agent: ${agentWithConfig.displayName}`,
-        metadata: JSON.stringify({
+      await tx.exec(
+        `UPDATE "userAgentConfigs" SET "pointsBalance" = $1, "totalWithdrawn" = $2, "updatedAt" = $3 WHERE "userId" = $4`,
+        [
+          configPointsBalance - amount,
+          configTotalWithdrawn + amount,
+          new Date().toISOString(),
           agentUserId,
-          agentName: agentWithConfig.displayName,
-        }),
-      });
+        ]
+      );
+
+      const managerResult = await tx.queryOne<{ reputationPoints: number }>(
+        `SELECT "reputationPoints" FROM "users" WHERE "id" = $1`,
+        [managerUserId]
+      );
+
+      const managerPoints = Number(managerResult?.reputationPoints) || 0;
+
+      await tx.exec(
+        `UPDATE "users" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
+        [managerPoints + amount, new Date().toISOString(), managerUserId]
+      );
+
+      const agentPointsTxId = await generateSnowflakeId();
+      await tx.exec(
+        `INSERT INTO "agentPointsTransactions" (
+          "id", "agentUserId", "managerUserId", "type", "amount",
+          "balanceBefore", "balanceAfter", "description"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          agentPointsTxId,
+          agentUserId,
+          managerUserId,
+          'withdraw',
+          -amount,
+          configPointsBalance,
+          configPointsBalance - amount,
+          'Points withdrawal',
+        ]
+      );
+
+      const pointsTxId = await generateSnowflakeId();
+      await tx.exec(
+        `INSERT INTO "pointsTransactions" (
+          "id", "userId", "amount", "pointsBefore", "pointsAfter", "reason", "metadata"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          pointsTxId,
+          managerUserId,
+          amount,
+          managerPoints,
+          managerPoints + amount,
+          `Withdrawal from agent: ${String(agentWithConfig.displayName)}`,
+          JSON.stringify({
+            agentUserId,
+            agentName: agentWithConfig.displayName,
+          }),
+        ]
+      );
     });
 
     logger.info(
@@ -666,12 +708,10 @@ export class AgentServiceV2 {
       'AgentService'
     );
 
-    const result = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-    return result[0]!;
+    const result = await db.user.findUniqueOrThrow({
+      where: { id: agentUserId },
+    });
+    return result as User;
   }
 
   async deductPoints(
@@ -683,117 +723,118 @@ export class AgentServiceV2 {
     const config = await getAgentConfig(agentUserId);
     if (!config) throw new Error('Agent config not found');
 
-    if (config.pointsBalance < amount) {
+    const configPointsBalance = Number(config.pointsBalance);
+    const configTotalPointsSpent = Number(config.totalPointsSpent);
+
+    if (configPointsBalance < amount) {
       throw new Error(
-        `Insufficient balance. Have: ${config.pointsBalance}, Need: ${amount}`
+        `Insufficient balance. Have: ${configPointsBalance}, Need: ${amount}`
       );
     }
 
     const newBalance = await withTransaction(async (tx) => {
-      const result = await tx
-        .update(userAgentConfigs)
-        .set({
-          pointsBalance: config.pointsBalance - amount,
-          totalPointsSpent: config.totalPointsSpent + amount,
-          updatedAt: new Date(),
-        })
-        .where(eq(userAgentConfigs.userId, agentUserId))
-        .returning();
+      await tx.exec(
+        `UPDATE "userAgentConfigs" SET "pointsBalance" = $1, "totalPointsSpent" = $2, "updatedAt" = $3 WHERE "userId" = $4`,
+        [
+          configPointsBalance - amount,
+          configTotalPointsSpent + amount,
+          new Date().toISOString(),
+          agentUserId,
+        ]
+      );
 
       // Get the user to find manager
-      const userResult = await tx
-        .select({ managedBy: users.managedBy })
-        .from(users)
-        .where(eq(users.id, agentUserId))
-        .limit(1);
+      const userResult = await tx.queryOne<{ managedBy: string | null }>(
+        `SELECT "managedBy" FROM "users" WHERE "id" = $1`,
+        [agentUserId]
+      );
 
-      const managedBy = userResult[0]?.managedBy || agentUserId;
+      const managedBy = userResult?.managedBy || agentUserId;
 
-      await tx.insert(agentPointsTransactions).values({
-        id: await generateSnowflakeId(),
-        type: reason.includes('chat')
-          ? 'spend_chat'
-          : reason.includes('post')
-            ? 'spend_post'
-            : 'spend_tick',
-        amount: -amount,
-        balanceBefore: config.pointsBalance,
-        balanceAfter: config.pointsBalance - amount,
-        description: reason,
-        relatedId: relatedId ?? null,
-        agentUserId: agentUserId,
-        managerUserId: managedBy,
-      });
+      const agentPointsTxId = await generateSnowflakeId();
+      await tx.exec(
+        `INSERT INTO "agentPointsTransactions" (
+          "id", "agentUserId", "managerUserId", "type", "amount",
+          "balanceBefore", "balanceAfter", "description", "relatedId"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          agentPointsTxId,
+          agentUserId,
+          managedBy,
+          reason.includes('chat')
+            ? 'spend_chat'
+            : reason.includes('post')
+              ? 'spend_post'
+              : 'spend_tick',
+          -amount,
+          configPointsBalance,
+          configPointsBalance - amount,
+          reason,
+          relatedId ?? null,
+        ]
+      );
 
-      return result[0]!.pointsBalance;
+      return configPointsBalance - amount;
     });
 
     return newBalance;
   }
 
   async getPerformance(agentUserId: string): Promise<AgentPerformance> {
-    const agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
 
-    const agent = agentResult[0];
     if (!agent || !agent.isAgent) throw new Error('Agent not found');
 
     // Get pre-calculated performance metrics from agentPerformanceMetrics table
-    const metricsResult = await db
-      .select()
-      .from(agentPerformanceMetrics)
-      .where(eq(agentPerformanceMetrics.userId, agentUserId))
-      .limit(1);
-
-    const metrics = metricsResult[0];
+    const metrics = await db.agentPerformanceMetrics.findUnique({
+      where: { userId: agentUserId },
+    });
 
     // If metrics exist, use them; otherwise fall back to calculating from trades
     if (metrics) {
       // Get trades for avgTradeSize calculation
-      const trades = await db
-        .select()
-        .from(agentTrades)
-        .where(eq(agentTrades.agentUserId, agentUserId));
+      const trades = await db.agentTrade.findMany({
+        where: { agentUserId },
+      });
 
       const tradesWithPnl = trades.filter((t) => t.pnl !== null);
       const avgTradeSize =
         tradesWithPnl.length > 0
-          ? tradesWithPnl.reduce((sum, t) => sum + t.amount, 0) /
+          ? tradesWithPnl.reduce((sum, t) => sum + Number(t.amount), 0) /
             tradesWithPnl.length
           : 0;
 
       return {
         lifetimePnL: Number(agent.lifetimePnL),
-        totalTrades: metrics.totalTrades,
-        profitableTrades: metrics.profitableTrades,
-        winRate: metrics.winRate,
+        totalTrades: Number(metrics.totalTrades),
+        profitableTrades: Number(metrics.profitableTrades),
+        winRate: Number(metrics.winRate),
         avgTradeSize,
       };
     }
 
     // Fallback: calculate from agentTrades if no metrics record exists
-    const trades = await db
-      .select()
-      .from(agentTrades)
-      .where(eq(agentTrades.agentUserId, agentUserId));
+    const trades = await db.agentTrade.findMany({
+      where: { agentUserId },
+    });
 
     const tradesWithPnl = trades.filter((t) => t.pnl !== null);
     const avgTradeSize =
       tradesWithPnl.length > 0
-        ? tradesWithPnl.reduce((sum, t) => sum + t.amount, 0) /
+        ? tradesWithPnl.reduce((sum, t) => sum + Number(t.amount), 0) /
           tradesWithPnl.length
         : 0;
 
     return {
       lifetimePnL: Number(agent.lifetimePnL),
       totalTrades: tradesWithPnl.length,
-      profitableTrades: tradesWithPnl.filter((t) => t.pnl && t.pnl > 0).length,
+      profitableTrades: tradesWithPnl.filter((t) => t.pnl && Number(t.pnl) > 0)
+        .length,
       winRate:
         tradesWithPnl.length > 0
-          ? tradesWithPnl.filter((t) => t.pnl && t.pnl > 0).length /
+          ? tradesWithPnl.filter((t) => t.pnl && Number(t.pnl) > 0).length /
             tradesWithPnl.length
           : 0,
       avgTradeSize,
@@ -801,32 +842,27 @@ export class AgentServiceV2 {
   }
 
   async getChatHistory(agentUserId: string, limit = 50) {
-    return db
-      .select()
-      .from(agentMessages)
-      .where(eq(agentMessages.agentUserId, agentUserId))
-      .orderBy(desc(agentMessages.createdAt))
-      .limit(limit);
+    return db.agentMessage.findMany({
+      where: { agentUserId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
   }
 
   async getLogs(
     agentUserId: string,
     filters?: { type?: string; level?: string; limit?: number }
   ) {
-    const query = db
-      .select()
-      .from(agentLogs)
-      .where(
-        and(
-          eq(agentLogs.agentUserId, agentUserId),
-          ...(filters?.type ? [eq(agentLogs.type, filters.type)] : []),
-          ...(filters?.level ? [eq(agentLogs.level, filters.level)] : [])
-        )
-      )
-      .orderBy(desc(agentLogs.createdAt))
-      .limit(filters?.limit || 100);
+    // Build where clause dynamically
+    const whereClause: Record<string, unknown> = { agentUserId };
+    if (filters?.type) whereClause.type = filters.type;
+    if (filters?.level) whereClause.level = filters.level;
 
-    return query;
+    return db.agentLog.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      take: filters?.limit || 100,
+    });
   }
 
   async createLog(
@@ -849,9 +885,8 @@ export class AgentServiceV2 {
       metadata?: Record<string, JsonValue>;
     }
   ) {
-    const result = await db
-      .insert(agentLogs)
-      .values({
+    return db.agentLog.create({
+      data: {
         id: await generateSnowflakeId(),
         agentUserId,
         type: log.type,
@@ -860,13 +895,9 @@ export class AgentServiceV2 {
         prompt: log.prompt ?? null,
         completion: log.completion ?? null,
         thinking: log.thinking ?? null,
-        metadata: log.metadata
-          ? JSON.parse(JSON.stringify(log.metadata))
-          : null,
-      })
-      .returning();
-
-    return result[0]!;
+        metadata: log.metadata ? JSON.stringify(log.metadata) : null,
+      },
+    });
   }
 
   private shouldAutoSetupAgentIdentity(): boolean {

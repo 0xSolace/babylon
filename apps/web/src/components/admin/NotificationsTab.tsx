@@ -1,8 +1,9 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Bell, MessageCircle, Send, User, UserPlus, Users } from 'lucide-react';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 /**
@@ -45,23 +46,21 @@ export function NotificationsTab() {
   const [userId, setUserId] = useState('');
   const [type, setType] = useState<NotificationType>('system');
   const [recipientType, setRecipientType] = useState<RecipientType>('specific');
-  const [isSending, startSending] = useTransition();
 
   // DM Testing state
   const [dmSenderId, setDmSenderId] = useState('demo-user-babylon-support');
   const [dmRecipientId, setDmRecipientId] = useState('');
-  const [isSendingDm, startSendingDm] = useTransition();
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(
     null
   );
 
-  // Fetch current user ID on mount
-  useEffect(() => {
-    const fetchCurrentUser = async () => {
+  // Fetch current user ID
+  const { data: currentUser } = useQuery<{ id: string } | null>({
+    queryKey: ['users', 'me'],
+    queryFn: async () => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-      if (!token) return;
+      if (!token) return null;
 
       const response = await fetch('/api/users/me', {
         headers: {
@@ -71,25 +70,16 @@ export function NotificationsTab() {
 
       if (response.ok) {
         const data = await response.json();
-        setCurrentUserId(data.user?.id || null);
+        return data.user || null;
       }
-    };
+      return null;
+    },
+  });
 
-    fetchCurrentUser();
-  }, []);
+  const currentUserId = currentUser ? currentUser.id : null;
 
-  const handleSend = useCallback(async () => {
-    if (!message.trim()) {
-      toast.error('Please enter a message');
-      return;
-    }
-
-    if (recipientType === 'specific' && !userId.trim()) {
-      toast.error('Please enter a user ID');
-      return;
-    }
-
-    startSending(async () => {
+  const sendNotificationMutation = useMutation({
+    mutationFn: async () => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
@@ -114,24 +104,27 @@ export function NotificationsTab() {
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
-        toast.success(data.message || 'Notification sent successfully');
-        // Reset form
-        setMessage('');
-        setUserId('');
-      } else {
-        toast.error(data.message || 'Failed to send notification');
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to send notification');
       }
-    });
-  }, [message, userId, type, recipientType]);
 
-  const handleDebugDMs = useCallback(async () => {
-    if (!dmRecipientId.trim()) {
-      toast.error('Please enter a recipient user ID to debug');
-      return;
-    }
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Notification sent successfully');
+      // Reset form
+      setMessage('');
+      setUserId('');
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to send notification'
+      );
+    },
+  });
 
-    startSendingDm(async () => {
+  const debugDMsMutation = useMutation({
+    mutationFn: async (recipientId: string) => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
@@ -140,7 +133,7 @@ export function NotificationsTab() {
       }
 
       const response = await fetch(
-        `/api/admin/debug-dm?userId=${encodeURIComponent(dmRecipientId.trim())}`,
+        `/api/admin/debug-dm?userId=${encodeURIComponent(recipientId.trim())}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -150,35 +143,38 @@ export function NotificationsTab() {
 
       const data = await response.json();
       logger.debug('Debug DM response', { data }, 'NotificationsTab');
+      return data;
+    },
+    onSuccess: (data) => {
       setDebugInfo(data);
+      const participantCount = data.participantRecords
+        ? data.participantRecords.length
+        : 0;
+      const chatCount = data.chats ? data.chats.length : 0;
 
-      if (data.participantRecords?.length === 0) {
+      if (participantCount === 0) {
         toast.error(`No DM chats found for user ${dmRecipientId}`);
       } else {
         toast.success(
-          `Found ${data.participantRecords?.length || 0} DM participant records and ${data.chats?.length || 0} chats`
+          `Found ${participantCount} DM participant records and ${chatCount} chats`
         );
       }
-    });
-  }, [dmRecipientId]);
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to debug DMs'
+      );
+    },
+  });
 
-  const handleSendTestDMs = useCallback(async () => {
-    if (!dmSenderId.trim()) {
-      toast.error('Please enter a sender user ID');
-      return;
-    }
-
-    if (!dmRecipientId.trim()) {
-      toast.error('Please enter a recipient user ID');
-      return;
-    }
-
-    if (dmSenderId === dmRecipientId) {
-      toast.error('Sender and recipient must be different users');
-      return;
-    }
-
-    startSendingDm(async () => {
+  const sendTestDMsMutation = useMutation({
+    mutationFn: async ({
+      senderId,
+      recipientId,
+    }: {
+      senderId: string;
+      recipientId: string;
+    }) => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
@@ -195,38 +191,92 @@ export function NotificationsTab() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          senderId: dmSenderId.trim(),
-          recipientId: dmRecipientId.trim(),
+          senderId: senderId.trim(),
+          recipientId: recipientId.trim(),
           messageCount: 100,
         }),
       });
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
-        const chatId = data.chatId;
-        logger.debug(
-          'Test DM messages sent',
-          { chatId, data },
-          'NotificationsTab'
-        );
-        toast.success(data.message || 'Test DM messages sent successfully', {
-          duration: 10000,
-          action: {
-            label: 'Go to Chats',
-            onClick: () => (window.location.href = '/chats'),
-          },
-        });
-      } else {
+      if (!response.ok || !data.success) {
         logger.error(
           'Failed to send test DM messages',
           { data },
           'NotificationsTab'
         );
-        toast.error(data.message || 'Failed to send test DM messages');
+        throw new Error(data.message || 'Failed to send test DM messages');
       }
+
+      return data;
+    },
+    onSuccess: (data) => {
+      logger.debug(
+        'Test DM messages sent',
+        { chatId: data.chatId, data },
+        'NotificationsTab'
+      );
+      toast.success(data.message || 'Test DM messages sent successfully', {
+        duration: 10000,
+        action: {
+          label: 'Go to Chats',
+          onClick: () => (window.location.href = '/chats'),
+        },
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to send test DM messages'
+      );
+    },
+  });
+
+  const handleSend = useCallback(() => {
+    if (!message.trim()) {
+      toast.error('Please enter a message');
+      return;
+    }
+
+    if (recipientType === 'specific' && !userId.trim()) {
+      toast.error('Please enter a user ID');
+      return;
+    }
+
+    sendNotificationMutation.mutate();
+  }, [message, userId, recipientType, sendNotificationMutation]);
+
+  const handleDebugDMs = useCallback(() => {
+    if (!dmRecipientId.trim()) {
+      toast.error('Please enter a recipient user ID to debug');
+      return;
+    }
+
+    debugDMsMutation.mutate(dmRecipientId);
+  }, [dmRecipientId, debugDMsMutation]);
+
+  const handleSendTestDMs = useCallback(() => {
+    if (!dmSenderId.trim()) {
+      toast.error('Please enter a sender user ID');
+      return;
+    }
+
+    if (!dmRecipientId.trim()) {
+      toast.error('Please enter a recipient user ID');
+      return;
+    }
+
+    if (dmSenderId === dmRecipientId) {
+      toast.error('Sender and recipient must be different users');
+      return;
+    }
+
+    sendTestDMsMutation.mutate({
+      senderId: dmSenderId,
+      recipientId: dmRecipientId,
     });
-  }, [dmSenderId, dmRecipientId]);
+  }, [dmSenderId, dmRecipientId, sendTestDMsMutation]);
 
   return (
     <div className="space-y-6">
@@ -287,7 +337,7 @@ export function NotificationsTab() {
                 'focus:border-border focus:outline-none',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
-              disabled={isSending}
+              disabled={sendNotificationMutation.isPending}
             />
             <p className="mt-1 text-muted-foreground text-xs">
               You can find user IDs in the Users tab or in the database
@@ -310,7 +360,7 @@ export function NotificationsTab() {
               'focus:border-border focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50'
             )}
-            disabled={isSending}
+            disabled={sendNotificationMutation.isPending}
           >
             <option value="system">System</option>
             <option value="comment">Comment</option>
@@ -341,7 +391,7 @@ export function NotificationsTab() {
               'disabled:cursor-not-allowed disabled:opacity-50',
               'resize-none'
             )}
-            disabled={isSending}
+            disabled={sendNotificationMutation.isPending}
           />
           <p className="mt-1 text-muted-foreground text-xs">
             {message.length}/500 characters
@@ -352,7 +402,7 @@ export function NotificationsTab() {
         <button
           onClick={handleSend}
           disabled={
-            isSending ||
+            sendNotificationMutation.isPending ||
             !message.trim() ||
             (recipientType === 'specific' && !userId.trim())
           }
@@ -364,7 +414,11 @@ export function NotificationsTab() {
           )}
         >
           <Send className="h-4 w-4" />
-          <span>{isSending ? 'Sending...' : 'Send Notification'}</span>
+          <span>
+            {sendNotificationMutation.isPending
+              ? 'Sending...'
+              : 'Send Notification'}
+          </span>
         </button>
       </div>
 
@@ -436,7 +490,7 @@ export function NotificationsTab() {
                 'focus:border-border focus:outline-none',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
-              disabled={isSendingDm}
+              disabled={sendTestDMsMutation.isPending}
             />
             <p className="mt-1 text-muted-foreground text-xs">
               Default: demo-user-babylon-support (Babylon Support)
@@ -464,7 +518,7 @@ export function NotificationsTab() {
                   'focus:border-border focus:outline-none',
                   'disabled:cursor-not-allowed disabled:opacity-50'
                 )}
-                disabled={isSendingDm}
+                disabled={sendTestDMsMutation.isPending}
               />
               <button
                 type="button"
@@ -476,7 +530,7 @@ export function NotificationsTab() {
                     toast.error('Could not fetch your user ID');
                   }
                 }}
-                disabled={isSendingDm || !currentUserId}
+                disabled={sendTestDMsMutation.isPending || !currentUserId}
                 className={cn(
                   'rounded-lg border border-border px-3 py-2',
                   'bg-primary text-primary-foreground transition-colors hover:bg-primary/90',
@@ -490,7 +544,7 @@ export function NotificationsTab() {
               <button
                 type="button"
                 onClick={() => setDmRecipientId('demo-user-welcome-bot')}
-                disabled={isSendingDm}
+                disabled={sendTestDMsMutation.isPending}
                 className={cn(
                   'rounded-lg border border-border px-3 py-2',
                   'bg-background transition-colors hover:bg-muted',
@@ -512,7 +566,7 @@ export function NotificationsTab() {
           <div className="flex gap-2">
             <button
               onClick={handleDebugDMs}
-              disabled={!dmRecipientId.trim()}
+              disabled={!dmRecipientId.trim() || debugDMsMutation.isPending}
               className={cn(
                 'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3',
                 'bg-secondary font-medium text-secondary-foreground',
@@ -527,7 +581,9 @@ export function NotificationsTab() {
             <button
               onClick={handleSendTestDMs}
               disabled={
-                isSendingDm || !dmSenderId.trim() || !dmRecipientId.trim()
+                sendTestDMsMutation.isPending ||
+                !dmSenderId.trim() ||
+                !dmRecipientId.trim()
               }
               className={cn(
                 'flex flex-[2] items-center justify-center gap-2 rounded-lg px-6 py-3',
@@ -538,7 +594,7 @@ export function NotificationsTab() {
             >
               <MessageCircle className="h-4 w-4" />
               <span>
-                {isSendingDm
+                {sendTestDMsMutation.isPending
                   ? 'Sending 100 Messages...'
                   : 'Send 100 Test DM Messages'}
               </span>
@@ -623,9 +679,55 @@ function GroupInviteSection() {
   const [userId, setUserId] = useState('');
   const [chatId, setChatId] = useState('');
   const [chatName, setChatName] = useState('');
-  const [sending, setSending] = useState(false);
 
-  const handleSendInvite = useCallback(async () => {
+  const sendInviteMutation = useMutation({
+    mutationFn: async () => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch('/api/admin/group-invite', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          npcId: npcId.trim(),
+          userId: userId.trim(),
+          chatId: chatId.trim() || undefined,
+          chatName: chatName.trim() || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || data.message || 'Failed to send group invite'
+        );
+      }
+
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Group invite sent successfully');
+      // Reset form
+      setUserId('');
+      setChatId('');
+      setChatName('');
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to send group invite'
+      );
+    },
+  });
+
+  const handleSendInvite = useCallback(() => {
     if (!npcId.trim()) {
       toast.error('Please enter an NPC ID');
       return;
@@ -636,42 +738,8 @@ function GroupInviteSection() {
       return;
     }
 
-    setSending(true);
-
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
-    const response = await fetch('/api/admin/group-invite', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        npcId: npcId.trim(),
-        userId: userId.trim(),
-        chatId: chatId.trim() || undefined,
-        chatName: chatName.trim() || undefined,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      toast.success(data.message || 'Group invite sent successfully');
-      // Reset form
-      setUserId('');
-      setChatId('');
-      setChatName('');
-    } else {
-      toast.error(data.error || data.message || 'Failed to send group invite');
-    }
-    setSending(false);
-  }, [npcId, userId, chatId, chatName]);
+    sendInviteMutation.mutate();
+  }, [npcId, userId, sendInviteMutation]);
 
   return (
     <div className="space-y-4">
@@ -705,7 +773,7 @@ function GroupInviteSection() {
               'focus:border-primary focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50'
             )}
-            disabled={sending}
+            disabled={sendInviteMutation.isPending}
           />
           <p className="mt-1 text-muted-foreground text-xs">
             The NPC that will send the invite. Check the Users tab or database
@@ -733,7 +801,7 @@ function GroupInviteSection() {
               'focus:border-primary focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50'
             )}
-            disabled={sending}
+            disabled={sendInviteMutation.isPending}
           />
           <p className="mt-1 text-muted-foreground text-xs">
             The user who will receive the invite. Find user IDs in the Users
@@ -758,7 +826,7 @@ function GroupInviteSection() {
               'focus:border-primary focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50'
             )}
-            disabled={sending}
+            disabled={sendInviteMutation.isPending}
           />
           <p className="mt-1 text-muted-foreground text-xs">
             Optional. If empty, will use format: [npcId]-owned-chat
@@ -782,7 +850,7 @@ function GroupInviteSection() {
               'focus:border-primary focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50'
             )}
-            disabled={sending}
+            disabled={sendInviteMutation.isPending}
           />
           <p className="mt-1 text-muted-foreground text-xs">
             Optional. If empty, will use format: [NPC Name]&apos;s Inner Circle
@@ -792,7 +860,9 @@ function GroupInviteSection() {
         {/* Send Button */}
         <button
           onClick={handleSendInvite}
-          disabled={sending || !npcId.trim() || !userId.trim()}
+          disabled={
+            sendInviteMutation.isPending || !npcId.trim() || !userId.trim()
+          }
           className={cn(
             'flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3',
             'bg-primary font-semibold text-primary-foreground',
@@ -801,7 +871,11 @@ function GroupInviteSection() {
           )}
         >
           <UserPlus className="h-4 w-4" />
-          <span>{sending ? 'Sending Invite...' : 'Send Group Invite'}</span>
+          <span>
+            {sendInviteMutation.isPending
+              ? 'Sending Invite...'
+              : 'Send Group Invite'}
+          </span>
         </button>
       </div>
 

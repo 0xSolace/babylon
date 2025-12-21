@@ -4,7 +4,7 @@
  * Connects to local A2A server and provides all required methods.
  */
 
-import { ethers } from 'ethers';
+import { privateKeyToAccount } from 'viem/accounts';
 import type {
   A2AClientInterface,
   AgentInfo,
@@ -33,8 +33,8 @@ export class HarnessA2AClient implements A2AClientInterface {
   constructor(config: A2AClientConfig) {
     this.baseUrl = config.baseUrl;
 
-    const wallet = new ethers.Wallet(config.privateKey);
-    this.address = wallet.address;
+    const account = privateKeyToAccount(config.privateKey as `0x${string}`);
+    this.address = account.address;
     this.tokenId = Math.floor(Date.now() / 1000) % 1000000;
     this.agentId = `agent-31337-${this.tokenId}`;
   }

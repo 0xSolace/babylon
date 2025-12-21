@@ -455,43 +455,39 @@ export class MessagingService {
     }
 
     // Generate new keys via KMS
-    try {
-      const response = await fetch(`${this.kmsEndpoint}/keys/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'encryption',
-          curve: 'x25519',
-          owner: address,
-        }),
-      });
+    const response = await fetch(`${this.kmsEndpoint}/keys/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'encryption',
+        curve: 'x25519',
+        owner: address,
+      }),
+    });
 
-      if (!response.ok) return null;
+    if (!response.ok) return null;
 
-      const data = (await response.json()) as {
-        publicKey: string;
-        metadata: { id: string };
-      };
+    const data = (await response.json()) as {
+      publicKey: string;
+      metadata: { id: string };
+    };
 
-      await this.cql.exec(
-        `INSERT INTO user_keys (address, encryption_public_key, signing_public_key, kms_key_id, registered_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          address,
-          data.publicKey,
-          data.publicKey,
-          data.metadata.id,
-          Date.now(),
-          Date.now(),
-        ]
-      );
+    await this.cql.exec(
+      `INSERT INTO user_keys (address, encryption_public_key, signing_public_key, kms_key_id, registered_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        address,
+        data.publicKey,
+        data.publicKey,
+        data.metadata.id,
+        Date.now(),
+        Date.now(),
+      ]
+    );
 
-      return {
-        encryptionPublicKey: data.publicKey,
-        signingPublicKey: data.publicKey,
-      };
-    } catch {
-      return null;
-    }
+    return {
+      encryptionPublicKey: data.publicKey,
+      signingPublicKey: data.publicKey,
+    };
   }
 
   private mapMessageRow(row: Record<string, unknown>): Message {

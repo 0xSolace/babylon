@@ -6,13 +6,7 @@
  * points for trades.
  */
 
-import {
-  db,
-  eq,
-  pointsTransactions,
-  type Transaction,
-  users,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 
 /**
@@ -59,29 +53,20 @@ export class EarnedPointsService {
    * @throws {Error} If user not found
    */
   static async syncEarnedPointsFromPnL(userId: string): Promise<void> {
-    const result = await db
-      .select({
-        lifetimePnL: users.lifetimePnL,
-        earnedPoints: users.earnedPoints,
-        invitePoints: users.invitePoints,
-        bonusPoints: users.bonusPoints,
-        reputationPoints: users.reputationPoints,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = result[0];
+    const user = await db.user.findUnique({
+      where: { id: userId },
+    });
 
     if (!user) {
       throw new Error(`User not found: ${userId}`);
     }
 
     const lifetimePnL = Number(user.lifetimePnL);
+    const currentEarnedPoints = Number(user.earnedPoints);
     const newEarnedPoints = EarnedPointsService.pnlToPoints(lifetimePnL);
 
     // Only update if earned points have changed
-    if (newEarnedPoints === user.earnedPoints) {
+    if (newEarnedPoints === currentEarnedPoints) {
       return;
     }
 
@@ -89,15 +74,18 @@ export class EarnedPointsService {
     // Total = Invite Points + Earned Points + Bonus Points + Base (100)
     const basePoints = 100;
     const newReputationPoints =
-      basePoints + user.invitePoints + newEarnedPoints + user.bonusPoints;
+      basePoints +
+      Number(user.invitePoints) +
+      newEarnedPoints +
+      Number(user.bonusPoints);
 
-    await db
-      .update(users)
-      .set({
+    await db.user.update({
+      where: { id: userId },
+      data: {
         earnedPoints: newEarnedPoints,
         reputationPoints: newReputationPoints,
-      })
-      .where(eq(users.id, userId));
+      },
+    });
 
     logger.info(
       'Updated earned points from P&L',
@@ -124,7 +112,6 @@ export class EarnedPointsService {
    * @param {number} newLifetimePnL - New lifetime P&L (after this trade)
    * @param {string} tradeType - Type of trade (for transaction record)
    * @param {string} [relatedId] - Optional related entity ID (trade ID, etc.)
-   * @param {Transaction} [tx] - Optional transaction client for atomic operations
    * @returns {Promise<number>} Points awarded (can be negative)
    * @throws {Error} If user not found
    */
@@ -132,32 +119,20 @@ export class EarnedPointsService {
     userId: string,
     newLifetimePnL: number,
     tradeType: string,
-    relatedId?: string,
-    tx?: Transaction
+    relatedId?: string
   ): Promise<number> {
-    const database = tx ?? db;
     const computedEarnedPoints =
       EarnedPointsService.pnlToPoints(newLifetimePnL);
 
-    const result = await database
-      .select({
-        earnedPoints: users.earnedPoints,
-        invitePoints: users.invitePoints,
-        bonusPoints: users.bonusPoints,
-        reputationPoints: users.reputationPoints,
-        lifetimePnL: users.lifetimePnL,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = result[0];
+    const user = await db.user.findUnique({
+      where: { id: userId },
+    });
 
     if (!user) {
       throw new Error(`User not found: ${userId}`);
     }
 
-    const currentEarnedPoints = user.earnedPoints;
+    const currentEarnedPoints = Number(user.earnedPoints);
     const storedLifetimePnL = Number(user.lifetimePnL);
 
     // Compute what earnedPoints should be based on the NEW lifetimePnL
@@ -196,33 +171,38 @@ export class EarnedPointsService {
     const newEarnedPoints = computedEarnedPoints;
     const basePoints = 100;
     const newReputationPoints =
-      basePoints + user.invitePoints + newEarnedPoints + user.bonusPoints;
+      basePoints +
+      Number(user.invitePoints) +
+      newEarnedPoints +
+      Number(user.bonusPoints);
 
     // Update user and create transaction
-    await database
-      .update(users)
-      .set({
+    await db.user.update({
+      where: { id: userId },
+      data: {
         earnedPoints: newEarnedPoints,
         reputationPoints: newReputationPoints,
-      })
-      .where(eq(users.id, userId));
+      },
+    });
 
-    await database.insert(pointsTransactions).values({
-      id: await generateSnowflakeId(),
-      userId,
-      amount: earnedPointsDelta,
-      pointsBefore: user.reputationPoints,
-      pointsAfter: newReputationPoints,
-      reason: 'trading_pnl',
-      metadata: JSON.stringify({
-        tradeType,
-        relatedId,
-        storedLifetimePnL,
-        newLifetimePnL,
-        previousEarnedPoints: currentEarnedPoints,
-        newEarnedPoints,
-        earnedPointsDelta,
-      }),
+    await db.pointsTransaction.create({
+      data: {
+        id: await generateSnowflakeId(),
+        userId,
+        amount: earnedPointsDelta,
+        pointsBefore: Number(user.reputationPoints),
+        pointsAfter: newReputationPoints,
+        reason: 'trading_pnl',
+        metadata: JSON.stringify({
+          tradeType,
+          relatedId,
+          storedLifetimePnL,
+          newLifetimePnL,
+          previousEarnedPoints: currentEarnedPoints,
+          newEarnedPoints,
+          earnedPointsDelta,
+        }),
+      },
     });
 
     logger.info(
@@ -250,10 +230,9 @@ export class EarnedPointsService {
     success: number;
     errors: number;
   }> {
-    const usersList = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.isActor, false));
+    const usersList = await db.user.findMany({
+      where: { isActor: false },
+    });
 
     logger.info(
       `Syncing earned points for ${usersList.length} users`,
@@ -264,8 +243,8 @@ export class EarnedPointsService {
     let successCount = 0;
     const errorCount = 0;
 
-    for (const user of usersList) {
-      await EarnedPointsService.syncEarnedPointsFromPnL(user.id);
+    for (const userRecord of usersList) {
+      await EarnedPointsService.syncEarnedPointsFromPnL(String(userRecord.id));
       successCount++;
     }
 

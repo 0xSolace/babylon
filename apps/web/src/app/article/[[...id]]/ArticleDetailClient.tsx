@@ -1,8 +1,9 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, MessageCircle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 
@@ -31,10 +32,6 @@ export default function ArticleDetailClient() {
   const idParam = params.id;
   const articleId = Array.isArray(idParam) ? idParam[0] : idParam;
 
-  const [article, setArticle] = useState<ArticlePost | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   // Redirect to home if no article ID provided
   useEffect(() => {
     if (!articleId) {
@@ -42,21 +39,19 @@ export default function ArticleDetailClient() {
     }
   }, [articleId, router]);
 
-  useEffect(() => {
-    if (!articleId) return;
-    const loadArticle = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      // Fetch from posts API since articles are posts with type='article'
+  const {
+    data: article,
+    isLoading,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['article', articleId],
+    queryFn: async () => {
       const response = await fetch(`/api/posts/${articleId}`);
 
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
         const errorMsg = result.error?.message || 'Failed to load article';
-        setError(errorMsg);
-        setIsLoading(false);
-        return;
+        throw new Error(errorMsg);
       }
 
       const result = await response.json();
@@ -66,16 +61,15 @@ export default function ArticleDetailClient() {
       if (articleData.type !== 'article') {
         // Redirect to regular post page if not an article
         router.replace(`/post/${articleId}`);
-        setIsLoading(false);
-        return;
+        throw new Error('Not an article');
       }
 
-      setArticle(articleData);
-      setIsLoading(false);
-    };
+      return articleData as ArticlePost;
+    },
+    enabled: !!articleId,
+  });
 
-    loadArticle();
-  }, [articleId, router]);
+  const error = queryError instanceof Error ? queryError.message : null;
 
   if (isLoading) {
     return (
@@ -140,7 +134,7 @@ export default function ArticleDetailClient() {
               <article className="px-4 py-4 sm:px-6 sm:py-5">
                 {/* Article title */}
                 <h1 className="mb-4 font-bold text-3xl text-foreground leading-tight sm:text-4xl">
-                  {article.articleTitle}
+                  {article.articleTitle || article.content.split('\n')[0]}
                 </h1>
 
                 {/* Article metadata */}
@@ -206,7 +200,7 @@ export default function ArticleDetailClient() {
           <article className="px-4 py-4 sm:px-6 sm:py-5">
             {/* Article title */}
             <h1 className="mb-4 font-bold text-2xl text-foreground leading-tight sm:text-3xl">
-              {article.articleTitle}
+              {article.articleTitle || article.content.split('\n')[0]}
             </h1>
 
             {/* Article metadata */}

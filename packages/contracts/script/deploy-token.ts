@@ -52,24 +52,19 @@ import {
   parseEther,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arbitrum, base, baseSepolia, hardhat, sepolia } from 'viem/chains';
+import { base, baseSepolia, hardhat, sepolia } from 'viem/chains';
 import {
   AIRDROP_TOKENS,
-  BABYLON_LABS_CLIFF,
   BABYLON_LABS_TOKENS,
-  BABYLON_LABS_VESTING,
   LIQUIDITY_TOKENS,
   PUBLIC_SALE_TOKENS,
   TOKEN_NAME,
   TOKEN_SYMBOL,
   TOTAL_SUPPLY_WEI,
-  TREASURY_CLIFF,
   TREASURY_TOKENS,
-  TREASURY_VESTING,
   tokensToWei,
 } from '../src/config/tokenomics';
 import {
-  type ContractName,
   deployContract,
   deployContractCreate2,
 } from '../src/deployer/contract-deployer';

@@ -137,9 +137,7 @@ describe('E2E - Autonomous Agent Live Tests', () => {
     console.log('Initializing decision maker...');
     decisionMaker = new AgentDecisionMaker({
       strategy: 'balanced',
-      groqApiKey: process.env.GROQ_API_KEY,
-      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-      openaiApiKey: process.env.OPENAI_API_KEY,
+      jejuGatewayUrl: process.env.JEJU_GATEWAY_URL,
     });
 
     memory = new AgentMemory({ maxEntries: 20 });

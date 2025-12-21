@@ -6,7 +6,6 @@
  * For real-time messaging, use Farcaster or the messaging service.
  */
 
-import { logger } from '@babylon/shared';
 import type { JsonValue } from '../types';
 import { getRedisClient } from './client';
 
@@ -29,24 +28,16 @@ export async function streamAdd(
   payload: Record<string, JsonValue>,
   _opts?: { maxlen?: number }
 ): Promise<string | null> {
-  try {
-    const client = getRedisClient();
-    const entry = encodeStreamPayload(payload);
+  const client = getRedisClient();
+  const entry = encodeStreamPayload(payload);
 
-    // Convert entry to field/value pairs
-    const args: string[] = [];
-    Object.entries(entry).forEach(([key, value]) => {
-      args.push(key, String(value));
-    });
+  // Convert entry to field/value pairs
+  const args: string[] = [];
+  Object.entries(entry).forEach(([key, value]) => {
+    args.push(key, String(value));
+  });
 
-    return await client.xadd(stream, '*', ...args);
-  } catch (error) {
-    logger.warn(
-      '[Streams] streamAdd failed, stream operations limited in decentralized mode',
-      { stream, error }
-    );
-    return null;
-  }
+  return await client.xadd(stream, '*', ...args);
 }
 
 export interface StreamMessage<T = Record<string, unknown>> {
@@ -60,13 +51,9 @@ export interface StreamMessage<T = Record<string, unknown>> {
  */
 const extractPayload = (
   data: Record<string, string>
-): Record<string, unknown> | null => {
+): Record<string, unknown> => {
   if (data.payload) {
-    try {
-      return JSON.parse(data.payload) as Record<string, unknown>;
-    } catch {
-      return { payload: data.payload };
-    }
+    return JSON.parse(data.payload) as Record<string, unknown>;
   }
   return data as Record<string, unknown>;
 };
@@ -82,38 +69,25 @@ export async function streamRead(
   _ids: string[],
   _opts?: { count?: number; block?: number }
 ): Promise<StreamMessage[]> {
-  try {
-    const client = getRedisClient();
-    const results: StreamMessage[] = [];
+  const client = getRedisClient();
+  const results: StreamMessage[] = [];
 
-    for (const stream of streams) {
-      // Get all entries from the stream (simplified - no ID tracking)
-      const streamData = await client.get(stream);
+  for (const stream of streams) {
+    // Get all entries from the stream (simplified - no ID tracking)
+    const streamData = await client.get(stream);
 
-      if (streamData) {
-        try {
-          const entries = JSON.parse(streamData) as Array<{
-            id: string;
-            data: Record<string, string>;
-          }>;
-          for (const entry of entries) {
-            const payload = extractPayload(entry.data);
-            if (payload) {
-              results.push({ stream, id: entry.id, payload });
-            }
-          }
-        } catch {
-          // Not a valid stream structure
-        }
+    if (streamData) {
+      const entries = JSON.parse(streamData) as Array<{
+        id: string;
+        data: Record<string, string>;
+      }>;
+
+      for (const entry of entries) {
+        const payload = extractPayload(entry.data);
+        results.push({ stream, id: entry.id, payload });
       }
     }
-
-    return results;
-  } catch (error) {
-    logger.warn(
-      '[Streams] streamRead failed, stream operations limited in decentralized mode',
-      { error }
-    );
-    return [];
   }
+
+  return results;
 }

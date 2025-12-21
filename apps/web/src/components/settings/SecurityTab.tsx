@@ -50,11 +50,11 @@ export function SecurityTab() {
   };
 
   // Extract linked account info
-  const emailAccount = linkedAccounts?.find((acc) => acc.type === 'email');
-  const farcasterAccount = linkedAccounts?.find(
+  const emailAccount = linkedAccounts.find((acc) => acc.type === 'email');
+  const farcasterAccount = linkedAccounts.find(
     (acc) => acc.type === 'farcaster'
   );
-  const twitterAccount = linkedAccounts?.find((acc) => acc.type === 'twitter');
+  const twitterAccount = linkedAccounts.find((acc) => acc.type === 'twitter');
 
   return (
     <div className="space-y-6">

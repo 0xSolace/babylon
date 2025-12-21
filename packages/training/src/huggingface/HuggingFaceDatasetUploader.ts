@@ -574,35 +574,17 @@ For questions or issues, please open an issue on the Babylon repository.
       throw new Error('HuggingFace token not configured');
     }
 
-    try {
-      // Use shared upload utility
-      const { HuggingFaceUploadUtil } = await import(
-        './shared/HuggingFaceUploadUtil'
-      );
+    // Use shared upload utility - let errors propagate
+    const { HuggingFaceUploadUtil } = await import(
+      './shared/HuggingFaceUploadUtil'
+    );
 
-      return await HuggingFaceUploadUtil.uploadDirectory(
-        datasetName,
-        'dataset',
-        localDir,
-        this.huggingFaceToken
-      );
-    } catch (error) {
-      logger.error('Failed to upload to HuggingFace Hub', { error });
-
-      // Provide helpful manual upload instructions
-      const { HuggingFaceUploadUtil } = await import(
-        './shared/HuggingFaceUploadUtil'
-      );
-      const instructions = HuggingFaceUploadUtil.getManualUploadInstructions(
-        datasetName,
-        'dataset',
-        localDir
-      );
-
-      logger.info('To upload manually:', { instructions });
-
-      throw error;
-    }
+    return await HuggingFaceUploadUtil.uploadDirectory(
+      datasetName,
+      'dataset',
+      localDir,
+      this.huggingFaceToken
+    );
   }
 
   /**

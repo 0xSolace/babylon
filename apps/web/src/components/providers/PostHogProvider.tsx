@@ -45,7 +45,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
         posthog.capture('$pageview', {
           $current_url: url,
           $pathname: pathname,
-          $search_params: searchParams?.toString() || '',
+          $search_params: searchParams.toString() || '',
         });
       }
     }

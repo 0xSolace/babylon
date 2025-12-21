@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Crown, Plus, Users } from 'lucide-react';
 /**
  * User groups list component for displaying groups the user is a member of.
@@ -19,7 +20,7 @@ import { Crown, Plus, Users } from 'lucide-react';
  *
  * @returns User groups list element
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CreateGroupModal } from './CreateGroupModal';
 import { GroupDetailsModal } from './GroupDetailsModal';
 
@@ -36,27 +37,32 @@ interface UserGroup {
   isAdmin: boolean;
 }
 
+interface UserGroupsResponse {
+  data: UserGroup[];
+}
+
 export function UserGroupsList() {
-  const [groups, setGroups] = useState<UserGroup[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
-  const loadGroups = useCallback(async () => {
-    const response = await fetch('/api/user-groups');
-    const data = await response.json();
+  const { data: groups, isLoading } = useQuery({
+    queryKey: ['user-groups'],
+    queryFn: async (): Promise<UserGroup[]> => {
+      const response = await fetch('/api/user-groups');
+      const data: UserGroupsResponse = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to load groups');
-    }
+      if (!response.ok) {
+        throw new Error('Failed to load groups');
+      }
 
-    setGroups(data.data);
-    setIsLoading(false);
-  }, []);
+      return data.data;
+    },
+  });
 
-  useEffect(() => {
-    loadGroups();
-  }, [loadGroups]);
+  const handleGroupsChange = () => {
+    queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+  };
 
   if (isLoading) {
     return (
@@ -82,11 +88,7 @@ export function UserGroupsList() {
           </button>
         </div>
         <div className="p-6">
-          {isLoading ? (
-            <div className="py-8 text-center text-muted-foreground">
-              Loading groups...
-            </div>
-          ) : groups.length === 0 ? (
+          {!groups || groups.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <Users className="mx-auto mb-4 h-12 w-12 opacity-50" />
               <p>You haven't joined any groups yet.</p>
@@ -133,7 +135,7 @@ export function UserGroupsList() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onGroupCreated={() => {
-          loadGroups();
+          handleGroupsChange();
         }}
       />
 
@@ -141,7 +143,7 @@ export function UserGroupsList() {
         <GroupDetailsModal
           groupId={selectedGroupId}
           onClose={() => setSelectedGroupId(null)}
-          onGroupUpdated={loadGroups}
+          onGroupUpdated={handleGroupsChange}
         />
       )}
     </>

@@ -1,9 +1,27 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Loader2, Send, X } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+
+/**
+ * Transfer points request payload.
+ */
+interface TransferPointsPayload {
+  recipientId: string;
+  amount: number;
+  message?: string;
+}
+
+/**
+ * Transfer points response structure.
+ */
+interface TransferPointsResponse {
+  success: boolean;
+  error?: string;
+}
 
 /**
  * Send points modal component for transferring points to other users.
@@ -54,66 +72,78 @@ export function SendPointsModal({
   onSuccess,
 }: SendPointsModalProps) {
   const { getAccessToken } = useAuth();
+  const queryClient = useQueryClient();
   const [amount, setAmount] = useState('');
   const [message, setMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const transferMutation = useMutation({
+    mutationFn: async (
+      payload: TransferPointsPayload
+    ): Promise<TransferPointsResponse> => {
+      const token = await getAccessToken();
+      const response = await fetch('/api/points/transfer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data: TransferPointsResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send points');
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      setSuccess(true);
+      // Invalidate balance queries
+      queryClient.invalidateQueries({ queryKey: ['balance'] });
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+
+      // Wait a moment to show success state
+      setTimeout(() => {
+        onSuccess?.();
+        handleClose();
+      }, 1500);
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
 
     const numAmount = Number.parseInt(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      setError('Please enter a valid amount');
       return;
     }
 
-    setIsSubmitting(true);
-
-    const token = await getAccessToken();
-    const response = await fetch('/api/points/transfer', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        recipientId,
-        amount: numAmount,
-        message: message.trim() || undefined,
-      }),
+    transferMutation.mutate({
+      recipientId,
+      amount: numAmount,
+      message: message.trim() || undefined,
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      setIsSubmitting(false);
-      setError(data.error || 'Failed to send points');
-      return;
-    }
-
-    setSuccess(true);
-    setIsSubmitting(false);
-
-    // Wait a moment to show success state
-    setTimeout(() => {
-      onSuccess?.();
-      handleClose();
-    }, 1500);
   };
 
   const handleClose = () => {
-    if (isSubmitting) return;
+    if (transferMutation.isPending) return;
     setAmount('');
     setMessage('');
-    setError(null);
     setSuccess(false);
+    transferMutation.reset();
     onClose();
   };
 
   if (!isOpen) return null;
+
+  const isSubmitting = transferMutation.isPending;
+  const error =
+    transferMutation.error instanceof Error
+      ? transferMutation.error.message
+      : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

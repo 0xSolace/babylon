@@ -35,36 +35,29 @@ async function main() {
 
   console.log('\nAttempting to score...');
 
-  try {
-    const result = await archetypeScoringService.scoreByArchetype(
-      'default',
-      ids
-    );
-    console.log('\nResult:', result);
+  const result = await archetypeScoringService.scoreByArchetype('default', ids);
+  console.log('\nResult:', result);
 
-    // Check if any were scored
-    const scored = await db
-      .select({
-        trajectoryId: trajectories.trajectoryId,
-        aiJudgeReward: trajectories.aiJudgeReward,
-        aiJudgeReasoning: trajectories.aiJudgeReasoning,
-      })
-      .from(trajectories)
-      .where(not(isNull(trajectories.aiJudgeReward)))
-      .orderBy(desc(trajectories.judgedAt))
-      .limit(5);
+  // Check if any were scored
+  const scored = await db
+    .select({
+      trajectoryId: trajectories.trajectoryId,
+      aiJudgeReward: trajectories.aiJudgeReward,
+      aiJudgeReasoning: trajectories.aiJudgeReasoning,
+    })
+    .from(trajectories)
+    .where(not(isNull(trajectories.aiJudgeReward)))
+    .orderBy(desc(trajectories.judgedAt))
+    .limit(5);
 
-    console.log('\nScored trajectories:', scored.length);
-    if (scored.length > 0) {
-      console.log('Sample scores:');
-      for (const s of scored) {
-        console.log(
-          `  ${s.trajectoryId}: score=${s.aiJudgeReward}, reasoning=${s.aiJudgeReasoning?.substring(0, 50)}...`
-        );
-      }
+  console.log('\nScored trajectories:', scored.length);
+  if (scored.length > 0) {
+    console.log('Sample scores:');
+    for (const s of scored) {
+      console.log(
+        `  ${s.trajectoryId}: score=${s.aiJudgeReward}, reasoning=${s.aiJudgeReasoning?.substring(0, 50)}...`
+      );
     }
-  } catch (error) {
-    console.error('Scoring error:', error);
   }
 
   process.exit(0);

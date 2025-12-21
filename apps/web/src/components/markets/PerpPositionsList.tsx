@@ -1,6 +1,7 @@
 'use client';
 
 import { calculateUnrealizedPnL, cn } from '@babylon/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -65,7 +66,6 @@ export function PerpPositionsList({
   positions,
   onPositionClosed,
 }: PerpPositionsListProps) {
-  const [closingId, setClosingId] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingClose, setPendingClose] = useState<{
     position: PerpPosition;
@@ -77,12 +77,42 @@ export function PerpPositionsList({
   const { closePosition: closePerpPosition } = usePerpTrade({
     getAccessToken,
   });
+  const queryClient = useQueryClient();
 
   const tickers = useMemo(
     () => positions.map((pos) => pos.ticker),
     [positions]
   );
   const livePrices = useMarketPrices(tickers);
+
+  // Mutation for closing perpetual position
+  const closeMutation = useMutation({
+    mutationFn: async (positionId: string) => {
+      return closePerpPosition(positionId);
+    },
+    onSuccess: (data) => {
+      if (!pendingClose) return;
+      const pnl =
+        typeof data?.pnl === 'number'
+          ? data.pnl
+          : typeof data?.realizedPnL === 'number'
+            ? data.realizedPnL
+            : 0;
+
+      toast.success('Position closed!', {
+        description: `${pendingClose.position.ticker}: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} PnL`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ['markets', 'perps'] });
+      void queryClient.invalidateQueries({ queryKey: ['positions'] });
+      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
+      onPositionClosed?.();
+      setPendingClose(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+      setPendingClose(null);
+    },
+  });
 
   const handleCloseClick = useCallback(
     (
@@ -97,28 +127,12 @@ export function PerpPositionsList({
     []
   );
 
-  const handleConfirmClose = useCallback(async () => {
+  const handleConfirmClose = useCallback(() => {
     if (!pendingClose) return;
 
-    setClosingId(pendingClose.position.id);
     setConfirmDialogOpen(false);
-
-    const data = await closePerpPosition(pendingClose.position.id);
-    const pnl =
-      typeof data?.pnl === 'number'
-        ? data.pnl
-        : typeof data?.realizedPnL === 'number'
-          ? data.realizedPnL
-          : 0;
-
-    toast.success('Position closed!', {
-      description: `${pendingClose.position.ticker}: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} PnL`,
-    });
-
-    await onPositionClosed?.();
-    setClosingId(null);
-    setPendingClose(null);
-  }, [closePerpPosition, onPositionClosed, pendingClose]);
+    closeMutation.mutate(pendingClose.position.id);
+  }, [closeMutation, pendingClose]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -169,7 +183,8 @@ export function PerpPositionsList({
             : ((position.liquidationPrice - currentPrice) / currentPrice) * 100;
 
         const isNearLiquidation = liquidationDistance < 5;
-        const isClosing = closingId === position.id;
+        const isClosing =
+          closeMutation.isPending && closeMutation.variables === position.id;
 
         return (
           <div
@@ -319,7 +334,7 @@ export function PerpPositionsList({
         open={confirmDialogOpen}
         onOpenChange={setConfirmDialogOpen}
         onConfirm={handleConfirmClose}
-        isSubmitting={closingId !== null}
+        isSubmitting={closeMutation.isPending}
         tradeDetails={
           pendingClose
             ? ({

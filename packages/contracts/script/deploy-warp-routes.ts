@@ -20,7 +20,6 @@ import {
   type Hex,
   http,
   padHex,
-  parseEther,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia, sepolia } from 'viem/chains';

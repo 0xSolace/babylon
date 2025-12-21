@@ -42,15 +42,11 @@ function PredictionSparklineBase({
 }: PredictionSparklineProps) {
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
-    return data.slice(-20).map((point) => {
-      const yes = (point.yesPrice ?? 0.5) * 100;
-      const no = point.noPrice !== undefined ? point.noPrice * 100 : 100 - yes;
-      return {
-        yesProbability: yes,
-        noProbability: no,
-        timestamp: point.time,
-      };
-    });
+    return data.slice(-20).map((point) => ({
+      yesProbability: point.yesPrice * 100,
+      noProbability: point.noPrice * 100,
+      timestamp: point.time,
+    }));
   }, [data]);
 
   if (chartData.length === 0) {

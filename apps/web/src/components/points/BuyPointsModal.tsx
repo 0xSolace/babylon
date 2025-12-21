@@ -2,6 +2,7 @@
 
 import { useJejuAuth } from '@babylon/auth/client';
 import { cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   CheckCircle2,
@@ -70,6 +71,24 @@ interface PaymentRequest {
   amount: string;
 }
 
+/**
+ * Create payment API response.
+ */
+interface CreatePaymentResponse {
+  success: boolean;
+  paymentRequest?: PaymentRequest;
+  error?: string;
+}
+
+/**
+ * Verify payment API response.
+ */
+interface VerifyPaymentResponse {
+  success: boolean;
+  pointsAwarded?: number;
+  error?: string;
+}
+
 export function BuyPointsModal({
   isOpen,
   onClose,
@@ -79,10 +98,10 @@ export function BuyPointsModal({
   const { getAccessToken } = useJejuAuth();
   const { sendPointsPayment } = useBuyPointsTx();
   const { balance, refreshBalance } = useSmartWalletBalance();
+  const queryClient = useQueryClient();
 
   const [amountUSD, setAmountUSD] = useState('10');
   const [step, setStep] = useState<PaymentStep>('input');
-  const [loading, setLoading] = useState(false);
   const [_paymentRequestId, setPaymentRequestId] = useState<string | null>(
     null
   );
@@ -97,13 +116,19 @@ export function BuyPointsModal({
       }
 
       const currentBalance = balance ?? (await refreshBalance());
-      if (currentBalance !== null && currentBalance >= requiredAmountWei) {
+      if (currentBalance === null) {
+        throw new Error(
+          'Unable to determine wallet balance. Please try again.'
+        );
+      }
+
+      if (currentBalance >= requiredAmountWei) {
         return true;
       }
 
       const deficit =
-        requiredAmountWei - (currentBalance ?? 0n) > 0n
-          ? requiredAmountWei - (currentBalance ?? 0n)
+        requiredAmountWei - currentBalance > 0n
+          ? requiredAmountWei - currentBalance
           : requiredAmountWei;
 
       // Show user they need to fund their wallet manually
@@ -118,22 +143,118 @@ export function BuyPointsModal({
     [balance, refreshBalance, smartWalletAddress]
   );
 
+  // Create payment mutation
+  const createPaymentMutation = useMutation({
+    mutationFn: async (amountNum: number): Promise<PaymentRequest> => {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('/api/points/purchase/create-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amountUSD: amountNum,
+          fromAddress: smartWalletAddress,
+        }),
+      });
+
+      const data: CreatePaymentResponse = await response.json();
+
+      if (!response.ok || !data.success || !data.paymentRequest) {
+        throw new Error(data.error || 'Failed to create payment request');
+      }
+
+      return data.paymentRequest;
+    },
+  });
+
+  // Verify payment mutation
+  const verifyPaymentMutation = useMutation({
+    mutationFn: async ({
+      requestId,
+      transactionHash,
+      paymentRequest,
+    }: {
+      requestId: string;
+      transactionHash: string;
+      paymentRequest: PaymentRequest;
+    }): Promise<number> => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      // Wait a bit for transaction to be confirmed
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      const response = await fetch('/api/points/purchase/verify-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          requestId,
+          txHash: transactionHash,
+          fromAddress: paymentRequest.from,
+          toAddress: paymentRequest.to,
+          amount: paymentRequest.amount,
+        }),
+      });
+
+      const data: VerifyPaymentResponse = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to verify payment');
+      }
+
+      return data.pointsAwarded || 0;
+    },
+    onSuccess: (points) => {
+      setPointsAwarded(points);
+      setStep('success');
+      toast.success(`Successfully purchased ${points} points!`);
+      queryClient.invalidateQueries({ queryKey: ['balance'] });
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+      onSuccess?.();
+    },
+    onError: (err: Error) => {
+      logger.error(
+        'Payment verification failed',
+        { error: err.message },
+        'BuyPointsModal'
+      );
+      setError(err.message);
+      setStep('error');
+      toast.error('Failed to verify payment');
+    },
+  });
+
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setTimeout(() => {
         setAmountUSD('10');
         setStep('input');
-        setLoading(false);
         setPaymentRequestId(null);
         setTxHash(null);
         setError(null);
         setPointsAwarded(0);
+        createPaymentMutation.reset();
+        verifyPaymentMutation.reset();
       }, 300);
     }
-  }, [isOpen]);
+  }, [isOpen, createPaymentMutation.reset, verifyPaymentMutation.reset]);
 
   // Handle escape key and body scroll lock
+  const loading =
+    createPaymentMutation.isPending || verifyPaymentMutation.isPending;
   useEffect(() => {
     if (!isOpen) {
       document.body.style.overflow = '';
@@ -183,36 +304,16 @@ export function BuyPointsModal({
       return;
     }
 
-    setLoading(true);
     setError(null);
 
-    const token = await getAccessToken();
-    if (!token) {
-      logger.error('Authentication required', undefined, 'BuyPointsModal');
-      setError('Authentication required');
-      setStep('error');
-      toast.error('Failed to create payment request');
-      setLoading(false);
-      return;
-    }
-
-    // Create payment request
-    const response = await fetch('/api/points/purchase/create-payment', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        amountUSD: amountNum,
-        fromAddress: smartWalletAddress,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      const errorMessage = data.error || 'Failed to create payment request';
+    try {
+      const paymentRequest = await createPaymentMutation.mutateAsync(amountNum);
+      setPaymentRequestId(paymentRequest.requestId);
+      setStep('payment');
+      await handleSendPayment(paymentRequest);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to create payment request';
       logger.error(
         'Failed to create payment',
         { error: errorMessage },
@@ -221,20 +322,10 @@ export function BuyPointsModal({
       setError(errorMessage);
       setStep('error');
       toast.error('Failed to create payment request');
-      setLoading(false);
-      return;
     }
-
-    setPaymentRequestId(data.paymentRequest.requestId);
-    setStep('payment');
-
-    // Initiate blockchain transaction
-    await handleSendPayment(data.paymentRequest);
-    setLoading(false);
   };
 
   const handleSendPayment = async (paymentRequest: PaymentRequest) => {
-    setLoading(true);
     setStep('payment');
 
     if (!smartWalletReady || !smartWalletAddress) {
@@ -243,84 +334,35 @@ export function BuyPointsModal({
       setError(errorMessage);
       setStep('error');
       toast.error('Payment transaction failed');
-      setLoading(false);
       return;
     }
 
-    const requiredAmountWei = BigInt(paymentRequest.amount);
-    await ensureFunds(requiredAmountWei);
+    try {
+      const requiredAmountWei = BigInt(paymentRequest.amount);
+      await ensureFunds(requiredAmountWei);
 
-    const hash = await sendPointsPayment({
-      to: paymentRequest.to as Address,
-      amountWei: requiredAmountWei,
-    });
+      const hash = await sendPointsPayment({
+        to: paymentRequest.to as Address,
+        amountWei: requiredAmountWei,
+      });
 
-    setTxHash(hash);
-    setStep('verifying');
+      setTxHash(hash);
+      setStep('verifying');
 
-    // Verify payment and credit points
-    await handleVerifyPayment(paymentRequest.requestId, hash, paymentRequest);
-  };
-
-  const handleVerifyPayment = async (
-    requestId: string,
-    transactionHash: string,
-    paymentRequest: PaymentRequest
-  ) => {
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      logger.error('Authentication required', undefined, 'BuyPointsModal');
-      setError('Authentication required');
-      setStep('error');
-      toast.error('Failed to verify payment');
-      setLoading(false);
-      return;
-    }
-
-    // Wait a bit for transaction to be confirmed
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-
-    const response = await fetch('/api/points/purchase/verify-payment', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        requestId,
-        txHash: transactionHash,
-        fromAddress: paymentRequest.from,
-        toAddress: paymentRequest.to,
-        amount: paymentRequest.amount,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      const errorMessage = data.error || 'Failed to verify payment';
-      logger.error(
-        'Payment verification failed',
-        { error: errorMessage },
-        'BuyPointsModal'
-      );
+      // Verify payment and credit points
+      verifyPaymentMutation.mutate({
+        requestId: paymentRequest.requestId,
+        transactionHash: hash,
+        paymentRequest,
+      });
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Payment failed';
+      logger.error('Payment failed', { error: errorMessage }, 'BuyPointsModal');
       setError(errorMessage);
       setStep('error');
-      toast.error('Failed to verify payment');
-      setLoading(false);
-      return;
+      toast.error('Payment transaction failed');
     }
-
-    setPointsAwarded(data.pointsAwarded);
-    setStep('success');
-    toast.success(`Successfully purchased ${data.pointsAwarded} points!`);
-
-    // Call onSuccess callback
-    if (onSuccess) {
-      onSuccess();
-    }
-    setLoading(false);
   };
 
   const handleClose = () => {

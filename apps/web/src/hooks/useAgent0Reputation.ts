@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 /**
  * Agent0 profile data structure
@@ -38,6 +39,33 @@ interface UseAgent0ReputationReturn {
   refetch: () => Promise<void>;
 }
 
+interface AgentReputation {
+  trustScore?: number;
+  accuracyScore?: number;
+  totalBets?: number;
+  winningBets?: number;
+  feedbackCount?: number;
+  averageScore?: number;
+}
+
+interface Agent0AgentData {
+  agent0TokenId: number;
+  name: string;
+  walletAddress: string;
+  isActive: boolean;
+  reputation?: AgentReputation;
+}
+
+interface AgentApiResponse {
+  agent?: Agent0AgentData;
+}
+
+interface Agent0QueryData {
+  profile: Agent0Profile | null;
+  reputation: Agent0ReputationSummary | null;
+  isAgent0Available: boolean;
+}
+
 /**
  * Hook to fetch Agent0 network reputation data for an agent
  *
@@ -47,58 +75,32 @@ interface UseAgent0ReputationReturn {
 export function useAgent0Reputation(
   agentId?: string
 ): UseAgent0ReputationReturn {
-  const [profile, setProfile] = useState<Agent0Profile | null>(null);
-  const [reputation, setReputation] = useState<Agent0ReputationSummary | null>(
-    null
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [isAgent0Available, setIsAgent0Available] = useState(false);
+  const queryClient = useQueryClient();
 
-  const fetchReputation = useCallback(async () => {
-    if (!agentId) {
-      setProfile(null);
-      setReputation(null);
-      setIsAgent0Available(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Fetch agent details which includes Agent0 registration info
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['agent0Reputation', agentId],
+    queryFn: async (): Promise<Agent0QueryData> => {
       const response = await fetch(`/api/agents/${agentId}`);
 
       if (!response.ok) {
         if (response.status === 404) {
-          setIsAgent0Available(false);
-          setProfile(null);
-          setReputation(null);
-          return;
+          return { profile: null, reputation: null, isAgent0Available: false };
         }
         throw new Error(`Failed to fetch agent: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      const agent = data.agent;
+      const responseData = (await response.json()) as AgentApiResponse;
+      const agent = responseData.agent;
 
-      // Check if agent has Agent0 registration
       if (!agent?.agent0TokenId) {
-        setIsAgent0Available(false);
-        setProfile(null);
-        setReputation(null);
-        return;
+        return { profile: null, reputation: null, isAgent0Available: false };
       }
 
-      setIsAgent0Available(true);
-
-      // Build profile from agent data
       const agent0Profile: Agent0Profile = {
         tokenId: agent.agent0TokenId,
         name: agent.name,
-        walletAddress: agent.walletAddress ?? '',
-        active: agent.isActive ?? false,
+        walletAddress: agent.walletAddress,
+        active: agent.isActive,
         reputation: agent.reputation
           ? {
               trustScore: agent.reputation.trustScore ?? 0,
@@ -109,37 +111,38 @@ export function useAgent0Reputation(
           : undefined,
       };
 
-      setProfile(agent0Profile);
+      const reputationSummary: Agent0ReputationSummary | null =
+        agent.reputation?.feedbackCount !== undefined
+          ? {
+              count: agent.reputation.feedbackCount,
+              averageScore: agent.reputation.averageScore ?? 0,
+            }
+          : null;
 
-      // Fetch reputation summary if available
-      if (agent.reputation?.feedbackCount !== undefined) {
-        setReputation({
-          count: agent.reputation.feedbackCount,
-          averageScore: agent.reputation.averageScore ?? 0,
-        });
-      } else {
-        setReputation(null);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Unknown error'));
-      setIsAgent0Available(false);
-      setProfile(null);
-      setReputation(null);
-    } finally {
-      setLoading(false);
+      return {
+        profile: agent0Profile,
+        reputation: reputationSummary,
+        isAgent0Available: true,
+      };
+    },
+    enabled: !!agentId,
+    staleTime: 60000,
+  });
+
+  const refetch = useCallback(async () => {
+    if (agentId) {
+      await queryClient.invalidateQueries({
+        queryKey: ['agent0Reputation', agentId],
+      });
     }
-  }, [agentId]);
-
-  useEffect(() => {
-    fetchReputation();
-  }, [fetchReputation]);
+  }, [queryClient, agentId]);
 
   return {
-    profile,
-    reputation,
-    loading,
-    error,
-    isAgent0Available,
-    refetch: fetchReputation,
+    profile: data?.profile ?? null,
+    reputation: data?.reputation ?? null,
+    loading: isLoading,
+    error: error as Error | null,
+    isAgent0Available: data?.isAgent0Available ?? false,
+    refetch,
   };
 }

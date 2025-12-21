@@ -148,7 +148,7 @@ export const GET = withErrorHandling(
       name: staticOrg.name,
       type: staticOrg.type,
       ticker: staticOrg.ticker ?? null,
-      currentPrice: orgState?.currentPrice ?? null,
+      currentPrice: orgState ? orgState.currentPrice : null,
     };
 
     // Use the organization's actual ticker or derive from id for perp position lookups

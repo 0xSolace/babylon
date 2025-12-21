@@ -5,7 +5,7 @@
  */
 
 import { hashApiKey } from '@babylon/api';
-import { asSystem, eq, userApiKeys } from '@babylon/db';
+import { db } from '@babylon/db';
 import { logger } from '@babylon/shared';
 
 /**
@@ -24,17 +24,24 @@ export async function validateUserApiKey(
   // Hash the provided API key
   const keyHash = hashApiKey(apiKey);
 
-  // Use asSystem for key lookup since we're authenticating based on the key itself
-  const keyRecord = await asSystem(async (dbClient) => {
-    return await dbClient.query.userApiKeys.findFirst({
-      where: (keys, { eq, and: andFn, isNull: isNullFn, or: orFn, gt: gtFn }) =>
-        andFn(
-          eq(keys.keyHash, keyHash),
-          isNullFn(keys.revokedAt),
-          orFn(isNullFn(keys.expiresAt), gtFn(keys.expiresAt, new Date()))
-        ),
-    });
-  });
+  // Query for a valid key that matches the hash, is not revoked, and hasn't expired
+  type KeyRecord = {
+    id: string;
+    userId: string;
+    expiresAt: Date | null;
+    revokedAt: Date | null;
+  };
+  const keys = await db.query<KeyRecord>(
+    `SELECT id, "userId", "expiresAt", "revokedAt"
+     FROM "UserApiKey"
+     WHERE "keyHash" = $1
+       AND "revokedAt" IS NULL
+       AND ("expiresAt" IS NULL OR "expiresAt" > $2)
+     LIMIT 1`,
+    [keyHash, new Date().toISOString()]
+  );
+
+  const keyRecord = keys[0];
 
   if (!keyRecord) {
     logger.warn('Invalid or expired API key', undefined, 'MCP Auth');
@@ -42,12 +49,10 @@ export async function validateUserApiKey(
   }
 
   // Update lastUsedAt timestamp
-  await asSystem(async (dbClient) => {
-    await dbClient
-      .update(userApiKeys)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(userApiKeys.id, keyRecord.id));
-  });
+  await db.exec(`UPDATE "UserApiKey" SET "lastUsedAt" = $1 WHERE id = $2`, [
+    new Date().toISOString(),
+    keyRecord.id,
+  ]);
 
   return {
     userId: keyRecord.userId,

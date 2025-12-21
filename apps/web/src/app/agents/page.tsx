@@ -1,9 +1,10 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Activity, Bot, Plus, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -28,52 +29,45 @@ interface Agent {
   createdAt: string;
 }
 
+interface AgentsResponse {
+  agents: Agent[];
+}
+
 export default function AgentsPage() {
   const { authenticated, ready, getAccessToken } = useAuth();
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'idle'>('all');
 
-  const fetchAgents = useCallback(async () => {
-    setLoading(true);
-    const token = await getAccessToken();
+  const { data: agents = [], isLoading: loading } = useQuery({
+    queryKey: ['agents', filter],
+    queryFn: async (): Promise<Agent[]> => {
+      const token = await getAccessToken();
 
-    if (!token) {
-      console.error('No access token available');
-      setLoading(false);
-      return;
-    }
+      if (!token) {
+        throw new Error('No access token available');
+      }
 
-    let url = '/api/agents';
-    if (filter === 'active') {
-      url += '?autonomousTrading=true';
-    } else if (filter === 'idle') {
-      url += '?autonomousTrading=false';
-    }
+      let url = '/api/agents';
+      if (filter === 'active') {
+        url += '?autonomousTrading=true';
+      } else if (filter === 'idle') {
+        url += '?autonomousTrading=false';
+      }
 
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }).catch((error: Error) => {
-      console.error('Failed to fetch agents:', error);
-      setLoading(false);
-      throw error;
-    });
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      setAgents(data.agents || []);
-    }
+      if (!res.ok) {
+        throw new Error('Failed to fetch agents');
+      }
 
-    setLoading(false);
-  }, [getAccessToken, filter]);
-
-  useEffect(() => {
-    if (ready && authenticated) {
-      fetchAgents();
-    }
-  }, [ready, authenticated, fetchAgents]);
+      const data = (await res.json()) as AgentsResponse;
+      return data.agents || [];
+    },
+    enabled: ready && authenticated,
+  });
 
   if (!ready || !authenticated) {
     return (

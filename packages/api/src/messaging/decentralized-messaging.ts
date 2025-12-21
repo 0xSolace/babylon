@@ -165,23 +165,17 @@ export async function getOrCreateDecentralizedDM(
     return null;
   }
 
-  try {
-    const bridge = await getMessagingBridgeInstance();
-    const conversation = await bridge.getOrCreateDM(user1Address, user2Address);
+  const bridge = await getMessagingBridgeInstance();
+  const conversation = await bridge.getOrCreateDM(user1Address, user2Address);
 
-    if (conversation) {
-      return {
-        conversationId: conversation.id,
-        isNew: Date.now() - conversation.createdAt < 1000, // Created in last second
-      };
-    }
-  } catch (error) {
-    logger.warn('Failed to create decentralized DM conversation', {
-      error: error instanceof Error ? error.message : String(error),
-    });
+  if (!conversation) {
+    return null;
   }
 
-  return null;
+  return {
+    conversationId: conversation.id,
+    isNew: Date.now() - conversation.createdAt < 1000, // Created in last second
+  };
 }
 
 /**
@@ -203,24 +197,16 @@ export async function getPendingDecentralizedMessages(
     return [];
   }
 
-  try {
-    const bridge = await getMessagingBridgeInstance();
-    const messages = await bridge.getPendingMessages(address, limit);
+  const bridge = await getMessagingBridgeInstance();
+  const messages = await bridge.getPendingMessages(address, limit);
 
-    return messages.map((m: Message) => ({
-      id: m.id,
-      conversationId: m.conversationId,
-      sender: m.sender,
-      content: m.content,
-      timestamp: m.timestamp,
-    }));
-  } catch (error) {
-    logger.warn('Failed to get pending decentralized messages', {
-      address,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return [];
-  }
+  return messages.map((m: Message) => ({
+    id: m.id,
+    conversationId: m.conversationId,
+    sender: m.sender,
+    content: m.content,
+    timestamp: m.timestamp,
+  }));
 }
 
 /**
@@ -285,23 +271,15 @@ export async function getDecentralizedConversations(
     return [];
   }
 
-  try {
-    const bridge = await getMessagingBridgeInstance();
-    const conversations = await bridge.getUserConversations(address, limit);
+  const bridge = await getMessagingBridgeInstance();
+  const conversations = await bridge.getUserConversations(address, limit);
 
-    return conversations.map((c: Conversation) => ({
-      id: c.id,
-      type: c.type,
-      name: c.name,
-      participants: c.participants,
-      lastMessageAt: c.lastMessageAt,
-      lastMessagePreview: c.lastMessagePreview,
-    }));
-  } catch (error) {
-    logger.warn('Failed to get decentralized conversations', {
-      address,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return [];
-  }
+  return conversations.map((c: Conversation) => ({
+    id: c.id,
+    type: c.type,
+    name: c.name,
+    participants: c.participants,
+    lastMessageAt: c.lastMessageAt,
+    lastMessagePreview: c.lastMessagePreview,
+  }));
 }

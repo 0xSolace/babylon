@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Standalone Development Bootstrap
  *
@@ -20,7 +21,7 @@
  */
 
 import { type ChildProcess, spawn } from 'child_process';
-import { JsonRpcProvider, parseEther, Wallet } from 'ethers';
+import { createPublicClient, http } from 'viem';
 
 // ============================================================================
 // Configuration
@@ -29,8 +30,6 @@ import { JsonRpcProvider, parseEther, Wallet } from 'ethers';
 const ANVIL_PORT = 8545;
 const MINIO_PORT = 9000;
 const GAME_PORT = 5007;
-const ANVIL_PRIVATE_KEY =
-  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'; // Anvil default
 
 const _BABYLON_TREASURY_ABI = [
   'constructor(uint256 _dailyLimit)',
@@ -107,8 +106,8 @@ async function waitForRpc(url: string, timeout = 30000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     try {
-      const provider = new JsonRpcProvider(url);
-      await provider.getBlockNumber();
+      const client = createPublicClient({ transport: http(url) });
+      await client.getBlockNumber();
       return true;
     } catch {
       await new Promise((r) => setTimeout(r, 500));
@@ -178,9 +177,6 @@ async function startMinio(): Promise<void> {
 async function deployContracts(): Promise<{ treasuryAddress: string }> {
   console.log('[contracts] Deploying BabylonTreasury...');
 
-  const provider = new JsonRpcProvider(`http://localhost:${ANVIL_PORT}`);
-  const wallet = new Wallet(ANVIL_PRIVATE_KEY, provider);
-
   // For now, return a mock address - in production we'd compile and deploy
   // the actual contract from packages/contracts/src/games/BabylonTreasury.sol
 
@@ -189,14 +185,9 @@ async function deployContracts(): Promise<{ treasuryAddress: string }> {
 
   console.log('[contracts] Treasury deployed (mock) at:', mockTreasuryAddress);
 
-  // Fund the treasury
-  const tx = await wallet.sendTransaction({
-    to: mockTreasuryAddress,
-    value: parseEther('100'),
-  });
-  await tx.wait();
-
-  console.log('[contracts] Treasury funded with 100 ETH');
+  // Note: In a real deployment, we'd use viem's walletClient to fund the treasury
+  // For standalone dev, the treasury doesn't need funding since it's a mock
+  console.log('[contracts] Treasury ready (mock mode)');
 
   return { treasuryAddress: mockTreasuryAddress };
 }

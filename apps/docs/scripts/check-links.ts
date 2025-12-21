@@ -209,9 +209,7 @@ async function processFile(filePath: string): Promise<void> {
             const filePath = normalizePath(filePart, baseDir);
             const fileExists = await checkInternalLink(filePath);
             if (fileExists) {
-              const targetContent = await readFile(filePath, 'utf-8').catch(
-                () => ''
-              );
+              const targetContent = await readFile(filePath, 'utf-8');
               if (!checkAnchor(anchorPart, targetContent)) {
                 issues.push({
                   file: relative(contentDir, filePath),
@@ -341,7 +339,7 @@ async function main() {
     if (!byFile.has(issue.file)) {
       byFile.set(issue.file, []);
     }
-    byFile.get(issue.file)?.push(issue);
+    byFile.get(issue.file)!.push(issue);
   }
 
   // Print grouped by file

@@ -466,41 +466,41 @@ export class FarcasterPostingService {
     const cached = this.signerCache.get(actorId);
     if (cached) return cached;
 
-    // Fetch from KMS
-    const kmsEndpoint =
-      process.env.JEJU_KMS_ENDPOINT ?? 'http://localhost:3300';
+    const kmsEndpoint = process.env.JEJU_KMS_ENDPOINT;
     const keyId = `fc-signer:${actorId}`;
 
-    try {
-      const response = await fetch(`${kmsEndpoint}/keys/${keyId}/export`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(10000),
-      });
-
-      if (response.ok) {
-        const data = (await response.json()) as { privateKey: string };
-        const key = hexToBytes(data.privateKey as `0x${string}`);
-        this.signerCache.set(actorId, key);
-        return key;
+    // Development fallback: derive deterministic key when KMS is not configured
+    if (!kmsEndpoint) {
+      const signerSeed = process.env.SIGNER_SEED;
+      if (!signerSeed) {
+        throw new Error(
+          `KMS not configured (JEJU_KMS_ENDPOINT) and no SIGNER_SEED for fallback derivation`
+        );
       }
-    } catch (error) {
-      logger.warn(
-        `Failed to fetch signer key from KMS for ${actorId}, using fallback`,
-        { error },
-        'FarcasterPostingService'
+      const encoder = new TextEncoder();
+      const seed = encoder.encode(`fc-signer:${actorId}:${signerSeed}`);
+      const hash = await crypto.subtle.digest('SHA-256', seed);
+      const key = new Uint8Array(hash);
+      this.signerCache.set(actorId, key);
+      return key;
+    }
+
+    // Production: fetch from KMS
+    const response = await fetch(`${kmsEndpoint}/keys/${keyId}/export`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `KMS key export failed for ${actorId}: ${response.status} - ${errorText}`
       );
     }
 
-    // Fallback: Derive deterministic key from actor ID
-    // This is for development only - production should always use KMS
-    const encoder = new TextEncoder();
-    const seed = encoder.encode(
-      `fc-signer:${actorId}:${process.env.SIGNER_SEED ?? 'dev'}`
-    );
-    const hash = await crypto.subtle.digest('SHA-256', seed);
-    const key = new Uint8Array(hash);
-
+    const data = (await response.json()) as { privateKey: string };
+    const key = hexToBytes(data.privateKey as `0x${string}`);
     this.signerCache.set(actorId, key);
     return key;
   }

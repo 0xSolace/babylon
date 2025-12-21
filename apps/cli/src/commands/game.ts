@@ -26,7 +26,7 @@ import {
 } from '@babylon/db';
 import type { GameHistory, GroupMessage } from '@babylon/engine';
 import { GameGenerator, loadActorsData } from '@babylon/engine';
-import { nanoid } from 'nanoid';
+import { v4 as uuidv4 } from 'uuid';
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';
 
@@ -66,11 +66,11 @@ EXAMPLES:
 /**
  * Generates a unique snowflake ID for game entities.
  *
- * @returns A 21-character nanoid string
+ * @returns A unique ID string
  * @internal
  */
 async function generateSnowflakeId(): Promise<string> {
-  return nanoid(21);
+  return uuidv4();
 }
 
 /**

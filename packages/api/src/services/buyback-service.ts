@@ -139,13 +139,15 @@ export class BuybackService {
       .where(eq(feeAccumulator.id, 'singleton'))
       .limit(1);
 
-    const currentAccumulated = BigInt(accumulator?.accumulatedFees ?? '0');
+    const currentAccumulated = BigInt(
+      String(accumulator?.accumulatedFees ?? '0')
+    );
     const threshold = BigInt(
-      accumulator?.buybackThreshold ?? DEFAULT_THRESHOLD.toString()
+      String(accumulator?.buybackThreshold ?? DEFAULT_THRESHOLD.toString())
     );
     const newAccumulated = currentAccumulated + feeAmount;
     const totalAccumulated =
-      BigInt(accumulator?.totalFeesAccumulated ?? '0') + feeAmount;
+      BigInt(String(accumulator?.totalFeesAccumulated ?? '0')) + feeAmount;
 
     if (accumulator) {
       await db
@@ -196,17 +198,24 @@ export class BuybackService {
       .where(eq(feeAccumulator.id, 'singleton'))
       .limit(1);
 
-    const accumulatedFees = BigInt(accumulator?.accumulatedFees ?? '0');
+    const accumulatedFees = BigInt(String(accumulator?.accumulatedFees ?? '0'));
     const threshold = BigInt(
-      accumulator?.buybackThreshold ?? DEFAULT_THRESHOLD.toString()
+      String(accumulator?.buybackThreshold ?? DEFAULT_THRESHOLD.toString())
     );
+
+    const lastBuybackAtRaw = accumulator?.lastBuybackAt;
+    const lastBuybackAt = lastBuybackAtRaw
+      ? lastBuybackAtRaw instanceof Date
+        ? lastBuybackAtRaw
+        : new Date(String(lastBuybackAtRaw))
+      : null;
 
     return {
       accumulatedFees,
       threshold,
       canExecute: accumulatedFees >= threshold,
-      lastBuybackAt: accumulator?.lastBuybackAt ?? null,
-      totalBuybacks: accumulator?.totalBuybacksExecuted ?? 0,
+      lastBuybackAt,
+      totalBuybacks: Number(accumulator?.totalBuybacksExecuted ?? 0),
     };
   }
 
@@ -340,11 +349,11 @@ export class BuybackService {
     ] as const;
 
     // Check if on-chain contract can execute
-    const canExecute = await publicClient.readContract({
+    const canExecute = (await publicClient.readContract({
       address: config.revenueContractAddress,
       abi: REVENUE_ABI,
       functionName: 'canExecuteBuyback',
-    });
+    })) as boolean;
 
     if (!canExecute) {
       // Update record as failed
@@ -463,11 +472,12 @@ export class BuybackService {
   static async getBuybackHistory(
     limit = 20
   ): Promise<(typeof buybackRecords.$inferSelect)[]> {
-    return db
+    const records = await db
       .select()
       .from(buybackRecords)
       .orderBy(buybackRecords.initiatedAt)
       .limit(limit);
+    return records as (typeof buybackRecords.$inferSelect)[];
   }
 
   /**
@@ -489,8 +499,10 @@ export class BuybackService {
       .limit(1);
 
     return {
-      totalFeesReceived: BigInt(accumulator?.totalFeesAccumulated ?? '0'),
-      totalBuybacks: accumulator?.totalBuybacksExecuted ?? 0,
+      totalFeesReceived: BigInt(
+        String(accumulator?.totalFeesAccumulated ?? '0')
+      ),
+      totalBuybacks: Number(accumulator?.totalBuybacksExecuted ?? 0),
       currentAccumulated: status.accumulatedFees,
       threshold: status.threshold,
       canExecute: status.canExecute,

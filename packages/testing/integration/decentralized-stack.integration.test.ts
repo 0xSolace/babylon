@@ -17,15 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 // it uses dynamic imports and requires running against real services.
 // Run with: bun test packages/testing/integration/decentralized-stack.integration.test.ts
 
-// Skip tests if services not available
-const REQUIRE_ALL_SERVICES = process.env.REQUIRE_DECENTRALIZED === 'true';
-const skipIfNoServices = (fn: () => Promise<void>) => {
-  return REQUIRE_ALL_SERVICES
-    ? fn
-    : async () => {
-        console.log('Skipped: REQUIRE_DECENTRALIZED not set');
-      };
-};
+const skipIfNoServices = (fn: () => Promise<void>) => fn;
 
 // ============================================================================
 // CQL (CovenantSQL) Tests
@@ -546,37 +538,37 @@ describe('Decentralized Training Integration', () => {
   it(
     'should create DecentralizedTrainingClient',
     skipIfNoServices(async () => {
-      const { createDecentralizedTrainingClient, GPUTier } = await import(
-        '@babylon/training/compute'
-      );
+      const {
+        createDecentralizedTrainingClient,
+        isDecentralizedTrainingAvailable,
+      } = await import('@babylon/training/compute');
 
-      // This will fail if services not running - that's expected
-      try {
-        const client = await createDecentralizedTrainingClient({
-          rpcUrl: 'http://localhost:8545',
-          privateKey:
-            '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as `0x${string}`,
-          coordinatorAddress:
-            '0x5FbDB2315678afecb367f032d93F642f64180aa3' as `0x${string}`,
-          rewardsAddress:
-            '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as `0x${string}`,
-          performanceOracleAddress:
-            '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as `0x${string}`,
-          computeRegistryAddress:
-            '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as `0x${string}`,
-        });
-
-        expect(client).toBeTruthy();
-        expect(typeof client.submitJob).toBe('function');
-        expect(typeof client.getJobStatus).toBe('function');
-      } catch (e: unknown) {
-        const error = e as Error;
-        // Expected if local node not running
+      // Skip if local node not running
+      const available = await isDecentralizedTrainingAvailable();
+      if (!available) {
         console.log(
-          'DecentralizedTrainingClient creation skipped:',
-          error.message
+          'DecentralizedTrainingClient: local node not running, skipping'
         );
+        return;
       }
+
+      const client = await createDecentralizedTrainingClient({
+        rpcUrl: 'http://localhost:8545',
+        privateKey:
+          '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as `0x${string}`,
+        coordinatorAddress:
+          '0x5FbDB2315678afecb367f032d93F642f64180aa3' as `0x${string}`,
+        rewardsAddress:
+          '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as `0x${string}`,
+        performanceOracleAddress:
+          '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as `0x${string}`,
+        computeRegistryAddress:
+          '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as `0x${string}`,
+      });
+
+      expect(client).toBeTruthy();
+      expect(typeof client.submitJob).toBe('function');
+      expect(typeof client.getJobStatus).toBe('function');
     })
   );
 

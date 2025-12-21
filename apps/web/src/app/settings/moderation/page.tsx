@@ -7,8 +7,9 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, Trash2, UserX, VolumeX } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { PageContainer } from '@/components/shared/PageContainer';
@@ -39,76 +40,115 @@ interface MutedUser {
   };
 }
 
+interface BlocksResponse {
+  blocks: BlockedUser[];
+}
+
+interface MutesResponse {
+  mutes: MutedUser[];
+}
+
 type Tab = 'blocked' | 'muted';
 
 export default function ModerationSettingsPage() {
   const { authenticated } = useAuth();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('blocked');
-  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
-  const [mutedUsers, setMutedUsers] = useState<MutedUser[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const fetchBlockedUsers = useCallback(async () => {
-    const response = await fetch('/api/moderation/blocks');
-    if (!response.ok) {
-      toast.error('Failed to load blocked users');
-      setLoading(false);
-      return;
-    }
+  const { data: blockedUsers = [], isLoading: blockedLoading } = useQuery({
+    queryKey: ['moderation', 'blocks'],
+    queryFn: async (): Promise<BlockedUser[]> => {
+      const response = await fetch('/api/moderation/blocks');
+      if (!response.ok) {
+        throw new Error('Failed to load blocked users');
+      }
+      const data = (await response.json()) as BlocksResponse;
+      return data.blocks || [];
+    },
+    enabled: authenticated,
+  });
 
-    const data = await response.json();
-    setBlockedUsers(data.blocks || []);
-    setLoading(false);
-  }, []);
+  const { data: mutedUsers = [], isLoading: mutedLoading } = useQuery({
+    queryKey: ['moderation', 'mutes'],
+    queryFn: async (): Promise<MutedUser[]> => {
+      const response = await fetch('/api/moderation/mutes');
+      if (!response.ok) {
+        throw new Error('Failed to load muted users');
+      }
+      const data = (await response.json()) as MutesResponse;
+      return data.mutes || [];
+    },
+    enabled: authenticated,
+  });
 
-  const fetchMutedUsers = useCallback(async () => {
-    const response = await fetch('/api/moderation/mutes');
-    if (!response.ok) {
-      toast.error('Failed to load muted users');
-      return;
-    }
+  const loading = blockedLoading || mutedLoading;
 
-    const data = await response.json();
-    setMutedUsers(data.mutes || []);
-  }, []);
+  const unblockMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      displayName,
+    }: {
+      userId: string;
+      displayName: string;
+    }) => {
+      const response = await fetch(`/api/users/${userId}/block`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unblock' }),
+      });
 
-  useEffect(() => {
-    if (authenticated) {
-      fetchBlockedUsers();
-      fetchMutedUsers();
-    }
-  }, [authenticated, fetchBlockedUsers, fetchMutedUsers]);
+      if (!response.ok) {
+        throw new Error('Failed to unblock user');
+      }
 
-  const handleUnblock = async (userId: string, displayName: string) => {
-    const response = await fetch(`/api/users/${userId}/block`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'unblock' }),
-    });
-
-    if (!response.ok) {
+      return displayName;
+    },
+    onSuccess: (displayName) => {
+      toast.success(`Unblocked ${displayName}`);
+      void queryClient.invalidateQueries({
+        queryKey: ['moderation', 'blocks'],
+      });
+    },
+    onError: () => {
       toast.error('Failed to unblock user');
-      return;
-    }
+    },
+  });
 
-    toast.success(`Unblocked ${displayName}`);
-    fetchBlockedUsers();
+  const unmuteMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      displayName,
+    }: {
+      userId: string;
+      displayName: string;
+    }) => {
+      const response = await fetch(`/api/users/${userId}/mute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unmute' }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to unmute user');
+      }
+
+      return displayName;
+    },
+    onSuccess: (displayName) => {
+      toast.success(`Unmuted ${displayName}`);
+      void queryClient.invalidateQueries({ queryKey: ['moderation', 'mutes'] });
+    },
+    onError: () => {
+      toast.error('Failed to unmute user');
+    },
+  });
+
+  const handleUnblock = (userId: string, displayName: string) => {
+    unblockMutation.mutate({ userId, displayName });
   };
 
-  const handleUnmute = async (userId: string, displayName: string) => {
-    const response = await fetch(`/api/users/${userId}/mute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'unmute' }),
-    });
-
-    if (!response.ok) {
-      toast.error('Failed to unmute user');
-      return;
-    }
-
-    toast.success(`Unmuted ${displayName}`);
-    fetchMutedUsers();
+  const handleUnmute = (userId: string, displayName: string) => {
+    unmuteMutation.mutate({ userId, displayName });
   };
 
   const formatDate = (date: string) => {

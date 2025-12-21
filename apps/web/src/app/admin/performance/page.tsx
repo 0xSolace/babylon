@@ -6,7 +6,8 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 
 // Simple replacement components
 const Card = ({
@@ -163,76 +164,84 @@ const SCENARIOS = [
 ];
 
 export default function AdminPerformancePage() {
-  const [stats, setStats] = useState<NetworkStats | null>(null);
-  const [loadTestStatus, setLoadTestStatus] = useState<LoadTestStatus | null>(
-    null
-  );
+  const queryClient = useQueryClient();
   const [selectedScenario, setSelectedScenario] = useState<string>('NORMAL');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   // Fetch network stats
-  const fetchStats = useCallback(async () => {
-    const response = await fetch('/api/admin/network-stats');
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch stats');
-    }
-
-    const data = await response.json();
-    setStats(data);
-    setError(null);
-  }, []);
+  const {
+    data: stats,
+    isLoading: _statsLoading,
+    error: statsError,
+  } = useQuery({
+    queryKey: ['admin', 'network-stats'],
+    queryFn: async (): Promise<NetworkStats> => {
+      const response = await fetch('/api/admin/network-stats');
+      if (!response.ok) {
+        throw new Error('Failed to fetch stats');
+      }
+      return (await response.json()) as NetworkStats;
+    },
+    refetchInterval: autoRefresh ? 5000 : false,
+  });
 
   // Fetch load test status
-  const fetchLoadTestStatus = useCallback(async () => {
-    const response = await fetch('/api/admin/load-test/status');
+  const { data: loadTestStatus } = useQuery({
+    queryKey: ['admin', 'load-test', 'status'],
+    queryFn: async (): Promise<LoadTestStatus> => {
+      const response = await fetch('/api/admin/load-test/status');
+      if (!response.ok) {
+        throw new Error('Failed to fetch load test status');
+      }
+      return (await response.json()) as LoadTestStatus;
+    },
+    refetchInterval: autoRefresh ? 5000 : false,
+  });
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch load test status');
-    }
+  // Start load test mutation
+  const loadTestMutation = useMutation({
+    mutationFn: async (scenario: string) => {
+      const response = await fetch('/api/admin/load-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario }),
+      });
 
-    const data = await response.json();
-    setLoadTestStatus(data);
-  }, []);
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(data.error || 'Failed to start load test');
+      }
 
-  // Start load test
-  const startLoadTest = async () => {
-    setIsLoading(true);
-    setError(null);
+      return response.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['admin', 'load-test', 'status'],
+      });
+    },
+  });
 
-    const response = await fetch('/api/admin/load-test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scenario: selectedScenario }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || 'Failed to start load test');
-    }
-
-    await fetchLoadTestStatus();
-    setIsLoading(false);
+  const startLoadTest = () => {
+    loadTestMutation.mutate(selectedScenario);
   };
 
-  // Auto-refresh stats
-  useEffect(() => {
-    fetchStats();
-    fetchLoadTestStatus();
+  const isLoading = loadTestMutation.isPending;
+  const error = statsError
+    ? (statsError as Error).message
+    : loadTestMutation.error
+      ? (loadTestMutation.error as Error).message
+      : null;
 
-    if (autoRefresh) {
-      const interval = setInterval(() => {
-        fetchStats();
-        fetchLoadTestStatus();
-      }, 5000); // Refresh every 5 seconds
-
-      return () => clearInterval(interval);
-    }
-
-    return undefined;
-  }, [autoRefresh, fetchLoadTestStatus, fetchStats]);
+  const fetchStats = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ['admin', 'network-stats'],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ['admin', 'load-test', 'status'],
+    });
+  };
 
   const getHealthBadgeVariant = (
     health: 'healthy' | 'warning' | 'critical'

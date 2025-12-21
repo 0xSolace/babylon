@@ -116,8 +116,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     });
   }
 
-  // Use the resolved user ID
-  const resolvedUserId = user?.id || user?.privyId || userId;
+  // Use the resolved user ID - fail fast if user not found
+  if (!user) {
+    return successResponse({
+      error: `User not found: ${userId}`,
+      user: null,
+      participantRecords: [],
+      chats: [],
+    });
+  }
+  const resolvedUserId = user.id || user.privyId || userId;
 
   // Get all ChatParticipant records for this user (bypass RLS)
   const participants = await db.chatParticipant.findMany({

@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
   CheckCircle,
@@ -8,7 +9,6 @@ import {
   RefreshCw,
   TrendingUp,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 /**
@@ -69,40 +69,32 @@ interface TrainingDataStats {
  * @returns Training data tab element
  */
 export function TrainingDataTab() {
-  const [data, setData] = useState<TrainingDataStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, refetch, isFetching } = useQuery<TrainingDataStats>({
+    queryKey: ['admin', 'training-data'],
+    queryFn: async () => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        toast.error('Not authenticated');
+        throw new Error('Not authenticated');
+      }
 
-  const fetchData = useCallback(async () => {
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      setLoading(false);
-      toast.error('Not authenticated');
-      return;
-    }
+      const response = await fetch('/api/admin/training-data', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    const response = await fetch('/api/admin/training-data', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      if (!response.ok) {
+        throw new Error('Failed to load training data');
+      }
 
-    if (!response.ok) {
-      setLoading(false);
-      toast.error('Failed to load training data');
-      return;
-    }
+      const result = await response.json();
+      return result.data;
+    },
+  });
 
-    const result = await response.json();
-    setData(result.data);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-primary border-b-2" />
@@ -142,14 +134,11 @@ export function TrainingDataTab() {
           </p>
         </div>
         <button
-          onClick={() => {
-            setLoading(true);
-            fetchData();
-          }}
-          disabled={loading}
+          onClick={() => refetch()}
+          disabled={isFetching}
           className="rounded-lg p-2 transition-colors hover:bg-accent"
         >
-          <RefreshCw className={cn('h-5 w-5', loading && 'animate-spin')} />
+          <RefreshCw className={cn('h-5 w-5', isFetching && 'animate-spin')} />
         </button>
       </div>
 

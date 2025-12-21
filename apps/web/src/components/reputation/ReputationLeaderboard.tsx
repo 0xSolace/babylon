@@ -28,8 +28,8 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Target, TrendingUp, Trophy } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 /**
  * Leaderboard entry structure for reputation leaderboard.
@@ -76,27 +76,21 @@ export function ReputationLeaderboard({
   minGames = 5,
   className = '',
 }: ReputationLeaderboardProps) {
-  const [data, setData] = useState<LeaderboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchLeaderboard = async () => {
-      setLoading(true);
+  const { data, isLoading } = useQuery({
+    queryKey: ['reputation', 'leaderboard', limit, minGames],
+    queryFn: async (): Promise<LeaderboardData | null> => {
       const response = await fetch(
         `/api/reputation/leaderboard?limit=${limit}&minGames=${minGames}`
       );
-      const result = await response.json();
-
-      if (result.success) {
-        setData(result);
+      if (!response.ok) {
+        throw new Error('Failed to fetch leaderboard');
       }
-      setLoading(false);
-    };
+      const result: LeaderboardData = await response.json();
+      return result.success ? result : null;
+    },
+  });
 
-    fetchLeaderboard();
-  }, [limit, minGames]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={cn('rounded-2xl bg-sidebar p-4', className)}>
         <div className="text-muted-foreground text-sm">

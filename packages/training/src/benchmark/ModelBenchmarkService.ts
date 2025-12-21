@@ -15,18 +15,14 @@
  */
 
 import {
-  and,
   benchmarkResults,
   db,
-  desc,
-  eq,
-  isNull,
-  sql,
   trainedModels,
   userAgentConfigs,
   users,
 } from '@babylon/db';
-import { ethers } from 'ethers';
+import { generateRandomWallet } from '@babylon/shared';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { getAgentRuntimeManager } from '../dependencies';
@@ -322,31 +318,27 @@ export class ModelBenchmarkService {
     );
     const results: ModelBenchmarkResult[] = [];
 
-    try {
-      const modelResult = await db
-        .select({ version: trainedModels.version })
-        .from(trainedModels)
-        .where(eq(trainedModels.modelId, modelId))
-        .limit(1);
-      const model = modelResult[0];
+    const modelResult = await db
+      .select({ version: trainedModels.version })
+      .from(trainedModels)
+      .where(eq(trainedModels.modelId, modelId))
+      .limit(1);
+    const model = modelResult[0];
 
-      if (!model) return results;
+    if (!model) return results;
 
-      const modelDir = path.join(benchmarksDir, model.version);
-      const files = await fs.readdir(modelDir).catch(() => []);
+    const modelDir = path.join(benchmarksDir, model.version);
+    const files = await fs.readdir(modelDir).catch(() => []);
 
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          const filePath = path.join(modelDir, file);
-          const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        const filePath = path.join(modelDir, file);
+        const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
 
-          if (data.modelId === modelId) {
-            results.push(data);
-          }
+        if (data.modelId === modelId) {
+          results.push(data);
         }
       }
-    } catch (error) {
-      logger.warn('Could not load benchmark results', { error });
     }
 
     return results;
@@ -440,26 +432,22 @@ export class ModelBenchmarkService {
   private static async getBaselineBenchmark(
     benchmarkPath: string
   ): Promise<SimulationMetrics | null> {
-    try {
-      // Look for baseline result for this benchmark
-      const baselinesDir = path.join(process.cwd(), 'benchmarks', 'baselines');
-      const files = await fs.readdir(baselinesDir).catch(() => []);
+    // Look for baseline result for this benchmark
+    const baselinesDir = path.join(process.cwd(), 'benchmarks', 'baselines');
+    const files = await fs.readdir(baselinesDir).catch(() => []);
 
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          const filePath = path.join(baselinesDir, file);
-          const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        const filePath = path.join(baselinesDir, file);
+        const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
 
-          if (
-            data.benchmark?.path === benchmarkPath ||
-            data.benchmark === benchmarkPath
-          ) {
-            return data.metrics;
-          }
+        if (
+          data.benchmark?.path === benchmarkPath ||
+          data.benchmark === benchmarkPath
+        ) {
+          return data.metrics;
         }
       }
-    } catch (error) {
-      logger.warn('Could not load baseline benchmark', { error });
     }
 
     return null;
@@ -509,21 +497,17 @@ export class ModelBenchmarkService {
     const baselinesDir = path.join(process.cwd(), 'benchmarks', 'baselines');
     const metricsArray: SimulationMetrics[] = [];
 
-    try {
-      const files = await fs.readdir(baselinesDir).catch(() => []);
+    const files = await fs.readdir(baselinesDir).catch(() => []);
 
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          const filePath = path.join(baselinesDir, file);
-          const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        const filePath = path.join(baselinesDir, file);
+        const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
 
-          if (data.metrics) {
-            metricsArray.push(data.metrics);
-          }
+        if (data.metrics) {
+          metricsArray.push(data.metrics);
         }
       }
-    } catch (error) {
-      logger.warn('Could not load baseline metrics', { error });
     }
 
     return this.calculateAverageMetrics(metricsArray);
@@ -555,7 +539,7 @@ export class ModelBenchmarkService {
         privyId: `did:privy:model-benchmark-${agentId}`,
         username: testAgentUsername,
         displayName: 'Model Benchmark Agent',
-        walletAddress: ethers.Wallet.createRandom().address,
+        walletAddress: generateRandomWallet().address,
         isAgent: true,
         virtualBalance: '10000',
         reputationPoints: 1000,

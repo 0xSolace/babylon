@@ -197,10 +197,12 @@ export default function OnChainBettingPage() {
           <div className="mt-2 flex items-center gap-2 text-sm">
             <Wallet className="h-4 w-4 text-green-600" />
             <span className="font-medium text-green-600">
-              Connected: {smartWalletAddress?.slice(0, 6)}...
-              {smartWalletAddress?.slice(-4)}
+              Connected:{' '}
+              {smartWalletAddress
+                ? `${smartWalletAddress.slice(0, 6)}...${smartWalletAddress.slice(-4)}`
+                : 'Unknown'}
             </span>
-            {explorerUrl && (
+            {explorerUrl && smartWalletAddress && (
               <a
                 href={`${explorerUrl}/address/${smartWalletAddress}`}
                 target="_blank"
@@ -220,8 +222,8 @@ export default function OnChainBettingPage() {
           </h2>
           <div className="space-y-3">
             {activeQuestions.map((question) => {
-              const yesShares = question.yesShares ?? 0;
-              const noShares = question.noShares ?? 0;
+              const yesShares = question.yesShares || 0;
+              const noShares = question.noShares || 0;
               const totalShares = yesShares + noShares;
               const yesPercent =
                 totalShares > 0

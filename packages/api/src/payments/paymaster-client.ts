@@ -222,9 +222,15 @@ export class PaymasterClient {
       signal: AbortSignal.timeout(10000),
     });
     const results = (await response.json()) as Array<{ result?: Hex }>;
+    if (!results[0]?.result) {
+      throw new Error('[Paymaster] Failed to get gas price from RPC');
+    }
+    if (!results[1]?.result) {
+      throw new Error('[Paymaster] Failed to get max priority fee from RPC');
+    }
     return {
-      baseFee: BigInt(results[0]?.result ?? '0x0'),
-      maxPriorityFee: BigInt(results[1]?.result ?? '0x0'),
+      baseFee: BigInt(results[0].result),
+      maxPriorityFee: BigInt(results[1].result),
       creditPerGas: 1000n,
     };
   }
@@ -248,10 +254,8 @@ export class PaymasterClient {
 
   private async waitForTx(txHash: Hex): Promise<void> {
     for (let i = 0; i < 60; i++) {
-      const receipt = await this.rpc('eth_getTransactionReceipt', [
-        txHash,
-      ]).catch(() => null);
-      if (receipt) {
+      const receipt = await this.rpc('eth_getTransactionReceipt', [txHash]);
+      if (receipt && receipt !== '0x') {
         const status = (receipt as unknown as { status: Hex }).status;
         if (status === '0x1') return;
         throw new Error(`Transaction reverted: ${txHash}`);

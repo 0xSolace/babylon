@@ -72,8 +72,12 @@ export const POST = withErrorHandling(
       .where(eq(users.id, canonicalUserId))
       .limit(1);
 
+    if (!user) {
+      throw new BusinessLogicError('User record not found', 'USER_NOT_FOUND');
+    }
+
     // VALIDATION: Check if user has linked Discord account
-    if (!user?.discordUsername || !user?.discordId) {
+    if (!user.discordUsername || !user.discordId) {
       throw new BusinessLogicError(
         'Please link your Discord account first to verify join.',
         'DISCORD_NOT_LINKED'
@@ -185,9 +189,9 @@ export const POST = withErrorHandling(
     if (!isMember) {
       return successResponse({
         verified: false,
-        message:
-          verificationError ||
-          'Could not verify membership. Please ensure you have joined the Babylon Discord server.',
+        message: verificationError
+          ? verificationError
+          : 'Could not verify membership. Please ensure you have joined the Babylon Discord server.',
         points: {
           awarded: 0,
           newTotal: 0,

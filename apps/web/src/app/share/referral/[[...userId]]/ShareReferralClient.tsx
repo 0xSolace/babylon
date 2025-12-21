@@ -16,7 +16,7 @@ export default function ShareReferralClient() {
   // Catch-all route: params.userId is string[] or undefined
   const userIdParam = params.userId;
   const rawUserId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
-  const userId = rawUserId ? decodeURIComponent(rawUserId) : '';
+  const userId = rawUserId ? decodeURIComponent(rawUserId) : null;
 
   useEffect(() => {
     if (!userId) {
@@ -47,6 +47,11 @@ export default function ShareReferralClient() {
 
     fetchAndRedirect();
   }, [userId, router]);
+
+  // Don't render with missing userId - redirect will happen via useEffect
+  if (!userId) {
+    return null;
+  }
 
   return (
     <PageContainer>

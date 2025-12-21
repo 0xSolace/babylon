@@ -217,9 +217,12 @@ export async function generateActivePredictions(): Promise<string> {
   const shuffledQuestions = shuffleArray(activeQuestions);
   const questionsList = shuffledQuestions.map(
     (q: (typeof activeQuestions)[number]) => {
-      const resolutionDate = q.resolutionDate
-        ? new Date(q.resolutionDate)
-        : new Date();
+      const resolutionDate =
+        q.resolutionDate instanceof Date
+          ? q.resolutionDate
+          : q.resolutionDate
+            ? new Date(Number(q.resolutionDate))
+            : new Date();
       const daysUntil = Math.ceil(
         (resolutionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       );
@@ -262,7 +265,18 @@ export async function generateRecentTrades(): Promise<string> {
   }));
 
   // Get recent agent trades with user names
-  const agentTradeResults = await db
+  type AgentTradeWithUser = {
+    action: string;
+    side: string | null;
+    amount: number;
+    price: number;
+    marketType: string;
+    ticker: string | null;
+    executedAt: Date;
+    displayName: string | null;
+    username: string | null;
+  };
+  const agentTradeResults = (await db
     .select({
       action: agentTrades.action,
       side: agentTrades.side,
@@ -277,11 +291,11 @@ export async function generateRecentTrades(): Promise<string> {
     .from(agentTrades)
     .leftJoin(users, eq(agentTrades.agentUserId, users.id))
     .orderBy(desc(agentTrades.executedAt))
-    .limit(15);
+    .limit(15)) as unknown as AgentTradeWithUser[];
 
   // Combine and sort by time
   const allTrades = [
-    ...npcTradeResults.map((t: (typeof npcTradeResults)[number]) => ({
+    ...npcTradeResults.map((t) => ({
       name: t.actorName || 'NPC',
       action: t.action,
       side: t.side,
@@ -291,7 +305,7 @@ export async function generateRecentTrades(): Promise<string> {
       ticker: t.ticker,
       time: t.executedAt,
     })),
-    ...agentTradeResults.map((t: (typeof agentTradeResults)[number]) => ({
+    ...agentTradeResults.map((t: AgentTradeWithUser) => ({
       name: t.displayName || t.username || 'Agent',
       action: t.action,
       side: t.side,
@@ -309,7 +323,7 @@ export async function generateRecentTrades(): Promise<string> {
     return 'Recent Trades: No recent activity';
   }
 
-  const tradesList = allTrades.map((t: (typeof allTrades)[number]) => {
+  const tradesList = allTrades.map((t) => {
     const actionStr = t.side ? `${t.action} ${t.side}` : t.action;
     const marketStr = t.ticker || t.marketType;
     return `${t.name} ${actionStr} ${marketStr}`;

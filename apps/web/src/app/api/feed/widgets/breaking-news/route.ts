@@ -289,15 +289,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           const significantPriceUpdates = priceUpdates
             .filter((update) => {
               if (!update.organization) return false;
-              const changePercent = update.changePercent || 0;
+              const changePercent = update.changePercent;
               // Use configurable thresholds
               return (
                 Math.abs(changePercent) >=
                   FEED_WIDGET_CONFIG.SIGNIFICANT_PRICE_CHANGE_PERCENT ||
                 (changePercent > 0 &&
-                  update.changePercent &&
-                  update.changePercent >=
-                    FEED_WIDGET_CONFIG.MIN_PRICE_CHANGE_PERCENT)
+                  changePercent >= FEED_WIDGET_CONFIG.MIN_PRICE_CHANGE_PERCENT)
               );
             })
             .slice(0, 3);
@@ -306,25 +304,28 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             if (!update.organization) continue;
 
             const org = update.organization;
-            const price = org.currentPrice || update.price || 0;
-            const changePercent = update.changePercent || 0;
+            const price = org.currentPrice ?? update.price;
+            if (price === null || price === undefined) {
+              throw new Error(`Missing price for organization ${org.id}`);
+            }
+            const changePercent = update.changePercent;
             const isATH =
               changePercent >= FEED_WIDGET_CONFIG.ATH_THRESHOLD_PERCENT &&
-              update.changePercent &&
-              update.changePercent > 0;
+              changePercent > 0;
 
             const priceTrendingThreshold =
               FEED_WIDGET_CONFIG.PRICE_TRENDING_HOURS * 60 * 60 * 1000;
             const isTrending =
               new Date(update.timestamp).getTime() >
               Date.now() - priceTrendingThreshold;
-            const fullDesc = `Stock price update for ${org.name || org.id}. Current price: $${price.toFixed(2)}. ${changePercent > 0 ? 'Up' : 'Down'} ${Math.abs(changePercent).toFixed(2)}% from previous price.${isATH ? ' This represents a new all-time high for the organization.' : ''}`;
+            const orgName = org.name || org.id;
+            const fullDesc = `Stock price update for ${orgName}. Current price: $${price.toFixed(2)}. ${changePercent > 0 ? 'Up' : 'Down'} ${Math.abs(changePercent).toFixed(2)}% from previous price.${isATH ? ' This represents a new all-time high for the organization.' : ''}`;
 
             items.push({
               id: `price-${update.id}`,
               title: isATH
-                ? `${org.name || org.id} reaches new ATH`
-                : `${org.name || org.id} ${changePercent > 0 ? 'up' : 'down'} ${Math.abs(changePercent).toFixed(1)}%`,
+                ? `${orgName} reaches new ATH`
+                : `${orgName} ${changePercent > 0 ? 'up' : 'down'} ${Math.abs(changePercent).toFixed(1)}%`,
               description: `Trading at $${price.toFixed(2)} • ${getTimeAgo(update.timestamp)}${isTrending ? ' • Trending' : ''}`,
               icon: 'chart',
               timestamp: update.timestamp.toISOString(),
@@ -681,15 +682,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           const significantPriceUpdates = priceUpdates
             .filter((update) => {
               if (!update.organization) return false;
-              const changePercent = update.changePercent || 0;
+              const changePercent = update.changePercent;
               // Use configurable thresholds
               return (
                 Math.abs(changePercent) >=
                   FEED_WIDGET_CONFIG.SIGNIFICANT_PRICE_CHANGE_PERCENT ||
                 (changePercent > 0 &&
-                  update.changePercent &&
-                  update.changePercent >=
-                    FEED_WIDGET_CONFIG.MIN_PRICE_CHANGE_PERCENT)
+                  changePercent >= FEED_WIDGET_CONFIG.MIN_PRICE_CHANGE_PERCENT)
               );
             })
             .slice(0, 3);
@@ -698,25 +697,28 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             if (!update.organization) continue;
 
             const org = update.organization;
-            const price = org.currentPrice || update.price || 0;
-            const changePercent = update.changePercent || 0;
+            const price = org.currentPrice ?? update.price;
+            if (price === null || price === undefined) {
+              throw new Error(`Missing price for organization ${org.id}`);
+            }
+            const changePercent = update.changePercent;
             const isATH =
               changePercent >= FEED_WIDGET_CONFIG.ATH_THRESHOLD_PERCENT &&
-              update.changePercent &&
-              update.changePercent > 0;
+              changePercent > 0;
 
             const priceTrendingThreshold =
               FEED_WIDGET_CONFIG.PRICE_TRENDING_HOURS * 60 * 60 * 1000;
             const isTrending =
               new Date(update.timestamp).getTime() >
               Date.now() - priceTrendingThreshold;
-            const fullDesc = `Stock price update for ${org.name || org.id}. Current price: $${price.toFixed(2)}. ${changePercent > 0 ? 'Up' : 'Down'} ${Math.abs(changePercent).toFixed(2)}% from previous price.${isATH ? ' This represents a new all-time high for the organization.' : ''}`;
+            const orgName = org.name || org.id;
+            const fullDesc = `Stock price update for ${orgName}. Current price: $${price.toFixed(2)}. ${changePercent > 0 ? 'Up' : 'Down'} ${Math.abs(changePercent).toFixed(2)}% from previous price.${isATH ? ' This represents a new all-time high for the organization.' : ''}`;
 
             items.push({
               id: `price-${update.id}`,
               title: isATH
-                ? `${org.name || org.id} reaches new ATH`
-                : `${org.name || org.id} ${changePercent > 0 ? 'up' : 'down'} ${Math.abs(changePercent).toFixed(1)}%`,
+                ? `${orgName} reaches new ATH`
+                : `${orgName} ${changePercent > 0 ? 'up' : 'down'} ${Math.abs(changePercent).toFixed(1)}%`,
               description: `Trading at $${price.toFixed(2)} • ${getTimeAgo(update.timestamp)}${isTrending ? ' • Trending' : ''}`,
               icon: 'chart',
               timestamp: update.timestamp.toISOString(),

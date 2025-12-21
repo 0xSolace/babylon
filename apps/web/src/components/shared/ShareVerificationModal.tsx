@@ -80,14 +80,18 @@ export function ShareVerificationModal({
     const data = await response.json();
 
     if (!response.ok) {
-      toast.error(data.message || data.error || 'Failed to verify share');
+      const errorMessage = data.message || data.error;
+      if (!errorMessage) {
+        throw new Error('Failed to verify share: Unknown error');
+      }
+      toast.error(errorMessage);
       setVerifying(false);
       return;
     }
 
     if (data.verified) {
       const pointsMessage =
-        data.points?.awarded > 0
+        data.points.awarded > 0
           ? `Share verified! You earned ${data.points.awarded} points.`
           : 'Share verified! Thank you for sharing!';
       toast.success(pointsMessage);
@@ -97,9 +101,10 @@ export function ShareVerificationModal({
         window.location.reload();
       }, 2000);
     } else {
-      toast.error(
-        data.message || 'Could not verify your post. Please check the URL.'
-      );
+      if (!data.message) {
+        throw new Error('Verification failed: No error message provided');
+      }
+      toast.error(data.message);
     }
     setVerifying(false);
   };

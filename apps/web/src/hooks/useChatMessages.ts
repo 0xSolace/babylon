@@ -1,4 +1,5 @@
 import { logger } from '@babylon/shared';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSSEChannel } from './useSSE';
 
@@ -20,6 +21,27 @@ export interface ChatMessage {
   isGameChat?: boolean;
 }
 
+interface ApiMessage {
+  id: string;
+  content: string;
+  senderId: string;
+  createdAt: string | Date;
+}
+
+interface ChatApiResponse {
+  messages?: ApiMessage[];
+  pagination?: {
+    hasMore?: boolean;
+    nextCursor?: string;
+  };
+}
+
+interface ChatPage {
+  messages: ChatMessage[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 /**
  * Hook for managing chat messages with real-time SSE updates.
  *
@@ -29,9 +51,6 @@ export interface ChatMessage {
  * - Message history pagination (load more)
  * - Automatic deduplication
  * - Polling fallback for multi-instance serverless environments
- *
- * Replaces the previous WebSocket-based implementation with SSE for better
- * Vercel compatibility. Messages are automatically sorted by timestamp.
  *
  * @param chatId - The ID of the chat to load messages for, or null to clear messages.
  *
@@ -58,163 +77,89 @@ export interface ChatMessage {
  * );
  * ```
  */
+const formatMessage = (msg: ApiMessage, targetChatId: string): ChatMessage => ({
+  id: msg.id,
+  content: msg.content,
+  chatId: targetChatId,
+  senderId: msg.senderId,
+  createdAt:
+    typeof msg.createdAt === 'string'
+      ? msg.createdAt
+      : msg.createdAt.toISOString(),
+});
+
 export function useChatMessages(chatId: string | null) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [sseMessages, setSseMessages] = useState<ChatMessage[]>([]);
   const previousChatIdRef = useRef<string | null>(null);
-  const hasLoadedRef = useRef<Set<string>>(new Set());
 
-  // Load existing messages from API (initial load)
-  const loadMessages = useCallback(async (chatId: string) => {
-    // Skip if already loaded
-    if (hasLoadedRef.current.has(chatId)) {
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage: isLoadingMore,
+    hasNextPage: hasMore,
+    fetchNextPage,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: ['chatMessages', chatId],
+    queryFn: async ({ pageParam }): Promise<ChatPage> => {
+      const url = pageParam
+        ? `/api/chats/${chatId}?cursor=${pageParam}&limit=50`
+        : `/api/chats/${chatId}?limit=50`;
+
       logger.debug(
-        `Skipping reload for ${chatId} - already loaded`,
-        { chatId },
+        `Loading messages for chat ${chatId}`,
+        { chatId, cursor: pageParam },
         'useChatMessages'
       );
-      setIsLoading(false);
-      return;
-    }
 
-    logger.debug(
-      `Loading initial messages for chat ${chatId}`,
-      { chatId },
-      'useChatMessages'
-    );
-    setIsLoading(true);
-    const response = await fetch(`/api/chats/${chatId}?limit=50`);
-    logger.debug(
-      `Response status: ${response.status}`,
-      { chatId, status: response.status },
-      'useChatMessages'
-    );
+      const response = await fetch(url);
 
-    if (response.ok) {
-      const data = await response.json();
-      if (data.messages) {
-        const formattedMessages: ChatMessage[] = data.messages.map(
-          (msg: {
-            id: string;
-            content: string;
-            senderId: string;
-            createdAt: string | Date;
-          }) => ({
-            id: msg.id,
-            content: msg.content,
-            chatId: chatId,
-            senderId: msg.senderId,
-            createdAt:
-              typeof msg.createdAt === 'string'
-                ? msg.createdAt
-                : msg.createdAt.toISOString(),
-          })
-        );
-        setMessages(formattedMessages);
-        setHasMore(data.pagination?.hasMore || false);
-        setNextCursor(data.pagination?.nextCursor || null);
-        hasLoadedRef.current.add(chatId);
-        logger.debug(
-          `Loaded ${formattedMessages.length} messages for chat ${chatId}`,
-          {
-            chatId,
-            count: formattedMessages.length,
-            hasMore: data.pagination?.hasMore,
-          },
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        logger.error(
+          'Failed to load messages',
+          { chatId, errorData, status: response.status },
           'useChatMessages'
         );
+        throw new Error('Failed to load messages');
       }
-    } else {
-      const errorData = await response.json().catch(() => null);
-      logger.error(
-        'Failed to load messages',
-        { chatId, errorData, status: response.status },
-        'useChatMessages'
-      );
-    }
-    setIsLoading(false);
-  }, []);
 
-  // Load more older messages (pagination)
-  const loadMore = useCallback(async () => {
-    if (!chatId || !nextCursor || isLoadingMore || !hasMore) {
+      const responseData = (await response.json()) as ChatApiResponse;
+
+      const formattedMessages: ChatMessage[] = (
+        responseData.messages ?? []
+      ).map((msg) => formatMessage(msg, chatId!));
+
       logger.debug(
-        'Skip loadMore',
-        { chatId, nextCursor, isLoadingMore, hasMore },
+        `Loaded ${formattedMessages.length} messages for chat ${chatId}`,
+        {
+          chatId,
+          count: formattedMessages.length,
+          hasMore: responseData.pagination?.hasMore,
+        },
         'useChatMessages'
       );
-      return;
-    }
 
-    logger.debug(
-      `Loading more messages with cursor: ${nextCursor}`,
-      { chatId, cursor: nextCursor },
-      'useChatMessages'
-    );
-    setIsLoadingMore(true);
-
-    const response = await fetch(
-      `/api/chats/${chatId}?cursor=${nextCursor}&limit=50`
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-
-      if (data.messages && data.messages.length > 0) {
-        const formattedMessages: ChatMessage[] = data.messages.map(
-          (msg: {
-            id: string;
-            content: string;
-            senderId: string;
-            createdAt: string | Date;
-          }) => ({
-            id: msg.id,
-            content: msg.content,
-            chatId: chatId,
-            senderId: msg.senderId,
-            createdAt:
-              typeof msg.createdAt === 'string'
-                ? msg.createdAt
-                : msg.createdAt.toISOString(),
-          })
-        );
-
-        // Prepend older messages to the beginning
-        setMessages((prev) => [...formattedMessages, ...prev]);
-        setHasMore(data.pagination?.hasMore || false);
-        setNextCursor(data.pagination?.nextCursor || null);
-
-        logger.debug(
-          `Loaded ${formattedMessages.length} more messages`,
-          {
-            chatId,
-            count: formattedMessages.length,
-            hasMore: data.pagination?.hasMore,
-          },
-          'useChatMessages'
-        );
-      }
-    } else {
-      logger.error(
-        'Failed to load more messages',
-        { chatId, status: response.status, statusText: response.statusText },
-        'useChatMessages'
-      );
-    }
-
-    setIsLoadingMore(false);
-  }, [chatId, nextCursor, isLoadingMore, hasMore]);
+      return {
+        messages: formattedMessages,
+        nextCursor: responseData.pagination?.nextCursor ?? null,
+        hasMore: responseData.pagination?.hasMore ?? false,
+      };
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.nextCursor : undefined,
+    enabled: !!chatId,
+    staleTime: 30000,
+  });
 
   // Handle SSE updates for this chat
   const handleChatUpdate = useCallback(
-    (data: Record<string, unknown>) => {
-      if (data.type === 'new_message' && data.message) {
-        const messageData = data.message as Record<string, unknown>;
+    (eventData: Record<string, unknown>) => {
+      if (eventData.type === 'new_message' && eventData.message) {
+        const messageData = eventData.message as Record<string, unknown>;
 
-        // Type guard for ChatMessage
         if (
           typeof messageData.id === 'string' &&
           typeof messageData.content === 'string' &&
@@ -234,19 +179,12 @@ export function useChatMessages(chatId: string | null) {
                 : undefined,
           };
 
-          // Only add message if it's for the current chat
           if (newMessage.chatId === chatId) {
-            setIsLoading(false);
-            setMessages((prev) => {
-              // Avoid duplicates
+            setSseMessages((prev) => {
               if (prev.some((msg) => msg.id === newMessage.id)) {
                 return prev;
               }
-              return [...prev, newMessage].sort(
-                (a, b) =>
-                  new Date(a.createdAt).getTime() -
-                  new Date(b.createdAt).getTime()
-              );
+              return [...prev, newMessage];
             });
           }
         }
@@ -255,38 +193,22 @@ export function useChatMessages(chatId: string | null) {
     [chatId]
   );
 
-  // Subscribe to chat channel
   const channel: `chat:${string}` | null = chatId ? `chat:${chatId}` : null;
   const { isConnected } = useSSEChannel(channel, handleChatUpdate);
 
-  // Load messages when switching chats
+  // Reset SSE messages when chat changes
   useEffect(() => {
-    const previousChatId = previousChatIdRef.current;
-
-    if (previousChatId !== chatId) {
-      if (chatId) {
-        setMessages([]);
-        setHasMore(false);
-        setNextCursor(null);
-        loadMessages(chatId);
-      } else {
-        setIsLoading(false);
-        setMessages([]);
-        setHasMore(false);
-        setNextCursor(null);
-      }
+    if (previousChatIdRef.current !== chatId) {
+      setSseMessages([]);
       previousChatIdRef.current = chatId;
     }
-  }, [chatId, loadMessages]);
+  }, [chatId]);
 
   // Polling fallback: Refresh chat every 15 seconds
-  // Ensures new messages appear even if SSE fails in multi-instance serverless
   useEffect(() => {
-    if (!chatId || !hasLoadedRef.current.has(chatId)) return;
+    if (!chatId) return;
 
     const interval = setInterval(async () => {
-      // Fetch new messages without blocking - bypass the hasLoadedRef check
-      // by fetching directly instead of calling loadMessages
       logger.debug(
         `Polling for new messages in chat ${chatId}`,
         { chatId },
@@ -295,28 +217,19 @@ export function useChatMessages(chatId: string | null) {
 
       const response = await fetch(`/api/chats/${chatId}?limit=50`);
       if (response.ok) {
-        const data = await response.json();
-        if (data.messages) {
-          const formattedMessages: ChatMessage[] = data.messages.map(
-            (msg: {
-              id: string;
-              content: string;
-              senderId: string;
-              createdAt: string | Date;
-            }) => ({
-              id: msg.id,
-              content: msg.content,
-              chatId: chatId,
-              senderId: msg.senderId,
-              createdAt:
-                typeof msg.createdAt === 'string'
-                  ? msg.createdAt
-                  : msg.createdAt.toISOString(),
-            })
+        const responseData = (await response.json()) as ChatApiResponse;
+        if (responseData.messages) {
+          const formattedMessages: ChatMessage[] = responseData.messages.map(
+            (msg) => formatMessage(msg, chatId)
           );
-          // Merge with existing messages, avoiding duplicates
-          setMessages((prev) => {
-            const existingIds = new Set(prev.map((m) => m.id));
+
+          // Check for new messages and add them via SSE messages
+          setSseMessages((prev) => {
+            const existingIds = new Set([
+              ...prev.map((m) => m.id),
+              ...(data?.pages.flatMap((p) => p.messages.map((m) => m.id)) ??
+                []),
+            ]);
             const newMessages = formattedMessages.filter(
               (m) => !existingIds.has(m.id)
             );
@@ -326,58 +239,67 @@ export function useChatMessages(chatId: string | null) {
                 { chatId, count: newMessages.length },
                 'useChatMessages'
               );
-              return [...prev, ...newMessages].sort(
-                (a, b) =>
-                  new Date(a.createdAt).getTime() -
-                  new Date(b.createdAt).getTime()
-              );
+              return [...prev, ...newMessages];
             }
             return prev;
           });
         }
       }
-    }, 15000); // 15 seconds (more frequent for chat)
+    }, 15000);
 
     return () => clearInterval(interval);
-  }, [chatId]);
+  }, [chatId, data?.pages]);
 
-  // Mark as loaded when connected
-  useEffect(() => {
-    if (isConnected && chatId) {
-      // Initial loading done - we're ready to receive messages
-      setIsLoading(false);
+  // Combine paginated data with SSE messages
+  const allMessages = useCallback((): ChatMessage[] => {
+    const paginatedMessages =
+      data?.pages.flatMap((page) => page.messages) ?? [];
+    const allMsgs = [...paginatedMessages, ...sseMessages];
+
+    // Deduplicate by id
+    const seen = new Set<string>();
+    const unique = allMsgs.filter((msg) => {
+      if (seen.has(msg.id)) return false;
+      seen.add(msg.id);
+      return true;
+    });
+
+    return unique.sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  }, [data?.pages, sseMessages]);
+
+  const loadMore = useCallback(() => {
+    if (hasMore && !isLoadingMore) {
+      void fetchNextPage();
     }
-  }, [isConnected, chatId]);
+  }, [hasMore, isLoadingMore, fetchNextPage]);
 
   const addMessage = useCallback((message: ChatMessage) => {
-    setMessages((prev) => {
+    setSseMessages((prev) => {
       if (prev.some((msg) => msg.id === message.id)) {
         return prev;
       }
-      return [...prev, message].sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      );
+      return [...prev, message];
     });
   }, []);
 
   const clearMessages = useCallback(() => {
-    setMessages([]);
-    hasLoadedRef.current.clear();
-  }, []);
+    setSseMessages([]);
+    void queryClient.resetQueries({ queryKey: ['chatMessages', chatId] });
+  }, [queryClient, chatId]);
 
   const reloadMessages = useCallback(() => {
-    if (chatId) {
-      hasLoadedRef.current.delete(chatId);
-      loadMessages(chatId);
-    }
-  }, [chatId, loadMessages]);
+    setSseMessages([]);
+    void refetch();
+  }, [refetch]);
 
   return {
-    messages,
+    messages: allMessages(),
     isLoading,
     isLoadingMore,
-    hasMore,
+    hasMore: hasMore ?? false,
     loadMore,
     addMessage,
     clearMessages,

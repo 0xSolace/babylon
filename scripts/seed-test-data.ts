@@ -25,8 +25,8 @@ import {
   users,
 } from '@babylon/db';
 import { logger } from '@babylon/engine';
-import { ethers } from 'ethers';
-import { nanoid } from 'nanoid';
+import { generateRandomWallet } from '@babylon/shared';
+import { v4 as uuidv4 } from 'uuid';
 
 // ============================================================================
 // AUTONOMOUS TRADING AGENTS
@@ -165,7 +165,7 @@ async function seedAutonomousAgents(): Promise<number> {
     }
 
     const agentId = await generateSnowflakeId();
-    const wallet = ethers.Wallet.createRandom();
+    const wallet = generateRandomWallet();
 
     // Create user record
     await db.insert(users).values({
@@ -463,7 +463,7 @@ async function seedBenchmarkAgents(): Promise<number> {
     }
 
     const agentId = await generateSnowflakeId();
-    const wallet = ethers.Wallet.createRandom();
+    const wallet = generateRandomWallet();
 
     // Create user
     await db.insert(users).values({
@@ -575,7 +575,7 @@ async function seedModerationTestUsers(): Promise<number> {
       where: { username: `reporter${i}` },
       update: { updatedAt: new Date() },
       create: {
-        id: nanoid(),
+        id: uuidv4(),
         username: `reporter${i}`,
         displayName: `Reporter ${i}`,
         walletAddress: `0xREPORTER${i.toString().padStart(36, '0')}`,
@@ -598,7 +598,7 @@ async function seedModerationTestUsers(): Promise<number> {
     where: { username: 'testadmin' },
     update: { isAdmin: true, updatedAt: new Date() },
     create: {
-      id: nanoid(),
+      id: uuidv4(),
       username: 'testadmin',
       displayName: 'Test Admin',
       walletAddress: '0xADMIN00000000000000000000000000000000000',
@@ -628,7 +628,7 @@ async function seedModerationTestUsers(): Promise<number> {
         updatedAt: new Date(),
       },
       create: {
-        id: nanoid(),
+        id: uuidv4(),
         username: testUser.username,
         displayName: testUser.displayName,
         walletAddress: testUser.walletAddress,
@@ -662,7 +662,7 @@ async function seedModerationTestUsers(): Promise<number> {
       await db.follow
         .create({
           data: {
-            id: nanoid(),
+            id: uuidv4(),
             followerId: follower.id,
             followingId: user.id,
             createdAt: new Date(
@@ -697,7 +697,7 @@ async function seedModerationTestUsers(): Promise<number> {
 
       await db.report.create({
         data: {
-          id: nanoid(),
+          id: uuidv4(),
           reporterId: reporter.id,
           reportedUserId: user.id,
           reportType: 'user',
@@ -729,7 +729,7 @@ async function seedModerationTestUsers(): Promise<number> {
       await db.userBlock
         .create({
           data: {
-            id: nanoid(),
+            id: uuidv4(),
             blockerId: blocker.id,
             blockedId: user.id,
             reason: `Test block ${i + 1}`,
@@ -751,7 +751,7 @@ async function seedModerationTestUsers(): Promise<number> {
       await db.userMute
         .create({
           data: {
-            id: nanoid(),
+            id: uuidv4(),
             muterId: muter.id,
             mutedId: user.id,
             reason: `Test mute ${i + 1}`,
@@ -865,9 +865,6 @@ async function main(): Promise<void> {
 
     logger.info('═'.repeat(60), undefined, 'SeedTestData');
     logger.info('Test data seeding complete!', undefined, 'SeedTestData');
-  } catch (error) {
-    logger.error('Seed failed', { error }, 'SeedTestData');
-    throw error;
   } finally {
     await db.$disconnect();
   }

@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   Award,
@@ -13,7 +14,6 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
 import { z } from 'zod';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -187,61 +187,54 @@ type TokenStats = z.infer<typeof TokenStatsSchema>;
  * @returns Stats tab element
  */
 export function StatsTab() {
-  const [stats, setStats] = useState<SystemStats | null>(null);
-  const [feeStats, setFeeStats] = useState<FeeStats | null>(null);
-  const [tokenStats, setTokenStats] = useState<TokenStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: stats,
+    isLoading,
+    error,
+  } = useQuery<SystemStats>({
+    queryKey: ['admin', 'stats'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/stats');
+      if (!response.ok) throw new Error('Failed to fetch stats');
+      const data = await response.json();
+      const validation = SystemStatsSchema.safeParse(data);
+      if (!validation.success) {
+        throw new Error('Invalid system stats data structure');
+      }
+      return validation.data;
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
 
-  const fetchStats = useCallback(async () => {
-    const response = await fetch('/api/admin/stats');
-    if (!response.ok) throw new Error('Failed to fetch stats');
-    const data = await response.json();
-    const validation = SystemStatsSchema.safeParse(data);
-    if (!validation.success) {
-      throw new Error('Invalid system stats data structure');
-    }
-    setStats(validation.data);
-    setError(null);
-    setLoading(false);
-  }, []);
+  const { data: feeStats } = useQuery<FeeStats | null>({
+    queryKey: ['admin', 'fees', 'platform'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/fees');
+      if (!response.ok) return null;
+      const data = await response.json();
+      const validation = FeeStatsSchema.safeParse(data.platformStats);
+      if (validation.success) {
+        return validation.data;
+      }
+      return null;
+    },
+    refetchInterval: 30000,
+  });
 
-  const fetchFeeStats = useCallback(async () => {
-    const response = await fetch('/api/admin/fees');
-    if (!response.ok) return; // Fail silently for fees
-    const data = await response.json();
-    const validation = FeeStatsSchema.safeParse(data.platformStats);
-    if (validation.success) {
-      setFeeStats(validation.data);
-    }
-  }, []);
-
-  const fetchTokenStats = useCallback(async () => {
-    const response = await fetch('/api/stats/tokens?period=day&limit=50');
-    if (!response.ok) return; // Fail silently for token stats
-    const data = await response.json();
-    const validation = TokenStatsSchema.safeParse(data);
-    if (validation.success) {
-      setTokenStats(validation.data);
-    }
-  }, []);
-
-  useEffect(() => {
-    const loadData = async () => {
-      await fetchStats().catch((err) => {
-        setError(err instanceof Error ? err.message : 'Failed to load stats');
-        setLoading(false);
-      });
-      fetchFeeStats(); // This one fails silently
-      fetchTokenStats(); // This one fails silently
-    };
-
-    loadData();
-    const interval = setInterval(() => {
-      loadData();
-    }, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, [fetchStats, fetchFeeStats, fetchTokenStats]);
+  const { data: tokenStats } = useQuery<TokenStats | null>({
+    queryKey: ['admin', 'stats', 'tokens'],
+    queryFn: async () => {
+      const response = await fetch('/api/stats/tokens?period=day&limit=50');
+      if (!response.ok) return null;
+      const data = await response.json();
+      const validation = TokenStatsSchema.safeParse(data);
+      if (validation.success) {
+        return validation.data;
+      }
+      return null;
+    },
+    refetchInterval: 30000,
+  });
 
   const formatCurrency = (value: string) => {
     const num = parseFloat(value);
@@ -287,7 +280,7 @@ export function StatsTab() {
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="w-full space-y-4">
@@ -301,7 +294,7 @@ export function StatsTab() {
   if (error || !stats) {
     return (
       <div className="p-8 text-center text-red-500">
-        {error || 'Failed to load statistics'}
+        {error instanceof Error ? error.message : 'Failed to load statistics'}
       </div>
     );
   }

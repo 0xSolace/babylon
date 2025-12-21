@@ -169,8 +169,8 @@ export const POST = withErrorHandling(
       return { chat, participants };
     });
 
-    let chat = chatData?.chat || null;
-    let chatParticipantsList = chatData?.participants || [];
+    let chat = chatData.chat;
+    let chatParticipantsList = chatData.participants;
 
     // If chat doesn't exist and it's a DM format, create it automatically
     if (!chat && chatId.startsWith('dm-')) {
@@ -262,14 +262,9 @@ export const POST = withErrorHandling(
       });
 
       // Update chat and participants from reloaded data
-      if (
-        chatDataResult &&
-        typeof chatDataResult === 'object' &&
-        'chat' in chatDataResult &&
-        chatDataResult.chat
-      ) {
+      if (chatDataResult.chat) {
         chat = chatDataResult.chat;
-        chatParticipantsList = chatDataResult.participants || [];
+        chatParticipantsList = chatDataResult.participants;
       }
     }
 
@@ -496,11 +491,12 @@ export const POST = withErrorHandling(
           });
         });
 
+        const chatName = chatInfo?.name || 'Group Chat';
         await notifyGroupChatMessage(
           recipientUserIds,
           user.userId,
           chatId,
-          chatInfo?.name || 'Group Chat',
+          chatName,
           content.trim()
         );
       }

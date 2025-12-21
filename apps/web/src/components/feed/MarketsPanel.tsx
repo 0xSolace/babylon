@@ -1,9 +1,10 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { usePerpMarkets } from '@/stores/perpMarketsStore';
@@ -20,6 +21,11 @@ interface Market {
   endDate: string;
   priceChange24h?: number;
   changePercent24h?: number;
+}
+
+interface MarketsResponse {
+  success: boolean;
+  markets?: Market[];
 }
 
 /**
@@ -40,8 +46,7 @@ interface Market {
  */
 export function MarketsPanel() {
   const router = useRouter();
-  const [markets, setMarkets] = useState<Market[]>([]);
-  const [predictionsLoading, setPredictionsLoading] = useState(true);
+  const queryClient = useQueryClient();
   const { registerRefresh, unregisterRefresh } = useWidgetRefresh();
 
   // Use shared perp markets store
@@ -51,52 +56,53 @@ export function MarketsPanel() {
     refetch: refetchPerps,
   } = usePerpMarkets();
 
+  const { data: markets = [], isLoading: predictionsLoading } = useQuery({
+    queryKey: ['feed', 'markets', 'predictions'],
+    queryFn: async (): Promise<Market[]> => {
+      const response = await fetch('/api/feed/widgets/markets');
+
+      if (!response.ok) {
+        console.error(
+          'Failed to fetch markets:',
+          response.status,
+          response.statusText
+        );
+        return [];
+      }
+
+      const text = await response.text();
+      if (!text) {
+        console.error('Empty response from markets API');
+        return [];
+      }
+
+      const data: MarketsResponse = JSON.parse(text);
+      if (!data.success) {
+        return [];
+      }
+      if (!data.markets) {
+        throw new Error('Markets API returned success without markets data');
+      }
+      return data.markets;
+    },
+  });
+
   const loading = predictionsLoading && perpLoading;
 
-  const fetchMarkets = useCallback(async () => {
-    // Fetch prediction markets only - perps come from shared store
-    const response = await fetch('/api/feed/widgets/markets');
-
-    if (!response.ok) {
-      console.error(
-        'Failed to fetch markets:',
-        response.status,
-        response.statusText
-      );
-      setMarkets([]);
-      setPredictionsLoading(false);
-      return;
-    }
-
-    const text = await response.text();
-    if (!text) {
-      console.error('Empty response from markets API');
-      setMarkets([]);
-      setPredictionsLoading(false);
-      return;
-    }
-
-    const data = JSON.parse(text);
-    if (data.success) {
-      setMarkets(data.markets || []);
-    } else {
-      setMarkets([]);
-    }
-    setPredictionsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetchMarkets();
-  }, [fetchMarkets]);
+  const refetchAll = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ['feed', 'markets', 'predictions'],
+      }),
+      refetchPerps(),
+    ]);
+  }, [queryClient, refetchPerps]);
 
   // Register refresh function (includes both predictions and perps)
   useEffect(() => {
-    const refreshAll = async () => {
-      await Promise.all([fetchMarkets(), refetchPerps()]);
-    };
-    registerRefresh('markets', refreshAll);
+    registerRefresh('markets', refetchAll);
     return () => unregisterRefresh('markets');
-  }, [registerRefresh, unregisterRefresh, fetchMarkets, refetchPerps]);
+  }, [registerRefresh, unregisterRefresh, refetchAll]);
 
   const handleMarketClick = (marketId: string) => {
     router.push(`/markets/predictions/${marketId}`);
@@ -111,12 +117,11 @@ export function MarketsPanel() {
     () =>
       markets
         .filter(
-          (m) => m.changePercent24h !== undefined && m.changePercent24h !== 0
+          (m): m is Market & { changePercent24h: number } =>
+            m.changePercent24h !== undefined && m.changePercent24h !== 0
         )
         .sort(
-          (a, b) =>
-            Math.abs(b.changePercent24h || 0) -
-            Math.abs(a.changePercent24h || 0)
+          (a, b) => Math.abs(b.changePercent24h) - Math.abs(a.changePercent24h)
         )
         .slice(0, 3),
     [markets]
@@ -176,18 +181,18 @@ export function MarketsPanel() {
                         <div
                           className={cn(
                             'flex items-center gap-0.5 font-semibold text-xs',
-                            (market.changePercent24h || 0) >= 0
+                            market.changePercent24h >= 0
                               ? 'text-green-600'
                               : 'text-red-600'
                           )}
                         >
-                          {(market.changePercent24h || 0) >= 0 ? (
+                          {market.changePercent24h >= 0 ? (
                             <TrendingUp className="h-3 w-3" />
                           ) : (
                             <TrendingDown className="h-3 w-3" />
                           )}
-                          {(market.changePercent24h || 0) >= 0 ? '+' : ''}
-                          {(market.changePercent24h || 0).toFixed(1)}%
+                          {market.changePercent24h >= 0 ? '+' : ''}
+                          {market.changePercent24h.toFixed(1)}%
                         </div>
                       </div>
                     </div>

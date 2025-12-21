@@ -70,10 +70,10 @@ export function FontSizeProvider({ children }: { children: ReactNode }) {
   const setFontSize = (size: number) => {
     setFontSizeState(size);
     // Determine preset or custom
-    const preset =
-      (Object.entries(FONT_SIZE_PRESETS).find(
-        ([, value]) => value === size
-      )?.[0] as FontSize) || size;
+    const found = Object.entries(FONT_SIZE_PRESETS).find(
+      ([, value]) => value === size
+    );
+    const preset = found ? (found[0] as FontSize) : size;
     setFontSizePresetState(preset);
     localStorage.setItem(
       STORAGE_KEY,

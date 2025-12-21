@@ -1,8 +1,9 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { AlertCircle, Bot, Check, RefreshCw, Zap } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 /**
@@ -43,72 +44,66 @@ interface AIModelsData {
  * @returns AI models tab element
  */
 export function AIModelsTab() {
-  const [data, setData] = useState<AIModelsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<Record<string, unknown> | null>(
     null
   );
 
-  const fetchData = useCallback(async () => {
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      toast.error('Not authenticated');
-      setLoading(false);
-      return;
-    }
+  const { data, isLoading, refetch } = useQuery<AIModelsData>({
+    queryKey: ['admin', 'ai-models'],
+    queryFn: async () => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
 
-    const response = await fetch('/api/admin/ai-models', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      const response = await fetch('/api/admin/ai-models', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    if (!response.ok) {
-      toast.error('Failed to load AI models');
-      setLoading(false);
-      return;
-    }
+      if (!response.ok) {
+        throw new Error('Failed to load AI models');
+      }
 
-    const result = await response.json();
-    setData(result.data);
-    setLoading(false);
-  }, []);
+      const result = await response.json();
+      return result.data;
+    },
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
 
-  const handleTest = async () => {
-    setTesting(true);
-    setTestResult(null);
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      toast.error('Not authenticated');
-      setTesting(false);
-      return;
-    }
+      const response = await fetch('/api/admin/ai-models/test', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    const response = await fetch('/api/admin/ai-models/test', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      const result = await response.json();
 
-    const result = await response.json();
+      if (!response.ok) {
+        setTestResult({ error: result.error, details: result.details });
+        throw new Error(result.error || 'Test failed');
+      }
 
-    if (response.ok) {
-      setTestResult(result.data);
-      toast.success(`Test successful! Using ${result.data.provider}`);
-    } else {
-      toast.error(result.error || 'Test failed');
-      setTestResult({ error: result.error, details: result.details });
-    }
-    setTesting(false);
-  };
+      return result.data;
+    },
+    onSuccess: (data) => {
+      setTestResult(data);
+      toast.success(`Test successful! Using ${data.provider}`);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Test failed');
+    },
+  });
 
   const getProviderIcon = (provider: string) => {
     switch (provider) {
@@ -136,7 +131,7 @@ export function AIModelsTab() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-primary border-b-2" />
@@ -163,11 +158,11 @@ export function AIModelsTab() {
           </p>
         </div>
         <button
-          onClick={fetchData}
-          disabled={loading}
+          onClick={() => refetch()}
+          disabled={isLoading}
           className="rounded-lg p-2 transition-colors hover:bg-accent"
         >
-          <RefreshCw className={cn('h-5 w-5', loading && 'animate-spin')} />
+          <RefreshCw className={cn('h-5 w-5', isLoading && 'animate-spin')} />
         </button>
       </div>
 
@@ -340,15 +335,15 @@ export function AIModelsTab() {
       {/* Action Buttons */}
       <div className="flex items-center justify-end gap-4 border-border border-t pt-4">
         <button
-          onClick={handleTest}
-          disabled={testing}
+          onClick={() => testMutation.mutate()}
+          disabled={testMutation.isPending}
           className={cn(
             'rounded-lg px-6 py-2 font-medium transition-all',
             'bg-primary text-primary-foreground hover:bg-primary/90',
             'disabled:cursor-not-allowed disabled:opacity-50'
           )}
         >
-          {testing ? (
+          {testMutation.isPending ? (
             <span className="flex items-center gap-2">
               <RefreshCw className="h-4 w-4 animate-spin" />
               Testing...

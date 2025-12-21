@@ -5,10 +5,15 @@
  */
 
 import {
+  type ActorStateRow,
   actorRelationships,
   actorState,
   and,
   count,
+  type Market as DbMarket,
+  type Position as DbPosition,
+  type Question as DbQuestion,
+  type WorldEvent as DbWorldEvent,
   Decimal,
   db,
   getDbInstance as dbService,
@@ -30,6 +35,7 @@ import {
   postTags,
   questions as questionsSchema,
   rssHeadlines,
+  type Transaction,
   tags,
   tickTokenStats,
   trendingTags,
@@ -230,10 +236,10 @@ export async function executeGameTick(
   );
 
   // Get active questions from database
-  const activeQuestions = await db
+  const activeQuestions = (await db
     .select()
     .from(questionsSchema)
-    .where(eq(questionsSchema.status, 'active'));
+    .where(eq(questionsSchema.status, 'active'))) as DbQuestion[];
 
   logger.info(
     `Found ${activeQuestions.length} active questions`,
@@ -242,7 +248,7 @@ export async function executeGameTick(
   );
 
   // Generate initial questions FIRST if this is the first tick
-  let currentActiveQuestions = activeQuestions;
+  let currentActiveQuestions: DbQuestion[] = activeQuestions;
   if (activeQuestions.length === 0 && Date.now() < deadline) {
     logger.info(
       'First tick detected - generating initial questions',
@@ -257,10 +263,10 @@ export async function executeGameTick(
     result.questionsCreated = questionsGenerated;
 
     // Reload active questions after generation (use new variable to avoid mutation)
-    currentActiveQuestions = await db
+    currentActiveQuestions = (await db
       .select()
       .from(questionsSchema)
-      .where(eq(questionsSchema.status, 'active'));
+      .where(eq(questionsSchema.status, 'active'))) as DbQuestion[];
 
     logger.info(
       `Initial questions created: ${questionsGenerated}`,
@@ -278,13 +284,11 @@ export async function executeGameTick(
     }
   }
 
-  const questionsToResolve = currentActiveQuestions.filter(
-    (q: { resolutionDate: Date | null }) => {
-      if (!q.resolutionDate) return false;
-      const resolutionDate = new Date(q.resolutionDate);
-      return resolutionDate <= timestamp;
-    }
-  );
+  const questionsToResolve = currentActiveQuestions.filter((q) => {
+    if (!q.resolutionDate) return false;
+    const resolutionDate = new Date(q.resolutionDate);
+    return resolutionDate <= timestamp;
+  });
 
   if (questionsToResolve.length > 0) {
     logger.info(
@@ -326,7 +330,7 @@ export async function executeGameTick(
       }));
 
     // Get recent events for context
-    const recentDbEvents = await db
+    const recentDbEvents = (await db
       .select()
       .from(worldEvents)
       .where(
@@ -335,7 +339,7 @@ export async function executeGameTick(
           new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
         )
       )
-      .orderBy(desc(worldEvents.timestamp));
+      .orderBy(desc(worldEvents.timestamp))) as DbWorldEvent[];
 
     // Type guards for WorldEvent fields
     const isValidEventType = (type: string): type is WorldEvent['type'] => {
@@ -372,7 +376,7 @@ export async function executeGameTick(
         (e) => isValidEventType(e.eventType) && isValidVisibility(e.visibility)
       )
       .map((e) => ({
-        id: e.id,
+        id: String(e.id),
         day: e.dayNumber || 0,
         type: e.eventType as WorldEvent['type'],
         description: e.description,
@@ -912,8 +916,8 @@ export async function executeGameTick(
       JSON.stringify(tickTokenStatsData.byModel)
     ) as JsonValue;
 
-    db.insert(tickTokenStats)
-      .values({
+    void Promise.resolve(
+      db.insert(tickTokenStats).values({
         id: tickTokenStatsData.tickId,
         tickId: tickTokenStatsData.tickId,
         tickStartedAt: tickTokenStatsData.tickStartedAt,
@@ -926,13 +930,13 @@ export async function executeGameTick(
         byPromptType: byPromptTypeJson,
         byModel: byModelJson,
       })
-      .catch((error: Error) => {
-        logger.warn(
-          'Failed to store token stats',
-          { error: error.message, tickId: tickTokenStatsData.tickId },
-          'GameTick'
-        );
-      });
+    ).catch((error: Error) => {
+      logger.warn(
+        'Failed to store token stats',
+        { error: error.message, tickId: tickTokenStatsData.tickId },
+        'GameTick'
+      );
+    });
 
     logger.info(
       'Token stats collected',
@@ -968,9 +972,14 @@ export async function executeGameTick(
  */
 async function bootstrapContentIfNeeded(_timestamp: Date): Promise<void> {
   // Check if we need to bootstrap
+  type CountResult = { count: number };
   const [trendingResult, relationshipResult] = await Promise.all([
-    db.select({ count: count() }).from(trendingTags),
-    db.select({ count: count() }).from(actorRelationships),
+    db.select({ count: count() }).from(trendingTags) as unknown as Promise<
+      CountResult[]
+    >,
+    db
+      .select({ count: count() })
+      .from(actorRelationships) as unknown as Promise<CountResult[]>,
   ]);
   const trendingCount = Number(trendingResult[0]?.count ?? 0);
   const relationshipCount = Number(relationshipResult[0]?.count ?? 0);
@@ -1004,8 +1013,12 @@ async function bootstrapContentIfNeeded(_timestamp: Date): Promise<void> {
   }
 
   const [finalTrending, finalRelationships] = await Promise.all([
-    db.select({ count: count() }).from(trendingTags),
-    db.select({ count: count() }).from(actorRelationships),
+    db.select({ count: count() }).from(trendingTags) as unknown as Promise<
+      CountResult[]
+    >,
+    db
+      .select({ count: count() })
+      .from(actorRelationships) as unknown as Promise<CountResult[]>,
   ]);
   logger.info(
     'Bootstrap complete',
@@ -1063,12 +1076,17 @@ async function bootstrapTrending(): Promise<void> {
   logger.info('Bootstrapping trending tags...', undefined, 'GameTick');
 
   // Check if we have enough posts and tags
+  type CountResult = { count: number };
   const [postCountResult, taggedPostCountResult] = await Promise.all([
-    db.select({ count: count() }).from(posts),
+    db.select({ count: count() }).from(posts) as unknown as Promise<
+      CountResult[]
+    >,
     db
       .select({ count: count() })
       .from(posts)
-      .innerJoin(postTags, eq(posts.id, postTags.postId)),
+      .innerJoin(postTags, eq(posts.id, postTags.postId)) as unknown as Promise<
+      CountResult[]
+    >,
   ]);
   const postCount = Number(postCountResult[0]?.count ?? 0);
   const taggedPostCount = Number(taggedPostCountResult[0]?.count ?? 0);
@@ -1129,7 +1147,13 @@ async function bootstrapTrending(): Promise<void> {
     if (!tagData) continue;
 
     // Create tag (check if exists first)
-    const [existingTag] = await db
+    type TagFields = {
+      id: string;
+      name: string;
+      displayName: string;
+      category: string | null;
+    };
+    const [existingTag] = (await db
       .select({
         id: tags.id,
         name: tags.name,
@@ -1138,18 +1162,13 @@ async function bootstrapTrending(): Promise<void> {
       })
       .from(tags)
       .where(eq(tags.name, tagData.name))
-      .limit(1);
+      .limit(1)) as TagFields[];
 
-    let tag: {
-      id: string;
-      name: string;
-      displayName: string;
-      category: string | null;
-    };
+    let tag: TagFields;
     if (existingTag) {
       tag = existingTag;
     } else {
-      const [newTag] = await db
+      const [newTag] = (await db
         .insert(tags)
         .values({
           id: await generateSnowflakeId(),
@@ -1158,17 +1177,12 @@ async function bootstrapTrending(): Promise<void> {
           category: tagData.category,
           updatedAt: now,
         })
-        .returning();
+        .returning()) as TagFields[];
       if (!newTag) {
         logger.warn('Failed to create tag', { tagData }, 'GameTick');
         continue;
       }
-      tag = {
-        id: newTag.id,
-        name: newTag.name,
-        displayName: newTag.displayName,
-        category: newTag.category,
-      };
+      tag = newTag;
     }
 
     // Create trending entry with real post count (0 since no posts are tagged yet)
@@ -1223,7 +1237,8 @@ async function generateMixedPosts(
         .select()
         .from(actorState)
         .orderBy(desc(actorState.reputationPoints))
-        .limit(15),
+        .limit(15)
+        .then((rows) => rows as ActorStateRow[]),
       worldFactsService.generatePromptContext(),
       getTrendingPromptContext(),
       loadSharedPostContext(), // Load feed posts + events ONCE
@@ -1411,7 +1426,7 @@ async function generateArticles(
   // Get recent events (from last 2 hours, up to current time)
   const now = new Date();
   const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-  const recentEvents = await db
+  const recentEvents = (await db
     .select()
     .from(worldEvents)
     .where(
@@ -1422,7 +1437,7 @@ async function generateArticles(
       )
     )
     .orderBy(desc(worldEvents.timestamp))
-    .limit(10);
+    .limit(10)) as DbWorldEvent[];
 
   // CRITICAL: Ensure each active question has 1-3 articles
   const questionArticlesCreated = await generateArticlesForActiveQuestions(
@@ -1580,101 +1595,91 @@ async function generateArticles(
   );
 
   // Generate articles in parallel with Promise.allSettled to handle failures gracefully
-  const articlePromises = eventsToCover.map(
-    async (event: {
-      id: string;
-      eventType: string;
-      description: string;
-      actors: string[] | null;
-      relatedQuestion: number | null;
-      visibility: string;
-      dayNumber: number | null;
-    }) => {
-      // Check deadline before starting each article
-      if (Date.now() > deadlineMs) {
-        logger.debug(
-          'Skipping article due to deadline',
+  const articlePromises = eventsToCover.map(async (event) => {
+    // Check deadline before starting each article
+    if (Date.now() > deadlineMs) {
+      logger.debug(
+        'Skipping article due to deadline',
+        { eventId: event.id },
+        'GameTick'
+      );
+      return 0;
+    }
+
+    const worldEvent: WorldEvent = {
+      id: event.id,
+      type: event.eventType as WorldEvent['type'],
+      description: event.description,
+      actors: (event.actors as string[]) || [],
+      relatedQuestion: event.relatedQuestion || undefined,
+      visibility: event.visibility as WorldEvent['visibility'],
+      day: event.dayNumber || 0,
+    };
+
+    const articles = await articleGen.generateArticlesForEvent(
+      worldEvent,
+      organizationsList,
+      actorList,
+      []
+    );
+
+    let created = 0;
+    for (const article of articles) {
+      if (!article || !article.authorOrgId) {
+        logger.warn(
+          'Invalid article generated',
           { eventId: event.id },
           'GameTick'
         );
-        return 0;
+        continue;
       }
 
-      const worldEvent: WorldEvent = {
-        id: event.id,
-        type: event.eventType as WorldEvent['type'],
-        description: event.description,
-        actors: (event.actors as string[]) || [],
-        relatedQuestion: event.relatedQuestion || undefined,
-        visibility: event.visibility as WorldEvent['visibility'],
-        day: event.dayNumber || 0,
-      };
-
-      const articles = await articleGen.generateArticlesForEvent(
-        worldEvent,
-        organizationsList,
-        actorList,
-        []
+      // Transform content to replace real names with parody names
+      const transformedSummary = await characterMappingService.transformText(
+        article.summary || ''
       );
-
-      let created = 0;
-      for (const article of articles) {
-        if (!article || !article.authorOrgId) {
-          logger.warn(
-            'Invalid article generated',
-            { eventId: event.id },
-            'GameTick'
-          );
-          continue;
-        }
-
-        // Transform content to replace real names with parody names
-        const transformedSummary = await characterMappingService.transformText(
-          article.summary || ''
+      const transformedContent = await characterMappingService.transformText(
+        article.content || ''
+      );
+      const transformedTitle = await characterMappingService.transformText(
+        article.title || 'Untitled'
+      );
+      if (
+        transformedSummary.replacementCount > 0 ||
+        transformedContent.replacementCount > 0 ||
+        transformedTitle.replacementCount > 0
+      ) {
+        logger.warn(
+          `Fixed ${transformedSummary.replacementCount + transformedContent.replacementCount + transformedTitle.replacementCount} real name(s) in event article`,
+          {
+            eventId: event.id,
+            title: article.title,
+          },
+          'GameTick'
         );
-        const transformedContent = await characterMappingService.transformText(
-          article.content || ''
-        );
-        const transformedTitle = await characterMappingService.transformText(
-          article.title || 'Untitled'
-        );
-        if (
-          transformedSummary.replacementCount > 0 ||
-          transformedContent.replacementCount > 0 ||
-          transformedTitle.replacementCount > 0
-        ) {
-          logger.warn(
-            `Fixed ${transformedSummary.replacementCount + transformedContent.replacementCount + transformedTitle.replacementCount} real name(s) in event article`,
-            {
-              eventId: event.id,
-              title: article.title,
-            },
-            'GameTick'
-          );
-        }
-
-        await dbService().createPostWithAllFields({
-          id: await generateSnowflakeId(),
-          type: 'article',
-          content: transformedSummary.transformedText,
-          fullContent: transformedContent.transformedText,
-          articleTitle: transformedTitle.transformedText,
-          byline: article.byline || undefined,
-          biasScore: article.biasScore || undefined,
-          sentiment: article.sentiment || undefined,
-          slant: article.slant || undefined,
-          category: article.category || undefined,
-          authorId: article.authorOrgId,
-          gameId: 'continuous',
-          dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
-          timestamp: article.publishedAt || new Date(),
-        });
-        created++;
       }
 
-      return created;
+      await dbService().createPostWithAllFields({
+        id: await generateSnowflakeId(),
+        type: 'article',
+        content: transformedSummary.transformedText,
+        fullContent: transformedContent.transformedText,
+        articleTitle: transformedTitle.transformedText,
+        byline: article.byline || undefined,
+        biasScore: article.biasScore || undefined,
+        sentiment: article.sentiment || undefined,
+        slant: article.slant || undefined,
+        category: article.category || undefined,
+        authorId: article.authorOrgId,
+        gameId: 'continuous',
+        dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
+        timestamp: article.publishedAt || new Date(),
+      });
+      created++;
     }
-  );
+
+    return created;
+  });
 
   // Wait for all article generation to complete
   const results = await Promise.allSettled(articlePromises);
@@ -1714,11 +1719,11 @@ async function generateArticlesForActiveQuestions(
   deadlineMs: number
 ): Promise<number> {
   // Get all active questions
-  const activeQuestions = await db
+  const activeQuestions = (await db
     .select()
     .from(questionsSchema)
     .where(eq(questionsSchema.status, 'active'))
-    .orderBy(desc(questionsSchema.createdAt));
+    .orderBy(desc(questionsSchema.createdAt))) as DbQuestion[];
 
   if (activeQuestions.length === 0) {
     return 0;
@@ -2504,27 +2509,27 @@ async function generateNewQuestions(
 export async function resolveQuestionPayouts(
   questionNumber: number
 ): Promise<void> {
-  const [question] = await db
+  const [question] = (await db
     .select()
     .from(questionsSchema)
     .where(eq(questionsSchema.questionNumber, questionNumber))
-    .limit(1);
+    .limit(1)) as DbQuestion[];
 
   if (!question) return;
 
   // Try to find market by question id first, then by question text
-  let [market] = await db
+  let [market] = (await db
     .select()
     .from(marketsSchema)
     .where(eq(marketsSchema.id, question.id))
-    .limit(1);
+    .limit(1)) as DbMarket[];
 
   if (!market) {
-    [market] = await db
+    [market] = (await db
       .select()
       .from(marketsSchema)
       .where(eq(marketsSchema.question, question.text))
-      .limit(1);
+      .limit(1)) as DbMarket[];
   }
 
   if (!market) return;
@@ -2551,12 +2556,12 @@ export async function resolveQuestionPayouts(
   const marketNoShares = market.noShares;
 
   const { positionUpdates, totalPayout } = await db.transaction(async (tx) => {
-    const positionsList = await tx
+    const positionsList = (await tx
       .select()
       .from(positions)
       .where(
         and(eq(positions.marketId, marketId), ne(positions.status, 'resolved'))
-      );
+      )) as DbPosition[];
 
     const updates: Array<{
       userId: string;
@@ -2583,7 +2588,7 @@ export async function resolveQuestionPayouts(
           'pred_resolve_win',
           `Prediction market payout: ${marketQuestion}`,
           marketId,
-          tx
+          tx as unknown as Transaction
         );
         payoutAccumulator += payout;
       }
@@ -2688,11 +2693,11 @@ export async function resolveQuestionPayouts(
       .where(eq(marketsSchema.id, marketId));
   }
 
-  const [resolvedMarket] = await db
+  const [resolvedMarket] = (await db
     .select()
     .from(marketsSchema)
     .where(eq(marketsSchema.id, marketId))
-    .limit(1);
+    .limit(1)) as DbMarket[];
 
   const resolvedYesShares = Number(
     resolvedMarket?.yesShares ?? marketYesShares ?? 0

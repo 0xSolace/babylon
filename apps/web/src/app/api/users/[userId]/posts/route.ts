@@ -142,8 +142,8 @@ export const GET = withErrorHandling(
     const { searchParams } = new URL(request.url);
     const queryParams = {
       type: searchParams.get('type') || 'posts',
-      page: searchParams.get('page') ?? undefined,
-      limit: searchParams.get('limit') ?? undefined,
+      page: searchParams.get('page') || undefined,
+      limit: searchParams.get('limit') || undefined,
     };
     const { type } = UserPostsQuerySchema.parse(queryParams);
 

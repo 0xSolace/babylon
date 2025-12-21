@@ -125,24 +125,27 @@ export class TokenService {
     if (!user) return null;
 
     // Get total points across all users for proportional allocation
-    const [totalsResult] = await db
+    const [totalsResult] = (await db
       .select({
         totalPoints: sql<number>`sum(${users.reputationPoints})`,
         userCount: sql<number>`count(*)`,
       })
       .from(users)
-      .where(eq(users.isActor, false));
+      .where(eq(users.isActor, false))) as unknown as {
+      totalPoints: number;
+      userCount: number;
+    }[];
 
     const totalPoints = Number(totalsResult?.totalPoints ?? 0);
     const pointsBalance = user.reputationPoints;
 
     // Get actual trading volume from tradingFees table
-    const volumeResult = await db
+    const volumeResult = (await db
       .select({
         total: sql<string>`COALESCE(SUM(${tradingFees.feeAmount}), 0)`,
       })
       .from(tradingFees)
-      .where(eq(tradingFees.userId, userId));
+      .where(eq(tradingFees.userId, userId))) as unknown as { total: string }[];
     const tradingVolume = Number(volumeResult[0]?.total ?? 0) * 100; // Fees are ~1% of volume
 
     const tradingPnL = Number(user.lifetimePnL ?? 0);
@@ -306,8 +309,16 @@ export class TokenService {
       };
     }
 
+    // Extract and properly type values from DB result
+    const dripsUnlocked = Number(allocation.dripsUnlocked ?? 0);
+    const lastDripTimeValue = allocation.lastDripTime
+      ? allocation.lastDripTime instanceof Date
+        ? allocation.lastDripTime
+        : new Date(String(allocation.lastDripTime))
+      : null;
+
     // Check if user can drip (20 hours since last drip)
-    const lastDripTime = allocation.lastDripTime?.getTime() ?? 0;
+    const lastDripTime = lastDripTimeValue?.getTime() ?? 0;
     const now = Date.now();
     const cooldownMs = AIRDROP_DRIP_COOLDOWN_HOURS * 60 * 60 * 1000;
 
@@ -315,7 +326,7 @@ export class TokenService {
       const nextDripTime = new Date(lastDripTime + cooldownMs);
       return {
         canDrip: false,
-        dripDay: allocation.dripsUnlocked,
+        dripDay: dripsUnlocked,
         amount: 0n,
         isInitialClaim: false,
         nextDripTime,
@@ -324,19 +335,19 @@ export class TokenService {
 
     // Check if max drips reached (initial + 45 daily drips = 46 total)
     const maxDrips = AIRDROP_TOTAL_DRIP_DAYS + 1; // +1 for initial claim
-    if (allocation.dripsUnlocked >= maxDrips) {
+    if (dripsUnlocked >= maxDrips) {
       return {
         canDrip: false,
-        dripDay: allocation.dripsUnlocked,
+        dripDay: dripsUnlocked,
         amount: 0n,
         isInitialClaim: false,
         nextDripTime: null,
       };
     }
 
-    const dripDay = allocation.dripsUnlocked + 1;
+    const dripDay = dripsUnlocked + 1;
     const isInitialClaim = dripDay === 1;
-    const totalAllocation = BigInt(allocation.totalAllocation);
+    const totalAllocation = BigInt(String(allocation.totalAllocation));
 
     // Calculate drip amount: 10% for initial, 2% for subsequent
     const dripAmount = isInitialClaim
@@ -411,9 +422,15 @@ export class TokenService {
     const allocation = allocationResult[0];
     if (!allocation) return null;
 
-    const totalAllocation = BigInt(allocation.totalAllocation);
-    const dripsUnlocked = allocation.dripsUnlocked;
-    const totalClaimed = BigInt(allocation.totalClaimed);
+    // Extract and properly type values from DB result
+    const totalAllocation = BigInt(String(allocation.totalAllocation));
+    const dripsUnlocked = Number(allocation.dripsUnlocked ?? 0);
+    const totalClaimed = BigInt(String(allocation.totalClaimed ?? '0'));
+    const lastDripTimeValue = allocation.lastDripTime
+      ? allocation.lastDripTime instanceof Date
+        ? allocation.lastDripTime
+        : new Date(String(allocation.lastDripTime))
+      : null;
     const maxDrips = AIRDROP_TOTAL_DRIP_DAYS + 1; // 46 total (1 initial + 45 daily)
 
     // Calculate total unlocked: 10% for initial + 2% per subsequent drip
@@ -434,16 +451,13 @@ export class TokenService {
     let canDripNow = false;
 
     if (dripsUnlocked < maxDrips) {
-      if (allocation.lastDripTime) {
-        const timeSinceLastDrip =
-          Date.now() - allocation.lastDripTime.getTime();
+      if (lastDripTimeValue) {
+        const timeSinceLastDrip = Date.now() - lastDripTimeValue.getTime();
         if (timeSinceLastDrip >= cooldownMs) {
           canDripNow = true;
           nextDripTime = new Date(); // Can drip now
         } else {
-          nextDripTime = new Date(
-            allocation.lastDripTime.getTime() + cooldownMs
-          );
+          nextDripTime = new Date(lastDripTimeValue.getTime() + cooldownMs);
         }
       } else {
         canDripNow = true;
@@ -596,7 +610,7 @@ export class TokenService {
     // For now, return 0 (no bonus) - actual position should be fetched from leaderboard service
     const leaderboardBonus = TokenService.calculateLeaderboardBonus(0);
 
-    const baseAllocation = BigInt(allocation.totalAllocation);
+    const baseAllocation = BigInt(String(allocation.totalAllocation));
     const combinedMultiplier =
       profitBonus.multiplier * leaderboardBonus.multiplier;
     const totalAllocation =
@@ -713,11 +727,34 @@ export class TokenService {
    * Points are a pre-TGE tracking mechanism.
    * The actual conversion ratio is determined by the airdrop formula.
    */
-  static pointsToDisplayTokens(points: number): string {
-    // Simplified display ratio: 1 point ≈ estimated token value
-    // Actual allocation is calculated via calculateAirdropAllocation
-    const estimatedTokens = points * 0.1; // Placeholder ratio
+  static async pointsToDisplayTokens(points: number): Promise<string> {
+    const ratio = await TokenService.getPointsToTokenRatio();
+    const estimatedTokens = points * ratio;
     return `${estimatedTokens.toFixed(2)} ${TOKEN_SYMBOL}`;
+  }
+
+  /**
+   * Calculate the current points-to-token ratio based on:
+   * - Total airdrop pool (100M BBLN)
+   * - Total points across all users
+   */
+  static async getPointsToTokenRatio(): Promise<number> {
+    const result = (await db
+      .select({
+        totalPoints: sql<string>`COALESCE(SUM(points), 0)`,
+      })
+      .from(users)) as unknown as { totalPoints: string }[];
+
+    const totalPoints = parseFloat(result[0]?.totalPoints ?? '0');
+
+    if (totalPoints === 0) {
+      return 0.1; // Default ratio when no points exist
+    }
+
+    // Airdrop pool: 100M BBLN (already has 18 decimals in the constant)
+    // Ratio = pool / totalPoints
+    const airdropPoolTokens = Number(AIRDROP_TOKENS);
+    return airdropPoolTokens / totalPoints;
   }
 
   /**

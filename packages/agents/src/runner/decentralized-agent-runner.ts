@@ -287,28 +287,25 @@ export class DecentralizedAgentRunner {
    */
   private async fetchAgentsFromCQL(): Promise<string[]> {
     // Import CQL client dynamically to avoid circular deps
-    const { db, eq, users, userAgentConfigs, and, or } = await import(
-      '@babylon/db'
-    );
+    const { db } = await import('@babylon/db');
 
-    // Query for active autonomous agents
-    const results = await db
-      .select({ id: users.id })
-      .from(users)
-      .innerJoin(userAgentConfigs, eq(users.id, userAgentConfigs.userId))
-      .where(
-        and(
-          eq(users.isAgent, true),
-          or(
-            eq(userAgentConfigs.autonomousTrading, true),
-            eq(userAgentConfigs.autonomousPosting, true),
-            eq(userAgentConfigs.autonomousCommenting, true),
-            eq(userAgentConfigs.autonomousDMs, true),
-            eq(userAgentConfigs.autonomousGroupChats, true)
-          )
-        )
-      )
-      .limit(this.config.maxConcurrentAgents);
+    // Query for active autonomous agents using raw SQL
+    // Join users with userAgentConfigs to find agents with any autonomous feature enabled
+    const results = await db.query<{ id: string }>(
+      `SELECT DISTINCT u."id"
+       FROM "User" u
+       INNER JOIN "UserAgentConfig" uac ON u."id" = uac."userId"
+       WHERE u."isAgent" = true
+         AND (
+           uac."autonomousTrading" = true
+           OR uac."autonomousPosting" = true
+           OR uac."autonomousCommenting" = true
+           OR uac."autonomousDMs" = true
+           OR uac."autonomousGroupChats" = true
+         )
+       LIMIT $1`,
+      [this.config.maxConcurrentAgents]
+    );
 
     return results.map((r) => r.id);
   }

@@ -128,12 +128,26 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       db.select({ total: sum(actorState.tradingBalance) }).from(actorState),
     ]);
 
+    const activePlayersCount = activePlayersResult[0];
+    const totalHootsCount = totalHootsResult[0];
+    const userPointsTotal = userPointsResult[0];
+    const actorPointsTotal = actorPointsResult[0];
+
+    if (
+      !activePlayersCount ||
+      !totalHootsCount ||
+      !userPointsTotal ||
+      !actorPointsTotal
+    ) {
+      throw new Error('Failed to retrieve stats from database');
+    }
+
     return {
-      activePlayers: Number(activePlayersResult[0]?.count ?? 0),
+      activePlayers: Number(activePlayersCount.count),
       aiAgents: StaticDataRegistry.getAllActors().length,
-      totalHoots: Number(totalHootsResult[0]?.count ?? 0),
-      userPoints: userPointsResult[0]?.total ?? '0',
-      actorPoints: actorPointsResult[0]?.total ?? '0',
+      totalHoots: Number(totalHootsCount.count),
+      userPoints: userPointsTotal.total ?? '0',
+      actorPoints: actorPointsTotal.total ?? '0',
     };
   };
 

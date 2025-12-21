@@ -5,17 +5,7 @@
  * Provides assertions and logging for model usage verification.
  */
 
-import {
-  and,
-  count,
-  db,
-  eq,
-  gte,
-  inArray,
-  llmCallLogs,
-  trajectories,
-  users,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
 import { logger } from '../utils/logger';
 
@@ -75,27 +65,28 @@ export class ModelUsageVerifier {
     }
 
     // Count inferences from logs (using trajectoryId)
-    const agentTrajectories = await db
-      .select({ trajectoryId: trajectories.trajectoryId })
-      .from(trajectories)
-      .where(eq(trajectories.agentId, agentUserId));
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const agentTrajectories = await db.trajectory.findMany({
+      where: {
+        AND: [
+          { agentId: agentUserId },
+          { startTime: { gte: twentyFourHoursAgo } },
+        ],
+      },
+    });
 
     const trajectoryIds = agentTrajectories.map((t) => t.trajectoryId);
 
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
     let inferenceCount = 0;
     if (trajectoryIds.length > 0) {
-      const inferenceCountResult = await db
-        .select({ count: count() })
-        .from(llmCallLogs)
-        .where(
-          and(
-            gte(llmCallLogs.createdAt, twentyFourHoursAgo),
-            inArray(llmCallLogs.trajectoryId, trajectoryIds)
-          )
-        );
-      inferenceCount = inferenceCountResult[0]?.count || 0;
+      inferenceCount = await db.llmCallLog.count({
+        where: {
+          AND: [
+            { createdAt: { gte: twentyFourHoursAgo } },
+            { trajectoryId: { in: trajectoryIds } },
+          ],
+        },
+      });
     }
 
     return {
@@ -168,13 +159,8 @@ export class ModelUsageVerifier {
   static async getModelUsageSummary(): Promise<{
     totalAgents: number;
   }> {
-    const agents = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.isAgent, true));
-
     return {
-      totalAgents: agents.length,
+      totalAgents: await db.user.count({ where: { isAgent: true } }),
     };
   }
 }

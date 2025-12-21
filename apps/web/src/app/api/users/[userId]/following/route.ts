@@ -197,11 +197,11 @@ export const GET = withErrorHandling(
         id: f.followingId,
         displayName: f.followingName,
         username: f.followingId,
-        profileImageUrl: f.followingProfileImageUrl || null,
-        bio: f.followingDescription || '',
+        profileImageUrl: f.followingProfileImageUrl ?? null,
+        bio: f.followingDescription ?? '',
         followedAt: f.createdAt.toISOString(),
         isActor: true,
-        tier: f.followingTier || null,
+        tier: f.followingTier ?? null,
       }));
     } else {
       // Target is a regular user
@@ -240,10 +240,10 @@ export const GET = withErrorHandling(
           id: rel.id,
           actorId: rel.actorId,
           createdAt: rel.createdAt,
-          actorName: actor?.name ?? null,
-          actorDescription: actor?.description ?? null,
-          actorProfileImageUrl: actor?.profileImageUrl ?? null,
-          actorTier: actor?.tier ?? null,
+          actorName: actor ? actor.name : null,
+          actorDescription: actor ? actor.description : null,
+          actorProfileImageUrl: actor ? actor.profileImageUrl : null,
+          actorTier: actor ? actor.tier : null,
         };
       });
 
@@ -274,15 +274,15 @@ export const GET = withErrorHandling(
       followingList = [
         ...userFollowsList.map((f) => ({
           id: f.followingId,
-          displayName: f.followingDisplayName || '',
-          username: f.followingUsername || null,
-          profileImageUrl: f.followingProfileImageUrl || null,
-          bio: f.followingBio || null,
+          displayName: f.followingDisplayName ?? '',
+          username: f.followingUsername ?? null,
+          profileImageUrl: f.followingProfileImageUrl ?? null,
+          bio: f.followingBio ?? null,
           isActor: f.followingIsActor,
           followedAt: f.createdAt.toISOString(),
           type: 'user' as const,
           tier: null,
-          isMutualFollow: mutualFollowMap.get(f.followingId) || false,
+          isMutualFollow: mutualFollowMap.get(f.followingId) ?? false,
         })),
         ...actorFollowsList.map((f) => {
           if (!f.actorName) {
@@ -301,14 +301,14 @@ export const GET = withErrorHandling(
 
           return {
             id: f.actorId,
-            displayName: f.actorName || f.actorId,
+            displayName: f.actorName ?? f.actorId,
             username: null,
-            profileImageUrl: f.actorProfileImageUrl || null,
-            bio: f.actorDescription || null,
+            profileImageUrl: f.actorProfileImageUrl ?? null,
+            bio: f.actorDescription ?? null,
             isActor: true,
             followedAt: f.createdAt.toISOString(),
             type: 'actor' as const,
-            tier: f.actorTier || null,
+            tier: f.actorTier ?? null,
           };
         }),
       ].sort(

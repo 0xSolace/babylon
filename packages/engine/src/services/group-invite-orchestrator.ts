@@ -164,7 +164,7 @@ export class GroupInviteOrchestrator {
         processed: false,
       })
       .onConflictDoNothing()
-      .returning({ id: pendingGroupInviteCandidates.id });
+      .returning();
 
     if (inserted.length === 0) {
       return { queued: false, reason: 'Already queued (concurrent)' };
@@ -204,8 +204,23 @@ export class GroupInviteOrchestrator {
     for (const candidate of candidates) {
       result.candidatesProcessed++;
 
-      if (candidate.queuedAt < expiryThreshold) {
-        await this.markCandidateProcessed(candidate.id, 'expired');
+      // Extract typed values from candidate
+      const candidateId = String(candidate.id);
+      const candidateUserId = String(candidate.userId);
+      const candidateNpcId = String(candidate.npcId);
+      const candidateGroupChatId = candidate.groupChatId
+        ? String(candidate.groupChatId)
+        : null;
+      const candidateQueuedAt = candidate.queuedAt
+        ? new Date(String(candidate.queuedAt))
+        : new Date();
+      const candidateEngagementScore = Number(candidate.engagementScore ?? 0);
+      const candidatePriorityMultiplier = Number(
+        candidate.priorityMultiplier ?? 1
+      );
+
+      if (candidateQueuedAt < expiryThreshold) {
+        await this.markCandidateProcessed(candidateId, 'expired');
         result.expired++;
         continue;
       }
@@ -215,57 +230,57 @@ export class GroupInviteOrchestrator {
         .from(groupChatMemberships)
         .where(
           and(
-            eq(groupChatMemberships.userId, candidate.userId),
-            eq(groupChatMemberships.npcAdminId, candidate.npcId),
+            eq(groupChatMemberships.userId, candidateUserId),
+            eq(groupChatMemberships.npcAdminId, candidateNpcId),
             eq(groupChatMemberships.isActive, true)
           )
         )
         .limit(1);
 
       if (membership) {
-        await this.markCandidateProcessed(candidate.id, 'already_member');
+        await this.markCandidateProcessed(candidateId, 'already_member');
         result.alreadyMembers++;
         continue;
       }
 
-      const limitCheck = await this.checkUserLimits(candidate.userId);
+      const limitCheck = await this.checkUserLimits(candidateUserId);
       if (!limitCheck.eligible) {
-        await this.markCandidateProcessed(candidate.id, 'skipped');
+        await this.markCandidateProcessed(candidateId, 'skipped');
         result.skipped++;
         continue;
       }
 
-      const npcActor = StaticDataRegistry.getActor(candidate.npcId);
+      const npcActor = StaticDataRegistry.getActor(candidateNpcId);
       const tierMultiplier =
         GroupInviteConfig.tierMultipliers[npcActor?.tier ?? 'NONE'] ?? 1.0;
-      const scoreMultiplier = Math.min(candidate.engagementScore / 50, 2.0);
+      const scoreMultiplier = Math.min(candidateEngagementScore / 50, 2.0);
       const probability =
         GroupInviteConfig.baseInviteProbability *
         scoreMultiplier *
-        candidate.priorityMultiplier *
+        candidatePriorityMultiplier *
         tierMultiplier;
 
       if (Math.random() >= probability) continue;
 
       const inviteResult = await this.createInvite(
-        candidate.userId,
-        candidate.npcId,
-        candidate.groupChatId
+        candidateUserId,
+        candidateNpcId,
+        candidateGroupChatId
       );
       if (inviteResult.success) {
-        await this.markCandidateProcessed(candidate.id, 'invited');
+        await this.markCandidateProcessed(candidateId, 'invited');
         result.invitesSent++;
         logger.info(
           'Invite sent',
           {
-            userId: candidate.userId,
-            npcId: candidate.npcId,
+            userId: candidateUserId,
+            npcId: candidateNpcId,
             probability: probability.toFixed(3),
           },
           'GroupInviteOrchestrator'
         );
       } else {
-        await this.markCandidateProcessed(candidate.id, 'skipped');
+        await this.markCandidateProcessed(candidateId, 'skipped');
         result.skipped++;
       }
     }
@@ -300,8 +315,10 @@ export class GroupInviteOrchestrator {
         .limit(1);
 
       if (existing) {
-        chatId = existing.id;
-        chatName = existing.name ?? `${npcName}'s Circle`;
+        chatId = String(existing.id);
+        chatName = existing.name
+          ? String(existing.name)
+          : `${npcName}'s Circle`;
       } else {
         chatId = await generateSnowflakeId();
         chatName = `${npcName}'s Circle`;
@@ -349,7 +366,9 @@ export class GroupInviteOrchestrator {
   private static async checkUserLimits(
     userId: string
   ): Promise<{ eligible: boolean; reason?: string }> {
-    const [[countResult], [latest]] = await Promise.all([
+    type CountResult = { count: number };
+    type JoinedResult = { joinedAt: Date };
+    const [[countResult], [latest]] = (await Promise.all([
       db
         .select({ count: count() })
         .from(groupChatMemberships)
@@ -370,7 +389,7 @@ export class GroupInviteOrchestrator {
         )
         .orderBy(desc(groupChatMemberships.joinedAt))
         .limit(1),
-    ]);
+    ])) as unknown as [CountResult[], JoinedResult[]];
 
     if ((countResult?.count ?? 0) >= GroupInviteConfig.maxActiveUserGroups) {
       return { eligible: false, reason: 'At group limit' };
@@ -406,7 +425,7 @@ export class GroupInviteOrchestrator {
           lt(pendingGroupInviteCandidates.processedAt, cutoff)
         )
       )
-      .returning({ id: pendingGroupInviteCandidates.id });
+      .returning();
     return deleted.length;
   }
 
@@ -423,7 +442,7 @@ export class GroupInviteOrchestrator {
           lt(userGroupInvites.invitedAt, cutoff)
         )
       )
-      .returning({ id: userGroupInvites.id });
+      .returning();
     return updated.length;
   }
 
@@ -433,8 +452,9 @@ export class GroupInviteOrchestrator {
     invitesLast24h: number;
     acceptsLast24h: number;
   }> {
+    type CountResult = { count: number }[];
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [[candidates], [pending], [recent], [accepts]] = await Promise.all([
+    const [[candidates], [pending], [recent], [accepts]] = (await Promise.all([
       db
         .select({ count: count() })
         .from(pendingGroupInviteCandidates)
@@ -456,7 +476,7 @@ export class GroupInviteOrchestrator {
             gte(userGroupInvites.respondedAt, oneDayAgo)
           )
         ),
-    ]);
+    ])) as unknown as [CountResult, CountResult, CountResult, CountResult];
 
     return {
       pendingCandidates: candidates?.count ?? 0,

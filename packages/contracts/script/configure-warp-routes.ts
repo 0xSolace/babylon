@@ -17,7 +17,7 @@ import {
   http,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia, sepolia } from 'viem/chains';
+import { sepolia } from 'viem/chains';
 
 // Load .env
 const envPath = resolve(import.meta.dir, '../../../.env');

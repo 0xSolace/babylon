@@ -4,7 +4,7 @@
  * Fetches trained RL models from the database for inference.
  */
 
-import { db, desc, inArray, trainedModels } from '@babylon/db';
+import { db } from '@babylon/db';
 import { logger } from '../utils/logger';
 
 export interface ModelArtifact {
@@ -23,14 +23,10 @@ export interface ModelArtifact {
  * Get the latest RL model from database
  */
 export async function getLatestRLModel(): Promise<ModelArtifact | null> {
-  const modelResult = await db
-    .select()
-    .from(trainedModels)
-    .where(inArray(trainedModels.status, ['ready', 'deployed']))
-    .orderBy(desc(trainedModels.createdAt))
-    .limit(1);
-
-  const model = modelResult[0];
+  const model = await db.trainedModel.findFirst({
+    where: { status: { in: ['ready', 'deployed'] } },
+    orderBy: { createdAt: 'desc' },
+  });
 
   if (!model) {
     return null;

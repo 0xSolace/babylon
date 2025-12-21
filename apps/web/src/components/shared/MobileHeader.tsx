@@ -1,6 +1,7 @@
 'use client';
 
 import { cn, getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
   Check,
@@ -23,6 +24,31 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
+ * Profile API response for mobile header.
+ */
+interface ProfileResponse {
+  user?: {
+    profileImageUrl?: string;
+    coverImageUrl?: string;
+    reputationPoints?: number;
+  };
+}
+
+/**
+ * Balance API response.
+ */
+interface BalanceResponse {
+  balance: number | string;
+}
+
+/**
+ * Notifications API response.
+ */
+interface NotificationsResponse {
+  unreadCount?: number;
+}
+
+/**
  * Mobile header content component for mobile devices.
  *
  * Provides a fixed header with logo, profile menu trigger, and slide-out
@@ -36,12 +62,7 @@ function MobileHeaderContent() {
   const { authenticated, logout } = useAuth();
   const { user, setUser } = useAuthStore();
   const [showSideMenu, setShowSideMenu] = useState(false);
-  const [pointsData, setPointsData] = useState<{
-    available: number;
-    total: number;
-  } | null>(null);
   const [copiedReferral, setCopiedReferral] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const pathname = usePathname();
 
   // Hide mobile header when WAITLIST_MODE is enabled on home page
@@ -49,125 +70,72 @@ function MobileHeaderContent() {
   const isHomePage = pathname === '/';
   const shouldHide = isWaitlistMode && isHomePage;
 
-  // All hooks must be called before any conditional returns
-  useEffect(() => {
-    if (!authenticated || !user?.id || user.profileImageUrl) {
-      return;
-    }
+  // Fetch profile data to hydrate profile image if missing
+  const { data: profileData } = useQuery({
+    queryKey: ['mobileHeader', 'profile', user?.id],
+    queryFn: async (): Promise<ProfileResponse> => {
+      if (!user?.id) return {};
 
-    const controller = new AbortController();
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
 
-    const hydrateProfileImage = async () => {
+      const headers: HeadersInit = token
+        ? {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          }
+        : { 'Content-Type': 'application/json' };
+
       const response = await fetch(
         `/api/users/${encodeURIComponent(user.id)}/profile`,
+        { headers }
+      );
+
+      if (!response.ok) return {};
+      return response.json() as Promise<ProfileResponse>;
+    },
+    enabled: authenticated && !!user?.id,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  // Fetch trading balance
+  const { data: balanceData } = useQuery({
+    queryKey: ['mobileHeader', 'balance', user?.id],
+    queryFn: async (): Promise<BalanceResponse> => {
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token || !user?.id) {
+        return { balance: 0 };
+      }
+
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(user.id)}/balance`,
         {
-          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
         }
-      ).catch((error: Error) => {
-        if (error.name === 'AbortError') return null;
-        throw error;
-      });
+      );
 
-      if (!response || !response.ok) return;
-      const data = await response.json();
-      const profileUrl = data?.user?.profileImageUrl as string | undefined;
-      const coverUrl = data?.user?.coverImageUrl as string | undefined;
-      if (profileUrl || coverUrl) {
-        setUser({
-          ...user,
-          profileImageUrl: profileUrl ?? user.profileImageUrl,
-          coverImageUrl: coverUrl ?? user.coverImageUrl,
-        });
-      }
-    };
-
-    void hydrateProfileImage();
-
-    return () => controller.abort();
-  }, [
-    authenticated,
-    setUser,
-    user?.id,
-    user?.profileImageUrl,
-    user?.coverImageUrl,
-    user,
-  ]);
-
-  useEffect(() => {
-    const fetchPoints = async () => {
-      if (!authenticated || !user?.id) {
-        setPointsData(null);
-        return;
+      if (!response.ok) {
+        return { balance: 0 };
       }
 
+      return response.json() as Promise<BalanceResponse>;
+    },
+    enabled: authenticated && !!user?.id,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  // Fetch unread notifications count
+  const { data: notificationsData } = useQuery({
+    queryKey: ['mobileHeader', 'notifications'],
+    queryFn: async (): Promise<NotificationsResponse> => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
       if (!token) {
-        // No token available yet, skip fetching protected data
-        return;
-      }
-
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      };
-
-      // Fetch both trading balance and profile for reputation points
-      const [balanceResponse, profileResponse] = await Promise.all([
-        fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, { headers }),
-        fetch(`/api/users/${encodeURIComponent(user.id)}/profile`, { headers }),
-      ]);
-
-      if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        setPointsData({
-          available: Number(balanceData.balance || 0),
-          total: user.reputationPoints || 0, // Use reputation points from authStore as fallback
-        });
-      }
-
-      // Update reputation points from profile if changed
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json();
-        if (
-          profileData.user?.reputationPoints !== undefined &&
-          profileData.user.reputationPoints !== user.reputationPoints
-        ) {
-          setUser({
-            ...user,
-            reputationPoints: profileData.user.reputationPoints,
-          });
-          // Update local state with new reputation points
-          setPointsData((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  total: profileData.user.reputationPoints,
-                }
-              : null
-          );
-        }
-      }
-    };
-
-    fetchPoints();
-    const interval = setInterval(fetchPoints, 30000);
-    return () => clearInterval(interval);
-  }, [authenticated, user?.id, user?.reputationPoints, setUser, user]);
-
-  // Poll for unread notifications
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadNotifications(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-
-      if (!token) {
-        return;
+        return { unreadCount: 0 };
       }
 
       const response = await fetch(
@@ -179,18 +147,49 @@ function MobileHeaderContent() {
         }
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadNotifications(data.unreadCount || 0);
+      if (!response.ok) {
+        return { unreadCount: 0 };
       }
-    };
 
-    fetchUnreadCount();
+      return response.json() as Promise<NotificationsResponse>;
+    },
+    enabled: authenticated && !!user,
+    refetchInterval: 60000, // Refresh every 1 minute
+  });
 
-    // Refresh every 1 minute
-    const interval = setInterval(fetchUnreadCount, 60000); // 60 seconds = 1 minute
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
+  const pointsData = {
+    available: Number(balanceData?.balance || 0),
+    total: user?.reputationPoints || 0,
+  };
+
+  const unreadNotifications = notificationsData?.unreadCount || 0;
+
+  // Update user profile image from profile data if missing
+  useEffect(() => {
+    if (!user || user.profileImageUrl) return;
+
+    const profileUrl = profileData?.user?.profileImageUrl;
+    const coverUrl = profileData?.user?.coverImageUrl;
+    if (profileUrl || coverUrl) {
+      setUser({
+        ...user,
+        profileImageUrl: profileUrl ?? user.profileImageUrl,
+        coverImageUrl: coverUrl ?? user.coverImageUrl,
+      });
+    }
+  }, [profileData, user, setUser]);
+
+  // Update reputation points from profile data if changed
+  useEffect(() => {
+    if (!user || !profileData?.user?.reputationPoints) return;
+
+    if (profileData.user.reputationPoints !== user.reputationPoints) {
+      setUser({
+        ...user,
+        reputationPoints: profileData.user.reputationPoints,
+      });
+    }
+  }, [profileData?.user?.reputationPoints, user, setUser]);
 
   const copyReferralCode = async () => {
     if (!user?.referralCode) return;

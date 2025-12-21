@@ -4,17 +4,8 @@
  * @description Utilities for finding users by various identifiers (ID, oauth3Id, username).
  */
 
-import {
-  db,
-  eq,
-  type InferSelectModel,
-  or,
-  type SelectedFields,
-  users,
-} from '@babylon/db';
+import { db, type User } from '@babylon/db';
 import { NotFoundError } from '../errors';
-
-type User = InferSelectModel<typeof users>;
 
 /**
  * Find user by identifier (ID, oauth3Id, or username)
@@ -38,20 +29,18 @@ export async function findUserByIdentifier(
   identifier: string,
   _select?: Record<string, boolean>
 ): Promise<User | null> {
-  // Try to find by ID, oauth3Id, or username
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(
-      or(
-        eq(users.id, identifier),
-        eq(users.oauth3Id, identifier),
-        eq(users.username, identifier)
-      )
-    )
-    .limit(1);
-
-  return user ?? null;
+  // `_select` kept for backward compatibility. CQL repositories currently
+  // return full rows.
+  void _select;
+  return (await db.user.findFirst({
+    where: {
+      OR: [
+        { id: identifier },
+        { oauth3Id: identifier },
+        { username: identifier },
+      ],
+    },
+  })) as User | null;
 }
 
 /**
@@ -71,24 +60,12 @@ export async function findUserByIdentifier(
  * });
  * ```
  */
-export async function findUserByIdentifierWithSelect<
-  T extends Record<string, unknown>,
->(identifier: string, select: T): Promise<T | null> {
-  // Drizzle's select() accepts SelectedFields which is compatible with our select object
-  const [user] = await db
-    .select(select as SelectedFields)
-    .from(users)
-    .where(
-      or(
-        eq(users.id, identifier),
-        eq(users.oauth3Id, identifier),
-        eq(users.username, identifier)
-      )
-    )
-    .limit(1);
-
-  if (!user) return null;
-  return user as T;
+export async function findUserByIdentifierWithSelect(
+  identifier: string,
+  _select: Record<string, boolean>
+): Promise<User | null> {
+  void _select;
+  return findUserByIdentifier(identifier);
 }
 
 /**

@@ -4,19 +4,7 @@
  * Handles agents commenting on posts autonomously
  */
 
-import {
-  and,
-  comments,
-  db,
-  desc,
-  eq,
-  gte,
-  isNull,
-  lte,
-  ne,
-  posts,
-  users,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
@@ -31,11 +19,9 @@ export class AutonomousCommentingService {
     agentUserId: string,
     _runtime: IAgentRuntime
   ): Promise<string | null> {
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
+    const agent = await db.user.findUnique({
+      where: { id: agentUserId },
+    });
 
     if (!agent?.isAgent) {
       throw new Error('Agent not found');
@@ -45,36 +31,29 @@ export class AutonomousCommentingService {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     // Get posts agent already commented on
-    const agentComments = await db
-      .select({ postId: comments.postId })
-      .from(comments)
-      .where(eq(comments.authorId, agentUserId));
+    const agentComments = await db.comment.findMany({
+      where: { authorId: agentUserId },
+      select: { postId: true },
+    });
 
     const commentedPostIds = agentComments
-      .map((c) => c.postId)
-      .filter((id) => id !== null) as string[];
+      .map((c) => String(c.postId))
+      .filter((id) => id !== 'null' && id !== 'undefined');
 
     // Get recent posts that agent hasn't commented on
-    const recentPostsQuery = db
-      .select()
-      .from(posts)
-      .where(
-        and(
-          ne(posts.authorId, agentUserId),
-          isNull(posts.deletedAt),
-          gte(posts.timestamp, oneDayAgo),
-          lte(posts.timestamp, now)
-        )
-      )
-      .orderBy(desc(posts.createdAt))
-      .limit(10);
-
-    // If there are commented posts, exclude them
-    const recentPosts = await recentPostsQuery;
+    const recentPosts = await db.post.findMany({
+      where: {
+        authorId: { not: agentUserId },
+        deletedAt: null,
+        timestamp: { gte: oneDayAgo, lte: now },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
 
     // Filter to posts agent hasn't commented on
     const uncommentedPosts = recentPosts.filter(
-      (p) => !commentedPostIds.includes(p.id)
+      (p) => !commentedPostIds.includes(String(p.id))
     );
 
     if (uncommentedPosts.length === 0) {
@@ -89,13 +68,15 @@ export class AutonomousCommentingService {
     }
 
     const config = await getAgentConfig(agentUserId);
+    const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
+    const postContent = post.content ? String(post.content) : '';
 
     // Generate comment
     const prompt = `${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
-You are ${agent.displayName}, viewing this post:
+You are ${displayName}, viewing this post:
 
-"${post.content}"
+"${postContent}"
 
 Task: Write a brief, insightful comment (1-2 sentences) that adds value to the discussion.
 Be authentic to your personality and expertise.
@@ -107,12 +88,12 @@ Generate ONLY the comment text, nothing else.`;
     const commentContent = await callJejuDirect({
       prompt,
       system: config?.systemPrompt ?? undefined,
-      modelSize: 'small', // Free tier: Frequent operation, use fast model
-      runtime: _runtime, // Pass runtime to access W&B trained models AND trajectory context
+      modelSize: 'small',
+      runtime: _runtime,
       temperature: 0.8,
       maxTokens: 80,
       actionType: 'generate_comment',
-      purpose: 'response', // RLAIF: This is a response generation call
+      purpose: 'response',
     });
 
     const cleanContent = commentContent.trim().replace(/^["']|["']$/g, '');
@@ -123,17 +104,19 @@ Generate ONLY the comment text, nothing else.`;
 
     // Create the comment
     const commentId = await generateSnowflakeId();
-    await db.insert(comments).values({
-      id: commentId,
-      content: cleanContent,
-      postId: post.id,
-      authorId: agentUserId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    await db.comment.create({
+      data: {
+        id: commentId,
+        content: cleanContent,
+        postId: String(post.id),
+        authorId: agentUserId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     });
 
     logger.info(
-      `Agent ${agent.displayName} commented on post ${post.id}`,
+      `Agent ${displayName} commented on post ${post.id}`,
       undefined,
       'AutonomousCommenting'
     );

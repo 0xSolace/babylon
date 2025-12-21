@@ -256,7 +256,7 @@ export const POST = withErrorHandling(
 
       // Check if this qualifies a referral (award bonus to referrer)
       // This happens after linking social account, so user now has at least one social account
-      if (pointsResult?.success) {
+      if (pointsResult.success) {
         await PointsService.checkAndQualifyReferral(canonicalUserId).catch(
           (error) => {
             // Log error but don't fail the request if qualification check fails

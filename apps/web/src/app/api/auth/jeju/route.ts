@@ -158,7 +158,7 @@ async function handleVerify(code?: string, method?: AuthMethod) {
  */
 async function handleRefresh(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'No token provided' }, { status: 401 });
   }
 
@@ -205,7 +205,7 @@ async function hashEmail(email: string): Promise<string> {
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return NextResponse.json({
       authenticated: false,
     });
