@@ -30,7 +30,9 @@ async function loadJejuConfig(): Promise<{
   getCQLUrl: typeof import('@jejunetwork/config').getCQLUrl;
 }> {
   if (!_getCQLUrl) {
-    const config = await import(/* webpackIgnore: true */ '@jejunetwork/config');
+    const config = await import(
+      /* webpackIgnore: true */ '@jejunetwork/config'
+    );
     _getCQLUrl = config.getCQLUrl;
   }
   return { getCQLUrl: _getCQLUrl };
