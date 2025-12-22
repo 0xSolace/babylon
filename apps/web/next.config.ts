@@ -151,6 +151,9 @@ const nextConfig: NextConfig = {
       'node:tls': false,
       'node:dns': false,
       'node:perf_hooks': false,
+      // Bun-specific modules - not available in webpack
+      'bun:sqlite': false,
+      'bun:ffi': false,
       net: false,
       tls: false,
       dns: false,
