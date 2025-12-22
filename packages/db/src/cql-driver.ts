@@ -7,12 +7,12 @@
  * Uses @jeju/db Drizzle adapter for SQL-to-CQL translation.
  */
 
-import { type CQLClient, getCQL, type QueryParam } from '@jeju/db';
+import { type CQLClient, getCQL, type QueryParam } from '@jejunetwork/db';
 import {
   sql as cqlSql,
   drizzle as createDrizzleCQL,
   type DrizzleCQL,
-} from '@jeju/db/adapters';
+} from '@jejunetwork/db/adapters';
 import { logger } from './logger';
 
 // ============================================================================

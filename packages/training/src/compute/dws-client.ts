@@ -1,6 +1,6 @@
 /**
  * Jeju DWS Training Client
- * 
+ *
  * Connects Babylon training to Jeju's DWS distributed training infrastructure.
  * Provides a unified interface for submitting training jobs, tracking progress,
  * and integrating with the decentralized training network.
@@ -8,7 +8,11 @@
 
 import { logger } from '@babylon/shared';
 import type { Address, Hex } from 'viem';
-import type { TrainingJobRequest, TrainingJobResult, TrainingJobStatus } from './types';
+import type {
+  TrainingJobRequest,
+  TrainingJobResult,
+  TrainingJobStatus,
+} from './types';
 
 // ============================================================================
 // Types
@@ -131,8 +135,8 @@ export class DWSTrainingClient {
       throw new Error(`DWS job submission failed: ${error}`);
     }
 
-    const result = await response.json() as { jobId: string };
-    
+    const result = (await response.json()) as { jobId: string };
+
     // Start polling for updates
     this.startPolling(result.jobId);
 
@@ -144,14 +148,16 @@ export class DWSTrainingClient {
    * Get job status
    */
   async getJobStatus(jobId: string): Promise<DWSJobStatus | null> {
-    const response = await fetch(`${this.config.dwsApiUrl}/training/jobs/${jobId}`);
-    
+    const response = await fetch(
+      `${this.config.dwsApiUrl}/training/jobs/${jobId}`
+    );
+
     if (!response.ok) {
       if (response.status === 404) return null;
       throw new Error(`Failed to get job status: ${response.statusText}`);
     }
 
-    const status = await response.json() as DWSJobStatus;
+    const status = (await response.json()) as DWSJobStatus;
     this.activeJobs.set(jobId, status);
     return status;
   }
@@ -159,21 +165,30 @@ export class DWSTrainingClient {
   /**
    * Get job allocations (nodes assigned to job)
    */
-  async getJobAllocations(jobId: string): Promise<Array<{ nodeId: string; gpuType: string; status: string }>> {
-    const response = await fetch(`${this.config.dwsApiUrl}/training/jobs/${jobId}/allocations`);
-    
+  async getJobAllocations(
+    jobId: string
+  ): Promise<Array<{ nodeId: string; gpuType: string; status: string }>> {
+    const response = await fetch(
+      `${this.config.dwsApiUrl}/training/jobs/${jobId}/allocations`
+    );
+
     if (!response.ok) {
       return [];
     }
 
-    const result = await response.json() as { allocations: Array<{ nodeId: string; gpuType: string; status: string }> };
+    const result = (await response.json()) as {
+      allocations: Array<{ nodeId: string; gpuType: string; status: string }>;
+    };
     return result.allocations;
   }
 
   /**
    * Wait for job completion
    */
-  async waitForJob(jobId: string, timeoutMs = 3600000): Promise<TrainingJobResult> {
+  async waitForJob(
+    jobId: string,
+    timeoutMs = 3600000
+  ): Promise<TrainingJobResult> {
     const start = Date.now();
 
     while (Date.now() - start < timeoutMs) {
@@ -198,7 +213,7 @@ export class DWSTrainingClient {
         };
       }
 
-      await new Promise(r => setTimeout(r, this.config.pollingIntervalMs));
+      await new Promise((r) => setTimeout(r, this.config.pollingIntervalMs));
     }
 
     return {
@@ -213,16 +228,18 @@ export class DWSTrainingClient {
    * Submit rollouts for LLM-as-judge scoring
    */
   async judgeRollouts(rollouts: RolloutData[]): Promise<JudgeResult[]> {
-    const bundles = rollouts.map(r => ({
+    const bundles = rollouts.map((r) => ({
       runId: r.trajectoryId,
       epoch: 0,
-      rollouts: [{
-        trajectoryId: r.trajectoryId,
-        agentId: r.metadata.agentId as string ?? 'babylon-agent',
-        steps: r.steps,
-        totalReward: r.totalReward,
-        environment: 'babylon',
-      }],
+      rollouts: [
+        {
+          trajectoryId: r.trajectoryId,
+          agentId: (r.metadata.agentId as string) ?? 'babylon-agent',
+          steps: r.steps,
+          totalReward: r.totalReward,
+          environment: 'babylon',
+        },
+      ],
     }));
 
     const response = await fetch(`${this.config.dwsApiUrl}/training/judge`, {
@@ -235,25 +252,44 @@ export class DWSTrainingClient {
       throw new Error(`LLM judging failed: ${response.statusText}`);
     }
 
-    const result = await response.json() as { results: Array<{ bundleId: string; score: number; reasoning: string; confidence: number }> };
-    
-    return result.results.map((r, i) => ({
-      trajectoryId: rollouts[i].trajectoryId,
-      score: r.score,
-      reasoning: r.reasoning,
-      confidence: r.confidence,
-    }));
+    const result = (await response.json()) as {
+      results: Array<{
+        bundleId: string;
+        score: number;
+        reasoning: string;
+        confidence: number;
+      }>;
+    };
+
+    return result.results.map((r, i) => {
+      const rollout = rollouts[i];
+      if (!rollout) {
+        throw new Error(`Missing rollout at index ${i}`);
+      }
+      return {
+        trajectoryId: rollout.trajectoryId,
+        score: r.score,
+        reasoning: r.reasoning,
+        confidence: r.confidence,
+      };
+    });
   }
 
   /**
    * Start an Atropos server for a job
    */
-  async startAtroposServer(jobId: string, port?: number): Promise<{ url: string; port: number }> {
-    const response = await fetch(`${this.config.dwsApiUrl}/training/jobs/${jobId}/atropos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ port }),
-    });
+  async startAtroposServer(
+    jobId: string,
+    port?: number
+  ): Promise<{ url: string; port: number }> {
+    const response = await fetch(
+      `${this.config.dwsApiUrl}/training/jobs/${jobId}/atropos`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ port }),
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to start Atropos server: ${response.statusText}`);
@@ -265,23 +301,28 @@ export class DWSTrainingClient {
   /**
    * Compute Merkle root for reward distribution
    */
-  async computeMerkleRoot(rewards: Array<{ client: Address; amount: bigint }>): Promise<string> {
-    const response = await fetch(`${this.config.dwsApiUrl}/training/bridge/merkle/root`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        rewards: rewards.map(r => ({
-          client: r.client,
-          amount: r.amount.toString(),
-        })),
-      }),
-    });
+  async computeMerkleRoot(
+    rewards: Array<{ client: Address; amount: bigint }>
+  ): Promise<string> {
+    const response = await fetch(
+      `${this.config.dwsApiUrl}/training/bridge/merkle/root`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rewards: rewards.map((r) => ({
+            client: r.client,
+            amount: r.amount.toString(),
+          })),
+        }),
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to compute Merkle root: ${response.statusText}`);
     }
 
-    const result = await response.json() as { root: string };
+    const result = (await response.json()) as { root: string };
     return result.root;
   }
 
@@ -292,23 +333,28 @@ export class DWSTrainingClient {
     rewards: Array<{ client: Address; amount: bigint }>,
     index: number
   ): Promise<string[]> {
-    const response = await fetch(`${this.config.dwsApiUrl}/training/bridge/merkle/proof`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        rewards: rewards.map(r => ({
-          client: r.client,
-          amount: r.amount.toString(),
-        })),
-        index,
-      }),
-    });
+    const response = await fetch(
+      `${this.config.dwsApiUrl}/training/bridge/merkle/proof`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rewards: rewards.map((r) => ({
+            client: r.client,
+            amount: r.amount.toString(),
+          })),
+          index,
+        }),
+      }
+    );
 
     if (!response.ok) {
-      throw new Error(`Failed to generate Merkle proof: ${response.statusText}`);
+      throw new Error(
+        `Failed to generate Merkle proof: ${response.statusText}`
+      );
     }
 
-    const result = await response.json() as { proof: string[] };
+    const result = (await response.json()) as { proof: string[] };
     return result.proof;
   }
 
@@ -317,12 +363,12 @@ export class DWSTrainingClient {
    */
   async listJobs(): Promise<DWSJobStatus[]> {
     const response = await fetch(`${this.config.dwsApiUrl}/training/jobs`);
-    
+
     if (!response.ok) {
       return [];
     }
 
-    const result = await response.json() as { jobs: DWSJobStatus[] };
+    const result = (await response.json()) as { jobs: DWSJobStatus[] };
     return result.jobs;
   }
 
@@ -330,9 +376,12 @@ export class DWSTrainingClient {
    * Cancel a running job
    */
   async cancelJob(jobId: string): Promise<void> {
-    const response = await fetch(`${this.config.dwsApiUrl}/training/jobs/${jobId}/cancel`, {
-      method: 'POST',
-    });
+    const response = await fetch(
+      `${this.config.dwsApiUrl}/training/jobs/${jobId}/cancel`,
+      {
+        method: 'POST',
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to cancel job: ${response.statusText}`);
@@ -351,7 +400,7 @@ export class DWSTrainingClient {
 
     const interval = setInterval(async () => {
       const status = await this.getJobStatus(jobId);
-      
+
       if (status?.status === 'completed' || status?.status === 'failed') {
         this.stopPolling(jobId);
       }

@@ -5,7 +5,7 @@
 import { getKMSClient } from '@babylon/api';
 import { db } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
-import { type CQLClient, getCQL } from '@jeju/db';
+import { type CQLClient, getCQL } from '@jejunetwork/db';
 import type { Address, Hex } from 'viem';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';

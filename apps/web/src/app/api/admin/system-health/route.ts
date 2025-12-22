@@ -40,34 +40,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     : null;
 
   // Get user activity stats as proxy for API health
-  const [userStatsHour] = await db
+  interface CountResult {
+    newUsers?: number;
+    newPosts?: number;
+  }
+  const userStatsHourResult = (await db
     .select({
       newUsers: count(),
     })
     .from(users)
-    .where(gte(users.createdAt, oneHourAgo));
+    .where(gte(users.createdAt, oneHourAgo))) as unknown as CountResult[];
+  const userStatsHour = userStatsHourResult[0];
 
-  const [userStatsDay] = await db
+  const userStatsDayResult = (await db
     .select({
       newUsers: count(),
     })
     .from(users)
-    .where(gte(users.createdAt, oneDayAgo));
+    .where(gte(users.createdAt, oneDayAgo))) as unknown as CountResult[];
+  const userStatsDay = userStatsDayResult[0];
 
   // Get post activity stats
-  const [postStatsHour] = await db
+  const postStatsHourResult = (await db
     .select({
       newPosts: count(),
     })
     .from(posts)
-    .where(gte(posts.createdAt, oneHourAgo));
+    .where(gte(posts.createdAt, oneHourAgo))) as unknown as CountResult[];
+  const postStatsHour = postStatsHourResult[0];
 
-  const [postStatsDay] = await db
+  const postStatsDayResult = (await db
     .select({
       newPosts: count(),
     })
     .from(posts)
-    .where(gte(posts.createdAt, oneDayAgo));
+    .where(gte(posts.createdAt, oneDayAgo))) as unknown as CountResult[];
+  const postStatsDay = postStatsDayResult[0];
 
   // Determine overall health status
   let healthStatus: 'healthy' | 'degraded' | 'critical' = 'healthy';

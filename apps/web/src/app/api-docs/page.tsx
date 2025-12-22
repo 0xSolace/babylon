@@ -13,7 +13,6 @@ import dynamic from 'next/dynamic';
 import 'swagger-ui-react/swagger-ui.css';
 
 // Dynamically import SwaggerUI to avoid SSR issues
-// @ts-expect-error - swagger-ui-react uses CJS exports that don't align with Next.js dynamic types
 const SwaggerUI = dynamic(() => import('swagger-ui-react'), {
   ssr: false,
   loading: () => (

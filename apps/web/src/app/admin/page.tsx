@@ -46,6 +46,7 @@ import {
   Gamepad2,
   Layers,
   LineChart,
+  type LucideIcon,
   MessageSquare,
   Scale,
   ScrollText,
@@ -196,65 +197,64 @@ export default function AdminDashboard() {
   }, []);
 
   // Navigation items organized by category
-  const navCategories = [
+  interface NavItem {
+    id: Tab;
+    label: string;
+    icon: LucideIcon;
+  }
+  interface NavCategory {
+    name: string;
+    items: NavItem[];
+  }
+  const navCategories: NavCategory[] = [
     {
       name: 'Overview',
       items: [
-        { id: 'stats' as const, label: 'Dashboard', icon: BarChart },
-        { id: 'analytics' as const, label: 'Analytics', icon: LineChart },
-        { id: 'system-health' as const, label: 'System Health', icon: Server },
+        { id: 'stats', label: 'Dashboard', icon: BarChart },
+        { id: 'analytics', label: 'Analytics', icon: LineChart },
+        { id: 'system-health', label: 'System Health', icon: Server },
       ],
     },
     {
       name: 'Game & Markets',
       items: [
-        { id: 'game-control' as const, label: 'Game Control', icon: Gamepad2 },
-        { id: 'markets' as const, label: 'Markets', icon: TrendingUp },
-        { id: 'fees' as const, label: 'Fees', icon: DollarSign },
-        { id: 'trades' as const, label: 'Trades', icon: Activity },
-        { id: 'escrow' as const, label: 'Escrow', icon: DollarSign },
+        { id: 'game-control', label: 'Game Control', icon: Gamepad2 },
+        { id: 'markets', label: 'Markets', icon: TrendingUp },
+        { id: 'fees', label: 'Fees', icon: DollarSign },
+        { id: 'trades', label: 'Trades', icon: Activity },
+        { id: 'escrow', label: 'Escrow', icon: DollarSign },
       ],
     },
     {
       name: 'Users & Moderation',
       items: [
-        { id: 'users' as const, label: 'Users', icon: Users },
-        { id: 'admins' as const, label: 'Admin Management', icon: ShieldCheck },
-        {
-          id: 'content-moderation' as const,
-          label: 'Content Moderation',
-          icon: Eye,
-        },
-        { id: 'reports' as const, label: 'Reports', icon: Flag },
-        { id: 'human-review' as const, label: 'Human Review', icon: Scale },
+        { id: 'users', label: 'Users', icon: Users },
+        { id: 'admins', label: 'Admin Management', icon: ShieldCheck },
+        { id: 'content-moderation', label: 'Content Moderation', icon: Eye },
+        { id: 'reports', label: 'Reports', icon: Flag },
+        { id: 'human-review', label: 'Human Review', icon: Scale },
       ],
     },
     {
       name: 'Platform',
       items: [
-        { id: 'registry' as const, label: 'Registry', icon: Layers },
-        { id: 'groups' as const, label: 'Groups', icon: MessageSquare },
-        { id: 'notifications' as const, label: 'Notifications', icon: Bell },
-        { id: 'ico' as const, label: 'ICO', icon: Coins },
+        { id: 'registry', label: 'Registry', icon: Layers },
+        { id: 'groups', label: 'Groups', icon: MessageSquare },
+        { id: 'notifications', label: 'Notifications', icon: Bell },
+        { id: 'ico', label: 'ICO', icon: Coins },
       ],
     },
     {
       name: 'AI & Agents',
       items: [
-        { id: 'agents' as const, label: 'Agents', icon: Bot },
-        { id: 'ai-models' as const, label: 'AI Models', icon: Sparkles },
-        {
-          id: 'training-data' as const,
-          label: 'Training Data',
-          icon: Database,
-        },
+        { id: 'agents', label: 'Agents', icon: Bot },
+        { id: 'ai-models', label: 'AI Models', icon: Sparkles },
+        { id: 'training-data', label: 'Training Data', icon: Database },
       ],
     },
     {
       name: 'Audit',
-      items: [
-        { id: 'audit-logs' as const, label: 'Audit Logs', icon: ScrollText },
-      ],
+      items: [{ id: 'audit-logs', label: 'Audit Logs', icon: ScrollText }],
     },
   ];
 

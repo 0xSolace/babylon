@@ -8,7 +8,7 @@ import {
   type CQLConfig,
   getCQL,
   type QueryParam,
-} from '@jeju/db';
+} from '@jejunetwork/db';
 
 // Re-export CQL types
 export type { CQLConfig };

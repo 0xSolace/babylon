@@ -9,16 +9,22 @@ import { PKCEParamsSchema } from '../schemas/index';
 import type { PKCEParams } from './types';
 
 /**
+ * Convert Uint8Array to base64url string
+ */
+function uint8ArrayToBase64Url(arr: Uint8Array): string {
+  let binary = '';
+  for (const byte of arr) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/**
  * Generate a cryptographically secure random string
  */
 function generateRandomString(length: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(length));
-  // Use URL-safe base64
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '')
-    .slice(0, length);
+  return uint8ArrayToBase64Url(bytes).slice(0, length);
 }
 
 /**
@@ -29,19 +35,23 @@ export function generateCodeVerifier(): string {
 }
 
 /**
+ * Convert Uint8Array to ArrayBuffer (guaranteed non-shared)
+ */
+function toArrayBuffer(arr: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(arr.length);
+  new Uint8Array(buffer).set(arr);
+  return buffer;
+}
+
+/**
  * Generate code challenge from verifier using S256 method
  */
 export async function generateCodeChallenge(verifier: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(verifier);
-  const hash = await crypto.subtle.digest('SHA-256', data);
+  const data = new TextEncoder().encode(verifier);
+  const hash = await crypto.subtle.digest('SHA-256', toArrayBuffer(data));
   const hashArray = new Uint8Array(hash);
 
-  // Base64url encode
-  return btoa(String.fromCharCode(...hashArray))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
+  return uint8ArrayToBase64Url(hashArray);
 }
 
 /**

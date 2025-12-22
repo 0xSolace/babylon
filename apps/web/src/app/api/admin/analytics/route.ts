@@ -58,6 +58,12 @@ import type { NextRequest } from 'next/server';
 
 type PeriodType = 'day' | 'week' | 'month';
 
+// Type for aggregated time series data
+interface TimeSeriesRow {
+  date: string;
+  count: number;
+}
+
 function getDateRange(period: PeriodType): { start: Date; end: Date } {
   const now = new Date();
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -118,7 +124,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     commentsCreated,
     reactionsCreated,
     followsCreated,
-  ] = await Promise.all([
+  ] = (await Promise.all([
     // User signups
     db
       .select({
@@ -230,7 +236,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           ? sql`DATE_TRUNC('month', ${follows.createdAt})`
           : sql`DATE(${follows.createdAt})`
       ),
-  ]);
+  ])) as unknown as [
+    TimeSeriesRow[],
+    TimeSeriesRow[],
+    TimeSeriesRow[],
+    TimeSeriesRow[],
+    TimeSeriesRow[],
+  ];
 
   // Build unified time-series data
   const dateMap = new Map<

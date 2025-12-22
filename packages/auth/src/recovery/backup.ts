@@ -100,7 +100,7 @@ export class KeyBackupManager {
   ): Promise<CryptoKey> {
     const passwordKey = await crypto.subtle.importKey(
       'raw',
-      new TextEncoder().encode(password),
+      this.toArrayBuffer(new TextEncoder().encode(password)),
       'PBKDF2',
       false,
       ['deriveBits', 'deriveKey']
@@ -154,7 +154,7 @@ export class KeyBackupManager {
   private async getKeyMaterial(userId: DID): Promise<Uint8Array> {
     const hash = await crypto.subtle.digest(
       'SHA-256',
-      new TextEncoder().encode(userId)
+      this.toArrayBuffer(new TextEncoder().encode(userId))
     );
     return new Uint8Array(hash);
   }

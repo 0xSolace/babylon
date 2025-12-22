@@ -11,7 +11,7 @@ export {
   CQLClient,
   getCQL,
   resetCQL,
-} from '@jeju/db';
+} from '@jejunetwork/db';
 export type {
   CQLAdapter,
   CQLTransactionAdapter,

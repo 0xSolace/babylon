@@ -197,7 +197,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           .offset(offset);
 
   // Get queue stats using efficient aggregation
-  const [postStats] = await db
+  interface PostStats {
+    pending: number;
+    deleted: number;
+  }
+  const postStatsResult = (await db
     .select({
       pending: sql<number>`COUNT(DISTINCT ${posts.id}) FILTER (WHERE ${posts.deletedAt} IS NULL)`,
       deleted: sql<number>`COUNT(DISTINCT ${posts.id}) FILTER (WHERE ${posts.deletedAt} IS NOT NULL)`,
@@ -206,7 +210,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     .innerJoin(
       reports,
       and(eq(reports.reportedPostId, posts.id), eq(reports.status, 'pending'))
-    );
+    )) as unknown as PostStats[];
+  const postStats = postStatsResult[0];
 
   return successResponse({
     posts: reportedPosts.map((p) => ({

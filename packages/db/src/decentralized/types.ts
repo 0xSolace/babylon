@@ -30,7 +30,7 @@ export type {
   RentalInfo,
   RentalPlan,
   RevokeRequest,
-} from '@jeju/db';
+} from '@jejunetwork/db';
 
 // Babylon-specific types for adapter layer
 export type SQLPrimitive = string | number | boolean | null | Date | bigint;

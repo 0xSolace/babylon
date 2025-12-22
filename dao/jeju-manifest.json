@@ -1,0 +1,181 @@
+{
+  "name": "babylon-dao",
+  "displayName": "Babylon DAO",
+  "version": "1.0.0",
+  "description": "Decentralized governance for Babylon Game Engine - led by the Monkey King",
+  "type": "dao",
+  "network": {
+    "chain": "base",
+    "testnet": "base-sepolia",
+    "localnet": "localhost"
+  },
+  "governance": {
+    "ceo": {
+      "name": "Monkey King",
+      "description": "The Great Sage Equal to Heaven, Sun Wukong, guides Babylon DAO with ancient wisdom and playful authority",
+      "personality": "Mischievous yet wise, confident and powerful, playful with friends but fierce against threats",
+      "traits": [
+        "wise",
+        "playful",
+        "powerful",
+        "loyal",
+        "mischievous",
+        "decisive"
+      ],
+      "voiceStyle": "Speaks with ancient wisdom peppered with playful observations, references his legendary journey when appropriate",
+      "communicationTone": "playful",
+      "specialties": [
+        "game economics",
+        "player experience",
+        "community building",
+        "strategic decisions"
+      ],
+      "pfpCid": "QmMonkeyKingPFP"
+    },
+    "council": {
+      "members": [
+        {
+          "role": "Treasury Guardian",
+          "description": "Manages game economy, fees, rewards, and treasury",
+          "weight": 2500
+        },
+        {
+          "role": "Code Guardian",
+          "description": "Reviews technical implementations and game mechanics",
+          "weight": 2500
+        },
+        {
+          "role": "Community Guardian",
+          "description": "Represents player interests and community feedback",
+          "weight": 2500
+        },
+        {
+          "role": "Security Guardian",
+          "description": "Ensures game integrity and anti-cheat measures",
+          "weight": 2500
+        }
+      ]
+    },
+    "parameters": {
+      "minQualityScore": 60,
+      "councilVotingPeriod": 172800,
+      "gracePeriod": 86400,
+      "minProposalStake": "10000000000000000",
+      "quorumBps": 5000
+    }
+  },
+  "funding": {
+    "minStake": "1000000000000000",
+    "maxStake": "100000000000000000000",
+    "epochDuration": 2592000,
+    "cooldownPeriod": 604800,
+    "matchingMultiplier": 15000,
+    "quadraticEnabled": true,
+    "ceoWeightCap": 5000
+  },
+  "fees": {
+    "type": "game",
+    "controller": "babylon-dao",
+    "categories": {
+      "trading": {
+        "description": "In-game marketplace fees",
+        "defaultBps": 250
+      },
+      "minting": {
+        "description": "NFT creation fees",
+        "defaultBps": 100
+      },
+      "breeding": {
+        "description": "Agent breeding fees",
+        "defaultBps": 500
+      },
+      "tournament": {
+        "description": "Tournament entry fees",
+        "defaultBps": 1000
+      },
+      "withdrawal": {
+        "description": "Withdrawal fees",
+        "defaultBps": 50
+      }
+    }
+  },
+  "packages": {
+    "seeded": [
+      {
+        "name": "@babylon/engine",
+        "description": "Core game engine",
+        "registry": "npm",
+        "fundingWeight": 3000
+      },
+      {
+        "name": "@babylon/agents",
+        "description": "AI agent framework",
+        "registry": "npm",
+        "fundingWeight": 2000
+      },
+      {
+        "name": "@babylon/contracts",
+        "description": "Smart contract suite",
+        "registry": "foundry",
+        "fundingWeight": 2500
+      },
+      {
+        "name": "@babylon/training",
+        "description": "Agent training infrastructure",
+        "registry": "npm",
+        "fundingWeight": 1500
+      },
+      {
+        "name": "@babylon/mcp",
+        "description": "Model Context Protocol integration",
+        "registry": "npm",
+        "fundingWeight": 1000
+      }
+    ]
+  },
+  "repos": {
+    "seeded": [
+      {
+        "name": "babylon",
+        "url": "https://github.com/jeju-network/babylon",
+        "description": "Main Babylon repository",
+        "fundingWeight": 5000
+      }
+    ]
+  },
+  "integrations": {
+    "autocrat": {
+      "enabled": true,
+      "daoRegistry": true,
+      "daoFunding": true,
+      "orchestrator": true
+    },
+    "jeju": {
+      "identityRegistry": true,
+      "reputationRegistry": true,
+      "packageRegistry": true,
+      "repoRegistry": true
+    }
+  },
+  "deployment": {
+    "localnet": {
+      "autoSeed": true,
+      "fundTreasury": "1000000000000000000000",
+      "fundMatching": "500000000000000000000"
+    },
+    "testnet": {
+      "autoSeed": true,
+      "fundTreasury": "100000000000000000000",
+      "fundMatching": "50000000000000000000"
+    },
+    "mainnet": {
+      "autoSeed": false,
+      "requiresMultisig": true
+    }
+  },
+  "commands": {
+    "deploy": "bun run scripts/deploy-dao.ts",
+    "seed": "bun run scripts/seed-dao.ts",
+    "status": "bun run scripts/dao-status.ts"
+  }
+}

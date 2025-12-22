@@ -41,7 +41,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const now = new Date();
 
   // Get market statistics
-  const [marketStats] = await db
+  interface MarketStats {
+    total: number;
+    active: number;
+    expired: number;
+    resolved: number;
+    totalLiquidity: number;
+  }
+  const marketStatsResult = (await db
     .select({
       total: count(),
       active: sql<number>`COUNT(*) FILTER (WHERE ${markets.resolved} = false AND ${markets.endDate} > ${now})`,
@@ -49,16 +56,23 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       resolved: sql<number>`COUNT(*) FILTER (WHERE ${markets.resolved} = true)`,
       totalLiquidity: sql<number>`COALESCE(SUM(${markets.liquidity}::numeric), 0)`,
     })
-    .from(markets);
+    .from(markets)) as unknown as MarketStats[];
+  const marketStats = marketStatsResult[0];
 
   // Get position statistics
-  const [positionStats] = await db
+  interface PositionStats {
+    totalPositions: number;
+    activePositions: number;
+    totalValue: number;
+  }
+  const positionStatsResult = (await db
     .select({
       totalPositions: count(),
       activePositions: sql<number>`COUNT(*) FILTER (WHERE ${positions.status} = 'active')`,
       totalValue: sql<number>`COALESCE(SUM(${positions.amount}::numeric), 0)`,
     })
-    .from(positions);
+    .from(positions)) as unknown as PositionStats[];
+  const positionStats = positionStatsResult[0];
 
   // Build filter for markets list
   let statusFilter = undefined;

@@ -8,7 +8,7 @@
  * Provides the same API as the Drizzle client for compatibility.
  */
 
-import type { QueryParam } from '@jeju/db';
+import type { QueryParam } from '@jejunetwork/db';
 import type { Column, SQL } from 'drizzle-orm';
 import {
   getTableConfig,

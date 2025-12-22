@@ -23,13 +23,13 @@ export type {
   RentalInfo,
   RentalPlan,
   RevokeRequest,
-} from '@jeju/db';
+} from '@jejunetwork/db';
 export {
   CovenantSQLClient,
   CQLClient,
   getCQL,
   resetCQL,
-} from '@jeju/db';
+} from '@jejunetwork/db';
 
 export type SQLValue =
   | string
@@ -76,7 +76,7 @@ export async function isCQLAvailable(): Promise<boolean> {
  * Initialize CQL client with health check
  */
 export async function initializeCQL() {
-  const { getCQL } = await import('@jeju/db');
+  const { getCQL } = await import('@jejunetwork/db');
 
   const client = getCQL({
     blockProducerEndpoint:
@@ -107,4 +107,7 @@ export async function tryInitializeCQL() {
 }
 
 // Babylon naming aliases
-export { getCQL as getCQLClient, resetCQL as resetCQLClient } from '@jeju/db';
+export {
+  getCQL as getCQLClient,
+  resetCQL as resetCQLClient,
+} from '@jejunetwork/db';

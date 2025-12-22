@@ -7,7 +7,7 @@
  * This replaces the Drizzle-based TableRepository for decentralized operation.
  */
 
-import type { QueryParam } from '@jeju/db';
+import type { QueryParam } from '@jejunetwork/db';
 import {
   type DecentralizedDB,
   getDB,

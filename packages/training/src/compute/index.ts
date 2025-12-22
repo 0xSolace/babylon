@@ -8,6 +8,9 @@
  * For fully decentralized training using Psyche-style coordination,
  * use DecentralizedTrainingClient which integrates with Jeju's
  * TrainingCoordinator, TrainingRewards, and NodePerformanceOracle contracts.
+ *
+ * For DWS-based distributed training with Atropos/Psyche integration,
+ * use DWSTrainingClient which connects to Jeju DWS infrastructure.
  */
 
 export { ComputeTrainingClient, createComputeTrainingClient } from './client';
@@ -25,6 +28,19 @@ export {
   PrivacyMode,
   RunState,
 } from './decentralized-training';
+// DWS Training Client (Atropos/Psyche/GRPO integration)
+export type {
+  DWSClientConfig,
+  DWSJobStatus,
+  JudgeResult,
+  RolloutData,
+} from './dws-client';
+export {
+  createDWSClient,
+  DWSTrainingClient,
+  getDefaultDWSConfig,
+  isDWSAvailable,
+} from './dws-client';
 // Jeju RLAIF integration
 export type { BabylonRLAIFConfig } from './jeju-rlaif-adapter';
 export {

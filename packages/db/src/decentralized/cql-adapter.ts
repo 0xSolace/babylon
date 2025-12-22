@@ -5,8 +5,8 @@
  * the real @jeju/db backend.
  */
 
-import type { CQLClient, CQLConnection, QueryParam } from '@jeju/db';
-import { getCQL } from '@jeju/db';
+import type { CQLClient, CQLConnection, QueryParam } from '@jejunetwork/db';
+import { getCQL } from '@jejunetwork/db';
 
 // Babylon-compatible types
 export type SQLValue = QueryParam;
@@ -384,4 +384,7 @@ export function resetCQLAdapter(): void {
 }
 
 // Re-export from real Jeju CQL
-export { getCQL as getCQLClient, resetCQL as resetCQLClient } from '@jeju/db';
+export {
+  getCQL as getCQLClient,
+  resetCQL as resetCQLClient,
+} from '@jejunetwork/db';

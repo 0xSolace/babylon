@@ -13,9 +13,9 @@
  * - packages/testing/integration/waitlist-service.test.ts
  */
 
+import { expect } from '@playwright/test';
 import { testWithSynpress } from '@synthetixio/synpress';
 import { metaMaskFixtures } from '@synthetixio/synpress/playwright';
-import { expect } from '@playwright/test';
 
 const test = testWithSynpress(metaMaskFixtures({}));
 
@@ -195,15 +195,18 @@ describe('Waitlist API Endpoints', () => {
   test('POST /api/waitlist/bonus/email should require authentication', async ({
     request,
   }) => {
-    const response = await request.post(`${BASE_URL}/api/waitlist/bonus/email`, {
-      data: {
-        userId: 'test-user-id',
-        email: 'test@example.com',
-      },
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await request.post(
+      `${BASE_URL}/api/waitlist/bonus/email`,
+      {
+        data: {
+          userId: 'test-user-id',
+          email: 'test@example.com',
+        },
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
     // Should require auth
     expect([200, 401, 404]).toContain(response.status());

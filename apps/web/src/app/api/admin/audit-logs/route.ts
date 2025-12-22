@@ -135,14 +135,29 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
 
   // Get total count for proper pagination
-  const [totalResult] = await db
+  const countResult = (await db
     .select({ count: count() })
     .from(adminAuditLogs)
-    .where(whereCondition);
-  const total = totalResult?.count ?? 0;
+    .where(whereCondition)) as unknown as { count: number }[];
+  const total = countResult[0]?.count ?? 0;
 
   // Query logs with admin user info
-  const logs = await db
+  interface AuditLogWithAdmin {
+    id: string;
+    adminId: string;
+    action: string;
+    resourceType: string;
+    resourceId: string | null;
+    previousValue: unknown;
+    newValue: unknown;
+    ipAddress: string | null;
+    metadata: unknown;
+    createdAt: Date;
+    adminUsername: string | null;
+    adminDisplayName: string | null;
+    adminProfileImageUrl: string | null;
+  }
+  const logs = (await db
     .select({
       id: adminAuditLogs.id,
       adminId: adminAuditLogs.adminId,
@@ -163,7 +178,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     .where(whereCondition)
     .orderBy(desc(adminAuditLogs.createdAt))
     .limit(limit)
-    .offset(offset);
+    .offset(offset)) as unknown as AuditLogWithAdmin[];
 
   // Get unique action types for filter dropdown
   const actionTypes = await db

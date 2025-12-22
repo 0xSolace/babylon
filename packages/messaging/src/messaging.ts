@@ -8,7 +8,7 @@
  */
 
 import { logger, ServiceUnavailableError } from '@babylon/shared';
-import { type CQLClient, getCQL } from '@jeju/db';
+import { type CQLClient, getCQL } from '@jejunetwork/db';
 import { randomBytes } from 'crypto';
 import { type Address } from 'viem';
 import {

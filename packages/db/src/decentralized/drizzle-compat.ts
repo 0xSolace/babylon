@@ -6,7 +6,7 @@
  * with the CQL backend without changes.
  */
 
-import type { ExecResult, QueryParam } from '@jeju/db';
+import type { ExecResult, QueryParam } from '@jejunetwork/db';
 import {
   and,
   eq,

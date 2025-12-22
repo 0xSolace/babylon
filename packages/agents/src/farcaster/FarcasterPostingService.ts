@@ -477,9 +477,13 @@ export class FarcasterPostingService {
           `KMS not configured (JEJU_KMS_ENDPOINT) and no SIGNER_SEED for fallback derivation`
         );
       }
-      const encoder = new TextEncoder();
-      const seed = encoder.encode(`fc-signer:${actorId}:${signerSeed}`);
-      const hash = await crypto.subtle.digest('SHA-256', seed);
+      const seed = new TextEncoder().encode(
+        `fc-signer:${actorId}:${signerSeed}`
+      );
+      // Convert to ArrayBuffer for crypto.subtle.digest compatibility
+      const seedBuffer = new ArrayBuffer(seed.length);
+      new Uint8Array(seedBuffer).set(seed);
+      const hash = await crypto.subtle.digest('SHA-256', seedBuffer);
       const key = new Uint8Array(hash);
       this.signerCache.set(actorId, key);
       return key;

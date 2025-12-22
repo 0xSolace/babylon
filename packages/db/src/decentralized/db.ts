@@ -8,7 +8,12 @@
  */
 
 import { logger } from '@babylon/shared';
-import { CQLClient, type ExecResult, getCQL, type QueryParam } from '@jeju/db';
+import {
+  CQLClient,
+  type ExecResult,
+  getCQL,
+  type QueryParam,
+} from '@jejunetwork/db';
 import {
   createDrizzleTransaction,
   type DrizzleTransaction,
