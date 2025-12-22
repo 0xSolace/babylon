@@ -366,13 +366,13 @@ jobs:
 
 ## Known Limitations
 
-1. **Mock Authentication**: Currently uses mock tokens. Real Privy integration coming soon.
+1. **Mock Authentication**: Currently uses mock tokens. Real OAuth3 integration coming soon.
 2. **Test Data**: No automatic test data seeding yet. Tests handle missing data gracefully.
 3. **Cleanup**: Test data cleanup not yet implemented. Manual cleanup may be needed.
 
 ## Future Improvements
 
-- [ ] Real authentication integration with Privy
+- [ ] Real authentication integration with OAuth3
 - [ ] Automated test data seeding
 - [ ] Test data cleanup after each test
 - [ ] Performance testing

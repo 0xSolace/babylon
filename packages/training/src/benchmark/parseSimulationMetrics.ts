@@ -3,10 +3,11 @@
  *
  * Shared utility for validating and parsing SimulationMetrics from JSON data.
  * Used by ModelBenchmarkService and HuggingFaceModelUploader.
+ *
+ * Note: SimulationMetrics type is imported from ./index (circular import workaround)
+ * due to SimulationEngine being deprecated and types being consolidated.
  */
 
-// TODO: SimulationEngine.ts was deleted in merge - using type export from benchmark/index
-// Importing from index to get the type (circular import workaround)
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports
 import type { SimulationMetrics } from './index';
 

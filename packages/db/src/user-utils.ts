@@ -67,3 +67,21 @@ export async function getMutedUserIds(userId: string): Promise<string[]> {
     .where(eq(userMutes.muterId, userId));
   return results.map((r) => r.mutedId);
 }
+
+/**
+ * Check if a user has muted another user
+ * @param muterId - The user who may have muted
+ * @param mutedId - The user who may be muted
+ * @returns true if muterId has muted mutedId
+ */
+export async function hasMuted(
+  muterId: string,
+  mutedId: string
+): Promise<boolean> {
+  const [result] = await db
+    .select({ id: userMutes.id })
+    .from(userMutes)
+    .where(and(eq(userMutes.muterId, muterId), eq(userMutes.mutedId, mutedId)))
+    .limit(1);
+  return result !== undefined;
+}

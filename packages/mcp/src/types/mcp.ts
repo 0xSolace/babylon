@@ -4,14 +4,26 @@
  */
 
 import type {
+  JsonRpcError,
+  JsonRpcNotification,
   JsonRpcParams,
+  JsonRpcRequest,
+  JsonRpcResponse,
   JsonRpcResult,
   JsonValue,
   StringRecord,
 } from '@babylon/shared';
 
 // Re-export JSON-RPC types from shared for consistency
-export type { JsonRpcParams, JsonRpcResult, JsonValue };
+export type {
+  JsonRpcError,
+  JsonRpcNotification,
+  JsonRpcParams,
+  JsonRpcRequest,
+  JsonRpcResponse,
+  JsonRpcResult,
+  JsonValue,
+};
 
 // Re-export tool argument types derived from Zod schemas (single source of truth)
 export type {
@@ -93,35 +105,7 @@ export type {
   VerifyEscrowPaymentArgs,
 } from '../utils/tool-args-validation';
 
-// TODO: Consolidate JSON-RPC types into @babylon/shared when A2A types are migrated.
-// Currently @babylon/shared only exports JsonRpcParams. JsonRpcRequest, JsonRpcResponse,
-// and JsonRpcError should be moved to shared for cross-package consistency.
-// JSON-RPC 2.0 Base Types (matching A2A structure)
-export interface JsonRpcRequest {
-  jsonrpc: '2.0';
-  method: string;
-  params?: JsonRpcParams;
-  id: string | number;
-}
-
-export interface JsonRpcResponse {
-  jsonrpc: '2.0';
-  result?: JsonRpcResult;
-  error?: JsonRpcError;
-  id: string | number | null;
-}
-
-export interface JsonRpcError {
-  code: number;
-  message: string;
-  data?: JsonValue;
-}
-
-export interface JsonRpcNotification {
-  jsonrpc: '2.0';
-  method: string;
-  params?: JsonRpcParams;
-}
+// JSON-RPC 2.0 types are now imported from @babylon/shared
 
 // MCP Protocol Methods
 export enum MCPMethod {

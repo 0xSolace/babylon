@@ -65,11 +65,11 @@ bun run db:push
 
 ## Authentication
 
-### Privy Auth Fails
+### OAuth3 Auth Fails
 
-1. Check App ID starts with `clp`
-2. Verify domains in Privy Dashboard: `http://localhost:3000`
-3. Check callback URLs match exactly
+1. Check `JEJU_OAUTH3_SERVICE_URL` is set correctly
+2. Verify `BABYLON_OAUTH3_APP_ID` matches your app registration
+3. Ensure callback URLs match your domain configuration
 
 ## Agents
 

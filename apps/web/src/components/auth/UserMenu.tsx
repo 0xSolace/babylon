@@ -123,7 +123,7 @@ export function UserMenu() {
         });
       }
     }
-  }, [profileData?.user?.reputationPoints, user, setUser, profileData.user]);
+  }, [profileData?.user?.reputationPoints, user, setUser, profileData?.user]);
 
   // Listen for rewards-updated events to refresh auth state
   // This ensures the sidebar updates when rewards are claimed elsewhere

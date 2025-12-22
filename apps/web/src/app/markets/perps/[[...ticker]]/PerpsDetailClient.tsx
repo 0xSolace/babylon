@@ -17,36 +17,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AssetTradesFeed } from '@/components/markets/AssetTradesFeed';
 import { PerpPositionsList } from '@/components/markets/PerpPositionsList';
-// TODO: PerpPriceChart component needs to be created
-// import { PerpPriceChart } from '@/components/markets/PerpPriceChart';
-// TODO: TradeConfirmationDialog component needs to be created
-// import {
-//   type OpenPerpDetails,
-//   TradeConfirmationDialog,
-// } from '@/components/markets/TradeConfirmationDialog';
+import { PerpPriceChart } from '@/components/markets/PerpPriceChart';
+import {
+  type OpenPerpDetails,
+  TradeConfirmationDialog,
+} from '@/components/markets/TradeConfirmationDialog';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
-// TODO: useMarketPrices hook needs to be created
-// import { useMarketPrices } from '@/hooks/useMarketPrices';
-// TODO: usePerpTrade hook needs to be created
-// import { usePerpTrade } from '@/hooks/usePerpTrade';
+import { useMarketPrices } from '@/hooks/useMarketPrices';
+import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { useMarketTracking } from '@/hooks/usePostHog';
 import { useUserPositions } from '@/hooks/useUserPositions';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { usePerpMarket } from '@/stores/perpMarketsStore';
 
-// TODO: Re-enable when price history chart is implemented
-// interface PricePoint {
-//   time: number;
-//   price: number;
-// }
+interface PricePoint {
+  time: number;
+  price: number;
+}
 
 export default function PerpsDetailClient() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, authenticated, login } = useAuth();
+  const { user, authenticated, login, getAccessToken } = useAuth();
   // Catch-all route: params.ticker is string[] or undefined
   const tickerParam = params.ticker;
   const ticker = Array.isArray(tickerParam) ? tickerParam[0] : tickerParam;
@@ -68,8 +63,7 @@ export default function PerpsDetailClient() {
   // Use shared perp markets store
   const { market, loading, refetch } = usePerpMarket(ticker);
 
-  // TODO: Re-enable when price history chart is implemented
-  // const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [side, setSide] = useState<'long' | 'short'>('long');
   const [size, setSize] = useState('100');
   const [leverage, setLeverage] = useState(10);
@@ -85,35 +79,23 @@ export default function PerpsDetailClient() {
     () => perpPositions.filter((position) => position.ticker === ticker),
     [perpPositions, ticker]
   );
-  // TODO: usePerpTrade hook needs to be created
-  // const { openPosition } = usePerpTrade({
-  //   getAccessToken,
-  // });
-  const openPosition = async (_params: {
-    ticker: string;
-    side: 'long' | 'short';
-    size: number;
-    leverage: number;
-  }) => {
-    throw new Error('usePerpTrade hook not implemented');
-  };
+  const { openPosition } = usePerpTrade({
+    getAccessToken,
+  });
   const {
     balance,
     loading: balanceLoading,
     refresh: refreshWalletBalance,
   } = useWalletBalance(user?.id, { enabled: authenticated });
 
-  // TODO: useMarketPrices hook needs to be created
-  // const trackedTicker = market ? market.ticker : ticker;
-  // const livePrices = useMarketPrices(trackedTicker ? [trackedTicker] : []);
-  // const livePrice = trackedTicker ? livePrices.get(trackedTicker) : undefined;
-  const livePrice: { price: number } | undefined = undefined;
-  const displayPrice =
-    livePrice && typeof livePrice === 'object' && 'price' in livePrice
-      ? (livePrice as { price: number }).price
-      : market
-        ? market.currentPrice
-        : 0;
+  const trackedTicker = market ? market.ticker : ticker;
+  const livePrices = useMarketPrices(trackedTicker ? [trackedTicker] : []);
+  const livePrice = trackedTicker ? livePrices.get(trackedTicker) : undefined;
+  const displayPrice = livePrice
+    ? livePrice.price
+    : market
+      ? market.currentPrice
+      : 0;
 
   // Track market view
   useEffect(() => {
@@ -130,27 +112,26 @@ export default function PerpsDetailClient() {
     }
   }, [loading, market, router, from]);
 
-  // TODO: Re-enable when price history chart is implemented
   // Generate price history when market loads
-  // useEffect(() => {
-  //   if (!market) return;
-  //
-  //   // Generate mock price history (you'll want to replace this with real data)
-  //   const now = Date.now();
-  //   const history: PricePoint[] = [];
-  //   const basePrice = market.currentPrice;
-  //   const volatility = basePrice * 0.02; // 2% volatility
-  //
-  //   for (let i = 100; i >= 0; i--) {
-  //     const time = now - i * 15 * 60 * 1000; // 15 min intervals for last ~25 hours
-  //     const randomChange = (Math.random() - 0.5) * volatility;
-  //     const price =
-  //       basePrice + randomChange + ((market.change24h / 100) * (100 - i)) / 100;
-  //     history.push({ time, price });
-  //   }
-  //
-  //   setPriceHistory(history);
-  // }, [market]);
+  useEffect(() => {
+    if (!market) return;
+
+    // Generate mock price history (you'll want to replace this with real data)
+    const now = Date.now();
+    const history: PricePoint[] = [];
+    const basePrice = market.currentPrice;
+    const volatility = basePrice * 0.02; // 2% volatility
+
+    for (let i = 100; i >= 0; i--) {
+      const time = now - i * 15 * 60 * 1000; // 15 min intervals for last ~25 hours
+      const randomChange = (Math.random() - 0.5) * volatility;
+      const price =
+        basePrice + randomChange + ((market.change24h / 100) * (100 - i)) / 100;
+      history.push({ time, price });
+    }
+
+    setPriceHistory(history);
+  }, [market]);
 
   const handlePositionClosed = useCallback(async () => {
     await Promise.all([
@@ -175,10 +156,9 @@ export default function PerpsDetailClient() {
         leverage: params.positionLeverage,
       });
     },
-    onSuccess: async () => {
-      if (!market) return;
+    onSuccess: async (_result, params) => {
       toast.success('Position opened!', {
-        description: `Opened ${leverage}x ${side} on ${market.ticker} at $${displayPrice.toFixed(2)}`,
+        description: `Opened ${params.positionLeverage}x ${params.positionSide} on ${params.positionTicker} at $${displayPrice.toFixed(2)}`,
       });
 
       await Promise.all([
@@ -253,20 +233,19 @@ export default function PerpsDetailClient() {
   const hasSufficientBalance = !authenticated || balance >= totalRequired;
   const showBalanceWarning =
     authenticated && sizeNum > 0 && !hasSufficientBalance;
-  // TODO: Re-enable when price history chart is implemented
   // Update price history when live price changes
-  // useEffect(() => {
-  //   if (!livePrice) return;
-  //   setPriceHistory((prev) => {
-  //     const last = prev[prev.length - 1];
-  //     if (last && Math.abs(last.price - livePrice.price) < 1e-6) {
-  //       return prev;
-  //     }
-  //     const next = [...prev, { time: Date.now(), price: livePrice.price }];
-  //     const maxPoints = 200;
-  //     return next.slice(Math.max(0, next.length - maxPoints));
-  //   });
-  // }, [livePrice]);
+  useEffect(() => {
+    if (!livePrice) return;
+    setPriceHistory((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && Math.abs(last.price - livePrice.price) < 1e-6) {
+        return prev;
+      }
+      const next = [...prev, { time: Date.now(), price: livePrice.price }];
+      const maxPoints = 200;
+      return next.slice(Math.max(0, next.length - maxPoints));
+    });
+  }, [livePrice]);
 
   const liquidationPrice =
     side === 'long'
@@ -386,10 +365,11 @@ export default function PerpsDetailClient() {
         <div className="lg:col-span-2">
           <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
             <h2 className="mb-4 font-bold text-lg">Price Chart</h2>
-            {/* TODO: PerpPriceChart component needs to be created */}
-            <div className="flex h-64 items-center justify-center text-muted-foreground">
-              Chart coming soon
-            </div>
+            <PerpPriceChart
+              data={priceHistory}
+              currentPrice={displayPrice}
+              ticker={ticker}
+            />
           </div>
 
           {/* Funding Rate Info */}
@@ -652,28 +632,29 @@ export default function PerpsDetailClient() {
         </div>
       </div>
 
-      {/* TODO: TradeConfirmationDialog component needs to be created */}
-      {confirmDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="rounded-lg bg-card p-6">
-            <p className="mb-4">Confirm trade?</p>
-            <div className="flex gap-2">
-              <button
-                onClick={handleConfirmOpen}
-                className="rounded bg-primary px-4 py-2 text-primary-foreground"
-              >
-                Confirm
-              </button>
-              <button
-                onClick={() => setConfirmDialogOpen(false)}
-                className="rounded bg-muted px-4 py-2"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirmation Dialog */}
+      <TradeConfirmationDialog
+        open={confirmDialogOpen}
+        onOpenChange={setConfirmDialogOpen}
+        onConfirm={handleConfirmOpen}
+        isSubmitting={submitting}
+        tradeDetails={
+          market
+            ? ({
+                type: 'open-perp',
+                ticker: market.ticker,
+                side,
+                size: sizeNum,
+                leverage,
+                entryPrice: displayPrice,
+                margin: baseMargin,
+                estimatedFee,
+                liquidationPrice,
+                liquidationDistance,
+              } as OpenPerpDetails)
+            : null
+        }
+      />
     </PageContainer>
   );
 }

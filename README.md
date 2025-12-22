@@ -237,7 +237,7 @@ vercel deploy --prod
 **Required Environment Variables:**
 
 - `CQL_BLOCK_PRODUCER_ENDPOINT` - CovenantQL endpoint
-- `NEXT_PUBLIC_PRIVY_APP_ID` - Authentication
+- `JEJU_OAUTH3_SERVICE_URL` - OAuth3 authentication service
 - `OPENAI_API_KEY` or `GROQ_API_KEY` - AI agents
 
 See `.env.example` for complete list.
@@ -295,38 +295,24 @@ Babylon is configured as a **Farcaster Mini App** with automatic authentication.
 
 ### Prerequisites
 
-- Privy account with Farcaster enabled
+- Jeju OAuth3 service configured
 - Production deployment at `https://babylon.market`
 
 ### Configuration Steps
 
-#### 1. Configure Privy Dashboard (10 min)
+#### 1. Configure OAuth3 Authentication
 
-Visit https://dashboard.privy.io/ and configure:
-
-**Enable Farcaster:**
-- Navigate to: **User management → Authentication → Socials**
-- Enable **Farcaster**
-
-**⚠️ CRITICAL: Add Allowed Domains:**
-- Navigate to: **Configuration → App settings → Domains**
-- Add these domains:
-  - ✅ `https://babylon.market` (your production domain)
-  - ⚠️ **`https://farcaster.xyz`** ← **REQUIRED for Mini Apps!**
-  - ✅ `http://localhost:3000` (for development)
-
-> **Why `https://farcaster.xyz`?** Required for iframe-in-iframe support that Farcaster Mini Apps use.
-
-**Set Callback URL:**
-- Add: `https://babylon.market/api/auth/farcaster/callback`
+Configure your Jeju OAuth3 service with:
+- **Allowed origins**: `https://babylon.market`, `http://localhost:3000`
+- **Farcaster callback URL**: `https://babylon.market/api/auth/farcaster/callback`
 
 #### 2. Verify Environment Variables
 
 Ensure these are set in production:
 
 ```bash
-NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id
-PRIVY_APP_SECRET=your_privy_app_secret
+JEJU_OAUTH3_SERVICE_URL=https://auth.jeju.network
+BABYLON_OAUTH3_APP_ID=babylon
 ```
 
 #### 3. Deploy
@@ -349,7 +335,7 @@ Click to launch → Users are automatically logged in! ✨
 ### How It Works
 
 1. **Mini App SDK** detects Farcaster context
-2. **Auto-login** triggers via Privy + `@farcaster/miniapp-sdk`
+2. **Auto-login** triggers via OAuth3 + `@farcaster/miniapp-sdk`
 3. User approves once
 4. **Instant authentication** - no forms or passwords!
 
@@ -372,5 +358,5 @@ function MyComponent() {
 ### Key Resources
 
 - **Farcaster Mini Apps**: https://miniapps.farcaster.xyz/
-- **Privy Recipe**: https://docs.privy.io/recipes/farcaster/mini-apps
+- **Jeju OAuth3 Docs**: https://docs.jeju.network/oauth3
 - **Mini Apps SDK**: https://github.com/farcaster/miniapp-sdk

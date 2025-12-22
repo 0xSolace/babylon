@@ -50,7 +50,6 @@ interface ApiPost {
   shareCount?: number;
   isLiked?: boolean;
   isShared?: boolean;
-  // Repost metadata
   isRepost?: boolean;
   isQuote?: boolean;
   quoteComment?: string | null;
@@ -69,15 +68,13 @@ interface ApiPost {
 export default function ProfileDetailClient() {
   const params = useParams();
   const router = useRouter();
-  // Catch-all route: params.id is string[] or undefined
-  const idParam = params.id;
-  const rawId = Array.isArray(idParam) ? idParam[0] : idParam;
+  // Dynamic route: params.id is string
+  const rawId = params.id as string | undefined;
   const identifier = rawId ? decodeURIComponent(rawId) : '';
   const isUsernameParam = identifier ? isUsername(identifier) : false;
   const actorId = isUsernameParam ? extractUsername(identifier) : identifier;
   const { user, authenticated, getAccessToken } = useAuth();
 
-  // Redirect to home if no profile ID provided
   useEffect(() => {
     if (!identifier) {
       router.replace('/');
@@ -91,7 +88,6 @@ export default function ProfileDetailClient() {
     number | null
   >(null);
 
-  // Check if viewing own profile - compare with both actorId and identifier (for ID-based URLs)
   const isOwnProfile =
     authenticated &&
     user &&
@@ -105,8 +101,6 @@ export default function ProfileDetailClient() {
         !user.username.startsWith('@') &&
         user.username === actorId));
 
-  // Use useLayoutEffect to redirect BEFORE paint to prevent flash of old username
-  // This runs synchronously before the browser paints, preventing any visual flash
   useLayoutEffect(() => {
     if (authenticated && user?.username && !isUsernameParam) {
       const decodedIdentifier = decodeURIComponent(identifier);
@@ -116,18 +110,15 @@ export default function ProfileDetailClient() {
         user.id === identifier;
 
       if (viewingOwnId && user.username) {
-        // Additional null check to prevent redirecting to /profile/undefined
         const cleanUsername = user.username.startsWith('@')
           ? user.username.slice(1)
           : user.username;
-        // Only redirect if cleanUsername is valid and the current URL doesn't already match
         if (
           cleanUsername &&
           identifier !== cleanUsername &&
           decodedIdentifier !== cleanUsername &&
           actorId !== cleanUsername
         ) {
-          // Use router.replace for client-side navigation (preserves React state)
           router.replace(`/profile/${cleanUsername}`);
         }
       }
@@ -142,13 +133,11 @@ export default function ProfileDetailClient() {
     router,
   ]);
 
-  // Enable error toast notifications
   useErrorToasts();
 
   const [isCreatingDM, setIsCreatingDM] = useState(false);
   const [sendPointsModalOpen, setSendPointsModalOpen] = useState(false);
 
-  // Query for actor/profile info
   const {
     data: actorInfo,
     isLoading: loading,
@@ -164,8 +153,6 @@ export default function ProfileDetailClient() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      // First, always try to load as a user by ID
-      // This handles IDs like "testuser-53618432" or Privy IDs
       const userResponse = await fetch(
         `/api/users/${encodeURIComponent(actorId)}/profile`,
         { headers }
@@ -191,7 +178,6 @@ export default function ProfileDetailClient() {
             stats: fetchedUser.stats,
           };
 
-          // Redirect to username-based URL if username exists and we're not already on it
           if (fetchedUser.username && !isUsernameParam && !isOwnProfile) {
             const cleanUsername = fetchedUser.username.startsWith('@')
               ? fetchedUser.username.slice(1)
@@ -203,10 +189,9 @@ export default function ProfileDetailClient() {
         }
       }
 
-      // If it's a username (starts with @) or looks like a username, try username lookup
       if (
         isUsernameParam ||
-        (!actorId.startsWith('did:privy:') &&
+        (!actorId.startsWith('did:') &&
           actorId.length <= 42 &&
           !actorId.includes('-'))
       ) {
@@ -235,7 +220,6 @@ export default function ProfileDetailClient() {
               stats: fetchedUser.stats,
             };
 
-            // Redirect to username-based URL if we're on ID-based URL
             if (!isUsernameParam && fetchedUser.username && !isOwnProfile) {
               const cleanUsername = fetchedUser.username.startsWith('@')
                 ? fetchedUser.username.slice(1)
@@ -248,7 +232,6 @@ export default function ProfileDetailClient() {
         }
       }
 
-      // Try to load from API endpoint (uses optimized server-side loader)
       const response = await fetch('/api/actors');
       if (!response.ok) throw new Error('Failed to load actors');
 
@@ -257,13 +240,11 @@ export default function ProfileDetailClient() {
         organizations?: Organization[];
       };
 
-      // Find actor
       let actor = actorsDb.actors?.find((a) => a.id === actorId);
       if (!actor) {
         actor = actorsDb.actors?.find((a) => a.name === actorId);
       }
       if (actor) {
-        // Find which game this actor belongs to
         let gameId: string | null = null;
         for (const game of allGames) {
           const allActors = [
@@ -277,7 +258,6 @@ export default function ProfileDetailClient() {
           }
         }
 
-        // Fetch actor stats from database
         let stats = { followers: 0, following: 0, posts: 0 };
         const statsResponse = await fetch(
           `/api/actors/${encodeURIComponent(actor.id)}/stats`
@@ -316,13 +296,11 @@ export default function ProfileDetailClient() {
         };
       }
 
-      // Find organization
       let org = actorsDb.organizations?.find((o) => o.id === actorId);
       if (!org) {
         org = actorsDb.organizations?.find((o) => o.name === actorId);
       }
       if (org) {
-        // Fetch organization stats from database (orgs are also stored as actors)
         let stats = { followers: 0, following: 0, posts: 0 };
         const statsResponse = await fetch(
           `/api/actors/${encodeURIComponent(org.id)}/stats`
@@ -353,13 +331,11 @@ export default function ProfileDetailClient() {
         };
       }
 
-      // Not found
       return null;
     },
     enabled: !!actorId,
   });
 
-  // Query for posts
   const { data: apiPosts = [] as ApiPost[], isLoading: loadingPosts } =
     useQuery<ApiPost[]>({
       queryKey: ['profilePosts', actorInfo?.id ?? actorId],
@@ -379,33 +355,25 @@ export default function ProfileDetailClient() {
       enabled: !!actorInfo?.id,
     });
 
-  // Handle creating DM with user
   const handleMessageClick = async () => {
     if (!authenticated || !actorInfo?.id || isCreatingDM || !user?.id) return;
 
     setIsCreatingDM(true);
 
-    // Generate deterministic chat ID (same format as backend)
-    // Sort IDs to ensure consistency
     const sortedIds = [user.id, actorInfo.id].sort();
     const chatId = `dm-${sortedIds.join('-')}`;
 
-    // Navigate directly to chat page
-    // Chat will be created in DB when first message is sent
     router.push(`/chats?chat=${chatId}&newDM=${actorInfo.id}`);
 
     setIsCreatingDM(false);
   };
 
-  // Listen for profile updates (when user follows/unfollows someone)
   useEffect(() => {
     const handleProfileUpdate = () => {
-      // Reset optimistic count to trigger refetch from server
       setTimeout(() => {
         setOptimisticFollowerCount(null);
-        // Refetch actor info to get updated counts
         loadActorInfo();
-      }, 1000); // Small delay to allow backend cache invalidation
+      }, 1000);
     };
 
     window.addEventListener('profile-updated', handleProfileUpdate);
@@ -413,10 +381,8 @@ export default function ProfileDetailClient() {
       window.removeEventListener('profile-updated', handleProfileUpdate);
   }, [loadActorInfo]);
 
-  // Reset optimistic count when actorInfo changes (server data arrived)
   useEffect(() => {
     if (actorInfo && optimisticFollowerCount !== null) {
-      // Wait a bit then reset to use server value
       const timer = setTimeout(() => {
         setOptimisticFollowerCount(null);
       }, 2000);
@@ -425,7 +391,6 @@ export default function ProfileDetailClient() {
     return undefined;
   }, [actorInfo, optimisticFollowerCount]);
 
-  // Get posts for this actor from all games
   const gameStorePosts = useMemo(() => {
     const posts: Array<{
       post: FeedPost;
@@ -450,11 +415,9 @@ export default function ProfileDetailClient() {
       });
     });
 
-    // Sort by timestamp (newest first)
     return posts.sort((a, b) => b.timestampMs - a.timestampMs);
   }, [allGames, actorId]);
 
-  // Combine API posts and game store posts, removing duplicates
   const actorPosts = useMemo(() => {
     const combined: Array<{
       post: FeedPost;
@@ -463,7 +426,6 @@ export default function ProfileDetailClient() {
       timestampMs: number;
     }> = [];
 
-    // Add API posts first
     apiPosts.forEach((apiPost) => {
       combined.push({
         post: {
@@ -476,16 +438,15 @@ export default function ProfileDetailClient() {
           authorProfileImageUrl:
             apiPost.authorProfileImageUrl || actorInfo?.profileImageUrl || null,
           timestamp: apiPost.timestamp,
-          type: POST_TYPES.POST, // User-generated posts
-          sentiment: 0, // Neutral sentiment for user posts
-          clueStrength: 0, // User posts don't have clue strength
-          pointsToward: null, // User posts don't hint at yes/no
+          type: POST_TYPES.POST,
+          sentiment: 0,
+          clueStrength: 0,
+          pointsToward: null,
           likeCount: apiPost.likeCount,
           commentCount: apiPost.commentCount,
           shareCount: apiPost.shareCount,
           isLiked: apiPost.isLiked,
           isShared: apiPost.isShared,
-          // Repost metadata (pass through from API)
           isRepost: apiPost.isRepost,
           isQuote: apiPost.isQuote,
           quoteComment: apiPost.quoteComment,
@@ -498,7 +459,6 @@ export default function ProfileDetailClient() {
       });
     });
 
-    // Add game store posts that aren't already in API posts
     const apiPostIds = new Set(apiPosts.map((p) => p.id));
     gameStorePosts.forEach((gamePost) => {
       if (!apiPostIds.has(gamePost.post.id)) {
@@ -515,11 +475,9 @@ export default function ProfileDetailClient() {
       }
     });
 
-    // Sort by timestamp (newest first)
     return combined.sort((a, b) => b.timestampMs - a.timestampMs);
   }, [apiPosts, gameStorePosts, actorInfo]);
 
-  // Separate posts and replies
   const originalPosts = useMemo(() => {
     return actorPosts.filter((item) => !item.post.replyTo);
   }, [actorPosts]);
@@ -528,12 +486,10 @@ export default function ProfileDetailClient() {
     return actorPosts.filter((item) => item.post.replyTo);
   }, [actorPosts]);
 
-  // Filter by tab
   const tabFilteredPosts = useMemo(() => {
     return tab === 'posts' ? originalPosts : replyPosts;
   }, [tab, originalPosts, replyPosts]);
 
-  // Filter by search query
   const filteredPosts = useMemo(() => {
     if (!searchQuery.trim()) return tabFilteredPosts;
 
@@ -543,14 +499,11 @@ export default function ProfileDetailClient() {
     );
   }, [tabFilteredPosts, searchQuery]);
 
-  // Don't render with missing identifier - redirect will happen via useEffect
   if (!identifier) {
     return null;
   }
 
-  // Loading or actor not found
   if (loading) {
-    // If we're redirecting, don't show loading state
     if (isOwnProfile && user?.username && !isUsernameParam) {
       return null;
     }
@@ -600,9 +553,7 @@ export default function ProfileDetailClient() {
     <PageContainer noPadding className="flex flex-col">
       {/* Desktop: Content + Widget layout */}
       <div className="hidden flex-1 overflow-hidden xl:flex">
-        {/* Main content */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* Header */}
           <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm">
             <div className="flex items-center gap-4 px-4 py-3">
               <Link
@@ -620,14 +571,10 @@ export default function ProfileDetailClient() {
             </div>
           </div>
 
-          {/* Content area */}
           <div className="flex-1 overflow-y-auto">
-            {/* Profile Header */}
             <div className="border-border border-b">
-              {/* Cover Image */}
               <div className="relative h-[200px] bg-muted">
                 {(() => {
-                  // Get banner URL using the utility function (supports CDN)
                   const bannerUrl =
                     actorInfo.isUser &&
                     actorInfo.type === 'user' &&
@@ -647,7 +594,6 @@ export default function ProfileDetailClient() {
                       alt={`${actorInfo.name} banner`}
                       className="h-full w-full object-cover"
                       onError={(e) => {
-                        // Fallback to gradient if image not found
                         e.currentTarget.style.display = 'none';
                         e.currentTarget.nextElementSibling?.classList.remove(
                           'hidden'
@@ -667,11 +613,8 @@ export default function ProfileDetailClient() {
                 />
               </div>
 
-              {/* Profile Info Container */}
               <div className="px-4 pb-4">
-                {/* Top Row: Avatar + Action Buttons */}
                 <div className="mb-4 flex items-start justify-between">
-                  {/* Profile Picture - Overlapping cover */}
                   <div className="relative -mt-16 sm:-mt-20">
                     <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-background bg-background sm:h-36 sm:w-36">
                       <Avatar
@@ -693,11 +636,9 @@ export default function ProfileDetailClient() {
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
                   <div className="flex items-center gap-2 pt-3">
                     {authenticated && user && user.id !== actorInfo.id && (
                       <>
-                        {/* Message button - only for regular users, not actors/NPCs/agents */}
                         {actorInfo.isUser && actorInfo.type === 'user' && (
                           <button
                             onClick={handleMessageClick}
@@ -708,7 +649,6 @@ export default function ProfileDetailClient() {
                             <MessageCircle className="h-5 w-5" />
                           </button>
                         )}
-                        {/* Send points button - available for ALL users including agents and actors */}
                         <button
                           onClick={() => setSendPointsModalOpen(true)}
                           className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50"
@@ -721,17 +661,15 @@ export default function ProfileDetailClient() {
                           size="md"
                           variant="button"
                           onFollowerCountChange={(delta) => {
-                            // Optimistically update the follower count based on current displayed value
                             setOptimisticFollowerCount((prev) => {
                               const currentCount =
                                 prev !== null
                                   ? prev
                                   : actorInfo.stats?.followers || 0;
-                              return Math.max(0, currentCount + delta); // Never go negative
+                              return Math.max(0, currentCount + delta);
                             });
                           }}
                         />
-                        {/* Report button - only for users, not own profile */}
                         {actorInfo.isUser && actorInfo.type === 'user' && (
                           <ModerationMenu
                             targetUserId={actorInfo.id}
@@ -741,7 +679,6 @@ export default function ProfileDetailClient() {
                               actorInfo.profileImageUrl ?? undefined
                             }
                             onActionComplete={() => {
-                              // Refresh profile data after report
                               loadActorInfo();
                             }}
                           />
@@ -759,7 +696,6 @@ export default function ProfileDetailClient() {
                   </div>
                 </div>
 
-                {/* Name and Handle */}
                 <div className="mb-3">
                   <div className="mb-0.5 flex items-center gap-1">
                     <h2 className="font-bold text-xl">
@@ -783,14 +719,12 @@ export default function ProfileDetailClient() {
                   )}
                 </div>
 
-                {/* Description/Bio */}
                 {(actorInfo.profileDescription || actorInfo.description) && (
                   <p className="mb-3 whitespace-pre-wrap text-[15px] text-foreground">
                     {actorInfo.profileDescription || actorInfo.description}
                   </p>
                 )}
 
-                {/* Stats */}
                 <div className="flex gap-4 text-[15px]">
                   <Link href="#" className="hover:underline">
                     <span className="font-bold text-foreground">
@@ -814,10 +748,8 @@ export default function ProfileDetailClient() {
               </div>
             </div>
 
-            {/* Tabs: Posts vs Replies vs Trades */}
             <div className="sticky top-0 z-10 border-border border-b bg-background/95 backdrop-blur-sm">
               <div className="flex h-14 items-center justify-between px-4">
-                {/* Tab Buttons */}
                 <div className="flex flex-1 items-center">
                   <button
                     onClick={() => setTab('posts')}
@@ -854,7 +786,6 @@ export default function ProfileDetailClient() {
                   </button>
                 </div>
 
-                {/* Search Bar - Top Right (hide on trades tab) */}
                 {tab !== 'trades' && (
                   <div className="relative w-64">
                     <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -870,7 +801,6 @@ export default function ProfileDetailClient() {
               </div>
             </div>
 
-            {/* Posts/Replies/Trades */}
             <div className="px-4">
               {tab === 'trades' ? (
                 <TradesFeed userId={actorInfo.id} />
@@ -909,7 +839,6 @@ export default function ProfileDetailClient() {
                       shareCount: item.post.shareCount,
                       isLiked: item.post.isLiked,
                       isShared: item.post.isShared,
-                      // Repost metadata
                       isRepost: item.post.isRepost || false,
                       isQuote: item.post.isQuote || false,
                       quoteComment: item.post.quoteComment || null,
@@ -917,8 +846,7 @@ export default function ProfileDetailClient() {
                       originalPost: item.post.originalPost || null,
                     };
 
-                    return postData.type === 'article' ||
-                      postData.articleTitle ? (
+                    return postData.type && postData.type === 'article' ? (
                       <ArticleCard
                         key={`${item.post.id}-${i}`}
                         post={postData}
@@ -937,7 +865,6 @@ export default function ProfileDetailClient() {
           </div>
         </div>
 
-        {/* Widget Sidebar - Show for all user profiles */}
         {actorInfo && actorInfo.isUser && (
           <div className="hidden w-96 flex-shrink-0 flex-col overflow-y-auto bg-sidebar p-4 xl:flex">
             <ProfileWidget userId={actorInfo.id} />
@@ -947,7 +874,6 @@ export default function ProfileDetailClient() {
 
       {/* Mobile/Tablet: Full width content */}
       <div className="flex flex-1 flex-col overflow-hidden xl:hidden">
-        {/* Header */}
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm">
           <div className="flex items-center gap-4 px-4 py-3">
             <Link
@@ -965,14 +891,10 @@ export default function ProfileDetailClient() {
           </div>
         </div>
 
-        {/* Content area */}
         <div className="flex-1 overflow-y-auto">
-          {/* Profile Header */}
           <div className="border-border border-b">
-            {/* Cover Image */}
             <div className="relative h-[200px] bg-muted">
               {(() => {
-                // Get banner URL using the utility function (supports CDN)
                 const bannerUrl =
                   actorInfo.isUser &&
                   actorInfo.type === 'user' &&
@@ -992,7 +914,6 @@ export default function ProfileDetailClient() {
                     alt={`${actorInfo.name} banner`}
                     className="h-full w-full object-cover"
                     onError={(e) => {
-                      // Fallback to gradient if image not found
                       e.currentTarget.style.display = 'none';
                       e.currentTarget.nextElementSibling?.classList.remove(
                         'hidden'
@@ -1012,11 +933,8 @@ export default function ProfileDetailClient() {
               />
             </div>
 
-            {/* Profile Info Container */}
             <div className="px-4 pb-4">
-              {/* Top Row: Avatar + Action Buttons */}
               <div className="mb-4 flex items-start justify-between">
-                {/* Profile Picture - Overlapping cover */}
                 <div className="relative -mt-16 sm:-mt-20">
                   <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-background bg-background sm:h-36 sm:w-36">
                     <Avatar
@@ -1038,11 +956,9 @@ export default function ProfileDetailClient() {
                   </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex items-center gap-2 pt-3">
                   {authenticated && user && user.id !== actorInfo.id && (
                     <>
-                      {/* Message button - only for regular users, not actors/NPCs/agents */}
                       {actorInfo.isUser && actorInfo.type === 'user' && (
                         <button
                           onClick={handleMessageClick}
@@ -1053,7 +969,6 @@ export default function ProfileDetailClient() {
                           <MessageCircle className="h-5 w-5" />
                         </button>
                       )}
-                      {/* Send points button - available for ALL users including agents and actors */}
                       <button
                         onClick={() => setSendPointsModalOpen(true)}
                         className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50"
@@ -1066,13 +981,12 @@ export default function ProfileDetailClient() {
                         size="md"
                         variant="button"
                         onFollowerCountChange={(delta) => {
-                          // Optimistically update the follower count based on current displayed value
                           setOptimisticFollowerCount((prev) => {
                             const currentCount =
                               prev !== null
                                 ? prev
                                 : actorInfo.stats?.followers || 0;
-                            return Math.max(0, currentCount + delta); // Never go negative
+                            return Math.max(0, currentCount + delta);
                           });
                         }}
                       />
@@ -1089,7 +1003,6 @@ export default function ProfileDetailClient() {
                 </div>
               </div>
 
-              {/* Name and Handle */}
               <div className="mb-3">
                 <div className="mb-0.5 flex items-center gap-1">
                   <h2 className="font-bold text-xl">
@@ -1106,14 +1019,12 @@ export default function ProfileDetailClient() {
                 )}
               </div>
 
-              {/* Description/Bio */}
               {(actorInfo.profileDescription || actorInfo.description) && (
                 <p className="mb-3 whitespace-pre-wrap text-[15px] text-foreground">
                   {actorInfo.profileDescription || actorInfo.description}
                 </p>
               )}
 
-              {/* Stats */}
               <div className="flex gap-4 text-[15px]">
                 <Link href="#" className="hover:underline">
                   <span className="font-bold text-foreground">
@@ -1133,10 +1044,8 @@ export default function ProfileDetailClient() {
             </div>
           </div>
 
-          {/* Tabs: Posts vs Replies */}
           <div className="sticky top-0 z-10 border-border border-b bg-background/95 backdrop-blur-sm">
             <div className="flex flex-col px-4 sm:flex-row sm:items-center sm:justify-between">
-              {/* Tab Buttons */}
               <div className="flex flex-1 items-center">
                 <button
                   onClick={() => setTab('posts')}
@@ -1162,7 +1071,6 @@ export default function ProfileDetailClient() {
                 </button>
               </div>
 
-              {/* Search Bar - Top Right (hidden on small screens) */}
               <div className="relative w-full py-2 sm:w-64 sm:py-0">
                 <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -1176,7 +1084,6 @@ export default function ProfileDetailClient() {
             </div>
           </div>
 
-          {/* Posts */}
           <div className="px-4">
             {loadingPosts ? (
               <div className="w-full">
@@ -1213,7 +1120,6 @@ export default function ProfileDetailClient() {
                     shareCount: item.post.shareCount,
                     isLiked: item.post.isLiked,
                     isShared: item.post.isShared,
-                    // Repost metadata
                     isRepost: item.post.isRepost || false,
                     isQuote: item.post.isQuote || false,
                     quoteComment: item.post.quoteComment || null,
@@ -1237,7 +1143,6 @@ export default function ProfileDetailClient() {
         </div>
       </div>
 
-      {/* Send Points Modal - Available for all users, agents, and actors */}
       {actorInfo && (
         <SendPointsModal
           isOpen={sendPointsModalOpen}
@@ -1246,7 +1151,6 @@ export default function ProfileDetailClient() {
           recipientName={actorInfo.name ?? actorInfo.username ?? ''}
           recipientUsername={actorInfo.username}
           onSuccess={() => {
-            // Refresh profile data after successful transfer
             loadActorInfo();
           }}
         />

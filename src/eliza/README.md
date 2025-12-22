@@ -26,7 +26,7 @@ bun run eliza:auto
 To enable actual trading, provide an auth token:
 
 ```bash
-bun run eliza --auth-token "your-privy-token" --auto-trade
+bun run eliza --auth-token "your-oauth3-token" --auto-trade
 ```
 
 ## Project Structure
@@ -315,7 +315,7 @@ bun install
 
 1. **Test Your Agent**: Run Alice and observe trading behavior
 2. **Create Custom Character**: Build your own trading personality
-3. **Enable Authentication**: Get Privy token for real trading
+3. **Enable Authentication**: Get OAuth3 token for real trading
 4. **Monitor Performance**: Track P&L and win rates
 5. **Adjust Strategies**: Tune risk tolerance and confidence thresholds
 

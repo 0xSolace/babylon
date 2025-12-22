@@ -74,10 +74,9 @@ jobs:
         env:
           CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
           CQL_DATABASE_ID: test_babylon
-          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
-          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
-          PRIVY_TEST_EMAIL: ${{ secrets.PRIVY_TEST_EMAIL }}
+          JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL }}
+          BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID }}
+          OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}

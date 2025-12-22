@@ -29,9 +29,9 @@ graph TB
  K[Diamond Proxy]
  end
  
- subgraph "External Services"
- L[Privy Auth]
- M[OpenAI/Groq]
+subgraph "External Services"
+L[OAuth3 Auth]
+M[OpenAI/Groq]
  N[Agent0 Registry]
  end
  
@@ -103,7 +103,7 @@ graph TB
 - Validation with Zod
 
 **Security Layers**:
-1. Authentication (Privy JWT)
+1. Authentication (OAuth3 JWT)
 2. Authorization (admin/user/agent)
 3. Row-Level Security (database)
 4. Rate limiting
@@ -297,7 +297,7 @@ sequenceDiagram
  - Input validation 
 
 
- Layer 3: Authentication (Privy) 
+ Layer 3: Authentication (OAuth3) 
  - JWT verification 
  - Wallet signatures 
  - Session management 
@@ -383,7 +383,7 @@ graph LR
 | State | Zustand | Global state |
 | Data Fetching | React Query | Server state |
 | Forms | React Hook Form | Form management |
-| Auth | Privy | Authentication |
+| Auth | OAuth3 | Authentication |
 | Blockchain | Wagmi/Viem | Web3 interactions |
 
 ### Backend Stack
@@ -395,7 +395,7 @@ graph LR
 | Database | PostgreSQL | Primary data store |
 | ORM | Drizzle | Database access |
 | Cache | Redis (Upstash) | Caching layer |
-| Auth | Privy Server SDK | Token verification |
+| Auth | Jeju OAuth3 SDK | Token verification |
 | AI | OpenAI/Groq | Content generation |
 | Blockchain | Ethers.js | Smart contracts |
 

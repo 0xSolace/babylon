@@ -105,9 +105,8 @@ export default function AgentDetailClient() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { authenticated, ready, getAccessToken } = useAuth();
-  // Catch-all route: params.agentId is string[] or undefined
-  const agentIdParam = params.agentId;
-  const agentId = Array.isArray(agentIdParam) ? agentIdParam[0] : agentIdParam;
+  // Dynamic route: params.agentId is string
+  const agentId = params.agentId as string | undefined;
 
   // Redirect to agents list if no agent ID provided
   useEffect(() => {

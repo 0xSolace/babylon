@@ -1,12 +1,28 @@
 /**
  * TradeConfirmationDialog - Confirmation dialog for prediction market trades
  *
- * TODO: Implement trade confirmation UI
+ * Displays trade details and confirmation UI for:
+ * - Perpetual position opening/closing
+ * - Prediction market buy/sell operations
  */
 
 'use client';
 
 import type { ReactNode } from 'react';
+
+/** Details for opening a perpetual position */
+export interface OpenPerpDetails {
+  type: 'open-perp';
+  ticker: string;
+  side: 'long' | 'short';
+  size: number;
+  leverage: number;
+  entryPrice: number;
+  margin: number;
+  estimatedFee: number;
+  liquidationPrice: number;
+  liquidationDistance: number;
+}
 
 /** Details for closing a perpetual position */
 export interface ClosePerpDetails {
@@ -34,7 +50,26 @@ export interface SellPredictionDetails {
   unrealizedPnLPercent: number;
 }
 
-export type TradeDetails = ClosePerpDetails | SellPredictionDetails | null;
+/** Details for buying a prediction position */
+export interface BuyPredictionDetails {
+  type: 'buy-prediction';
+  question: string;
+  side: 'YES' | 'NO';
+  amount: number;
+  sharesBought: number;
+  avgPrice: number;
+  newPrice: number;
+  priceImpact: number;
+  expectedPayout: number;
+  expectedProfit: number;
+}
+
+export type TradeDetails =
+  | OpenPerpDetails
+  | ClosePerpDetails
+  | BuyPredictionDetails
+  | SellPredictionDetails
+  | null;
 
 export interface TradeConfirmationDialogProps {
   open: boolean;
@@ -66,6 +101,38 @@ export function TradeConfirmationDialog({
 
   // Render trade details based on type
   const renderDetails = () => {
+    if (tradeDetails?.type === 'open-perp') {
+      return (
+        <div className="space-y-2 text-sm">
+          <p>
+            <span className="text-muted-foreground">Position:</span>{' '}
+            {tradeDetails.ticker} {tradeDetails.side.toUpperCase()}
+          </p>
+          <p>
+            <span className="text-muted-foreground">Size:</span> $
+            {tradeDetails.size.toFixed(2)} @ {tradeDetails.leverage}x
+          </p>
+          <p>
+            <span className="text-muted-foreground">Entry Price:</span> $
+            {tradeDetails.entryPrice.toFixed(2)}
+          </p>
+          <p>
+            <span className="text-muted-foreground">Margin:</span> $
+            {tradeDetails.margin.toFixed(2)}
+          </p>
+          <p>
+            <span className="text-muted-foreground">Est. Fee:</span> $
+            {tradeDetails.estimatedFee.toFixed(2)}
+          </p>
+          <p className="text-red-500">
+            <span className="text-muted-foreground">Liquidation:</span> $
+            {tradeDetails.liquidationPrice.toFixed(2)} (
+            {tradeDetails.liquidationDistance.toFixed(2)}% away)
+          </p>
+        </div>
+      );
+    }
+
     if (tradeDetails?.type === 'close-perp') {
       return (
         <div className="space-y-2 text-sm">
@@ -95,6 +162,49 @@ export function TradeConfirmationDialog({
             <span className="text-muted-foreground">PnL:</span> $
             {tradeDetails.unrealizedPnL.toFixed(2)} (
             {tradeDetails.unrealizedPnLPercent.toFixed(2)}%)
+          </p>
+        </div>
+      );
+    }
+
+    if (tradeDetails?.type === 'buy-prediction') {
+      return (
+        <div className="space-y-2 text-sm">
+          <p className="line-clamp-2">
+            <span className="text-muted-foreground">Question:</span>{' '}
+            {tradeDetails.question}
+          </p>
+          <p>
+            <span className="text-muted-foreground">Side:</span>{' '}
+            {tradeDetails.side}
+          </p>
+          <p>
+            <span className="text-muted-foreground">Amount:</span> $
+            {tradeDetails.amount.toFixed(2)}
+          </p>
+          <p>
+            <span className="text-muted-foreground">Shares:</span>{' '}
+            {tradeDetails.sharesBought.toFixed(2)} @ $
+            {tradeDetails.avgPrice.toFixed(4)}
+          </p>
+          <p>
+            <span className="text-muted-foreground">Price Impact:</span>{' '}
+            <span className="text-orange-500">
+              +{Math.abs(tradeDetails.priceImpact).toFixed(2)}%
+            </span>
+          </p>
+          <p
+            className={
+              tradeDetails.expectedProfit >= 0
+                ? 'text-green-500'
+                : 'text-red-500'
+            }
+          >
+            <span className="text-muted-foreground">
+              If {tradeDetails.side} wins:
+            </span>{' '}
+            ${tradeDetails.expectedPayout.toFixed(2)} (+$
+            {tradeDetails.expectedProfit.toFixed(2)})
           </p>
         </div>
       );
@@ -151,14 +261,18 @@ export function TradeConfirmationDialog({
   };
 
   const getTitle = () => {
+    if (tradeDetails?.type === 'open-perp') return 'Open Position';
     if (tradeDetails?.type === 'close-perp') return 'Close Position';
+    if (tradeDetails?.type === 'buy-prediction') return 'Buy Shares';
     if (tradeDetails?.type === 'sell-prediction') return 'Sell Position';
     return 'Confirm Trade';
   };
 
   const getConfirmText = () => {
     if (isPending) return 'Processing...';
+    if (tradeDetails?.type === 'open-perp') return 'Open Position';
     if (tradeDetails?.type === 'close-perp') return 'Close Position';
+    if (tradeDetails?.type === 'buy-prediction') return 'Buy';
     if (tradeDetails?.type === 'sell-prediction') return 'Sell';
     return 'Confirm';
   };

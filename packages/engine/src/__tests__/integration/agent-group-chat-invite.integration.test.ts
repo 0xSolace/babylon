@@ -24,6 +24,10 @@ import {
 } from 'bun:test';
 
 import { db } from '@babylon/db';
+
+// Check if database is available
+const hasDatabase = !!process.env.DATABASE_URL;
+
 import {
   AlphaGroupInviteService,
   GroupChatService,
@@ -400,7 +404,8 @@ async function cleanupTestData(): Promise<void> {
 
 // ============ TESTS ============
 
-describe('Agent Group Chat Invite Flow', () => {
+// Skip tests if database is not available
+describe.skipIf(!hasDatabase)('Agent Group Chat Invite Flow', () => {
   beforeAll(async () => {
     await cleanupTestData();
   });

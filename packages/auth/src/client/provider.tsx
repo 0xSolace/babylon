@@ -696,7 +696,7 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
 
     // Import paymaster dynamically to avoid circular deps
     const { TreasuryPaymaster } = await import(
-      '../paymaster/treasury-paymaster.js'
+      '../paymaster/treasury-paymaster'
     );
 
     // Transform config to match paymaster's expected type

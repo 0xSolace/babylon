@@ -10,8 +10,12 @@ import { BabylonLLMClient } from '../llm/openai-client';
 import { TokenStatsService } from '../services/token-stats-service';
 
 // Check if Jeju Compute is available for inference
+// AND that LLM API keys are configured (otherwise inference will fail)
 const hasJejuCompute = Boolean(
-  process.env.JEJU_GATEWAY_URL || process.env.JEJU_COMPUTE_ENDPOINT
+  (process.env.JEJU_GATEWAY_URL || process.env.JEJU_COMPUTE_ENDPOINT) &&
+    (process.env.OPENAI_API_KEY ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.GROQ_API_KEY)
 );
 
 describe.skipIf(!hasJejuCompute)(

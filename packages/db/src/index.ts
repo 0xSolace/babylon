@@ -304,12 +304,13 @@ export {
 } from './helpers';
 // Query monitoring (stub for performance route)
 export { queryMonitor } from './query-monitor';
-// User block utilities
+// User block/mute utilities
 export {
   getBlockedByUserIds,
   getBlockedUserIds,
   getMutedUserIds,
   hasBlocked,
+  hasMuted,
 } from './user-utils';
 
 // ============================================================================

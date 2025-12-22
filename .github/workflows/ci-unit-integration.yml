@@ -46,13 +46,12 @@ jobs:
         env:
           CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
           CQL_DATABASE_ID: test_babylon
-          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID || '' }}
-          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET || '' }}
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || '' }}
-          PRIVY_TEST_EMAIL: ${{ secrets.PRIVY_TEST_EMAIL || '' }}
-          PRIVY_TEST_PHONE: ${{ secrets.PRIVY_TEST_PHONE || '' }}
-          PRIVY_TEST_OTP: ${{ secrets.PRIVY_TEST_OTP || '' }}
-          PRIVY_TEST_PASSWORD: ${{ secrets.PRIVY_TEST_PASSWORD || '' }}
+          JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL || '' }}
+          BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID || '' }}
+          OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL || '' }}
+          OAUTH3_TEST_PHONE: ${{ secrets.OAUTH3_TEST_PHONE || '' }}
+          OAUTH3_TEST_OTP: ${{ secrets.OAUTH3_TEST_OTP || '' }}
+          OAUTH3_TEST_PASSWORD: ${{ secrets.OAUTH3_TEST_PASSWORD || '' }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY || '' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || '' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '' }}
@@ -102,11 +101,10 @@ jobs:
           REDIS_URL: redis://localhost:6379
           NEXT_PUBLIC_APP_URL: http://localhost:3000
           PORT: 3000
-          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID || '' }}
-          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET || '' }}
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || '' }}
-          PRIVY_TEST_EMAIL: ${{ secrets.PRIVY_TEST_EMAIL || '' }}
-          PRIVY_TEST_PASSWORD: ${{ secrets.PRIVY_TEST_PASSWORD || '' }}
+          JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL || '' }}
+          BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID || '' }}
+          OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL || '' }}
+          OAUTH3_TEST_PASSWORD: ${{ secrets.OAUTH3_TEST_PASSWORD || '' }}
         run: |
           echo "🚀 Starting Next.js dev server for integration tests..."
           SKIP_ENV_VALIDATION=1 bunx --bun next dev apps/web -p 3000 > /tmp/next-server.log 2>&1 &
@@ -129,11 +127,10 @@ jobs:
           CQL_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           PLAYWRIGHT_BASE_URL: http://localhost:3000
-          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID || '' }}
-          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET || '' }}
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || '' }}
-          PRIVY_TEST_EMAIL: ${{ secrets.PRIVY_TEST_EMAIL || '' }}
-          PRIVY_TEST_PASSWORD: ${{ secrets.PRIVY_TEST_PASSWORD || '' }}
+          JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL || '' }}
+          BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID || '' }}
+          OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL || '' }}
+          OAUTH3_TEST_PASSWORD: ${{ secrets.OAUTH3_TEST_PASSWORD || '' }}
         run: |
           echo "🔐 Setting up Playwright authentication for integration tests..."
           cd packages/testing && bunx playwright test --project=setup || {
@@ -155,11 +152,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || '' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '' }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY || '' }}
-          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID || '' }}
-          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET || '' }}
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || '' }}
-          PRIVY_TEST_EMAIL: ${{ secrets.PRIVY_TEST_EMAIL || '' }}
-          PRIVY_TEST_PASSWORD: ${{ secrets.PRIVY_TEST_PASSWORD || '' }}
+          JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL || '' }}
+          BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID || '' }}
+          OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL || '' }}
+          OAUTH3_TEST_PASSWORD: ${{ secrets.OAUTH3_TEST_PASSWORD || '' }}
           TEST_USER_ID: ${{ secrets.TEST_USER_ID || vars.TEST_USER_ID || '' }}
           TEST_ACCESS_TOKEN: ${{ secrets.TEST_ACCESS_TOKEN || vars.TEST_ACCESS_TOKEN || '' }}
           AGENT0_ENABLED: ${{ secrets.AGENT0_ENABLED || 'false' }}

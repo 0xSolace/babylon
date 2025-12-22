@@ -9,8 +9,8 @@ import type { PageMapItem } from 'nextra';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 
-// import logo_full.svg directly, its next.js
-import logo_full from '@/app/logo_full.svg';
+// Logo is in public folder - use direct path
+const logo_full = '/logo_full.svg';
 
 const footer = <Footer>MIT {new Date().getFullYear()} © Babylon.</Footer>;
 

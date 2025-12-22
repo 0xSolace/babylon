@@ -23,7 +23,10 @@ import { toast } from 'sonner';
 import { AssetTradesFeed } from '@/components/markets/AssetTradesFeed';
 import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList';
 import { PredictionProbabilityChart } from '@/components/markets/PredictionProbabilityChart';
-import { TradeConfirmationDialog } from '@/components/markets/TradeConfirmationDialog';
+import {
+  type BuyPredictionDetails,
+  TradeConfirmationDialog,
+} from '@/components/markets/TradeConfirmationDialog';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -214,7 +217,7 @@ export default function PredictionDetailClient() {
         : undefined,
     [market, effectiveShares]
   );
-  const { history: _priceHistory } = usePredictionHistory(marketId || null, {
+  const { history: priceHistory } = usePredictionHistory(marketId || null, {
     seed: historySeed,
   });
   const amountNum = Number.parseFloat(amount) || 0;
@@ -564,7 +567,11 @@ export default function PredictionDetailClient() {
         <div className="lg:col-span-2">
           <div className="rounded-2xl border border-border bg-card/50 px-4 py-3 backdrop-blur">
             <h2 className="mb-4 font-bold text-lg">Probability Over Time</h2>
-            <PredictionProbabilityChart marketId={marketId} />
+            <PredictionProbabilityChart
+              data={priceHistory}
+              marketId={marketId}
+              showBrush={true}
+            />
           </div>
 
           {/* Market Info */}
@@ -806,17 +813,31 @@ export default function PredictionDetailClient() {
       </div>
 
       {/* Confirmation Dialog */}
-      {market && calculation && (
-        <TradeConfirmationDialog
-          open={confirmDialogOpen}
-          onOpenChange={setConfirmDialogOpen}
-          onConfirm={handleConfirmBuy}
-          side={side.toUpperCase() as 'YES' | 'NO'}
-          shares={calculation.sharesBought}
-          cost={amountNum}
-          loading={submitting}
-        />
-      )}
+      <TradeConfirmationDialog
+        open={confirmDialogOpen}
+        onOpenChange={setConfirmDialogOpen}
+        onConfirm={handleConfirmBuy}
+        isSubmitting={submitting}
+        tradeDetails={
+          market && calculation
+            ? ({
+                type: 'buy-prediction',
+                question: market.text,
+                side: side.toUpperCase() as 'YES' | 'NO',
+                amount: amountNum,
+                sharesBought: calculation.sharesBought,
+                avgPrice: calculation.avgPrice,
+                newPrice:
+                  side === 'yes'
+                    ? calculation.newYesPrice
+                    : calculation.newNoPrice,
+                priceImpact: calculation.priceImpact,
+                expectedPayout,
+                expectedProfit,
+              } as BuyPredictionDetails)
+            : null
+        }
+      />
     </PageContainer>
   );
 }

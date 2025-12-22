@@ -62,6 +62,44 @@ export type JsonRpcParams = StringRecord<JsonValue> | JsonValue[];
 export type JsonRpcResult = JsonValue | StringRecord<JsonValue> | JsonValue[];
 
 /**
+ * JSON-RPC 2.0 Request
+ */
+export interface JsonRpcRequest {
+  jsonrpc: '2.0';
+  method: string;
+  params?: JsonRpcParams;
+  id: string | number;
+}
+
+/**
+ * JSON-RPC 2.0 Error
+ */
+export interface JsonRpcError {
+  code: number;
+  message: string;
+  data?: JsonValue;
+}
+
+/**
+ * JSON-RPC 2.0 Response
+ */
+export interface JsonRpcResponse {
+  jsonrpc: '2.0';
+  result?: JsonRpcResult;
+  error?: JsonRpcError;
+  id: string | number | null;
+}
+
+/**
+ * JSON-RPC 2.0 Notification (request without id)
+ */
+export interface JsonRpcNotification {
+  jsonrpc: '2.0';
+  method: string;
+  params?: JsonRpcParams;
+}
+
+/**
  * API response wrapper
  */
 export interface ApiResponse<T = JsonValue> {

@@ -219,7 +219,7 @@ bunx playwright show-trace test-results/.../trace.zip
 ### Current Limitations
 
 1. **Authentication Mocking**: Tests use simplified auth mocking
-   - Real Privy auth requires more complex setup
+   - Real OAuth3 auth requires more complex setup
    - Consider using test mode or mock provider
 
 2. **Database State**: Some tests marked as `test.skip`

@@ -13,7 +13,17 @@ import { GameGenerator } from '../../GameGenerator';
 
 setDefaultTimeout(600000);
 
-describe('Game Output Validation', () => {
+// Check if Jeju Compute is available for inference AND LLM API keys are configured
+const hasJejuCompute = !!(
+  ((process.env.JEJU_GATEWAY_URL?.trim() ?? '') !== '' ||
+    (process.env.JEJU_COMPUTE_ENDPOINT?.trim() ?? '') !== '') &&
+  (process.env.OPENAI_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.GROQ_API_KEY)
+);
+
+// Skip tests if Jeju compute with API keys is not available
+describe.skipIf(!hasJejuCompute)('Game Output Validation', () => {
   let game: GeneratedGame;
 
   // Generate one game before all tests

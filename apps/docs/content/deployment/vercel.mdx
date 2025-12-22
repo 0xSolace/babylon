@@ -10,7 +10,7 @@ Before deploying, ensure you have:
 - GitHub repository with Babylon code
 - Neon account for PostgreSQL ([neon.tech](https://neon.tech))
 - Upstash account for Redis ([upstash.com](https://upstash.com))
-- Privy account ([privy.io](https://privy.io))
+- Jeju OAuth3 service configured
 
 ## Step 1: Database Setup (Neon)
 
@@ -94,9 +94,9 @@ DIRECT_DATABASE_URL="postgresql://user:pass@host/babylon?sslmode=require"
 UPSTASH_REDIS_REST_URL="https://xxx.upstash.io"
 UPSTASH_REDIS_REST_TOKEN="your_token"
 
-# Privy Authentication
-NEXT_PUBLIC_PRIVY_APP_ID="clp..."
-PRIVY_APP_SECRET="your_secret"
+# OAuth3 Authentication (Jeju)
+JEJU_OAUTH3_SERVICE_URL="https://auth.jeju.network"
+BABYLON_OAUTH3_APP_ID="babylon"
 
 # AI Provider
 OPENAI_API_KEY="sk-..."
@@ -165,13 +165,13 @@ Click **Deploy** and wait for the build to complete (usually 2-3 minutes).
 3. Add DNS records as instructed by Vercel
 4. Wait for DNS propagation (5-60 minutes)
 
-### Update Privy
+### Update OAuth3 Configuration
 
 After domain is configured:
 
-1. Go to [dashboard.privy.io](https://dashboard.privy.io)
-2. Add your production domain to allowed domains
-3. Update callback URLs
+1. Update your Jeju OAuth3 app configuration
+2. Add your production domain to allowed origins
+3. Update callback URLs to match your domain
 
 ## Step 6: Cron Jobs
 

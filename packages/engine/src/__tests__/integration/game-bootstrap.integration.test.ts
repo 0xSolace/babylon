@@ -8,8 +8,12 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { db, eq, games, generateSnowflakeId } from '@babylon/db';
 
+// Check if database is available
+const hasDatabase = !!process.env.DATABASE_URL;
+
 // Test game creation/auto-start logic directly on games table
-describe('Game Auto-Start Logic', () => {
+// Skip tests if database is not available
+describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
   const createdGameIds: string[] = [];
 
   afterEach(async () => {

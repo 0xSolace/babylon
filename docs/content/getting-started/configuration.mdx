@@ -14,9 +14,9 @@ These variables are **required** for the application to run:
 # Database
 DATABASE_URL="postgresql://user:password@localhost:5432/babylon"
 
-# Privy Authentication
-NEXT_PUBLIC_PRIVY_APP_ID="your_privy_app_id"
-PRIVY_APP_SECRET="your_privy_app_secret"
+# OAuth3 Authentication (Jeju)
+JEJU_OAUTH3_SERVICE_URL="http://localhost:4020"
+BABYLON_OAUTH3_APP_ID="babylon"
 
 # AI Provider (choose one or both)
 OPENAI_API_KEY="sk-..."
@@ -25,20 +25,17 @@ GROQ_API_KEY="gsk_..."
 
 ### Authentication Setup
 
-#### Privy Configuration
+#### OAuth3 Configuration (Jeju)
 
-1. Sign up at [privy.io](https://privy.io)
-2. Create a new app
-3. Configure allowed domains:
+1. Configure your Jeju OAuth3 service
+2. Set up allowed origins:
    - Add `http://localhost:3000` for development
    - Add your production domain
-   - **Important**: Add `https://farcaster.xyz` for Farcaster Mini App support
-4. Enable authentication methods:
-   - Email
+3. Supported authentication methods:
    - Wallet (MetaMask, Rabby, etc.)
    - Farcaster (optional)
    - Twitter (optional)
-5. Copy your App ID and App Secret to `.env.local`
+4. Copy your OAuth3 service URL and App ID to `.env.local`
 
 ### Optional Variables
 
@@ -137,8 +134,8 @@ DATABASE_URL="postgresql://babylon_user:password@localhost:5432/babylon"
 # ============================================
 # AUTHENTICATION (Required)
 # ============================================
-NEXT_PUBLIC_PRIVY_APP_ID="clp..."
-PRIVY_APP_SECRET="..."
+JEJU_OAUTH3_SERVICE_URL="http://localhost:4020"
+BABYLON_OAUTH3_APP_ID="babylon"
 
 # ============================================
 # AI PROVIDERS (At least one required)
@@ -242,8 +239,8 @@ When deploying to Vercel, set environment variables in the dashboard:
 
 - **All Environments**:
   - `DATABASE_URL` (different per environment)
-  - `NEXT_PUBLIC_PRIVY_APP_ID`
-  - `PRIVY_APP_SECRET`
+  - `JEJU_OAUTH3_SERVICE_URL`
+  - `BABYLON_OAUTH3_APP_ID`
 
 ## Security Best Practices
 
@@ -305,9 +302,9 @@ DATABASE_URL="postgresql://user:pass@host:5432/babylon?pgbouncer=true"
 DIRECT_DATABASE_URL="postgresql://user:pass@host:5432/babylon"
 ```
 
-### Privy Authentication Fails
+### OAuth3 Authentication Fails
 
-- Verify App ID is correct (starts with `clp`)
+- Verify `JEJU_OAUTH3_SERVICE_URL` is correct
 - Check that domains are whitelisted
 - Ensure callback URLs match exactly
 

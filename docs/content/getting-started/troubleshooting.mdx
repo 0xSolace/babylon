@@ -221,27 +221,26 @@ bun run dev
 
 ## Authentication Issues
 
-### Privy Authentication Fails
+### OAuth3 Authentication Fails
 
 **Error**: `Authentication failed`
 
 **Causes**:
-- Invalid App ID
-- Domain not whitelisted
+- Invalid OAuth3 service URL
+- Origin not whitelisted
 - Callback URL mismatch
 
 **Solutions**:
 
-1. **Check App ID**:
+1. **Check OAuth3 Configuration**:
    ```bash
-   echo $NEXT_PUBLIC_PRIVY_APP_ID
-   # Should start with "clp"
+   echo $JEJU_OAUTH3_SERVICE_URL
+   echo $BABYLON_OAUTH3_APP_ID
    ```
 
-2. **Verify Domains** in Privy Dashboard:
+2. **Verify Allowed Origins**:
    - Add `http://localhost:3000`
    - Add `https://babylon.market`
-   - Add `https://farcaster.xyz` (for mini apps)
 
 3. **Check Callback URLs**:
    - `/api/auth/farcaster/callback`

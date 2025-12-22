@@ -1,22 +1,32 @@
 /**
  * PredictionProbabilityChart - Displays probability history for a prediction market
  *
- * TODO: Implement chart visualization using lightweight-charts or similar
+ * Placeholder component - chart visualization will be implemented using
+ * lightweight-charts or similar charting library when probability history
+ * tracking is added to the prediction market service.
  */
 
 'use client';
 
-interface PredictionProbabilityChartProps {
+import type { PredictionHistoryPoint } from '@/hooks/usePredictionHistory';
+
+export interface PredictionProbabilityChartProps {
   marketId: string | number;
+  data?: PredictionHistoryPoint[];
+  showBrush?: boolean;
   height?: number;
 }
 
 export function PredictionProbabilityChart({
   marketId,
+  data,
+  showBrush,
   height = 200,
 }: PredictionProbabilityChartProps) {
   // Placeholder - implement chart
   void marketId;
+  void data;
+  void showBrush;
 
   return (
     <div

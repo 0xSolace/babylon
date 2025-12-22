@@ -30,8 +30,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { AdminSendMoneyModal } from '@/components/admin/AdminSendMoneyModal';
 import { BlockUserModal } from '@/components/moderation/BlockUserModal';
-// TODO: MuteUserModal component needs to be created
-// import { MuteUserModal } from '@/components/moderation/MuteUserModal';
+import { MuteUserModal } from '@/components/moderation/MuteUserModal';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 
@@ -574,22 +573,26 @@ export function UserManagementTab() {
         />
       )}
 
-      {/* TODO: Mute Modal - component needs to be created */}
-      {showMuteModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="rounded-lg bg-card p-6">
-            <p className="mb-4">Mute functionality coming soon</p>
-            <button
-              onClick={() => {
-                setShowMuteModal(false);
-                setSelectedUser(null);
-              }}
-              className="rounded bg-primary px-4 py-2 text-primary-foreground"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+      {/* Mute Modal */}
+      {selectedUser && (
+        <MuteUserModal
+          isOpen={showMuteModal}
+          onClose={() => {
+            setShowMuteModal(false);
+            setSelectedUser(null);
+          }}
+          targetUserId={selectedUser.id}
+          targetDisplayName={
+            selectedUser.displayName ?? selectedUser.username ?? 'User'
+          }
+          isNPC={selectedUser.isActor}
+          onSuccess={() => {
+            toast.success(
+              `Muted ${selectedUser.displayName ?? selectedUser.username}`
+            );
+            void refetch();
+          }}
+        />
       )}
 
       {/* Ban Modal */}

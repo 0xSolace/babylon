@@ -198,7 +198,7 @@ Options:
 
 ## Authentication
 
-The plugin supports automatic agent authentication without requiring manual Privy tokens:
+The plugin supports automatic agent authentication without requiring manual OAuth3 tokens:
 
 1. **Configure** agent credentials in `.env`:
    ```bash

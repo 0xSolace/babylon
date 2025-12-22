@@ -30,11 +30,8 @@
 import { Ban, Flag, MoreHorizontal, VolumeX } from 'lucide-react';
 import { useState } from 'react';
 import { BlockUserModal } from './BlockUserModal';
-
-// TODO: MuteUserModal component needs to be created
-// import { MuteUserModal } from './MuteUserModal';
-// TODO: ReportModal component needs to be created
-// import { ReportModal } from './ReportModal';
+import { MuteUserModal } from './MuteUserModal';
+import { ReportModal } from './ReportModal';
 
 interface ModerationMenuProps {
   targetUserId: string;
@@ -143,34 +140,24 @@ export function ModerationMenu({
         onSuccess={handleAction}
       />
 
-      {/* TODO: MuteUserModal component needs to be created */}
-      {showMuteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="rounded-lg bg-card p-6">
-            <p className="mb-4">Mute functionality coming soon</p>
-            <button
-              onClick={() => setShowMuteModal(false)}
-              className="rounded bg-primary px-4 py-2 text-primary-foreground"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      <MuteUserModal
+        isOpen={showMuteModal}
+        onClose={() => setShowMuteModal(false)}
+        targetUserId={targetUserId}
+        targetDisplayName={displayName}
+        isNPC={isNPC}
+        onSuccess={handleAction}
+      />
 
-      {/* TODO: ReportModal component needs to be created */}
-      {!isNPC && showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="rounded-lg bg-card p-6">
-            <p className="mb-4">Report functionality coming soon</p>
-            <button
-              onClick={() => setShowReportModal(false)}
-              className="rounded bg-primary px-4 py-2 text-primary-foreground"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+      {!isNPC && (
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          targetUserId={targetUserId}
+          targetDisplayName={displayName}
+          postId={postId}
+          onSuccess={handleAction}
+        />
       )}
     </div>
   );

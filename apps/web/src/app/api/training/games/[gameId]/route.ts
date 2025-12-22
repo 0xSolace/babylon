@@ -99,11 +99,11 @@ export async function GET(
   });
 
   // Get all posts from this time period
-  // TODO: Add relatedQuestion field to Post model for better filtering
+  // Note: Posts are filtered by gameId. When relatedQuestion field is added
+  // to Post model, posts can be grouped more precisely per question.
   const posts = await db.post.findMany({
     where: {
       gameId: gameId,
-      // relatedQuestion: { in: questions.map(q => q.questionNumber) }  // TODO: Add field
     },
     select: {
       id: true,
@@ -117,9 +117,9 @@ export async function GET(
     orderBy: { createdAt: 'asc' },
   });
 
-  // Group posts by question (simplified for now):
+  // Group posts by question (all posts included since relatedQuestion field not yet available):
   const questionData = questions.map((q) => {
-    const questionPosts = posts; // TODO: Filter by relatedQuestion when field added
+    const questionPosts = posts; // Uses all posts for now; filter by relatedQuestion when available
 
     return {
       questionId: q.questionNumber,

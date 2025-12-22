@@ -7,16 +7,6 @@ import {
 } from '@babylon/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Award, DollarSign, RefreshCw, TrendingUp, Users } from 'lucide-react';
-// TODO: Re-enable when feeTrend is added to schema
-// import {
-//   CartesianGrid,
-//   Line,
-//   LineChart,
-//   ResponsiveContainer,
-//   Tooltip,
-//   XAxis,
-//   YAxis,
-// } from 'recharts';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 
@@ -200,49 +190,7 @@ export function FeesTab() {
         />
       </div>
 
-      {/* TODO: Fee Trend Chart - feeTrend property not in FeeStatsResponse schema */}
-      {/* <div className="rounded-lg border border-border bg-card p-6">
-        <h3 className="mb-4 font-semibold text-lg">Fee Trend (Last 30 Days)</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={stats.feeTrend}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-            <XAxis
-              dataKey="date"
-              stroke="#888"
-              fontSize={12}
-              tickFormatter={(date) =>
-                new Date(date).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                })
-              }
-            />
-            <YAxis
-              stroke="#888"
-              fontSize={12}
-              tickFormatter={(value) => `$${value}`}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#1a1a1a',
-                border: '1px solid #333',
-              }}
-              labelFormatter={(date) => new Date(date).toLocaleDateString()}
-              formatter={(value) => [
-                `$${Number(value ?? 0).toFixed(2)}`,
-                'Fees',
-              ]}
-            />
-            <Line
-              type="monotone"
-              dataKey="totalFees"
-              stroke="#22c55e"
-              strokeWidth={2}
-              dot={{ fill: '#22c55e', r: 4 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div> */}
+      {/* Fee Trend Chart - Planned feature: Add feeTrend to FeeStatsResponse schema when historical data is available */}
 
       {/* Fee Breakdown by Type */}
       <div className="rounded-lg border border-border bg-card p-6">
@@ -379,48 +327,7 @@ export function FeesTab() {
         </div>
       </div>
 
-      {/* TODO: Recent Fee Transactions - recentFees property not in FeeStatsResponse schema */}
-      {/* <div className="rounded-lg border border-border bg-card p-6">
-        <h3 className="mb-4 font-semibold text-lg">Recent Fee Transactions</h3>
-        <div className="space-y-2">
-          {stats.recentFees.map((fee) => (
-            <div
-              key={fee.id}
-              className="flex items-center gap-3 rounded-lg p-3 transition-colors hover:bg-accent/50"
-            >
-              <Avatar
-                src={fee.profileImageUrl ?? undefined}
-                alt={fee.displayName}
-                size="sm"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 font-medium text-sm">
-                  {fee.displayName}
-                  {fee.isNPC && (
-                    <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-purple-500 text-xs">
-                      NPC
-                    </span>
-                  )}
-                </div>
-                <div className="text-muted-foreground text-xs">
-                  {formatTradeType(fee.tradeType)} •{' '}
-                  {new Date(fee.createdAt).toLocaleString()}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-red-500 text-sm">
-                  {formatCurrency(fee.feeAmount)}
-                </div>
-                <div className="text-muted-foreground text-xs">
-                  Platform: {formatCurrency(fee.platformFee)}
-                  {fee.referrerFee > 0 &&
-                    ` • Referrer: ${formatCurrency(fee.referrerFee)}`}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div> */}
+      {/* Recent Fee Transactions - Planned feature: Add recentFees to FeeStatsResponse schema when transaction logging is implemented */}
     </div>
   );
 }
