@@ -89,6 +89,8 @@ const nextConfig: NextConfig = {
     'swagger-jsdoc',
     '@jejunetwork/db', // CQL client from Jeju - requires HTTP client
     'ioredis', // Node.js Redis client - requires tls/net modules not available in edge runtime
+    'bun:sqlite', // Bun built-in - not available during webpack build
+    'bun:ffi', // Bun built-in - not available during webpack build
   ],
   images: {
     remotePatterns: [
@@ -173,9 +175,15 @@ const nextConfig: NextConfig = {
       process.cwd(),
       'webpack-electron-stub.js'
     );
+    // Alias bun:sqlite to stub module - this is a Bun built-in that doesn't exist in Node.js
+    const bunSqliteStubPath = path.join(
+      process.cwd(),
+      'webpack-bun-sqlite-stub.js'
+    );
     config.resolve.alias = {
       ...config.resolve.alias,
       electron: electronStubPath,
+      'bun:sqlite': bunSqliteStubPath,
     };
 
     // Ignore electron module completely - electron-fetch will handle it at runtime
@@ -196,6 +204,11 @@ const nextConfig: NextConfig = {
       new webpack.NormalModuleReplacementPlugin(
         /^electron-fetch$/,
         electronFetchStubPath
+      ),
+      // Replace bun:sqlite with stub - it's a Bun built-in not available in Node.js
+      new webpack.NormalModuleReplacementPlugin(
+        /^bun:sqlite$/,
+        bunSqliteStubPath
       )
     );
 
@@ -236,6 +249,10 @@ const nextConfig: NextConfig = {
       new webpack.IgnorePlugin({
         resourceRegExp: /^swagger-jsdoc$/,
       }),
+      // Ignore Bun built-in modules - not available in webpack/Node.js
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^bun:(sqlite|ffi)$/,
+      }),
       // Ignore @jejunetwork/db for client-side builds only
       // CQL client requires HTTP/net modules not available in browser
       ...(isServer
@@ -261,6 +278,8 @@ const nextConfig: NextConfig = {
         '@jejunetwork/db',
         'ioredis',
         'swagger-jsdoc',
+        'bun:sqlite',
+        'bun:ffi',
       ];
 
       if (!Array.isArray(config.externals)) {

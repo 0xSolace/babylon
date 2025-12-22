@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Current User Profile API
  *
@@ -58,6 +60,7 @@ import type { NextRequest } from 'next/server';
 
 const userSelectFields = {
   id: users.id,
+  /** @deprecated Legacy field from Privy auth migration. Use oauth3Id instead. */
   privyId: users.privyId,
   oauth3Id: users.oauth3Id,
   username: users.username,
@@ -120,13 +123,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     'GET /api/users/me'
   );
 
-  // Try to find user by oauth3Id first, then by privyId for legacy users
+  // Primary lookup by oauth3Id
   let [dbUser] = await db
     .select(userSelectFields)
     .from(users)
     .where(eq(users.oauth3Id, oauth3Id))
     .limit(1);
 
+  // @deprecated Fallback for users created before OAuth3 migration (privyId field)
   if (!dbUser) {
     [dbUser] = await db
       .select(userSelectFields)
@@ -224,7 +228,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .values({
         id: canonicalUserId,
         oauth3Id,
-        privyId: oauth3Id, // Keep for legacy compatibility
+        /** @deprecated Set for backward compatibility with legacy queries. */
+        privyId: oauth3Id,
         walletAddress,
         referredBy: resolvedReferrerId,
         profileComplete: false,
@@ -276,7 +281,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         .update(users)
         .set({ referredBy: referrer.id })
         .where(eq(users.id, dbUser.id))
-        .returning(userSelectFields);
+        .returning();
 
       if (!updatedUser) {
         throw new InternalServerError('Failed to update user record');
@@ -333,7 +338,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const responseUser = {
     id: dbUser.id,
-    privyId: dbUser.privyId, // Keep for legacy compatibility
+    /** @deprecated Legacy field from Privy auth migration. Use oauth3Id instead. */
+    privyId: dbUser.privyId,
     oauth3Id: dbUser.oauth3Id,
     username: dbUser.username,
     displayName: dbUser.displayName,

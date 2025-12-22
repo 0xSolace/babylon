@@ -19,11 +19,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Contracts:** `cd packages/contracts && forge test`
 - **Single test:** `bun test path/to/test.ts`
 
-### Database (CovenantQL / CQL)
+### Database (CovenantQL / CQL via Jeju DWS)
 - **Check status:** `bun run babylon db status`
 - **Connect/test:** `bun run babylon db connect`
+- **Provision:** `bun run babylon db provision --network localnet`
 - **Seed data:** `bun run db:seed` or `bun run db:seed:test all`
 - Schema is managed by Jeju platform; local schema definitions are for TypeScript types
+- Configuration is network-aware via `JEJU_NETWORK` env var
 
 ### Deployment & Operations
 - **Deploy contracts:** `bun run deploy:local|testnet|mainnet`
@@ -74,11 +76,15 @@ Only consider work done after all three pass without errors.
 1. Copy `.env.example` to `.env`
 2. Run `scripts/pre-dev/pre-dev-local.ts` for localnet defaults
 3. Key variables:
-   - `CQL_BLOCK_PRODUCER_ENDPOINT` - CQL database endpoint
+   - `JEJU_NETWORK` - Network: localnet, testnet, mainnet (auto-configures CQL/DWS)
    - `JEJU_OAUTH3_SERVICE_URL` - Auth (OAuth3)
    - `GROQ_API_KEY` or `OPENAI_API_KEY` - AI models
    - `CRON_SECRET` - For cron endpoints
    - `GAME_START` - Control game state (pause/running)
+
+**Database Configuration (choose one):**
+- `JEJU_NETWORK=localnet` - Auto-resolves CQL endpoint from Jeju config (recommended)
+- `CQL_BLOCK_PRODUCER_ENDPOINT` - Explicit override for CQL endpoint
 
 ### Git Workflow
 - **Commits:** Imperative mood, prefixed (`feat:`, `fix:`, `chore:`)
@@ -213,8 +219,9 @@ curl -X GET https://your-domain/api/admin/cron-metrics \
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `CRON_SECRET` | Production | Cron auth (fail-closed if missing) |
-| `CQL_BLOCK_PRODUCER_ENDPOINT` | Yes | CovenantQL block producer endpoint |
-| `CQL_DATABASE_ID` | Yes | CQL database identifier |
+| `JEJU_NETWORK` | Recommended | Network: localnet, testnet, mainnet (auto-resolves CQL/DWS) |
+| `CQL_BLOCK_PRODUCER_ENDPOINT` | If no JEJU_NETWORK | CovenantQL block producer endpoint (override) |
+| `CQL_DATABASE_ID` | No | CQL database identifier (default: babylon) |
 | `GAME_START` | No | Set to `false` to pause all game activity |
 | `REDIRECT_CRON_STAGING` | No | Set to `true` to relay crons to staging |
 | `GROQ_API_KEY` | Yes | LLM provider for content generation |

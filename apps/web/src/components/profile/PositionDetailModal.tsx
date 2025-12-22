@@ -6,7 +6,9 @@ import {
 } from '@babylon/core/markets/prediction/client';
 import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
 import { cn, type JsonValue } from '@babylon/shared';
+
 import { useMutation, useQuery } from '@tanstack/react-query';
+
 import {
   AlertTriangle,
   BarChart3,

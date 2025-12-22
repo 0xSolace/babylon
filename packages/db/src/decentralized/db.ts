@@ -1,18 +1,57 @@
 /**
  * Decentralized Database Layer
  *
- * ALL database operations route through CQL (CovenantSQL).
+ * ALL database operations route through CQL (CovenantSQL) via Jeju DWS.
  * NO FALLBACKS - CQL is required for operation.
+ *
+ * Configuration is resolved in this order:
+ * 1. Environment variable override (CQL_BLOCK_PRODUCER_ENDPOINT)
+ * 2. Network-based config from @jejunetwork/config (based on JEJU_NETWORK)
  *
  * This replaces the PostgreSQL Drizzle client as the primary data layer.
  */
 
 import { logger } from '@babylon/shared';
-import { CQLClient, type ExecResult, getCQL, type QueryParam } from '@jeju/db';
+// Type imports don't trigger runtime code execution
+import type { CQLClient, ExecResult, QueryParam } from '@jeju/db';
 import {
   createDrizzleTransaction,
   type DrizzleTransaction,
 } from './drizzle-compat';
+
+// Check if we're running in Bun
+const isBun = typeof process !== 'undefined' && 'Bun' in globalThis;
+
+// Lazy imports to avoid bun:sqlite issues during webpack build
+let _getCQL: typeof import('@jeju/db').getCQL | null = null;
+let _getCQLUrl: typeof import('@jejunetwork/config').getCQLUrl | null = null;
+
+async function loadJejuConfig(): Promise<{
+  getCQLUrl: typeof import('@jejunetwork/config').getCQLUrl;
+}> {
+  if (!_getCQLUrl) {
+    const config = await import(/* webpackIgnore: true */ '@jejunetwork/config');
+    _getCQLUrl = config.getCQLUrl;
+  }
+  return { getCQLUrl: _getCQLUrl };
+}
+
+async function getCQL(
+  config: Parameters<typeof import('@jeju/db').getCQL>[0]
+): Promise<CQLClient> {
+  if (!isBun) {
+    throw new Error(
+      '[DB] @jeju/db requires Bun runtime. Cannot run in Node.js. ' +
+        'Build with Bun or use dynamic route exports to skip static page generation.'
+    );
+  }
+  if (!_getCQL) {
+    // Use webpackIgnore comment to prevent webpack from bundling this module
+    const { getCQL: fn } = await import(/* webpackIgnore: true */ '@jeju/db');
+    _getCQL = fn;
+  }
+  return _getCQL(config);
+}
 
 // ============================================================================
 // Types
@@ -70,23 +109,49 @@ class DecentralizedDB {
   private client: CQLClient | null = null;
   private initialized = false;
   private databaseId: string;
+  private _endpoint: string | null = null;
 
   constructor() {
     this.databaseId = process.env.CQL_DATABASE_ID || 'babylon';
   }
 
+  /** Get the configured CQL endpoint */
+  getEndpoint(): string | null {
+    return this._endpoint;
+  }
+
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT;
+    // Resolve CQL endpoint from env var or Jeju network config
+    let endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT;
+
+    if (!endpoint) {
+      // Try to get endpoint from @jejunetwork/config based on JEJU_NETWORK
+      const network = process.env.JEJU_NETWORK;
+      if (network) {
+        const { getCQLUrl } = await loadJejuConfig();
+        endpoint = getCQLUrl(network as 'localnet' | 'testnet' | 'mainnet');
+        logger.info(
+          `[DB] Using CQL endpoint from JEJU_NETWORK=${network}: ${endpoint}`,
+          {},
+          'DB'
+        );
+      }
+    }
+
     if (!endpoint) {
       throw new Error(
-        '[DB] CQL_BLOCK_PRODUCER_ENDPOINT is required. ' +
-          'Decentralized database is mandatory - no PostgreSQL fallback.'
+        '[DB] CQL endpoint not configured. Either:\n' +
+          '  1. Set CQL_BLOCK_PRODUCER_ENDPOINT environment variable, or\n' +
+          '  2. Set JEJU_NETWORK=localnet|testnet|mainnet to use Jeju DWS config\n' +
+          '\nStart Jeju for local development: cd /path/to/jeju && jeju dev'
       );
     }
 
-    this.client = getCQL({
+    this._endpoint = endpoint;
+
+    this.client = await getCQL({
       blockProducerEndpoint: endpoint,
       databaseId: this.databaseId,
       privateKey: process.env.CQL_PRIVATE_KEY as `0x${string}` | undefined,

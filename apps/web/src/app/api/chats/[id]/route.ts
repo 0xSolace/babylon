@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * API Route: /api/chats/[id]
  * Methods: GET (get chat details and messages)
@@ -330,10 +332,24 @@ export const GET = withErrorHandling(
     // Fetch from decentralized storage if enabled
     if (isDecentralizedMessagingEnabled()) {
       const messaging = getMessaging();
+
+      // Look up cursor message timestamp for pagination
+      let cursorTimestamp: number | undefined;
+      if (cursor) {
+        const [cursorMsg] = await asSystem(async (db) => {
+          return await db
+            .select({ createdAt: messages.createdAt })
+            .from(messages)
+            .where(eq(messages.id, cursor))
+            .limit(1);
+        }, 'get-cursor-message-for-decentralized');
+        cursorTimestamp = cursorMsg?.createdAt.getTime();
+      }
+
       const decentralizedMessages = await messaging.getMessages({
         conversationId: chatId,
         limit: effectiveLimit,
-        before: cursor ? Date.now() : undefined, // TODO: Use proper cursor timestamp
+        before: cursorTimestamp,
       });
 
       // Merge decentralized messages (prefer decentralized if IDs match)

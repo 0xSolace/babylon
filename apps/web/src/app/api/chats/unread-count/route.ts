@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Chat Unread Count API
  *

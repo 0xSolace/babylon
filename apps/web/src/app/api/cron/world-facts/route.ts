@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * World Facts Update Cron Job API
  *

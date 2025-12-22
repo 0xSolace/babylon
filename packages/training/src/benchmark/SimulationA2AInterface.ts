@@ -487,40 +487,11 @@ export class SimulationA2AInterface {
       );
     }
 
-    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
-    // This needs to be reimplemented using the new game engine API
-    // Unused: const { marketId, outcome, amount } = params;
+    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
+    // To re-enable this functionality, implement using the new game engine API.
     throw new Error(
       'performAction not available - SimulationEngine is deprecated'
     );
-    /*
-    const result = await this.engine.performAction('buy_prediction', {
-      marketId,
-      outcome,
-      amount,
-    });
-
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to buy shares');
-    }
-
-    const { positionId, shares } = result.result as {
-      positionId: string;
-      shares: number;
-    };
-
-    const state = this.engine.getState();
-    const market = state.predictionMarkets.find(
-      (m: { id: string }) => m.id === marketId
-    );
-    const avgPrice = market
-      ? outcome === 'YES'
-        ? market.yesPrice
-        : market.noPrice
-      : 0.5;
-
-    return { shares, avgPrice, positionId };
-    */
   }
 
   /**
@@ -651,36 +622,11 @@ export class SimulationA2AInterface {
       );
     }
 
-    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
-    // This needs to be reimplemented using the new game engine API
-    // Unused: const { ticker, side, size, leverage } = params;
+    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
+    // To re-enable this functionality, implement using the new game engine API.
     throw new Error(
       'performAction not available - SimulationEngine is deprecated'
     );
-    /*
-    const result = await this.engine.performAction('open_perp', {
-      ticker,
-      side,
-      size,
-      leverage,
-    });
-
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to open position');
-    }
-
-    const { positionId } = result.result as { positionId: string };
-
-    const state = this.engine.getState();
-    const market = state.perpetualMarkets.find(
-      (m: { ticker: string }) => m.ticker === ticker
-    );
-
-    return {
-      positionId,
-      entryPrice: market?.price || 0,
-    };
-    */
   }
 
   /**
@@ -716,28 +662,11 @@ export class SimulationA2AInterface {
       );
     }
 
-    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
-    // This needs to be reimplemented using the new game engine API
-    // Unused: const { positionId } = params;
+    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
+    // To re-enable this functionality, implement using the new game engine API.
     throw new Error(
       'performAction not available - SimulationEngine is deprecated'
     );
-    /*
-    const result = await this.engine.performAction('close_perp', {
-      positionId,
-    });
-
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to close position');
-    }
-
-    const { pnl } = result.result as { pnl: number };
-
-    return {
-      pnl,
-      exitPrice: 0, // Simplified
-    };
-    */
   }
 
   /**
@@ -808,26 +737,11 @@ export class SimulationA2AInterface {
       );
     }
 
-    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
-    // This needs to be reimplemented using the new game engine API
-    // Unused: const { content, marketId } = params;
+    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
+    // To re-enable this functionality, implement using the new game engine API.
     throw new Error(
       'performAction not available - SimulationEngine is deprecated'
     );
-    /*
-    const result = await this.engine.performAction('create_post', {
-      content,
-      marketId: marketId ?? null,
-    });
-
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to create post');
-    }
-
-    const { postId } = result.result as { postId: string };
-
-    return { postId };
-    */
   }
 
   /**
@@ -892,19 +806,11 @@ export class SimulationA2AInterface {
       );
     }
 
-    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
-    // This needs to be reimplemented using the new game engine API
-    // Unused: const { groupId } = params;
+    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
+    // To re-enable this functionality, implement using the new game engine API.
     throw new Error(
       'performAction not available - SimulationEngine is deprecated'
     );
-    /*
-    const result = await this.engine.performAction('join_group', {
-      groupId,
-    });
-
-    return { success: result.success };
-    */
   }
 
   /**

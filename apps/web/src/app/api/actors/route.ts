@@ -68,6 +68,10 @@
 import { loadActorsData } from '@babylon/engine';
 import { NextResponse } from 'next/server';
 
+// Force dynamic to avoid static page data collection during build
+// which would try to import Bun-specific modules from CQL
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/actors
  *

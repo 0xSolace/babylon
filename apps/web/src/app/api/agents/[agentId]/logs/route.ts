@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Agent Logs and Activity History API
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import type { JsonValue } from '@babylon/api';
 import {
   authenticate,

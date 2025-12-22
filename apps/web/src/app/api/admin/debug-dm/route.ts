@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Admin Debug DM API
  *
@@ -93,57 +95,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   logger.info('Debug DM lookup', { userId }, 'GET /api/admin/debug-dm');
 
-  // Get user info (try by ID, username, oauth3Id, or privyId for backward compatibility)
+  // Get user info (try by ID, username, oauth3Id, or privyId)
+  // @deprecated privyId - kept for migration compatibility, remove after migration complete
+  const userSelect = {
+    id: true,
+    oauth3Id: true,
+    privyId: true, // @deprecated - remove after Privy→OAuth3 migration complete
+    username: true,
+    displayName: true,
+  } as const;
+
   let user = await db.user.findUnique({
     where: { id: userId },
-    select: {
-      id: true,
-      oauth3Id: true,
-      privyId: true, // @deprecated - kept for migration compatibility
-      username: true,
-      displayName: true,
-    },
+    select: userSelect,
   });
 
   if (!user) {
     // Try by username
     user = await db.user.findUnique({
       where: { username: userId },
-      select: {
-        id: true,
-        oauth3Id: true,
-        privyId: true, // @deprecated - kept for migration compatibility
-        username: true,
-        displayName: true,
-      },
+      select: userSelect,
     });
   }
 
   if (!user) {
-    // Try by oauth3Id
+    // Try by oauth3Id (primary auth identifier)
     user = await db.user.findUnique({
       where: { oauth3Id: userId },
-      select: {
-        id: true,
-        oauth3Id: true,
-        privyId: true, // @deprecated - kept for migration compatibility
-        username: true,
-        displayName: true,
-      },
+      select: userSelect,
     });
   }
 
   if (!user) {
-    // Try by privyId (deprecated - for backward compatibility)
+    // @deprecated - Try by privyId for users who haven't migrated to OAuth3 yet
     user = await db.user.findUnique({
       where: { privyId: userId },
-      select: {
-        id: true,
-        oauth3Id: true,
-        privyId: true, // @deprecated - kept for migration compatibility
-        username: true,
-        displayName: true,
-      },
+      select: userSelect,
     });
   }
 
@@ -156,6 +143,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       chats: [],
     });
   }
+  // @deprecated privyId fallback - remove after Privy→OAuth3 migration complete
   const resolvedUserId = user.id || user.oauth3Id || user.privyId || userId;
 
   // Get all ChatParticipant records for this user
@@ -249,8 +237,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   return successResponse({
     user,
+    // @deprecated privyId field - remove after Privy→OAuth3 migration complete
     note: user
-      ? `User database ID: ${user.id}, OAuth3 ID: ${user.oauth3Id || 'none'}, Privy ID (deprecated): ${user.privyId || 'none'}`
+      ? `User database ID: ${user.id}, OAuth3 ID: ${user.oauth3Id || 'none'}, Privy ID [deprecated]: ${user.privyId || 'none'}`
       : 'User not found',
     participantRecords: participants,
     chats: chatsList.map((chat, index) => ({

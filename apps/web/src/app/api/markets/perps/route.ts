@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { successResponse, withErrorHandling } from '@babylon/api';
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
 import { FEE_CONFIG, WalletService } from '@babylon/engine';

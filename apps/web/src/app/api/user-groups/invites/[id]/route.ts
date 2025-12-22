@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * User Group Invite Actions API
  *

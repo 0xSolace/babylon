@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Waitlist Leaderboard API
  *
@@ -89,7 +91,7 @@
  */
 
 import {
-  getCache,
+  cacheGet,
   setCache,
   successResponse,
   WaitlistService,
@@ -132,13 +134,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Calculate offset for pagination
   const offset = (page - 1) * limit;
 
-  // Cache key includes page, limit, and points type
-  const cacheKey = `${pointsType}-${page}-${limit}`;
+  // Cache key includes page, limit, and points type (with namespace)
+  const cacheKey = `${CACHE_KEY_NAMESPACE}:${pointsType}-${page}-${limit}`;
 
   if (CACHE_TTL_MS > 0) {
-    const cached = await getCache<LeaderboardResponse>(cacheKey, {
-      namespace: CACHE_KEY_NAMESPACE,
-    });
+    const cached = await cacheGet<LeaderboardResponse>(cacheKey);
     if (cached) {
       return successResponse(cached, 200, {
         'x-cache': 'waitlist-leaderboard-hit',
@@ -177,7 +177,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   if (CACHE_TTL_MS > 0) {
     await setCache(cacheKey, responseBody, {
-      namespace: CACHE_KEY_NAMESPACE,
       ttl: CACHE_TTL_SECONDS,
     });
   }

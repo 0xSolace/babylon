@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Agent Trading Balance API
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 // GET /api/markets/predictions/[id]/trades – paginated trades for a market
 import type { JsonValue } from '@babylon/api';
 import {

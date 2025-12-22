@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Perpetual Market Price History API
  *

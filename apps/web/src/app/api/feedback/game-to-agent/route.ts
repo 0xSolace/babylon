@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Game-to-Agent Feedback API
  *

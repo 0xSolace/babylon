@@ -211,23 +211,118 @@ export function formatNumber(num: number): string {
 }
 
 /**
- * Balance data structure
+ * Decimal-like value type that supports toString conversion
+ */
+type DecimalLike =
+  | string
+  | number
+  | bigint
+  | null
+  | undefined
+  | { toString: () => string };
+
+/**
+ * Safely convert a value to a string representation
+ *
+ * @description Handles various input types including numbers, strings, bigints,
+ * null, undefined, and objects with toString methods (like Decimal.js).
+ *
+ * @param value - Value to convert
+ * @param defaultValue - Default value if input is null/undefined (default: '0')
+ * @returns String representation of the value
+ *
+ * @example
+ * ```typescript
+ * toSafeString(123.45);      // Returns: "123.45"
+ * toSafeString(null);        // Returns: "0"
+ * toSafeString(undefined, '100'); // Returns: "100"
+ * toSafeString({ toString: () => '999.99' }); // Returns: "999.99"
+ * ```
+ */
+export function toSafeString(
+  value: DecimalLike,
+  defaultValue: string = '0'
+): string {
+  if (value === null || value === undefined) {
+    return defaultValue;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return String(value);
+  }
+  if (typeof value === 'object' && typeof value.toString === 'function') {
+    return value.toString();
+  }
+  return defaultValue;
+}
+
+/**
+ * Safely convert a value to a number
+ *
+ * @description Handles various input types including numbers, strings, bigints,
+ * null, undefined, and objects with toString methods (like Decimal.js).
+ * Returns the default value for invalid/unparseable inputs.
+ *
+ * @param value - Value to convert
+ * @param defaultValue - Default value if input is null/undefined/invalid (default: 0)
+ * @returns Number representation of the value
+ *
+ * @example
+ * ```typescript
+ * toSafeNumber(123.45);      // Returns: 123.45
+ * toSafeNumber('123.45');    // Returns: 123.45
+ * toSafeNumber(null);        // Returns: 0
+ * toSafeNumber('invalid', 100); // Returns: 100
+ * toSafeNumber({ toString: () => '999.99' }); // Returns: 999.99
+ * ```
+ */
+export function toSafeNumber(
+  value: DecimalLike,
+  defaultValue: number = 0
+): number {
+  if (value === null || value === undefined) {
+    return defaultValue;
+  }
+  if (typeof value === 'number') {
+    return Number.isNaN(value) ? defaultValue : value;
+  }
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+
+  // Convert to string first (handles objects with toString)
+  const str =
+    typeof value === 'string'
+      ? value.trim()
+      : typeof value === 'object' && typeof value.toString === 'function'
+        ? value.toString()
+        : String(value);
+
+  const parsed = Number(str);
+  return Number.isNaN(parsed) ? defaultValue : parsed;
+}
+
+/**
+ * Balance data structure with optional fields
  */
 interface BalanceData {
-  virtualBalance: number | string | bigint;
-  totalDeposited: number | string | bigint;
-  totalWithdrawn: number | string | bigint;
-  lifetimePnL: number | string | bigint;
+  virtualBalance?: DecimalLike;
+  totalDeposited?: DecimalLike;
+  totalWithdrawn?: DecimalLike;
+  lifetimePnL?: DecimalLike;
 }
 
 /**
  * Convert balance numeric values to strings for API responses
  *
  * @description Converts all numeric balance fields to string representations
- * for consistent API response formatting. Handles numbers, strings, and BigInts.
+ * for consistent API response formatting. Handles numbers, strings, BigInts,
+ * Decimal objects, and undefined values (defaulting to '0').
  *
- * @param {BalanceData} balance - Balance data with numeric values
- * @returns {Object} Balance data with all values as strings
+ * @param balance - Balance data with numeric values (all fields optional)
+ * @returns Balance data with all values as strings
  *
  * @example
  * ```typescript
@@ -238,6 +333,9 @@ interface BalanceData {
  *   lifetimePnL: -50,
  * })
  * // Returns: { virtualBalance: "1000", totalDeposited: "5000", ... }
+ *
+ * convertBalanceToStrings({})
+ * // Returns: { virtualBalance: "0", totalDeposited: "0", ... }
  * ```
  */
 export function convertBalanceToStrings(balance: BalanceData): {
@@ -247,9 +345,9 @@ export function convertBalanceToStrings(balance: BalanceData): {
   lifetimePnL: string;
 } {
   return {
-    virtualBalance: String(balance.virtualBalance),
-    totalDeposited: String(balance.totalDeposited),
-    totalWithdrawn: String(balance.totalWithdrawn),
-    lifetimePnL: String(balance.lifetimePnL),
+    virtualBalance: toSafeString(balance.virtualBalance),
+    totalDeposited: toSafeString(balance.totalDeposited),
+    totalWithdrawn: toSafeString(balance.totalWithdrawn),
+    lifetimePnL: toSafeString(balance.lifetimePnL),
   };
 }

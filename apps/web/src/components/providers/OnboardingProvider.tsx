@@ -70,7 +70,7 @@ export function OnboardingProvider({
     logout,
   } = useAuth();
 
-  // Use Jeju OAuth3 for user data (replaces Privy)
+  // Get linked social accounts and auth token from OAuth3
   const { linkedAccounts, getAccessToken } = useJejuAuth();
 
   const { setUser, setNeedsOnboarding, setNeedsOnchain } = useAuthStore();

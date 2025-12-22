@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * External Agent Connection Verification Endpoint
  *

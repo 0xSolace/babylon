@@ -4,13 +4,14 @@
  * Checks if messaging contracts are deployed and deploys them if needed.
  */
 
+import { jejuMainnet, jejuTestnet } from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
   http,
   type PublicClient,
 } from 'viem';
-import { hardhat, optimismSepolia } from 'viem/chains';
+import { hardhat } from 'viem/chains';
 
 // Contract addresses are stored in .env after deployment
 const ENV_KEYS = {
@@ -44,13 +45,15 @@ export async function getChainConfig(
         '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
     },
     testnet: {
-      chain: optimismSepolia,
-      rpcUrl: process.env.JEJU_TESTNET_RPC_URL ?? 'https://sepolia.optimism.io',
+      chain: jejuTestnet,
+      rpcUrl:
+        process.env.JEJU_TESTNET_RPC_URL ?? jejuTestnet.rpcUrls.default.http[0],
       deployerKey: process.env.DEPLOYER_PRIVATE_KEY,
     },
     mainnet: {
-      chain: optimismSepolia, // TODO: Replace with actual Jeju mainnet
-      rpcUrl: process.env.JEJU_MAINNET_RPC_URL ?? '',
+      chain: jejuMainnet,
+      rpcUrl:
+        process.env.JEJU_MAINNET_RPC_URL ?? jejuMainnet.rpcUrls.default.http[0],
       deployerKey: process.env.DEPLOYER_PRIVATE_KEY,
     },
   };

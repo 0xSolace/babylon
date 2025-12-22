@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * API Route: /api/posts/[id]/comments
  * Methods: GET (get comments), POST (add comment)

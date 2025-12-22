@@ -11,8 +11,8 @@ export { BenchmarkService, benchmarkService } from './BenchmarkService';
 
 export { ConfigValidator } from './ConfigValidator';
 export { logRLConfigOnStartup } from './logRLConfig';
-// TODO: MarketOutcomesTracker was deleted in merge - restore or remove usage
-// export { MarketOutcomesTracker } from './MarketOutcomesTracker';
+export type { WindowOutcomes } from './MarketOutcomesTracker';
+export { MarketOutcomesTracker } from './MarketOutcomesTracker';
 export type { DeploymentOptions, DeploymentResult } from './ModelDeployer';
 export { ModelDeployer, modelDeployer } from './ModelDeployer';
 export type { ModelArtifact } from './ModelFetcher';

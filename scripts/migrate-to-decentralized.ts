@@ -111,7 +111,9 @@ async function migrateUsers(): Promise<{ rowsMigrated: number }> {
       referralCode: u.referralCode,
       referralCount: u.referralCount,
       referredBy: u.referredBy,
-      oauth3Id: u.oauth3Id ?? u.privyId, // OAuth3 is primary auth; privyId is deprecated legacy field
+      // Auth migration: OAuth3 (Jeju) is the new auth system; fall back to privyId for legacy users
+      // who signed up before the Privy→OAuth3 migration
+      oauth3Id: u.oauth3Id ?? u.privyId,
       isAdmin: u.isAdmin,
       isBanned: u.isBanned,
       isAgent: u.isAgent,

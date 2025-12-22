@@ -46,9 +46,6 @@ export { BenchmarkRunner } from './BenchmarkRunner';
 export { BenchmarkValidator } from './BenchmarkValidator';
 export type { FastEvalConfig, FastEvalResult } from './FastEvalRunner';
 export { FastEvalRunner } from './FastEvalRunner';
-// TODO: MetricsValidator was deleted in merge - restore or remove usage
-// export { MetricsValidator } from './MetricsValidator';
-// MetricsVisualizer stub - provides minimal visualization output
 export type {
   ComparisonData,
   VisualizationOptions,

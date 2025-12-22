@@ -68,7 +68,7 @@ async function main() {
   // Note: We use the SAME generator config, so the runner will generate the SAME snapshot
   // because of the fixed seed.
   logger.info('>>> STARTING RUN A: BASELINE (RANDOM) <<<');
-  const _baselineResult = await BenchmarkRunner.runSingle({
+  const baselineResult = await BenchmarkRunner.runSingle({
     generatorConfig,
     agentRuntime: mockRuntime, // Not used for baseline strategy
     agentUserId: 'baseline-agent',
@@ -81,7 +81,7 @@ async function main() {
   // We use 'momentum' here to simulate a "Smart" agent for demonstration.
   logger.info('>>> STARTING RUN B: CHALLENGER (MOMENTUM/LLM) <<<');
 
-  const _challengerResult = await BenchmarkRunner.runSingle({
+  const challengerResult = await BenchmarkRunner.runSingle({
     generatorConfig, // Same config -> Same seed -> Same market conditions
     agentRuntime: mockRuntime,
     agentUserId: 'challenger-agent',
@@ -91,14 +91,14 @@ async function main() {
   });
 
   // 4. Generate Comparison Report
-  // TODO: MetricsVisualizer was deleted in merge - restore or implement alternative
-  // await MetricsVisualizer.generateComparisonReport(
-  //   baselineResult,
-  //   challengerResult,
-  //   outputDir
-  // );
-  logger.warn(
-    'MetricsVisualizer.generateComparisonReport is disabled - was deleted in merge'
+  // Note: generateComparisonReport is a stub - writes minimal output
+  const { MetricsVisualizer } = await import(
+    '../src/benchmark/MetricsVisualizer'
+  );
+  await MetricsVisualizer.generateComparisonReport(
+    baselineResult,
+    challengerResult,
+    outputDir
   );
 
   console.log(`\n✅ Benchmark complete. Results saved to: ${outputDir}`);

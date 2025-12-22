@@ -2,7 +2,7 @@
  * OAuth3 Authentication Helper for Synpress E2E Tests
  *
  * Provides utilities for authenticating with OAuth3 test accounts
- * Migrated from Privy to Jeju's decentralized OAuth3 authentication.
+ * using Jeju's decentralized OAuth3 authentication.
  */
 
 import { type Page } from '@playwright/test';
@@ -16,8 +16,8 @@ export interface OAuth3TestAccount {
  * Get OAuth3 test account credentials from environment variables
  */
 export function getOAuth3TestAccount(): OAuth3TestAccount {
-  const email = process.env.OAUTH3_TEST_EMAIL || process.env.PRIVY_TEST_EMAIL;
-  const otp = process.env.OAUTH3_TEST_OTP || process.env.PRIVY_TEST_OTP;
+  const email = process.env.OAUTH3_TEST_EMAIL;
+  const otp = process.env.OAUTH3_TEST_OTP;
 
   if (!email || !otp) {
     throw new Error(
@@ -26,13 +26,6 @@ export function getOAuth3TestAccount(): OAuth3TestAccount {
   }
 
   return { email, otp };
-}
-
-/**
- * @deprecated Use getOAuth3TestAccount instead
- */
-export function getPrivyTestAccount(): OAuth3TestAccount {
-  return getOAuth3TestAccount();
 }
 
 /**
@@ -155,16 +148,6 @@ export async function loginWithOAuth3Email(
 }
 
 /**
- * @deprecated Use loginWithOAuth3Email instead
- */
-export async function loginWithPrivyEmail(
-  page: Page,
-  testAccount?: OAuth3TestAccount
-): Promise<void> {
-  await loginWithOAuth3Email(page, testAccount);
-}
-
-/**
  * Setup OAuth3 auth (alias for loginWithOAuth3Email)
  */
 export async function setupOAuth3Auth(page: Page): Promise<void> {
@@ -172,24 +155,10 @@ export async function setupOAuth3Auth(page: Page): Promise<void> {
 }
 
 /**
- * @deprecated Use setupOAuth3Auth instead
- */
-export async function setupPrivyAuth(page: Page): Promise<void> {
-  await setupOAuth3Auth(page);
-}
-
-/**
  * Check if OAuth3 auth is working
  */
 export async function checkOAuth3Auth(page: Page): Promise<boolean> {
   return await isAuthenticated(page);
-}
-
-/**
- * @deprecated Use checkOAuth3Auth instead
- */
-export async function checkPrivyAuth(page: Page): Promise<boolean> {
-  return await checkOAuth3Auth(page);
 }
 
 /**
@@ -262,19 +231,6 @@ export async function loginWithWallet(
 }
 
 /**
- * @deprecated Use loginWithWallet instead
- */
-export async function loginWithPrivyWallet(
-  page: Page,
-  metamask: {
-    connectToDapp: () => Promise<void>;
-    confirmSignature: () => Promise<void>;
-  }
-): Promise<void> {
-  await loginWithWallet(page, metamask);
-}
-
-/**
  * Logout from the app
  */
 export async function logout(page: Page): Promise<void> {
@@ -330,13 +286,6 @@ export async function logout(page: Page): Promise<void> {
   }
 
   console.log('⚠️ Logout button not found');
-}
-
-/**
- * @deprecated Use logout instead
- */
-export async function logoutFromPrivy(page: Page): Promise<void> {
-  await logout(page);
 }
 
 /**

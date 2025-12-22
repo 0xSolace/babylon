@@ -430,17 +430,15 @@ graph LR
 
 import { withErrorHandling, successResponse } from '@/lib/errors/error-handler';
 import { requireAuth } from '@/lib/api/auth-middleware';
-import { asUser } from '@/lib/db/context';
+import { db } from '@babylon/db';
 
 export const GET = withErrorHandling(async (request) => {
  // 1. Authenticate
  const user = await requireAuth(request);
  
- // 2. Get data with RLS
- const data = await asUser(user, async (db) => {
- return await db.model.findMany({
+ // 2. Query data (authorization at application level)
+ const data = await db.model.findMany({
  where: { userId: user.userId }
- });
  });
  
  // 3. Return response

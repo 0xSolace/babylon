@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Admin Test DM Messages API
  *
@@ -98,7 +100,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     'POST /api/admin/test-dm-messages'
   );
 
-  // Verify both users exist (supports ID, username, oauth3Id, or privyId for migration)
+  // Verify both users exist (supports ID, username, or oauth3Id)
   const [sender, recipient] = await Promise.all([
     findUserByIdentifier(senderId, {
       id: true,

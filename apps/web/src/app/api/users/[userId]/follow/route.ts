@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * User Follow/Unfollow API Route
  *

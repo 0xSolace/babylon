@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 // POST /api/markets/predictions/[id]/buy-onchain – verify on-chain buy (legacy)
 import {
   authenticate,

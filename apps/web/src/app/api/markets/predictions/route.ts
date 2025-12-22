@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
 import {
   PredictionDbAdapter,

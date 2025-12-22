@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * User-to-Agent Feedback API
  *

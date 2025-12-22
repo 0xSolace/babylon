@@ -12,12 +12,16 @@ export const UUIDSchema = z.string().uuid({
 });
 
 /**
- * User ID schema - accepts UUID, OAuth3/Jeju DID, legacy Privy DID, or username formats
+ * User ID schema - accepts UUID, OAuth3/Jeju DID, or username formats
+ *
  * Examples:
  * - UUID: "550e8400-e29b-41d4-a716-446655440000"
  * - OAuth3/Jeju DID: "did:jeju:mainnet:0x1234567890abcdef1234567890abcdef12345678"
- * - Legacy Privy DID: "did:privy:cm6sqq4og01qw9l70rbmyjn20" (deprecated)
  * - Username: "eddy-snowjob" or "john_doe"
+ *
+ * @deprecated Legacy Privy DIDs (did:privy:...) are still accepted for backward
+ * compatibility with existing users migrated from Privy to OAuth3. This support
+ * will be removed once all users have been fully migrated.
  */
 export const UserIdSchema = z.string().refine(
   (val) => {
@@ -27,15 +31,18 @@ export const UserIdSchema = z.string().refine(
     // Check if it's a valid OAuth3/Jeju DID (did:jeju:{network}:0x{address})
     const oauth3DidRegex =
       /^did:jeju:(localnet|testnet|mainnet):0x[a-fA-F0-9]{40}$/;
-    // Check if it's a valid legacy Privy DID (deprecated)
-    const privyDidRegex = /^did:privy:[a-z0-9]+$/;
+    /**
+     * @deprecated Legacy Privy DID support - kept for backward compatibility only.
+     * New users should use OAuth3/Jeju DIDs (did:jeju:...).
+     */
+    const legacyPrivyDidRegex = /^did:privy:[a-z0-9]+$/;
     // Check if it's a valid username (3-30 chars, letters, numbers, underscores, hyphens)
     const usernameRegex = /^[a-zA-Z0-9_-]{3,30}$/;
 
     return (
       uuidRegex.test(val) ||
       oauth3DidRegex.test(val) ||
-      privyDidRegex.test(val) ||
+      legacyPrivyDidRegex.test(val) ||
       usernameRegex.test(val)
     );
   },

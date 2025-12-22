@@ -26,8 +26,7 @@ export interface AgentConfig {
   // Wallet
   pointsBalance: number;
   walletAddress?: string;
-  /** @deprecated Use oauth3WalletId - migrating from Privy to OAuth3 */
-  privyWalletId?: string;
+  /** OAuth3 wallet ID for decentralized key management */
   oauth3WalletId?: string;
 
   // Performance

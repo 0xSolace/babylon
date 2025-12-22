@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Onboarding Random Assets API
  *

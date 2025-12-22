@@ -1,23 +1,16 @@
 /**
  * Decimal Converter Unit Tests
  * Tests for safe conversion of Decimal values to strings and numbers
- *
- * TODO: convertBalanceToStrings, toSafeNumber, toSafeString are not exported from @babylon/shared
- * These functions were likely removed or renamed - need to find their new location or reimplement
  */
 
-import { describe } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import {
+  convertBalanceToStrings,
+  toSafeNumber,
+  toSafeString,
+} from '@babylon/shared';
 
-// TODO: These exports don't exist - comment out until they're available
-// import {
-//   convertBalanceToStrings,
-//   toSafeNumber,
-//   toSafeString,
-// } from '@babylon/shared';
-
-describe.skip('Decimal Converter', () => {
-  // TODO: Uncomment when convertBalanceToStrings, toSafeNumber, toSafeString are available
-  /*
+describe('Decimal Converter', () => {
   describe('toSafeString', () => {
     it('should convert string values', () => {
       expect(toSafeString('123.45')).toBe('123.45');
@@ -132,5 +125,4 @@ describe.skip('Decimal Converter', () => {
       expect(result.lifetimePnL).toBe('-200.25');
     });
   });
-  */
 });

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Waitlist Position API
  *
@@ -66,7 +68,7 @@
 
 import {
   authenticate,
-  getCache,
+  cacheGet,
   setCache,
   successResponse,
   WaitlistService,
@@ -137,10 +139,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     throw new Error('User not found in database');
   }
 
+  // Build full cache key with namespace
+  const cacheKey = `${CACHE_KEY_NAMESPACE}:${userId}`;
+
   if (CACHE_TTL_MS > 0) {
-    const cached = await getCache<PositionResponse>(userId, {
-      namespace: CACHE_KEY_NAMESPACE,
-    });
+    const cached = await cacheGet<PositionResponse>(cacheKey);
     if (cached) {
       return successResponse(cached, 200, {
         'x-cache': 'waitlist-position-hit',
@@ -188,7 +191,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Get completed referrals (qualified users) - limit to prevent unbounded payloads
   // Use explicit column selection to avoid querying columns that may not exist in DB yet
-  const completedReferralsRaw = await db
+  type CompletedReferralRow = {
+    id: string;
+    referredUserId: string | null;
+    completedAt: Date | null;
+    userId: string | null;
+    username: string | null;
+    displayName: string | null;
+    profileImageUrl: string | null;
+    userCreatedAt: Date | null;
+  };
+  const completedReferralsRaw = (await db
     .select({
       id: referrals.id,
       referredUserId: referrals.referredUserId,
@@ -206,14 +219,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       and(eq(referrals.referrerId, userId), eq(referrals.status, 'completed'))
     )
     .orderBy(desc(referrals.completedAt))
-    .limit(MAX_REFERRALS_PER_LIST);
+    .limit(MAX_REFERRALS_PER_LIST)) as unknown as CompletedReferralRow[];
 
   const weeklyReferralCount = completedReferralsRaw.filter(
     (r) => r.completedAt && r.completedAt >= oneWeekAgo
   ).length;
 
   // Get pending referrals (invited but not qualified) - limit to prevent unbounded payloads
-  const pendingReferredUsers = await db
+  type PendingUserRow = {
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    profileImageUrl: string | null;
+    email: string | null;
+    farcasterUsername: string | null;
+    twitterUsername: string | null;
+    createdAt: Date;
+  };
+  const pendingReferredUsers = (await db
     .select({
       id: users.id,
       username: users.username,
@@ -227,7 +250,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     .from(users)
     .where(and(eq(users.referredBy, userId), eq(users.profileComplete, false)))
     .orderBy(desc(users.createdAt))
-    .limit(MAX_REFERRALS_PER_LIST);
+    .limit(MAX_REFERRALS_PER_LIST)) as unknown as PendingUserRow[];
 
   const WEEKLY_REFERRAL_LIMIT = 10;
 
@@ -294,8 +317,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   };
 
   if (CACHE_TTL_MS > 0) {
-    await setCache(userId, responseBody, {
-      namespace: CACHE_KEY_NAMESPACE,
+    await setCache(cacheKey, responseBody, {
       ttl: CACHE_TTL_SECONDS,
     });
   }

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { successResponse, withErrorHandling } from '@babylon/api';
 import { db, desc, eq, predictionPriceHistories } from '@babylon/db';
 import { HistoryQuerySchema, PredictionMarketIdSchema } from '@babylon/shared';

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Market Bias Configuration API
  *

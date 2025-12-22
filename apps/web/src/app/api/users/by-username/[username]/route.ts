@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * User Lookup by Username API
  *

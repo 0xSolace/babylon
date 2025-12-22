@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * User Balance API
  *
@@ -130,7 +132,8 @@ export const GET = withErrorHandling(
         .insert(users)
         .values({
           id: userId,
-          privyId: userId, // @deprecated - kept for migration compatibility with existing did:privy: user data
+          /** @deprecated privyId retained for migration compatibility with legacy did:privy: users. New users use OAuth3 sub as id. */
+          privyId: userId,
           isActor: false,
           updatedAt: new Date(),
         })

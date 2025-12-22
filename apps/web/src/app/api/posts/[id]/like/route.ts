@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * API Route: /api/posts/[id]/like
  * Methods: POST (like), DELETE (unlike)

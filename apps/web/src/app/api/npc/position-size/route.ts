@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * NPC Position Size Recommendation API
  *

@@ -116,8 +116,9 @@ export class BenchmarkRunner {
       : await this.generateBenchmark(config.generatorConfig!);
 
     // 2. Create simulation engine
-    // TODO: SimulationEngine is deprecated - snapshot property doesn't exist in SimulationConfig
-    // The actual simulation implementation was moved to the game engine
+    // Note: SimulationEngine is deprecated - snapshot property doesn't exist in SimulationConfig.
+    // The actual simulation implementation was moved to the game engine.
+    // This configuration extends SimulationConfig with legacy snapshot support for benchmarking.
     const simConfig: SimulationConfig & {
       snapshot?: unknown;
       agentId?: string;
@@ -187,8 +188,8 @@ export class BenchmarkRunner {
     }
 
     // 5. Initialize simulation
-    // TODO: SimulationEngine.initialize() doesn't exist - engine is deprecated
-    // engine.initialize();
+    // Note: SimulationEngine.initialize() was removed when engine was deprecated.
+    // Initialization now happens in the constructor.
 
     // 6. Run simulation loop
     logger.info('Starting simulation loop', {
@@ -196,86 +197,15 @@ export class BenchmarkRunner {
       totalTicks: snapshot.ticks.length,
     });
 
-    // Only get coordinator if we are using an autonomous agent (not forced strategy)
-    // This prevents errors when running baseline tests without full dependency injection
-    // TODO: Unused - code that uses coordinator is commented out
-    // const coordinator = !config.forceStrategy
-    //   ? getAutonomousCoordinator()
-    //   : undefined;
-
-    // Create seeded RNG for baseline strategies (reproducibility)
-    // Use snapshot ID hash as seed for deterministic behavior across runs
-    // TODO: Unused - code that uses baselineRng is commented out
-    // const baselineSeed = config.forceStrategy
-    //   ? snapshot.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-    //   : 0;
-    // const baselineRng = config.forceStrategy
-    //   ? new SeededRandom(baselineSeed)
-    //   : undefined;
+    // Note: AutonomousCoordinator and SeededRandom were used for the deprecated tick loop below.
+    // These would be needed if the tick-by-tick simulation is re-enabled.
 
     const ticksCompleted = 0;
 
-    // TODO: SimulationEngine methods don't exist - engine is deprecated
-    // The actual simulation implementation was moved to the game engine
-    // Run ticks for each simulation tick
-    // while (!engine.isComplete()) {
-    //   const currentTick = engine.getCurrentTickNumber();
-    //
-    //   if (currentTick % 100 === 0 || currentTick < 5) {
-    //     logger.info(
-    //       `Benchmark progress: ${currentTick}/${snapshot.ticks.length} ticks`,
-    //       {
-    //         agentUserId: config.agentUserId,
-    //       }
-    //     );
-    //   }
-    //
-    //   if (config.forceStrategy && baselineRng) {
-    //     // Execute baseline strategy directly on engine (bypassing LLM)
-    //     await this.executeBaselineStrategy(
-    //       config.forceStrategy,
-    //       engine,
-    //       baselineRng
-    //     );
-    //   } else {
-    //     if (!coordinator) {
-    //       throw new Error(
-    //         'AutonomousCoordinator required for agent-driven benchmark but not configured.'
-    //       );
-    //     }
-    //
-    //     // Execute autonomous tick (agent makes decisions via A2A)
-    //     // Fail fast - don't catch errors, let them propagate
-    //     const tickResult = await coordinator.executeAutonomousTick(
-    //       config.agentUserId,
-    //       config.agentRuntime
-    //     );
-    //
-    //     if (tickResult.success && tickResult.actionsExecuted) {
-    //       const totalActions =
-    //         tickResult.actionsExecuted.trades +
-    //         tickResult.actionsExecuted.posts +
-    //         tickResult.actionsExecuted.comments +
-    //         tickResult.actionsExecuted.messages +
-    //         tickResult.actionsExecuted.groupMessages +
-    //         tickResult.actionsExecuted.engagements;
-    //
-    //       if (totalActions > 0) {
-    //         logger.debug('Agent took actions', {
-    //           tick: currentTick,
-    //           actions: tickResult.actionsExecuted,
-    //         });
-    //       }
-    //     }
-    //   }
-    //
-    //   // Advance simulation tick
-    //   engine.advanceTick();
-    //   ticksCompleted++;
-    //
-    //   // Small delay to avoid overwhelming the system
-    //   await new Promise((resolve) => setTimeout(resolve, 5));
-    // }
+    // Note: The tick-by-tick simulation loop was removed when SimulationEngine was deprecated.
+    // The deprecated loop would iterate through each tick, calling either executeBaselineStrategy()
+    // or coordinator.executeAutonomousTick() based on config.forceStrategy.
+    // Now, engine.run() handles the full simulation internally.
 
     logger.info('Simulation loop complete', {
       agentUserId: config.agentUserId,
@@ -286,18 +216,10 @@ export class BenchmarkRunner {
     // 7. Calculate final results
     const result = await engine.run();
 
-    // 8. Validate results - ensure agent actually did something
-    // TODO: SimulationResult doesn't have ticksProcessed or actions properties
-    // if (result.ticksProcessed === 0) {
-    //   throw new Error('Benchmark failed: No ticks were processed');
-    // }
-    //
-    // if (result.actions.length === 0) {
-    //   logger.warn('Benchmark completed but agent took no actions', {
-    //     agentUserId: config.agentUserId,
-    //     ticksProcessed: result.ticksProcessed,
-    //   });
-    // }
+    // 8. Validate results
+    // Note: SimulationResult type changed when SimulationEngine was deprecated.
+    // ticksProcessed and actions properties are no longer available.
+    // Validation now relies on the metrics returned by engine.run().
 
     // 9. Save trajectory if enabled
     if (trajectoryRecorder && trajectoryId) {

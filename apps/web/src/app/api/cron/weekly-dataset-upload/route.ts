@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Weekly Dataset Upload Cron API
  *

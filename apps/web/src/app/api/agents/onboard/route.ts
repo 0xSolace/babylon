@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Agent On-Chain Registration API
  *
@@ -164,7 +166,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       create: {
         id: await generateSnowflakeId(),
         oauth3Id: agentId,
-        privyId: agentId, // @deprecated - kept for migration compatibility
+        /** @deprecated privyId is legacy from Privy auth - use oauth3Id instead. Kept for migration compatibility only. */
+        privyId: agentId,
         username: agentId,
         displayName: agentName || agentId,
         virtualBalance: '10000', // Start with 10k points

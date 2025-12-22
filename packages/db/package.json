@@ -46,6 +46,7 @@
   },
   "dependencies": {
     "@babylon/shared": "workspace:*",
+    "@jejunetwork/config": "workspace:*",
     "@jejunetwork/db": "workspace:*",
     "zod": "^4.1.12"
   },

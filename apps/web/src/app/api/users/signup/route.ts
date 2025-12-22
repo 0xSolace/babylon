@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * User Signup API
  *
@@ -189,11 +191,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     async () => {
       return await withTransaction(async (tx) => {
         // Check if username is already taken by another user
-        const [existingUsername] = await tx
+        const [existingUsername] = (await tx
           .select({ id: users.id })
           .from(users)
           .where(eq(users.username, parsedProfile.username))
-          .limit(1);
+          .limit(1)) as unknown as { id: string }[];
 
         if (existingUsername && existingUsername.id !== canonicalUserId) {
           throw new ConflictError('Username is already taken', 'User.username');
@@ -201,11 +203,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
         // Check if wallet address is already linked to another user
         if (walletAddress) {
-          const [existingWallet] = await tx
+          const [existingWallet] = (await tx
             .select({ id: users.id })
             .from(users)
             .where(eq(users.walletAddress, walletAddress))
-            .limit(1);
+            .limit(1)) as unknown as { id: string }[];
 
           if (existingWallet && existingWallet.id !== canonicalUserId) {
             throw new ConflictError(
@@ -221,30 +223,30 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         const normalizedCode = referralCode?.trim() || null;
 
         // Check if user already has referredBy (set in /api/users/me)
-        const [existingUser] = await tx
+        const [existingUser] = (await tx
           .select({ referredBy: users.referredBy })
           .from(users)
           .where(eq(users.id, canonicalUserId))
-          .limit(1);
+          .limit(1)) as unknown as { referredBy: string | null }[];
 
         // Only resolve referral if not already set
         if (existingUser && !existingUser.referredBy && normalizedCode) {
           // First, try to find referrer by username (legacy system)
-          const [referrerByUsername] = await tx
+          const [referrerByUsername] = (await tx
             .select({ id: users.id })
             .from(users)
             .where(eq(users.username, normalizedCode))
-            .limit(1);
+            .limit(1)) as unknown as { id: string }[];
 
           if (referrerByUsername && referrerByUsername.id !== canonicalUserId) {
             resolvedReferrerId = referrerByUsername.id;
           } else {
             // If not found by username, look up who owns this referral code
-            const [referralOwner] = await tx
+            const [referralOwner] = (await tx
               .select({ id: users.id })
               .from(users)
               .where(eq(users.referralCode, normalizedCode))
-              .limit(1);
+              .limit(1)) as unknown as { id: string }[];
 
             if (referralOwner && referralOwner.id !== canonicalUserId) {
               resolvedReferrerId = referralOwner.id;
@@ -331,7 +333,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
         if (existingUserRecord) {
           // Update existing user
-          const [updatedUser] = await tx
+          const [updatedUser] = (await tx
             .update(users)
             .set({
               ...baseUserData,
@@ -340,25 +342,24 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
                 : existingUserRecord.referredBy,
               updatedAt: new Date(),
             })
-            .where(eq(users.id, canonicalUserId))
-            .returning();
+            .where(
+              eq(users.id, canonicalUserId)
+            )) as (typeof users.$inferSelect)[];
           if (!updatedUser) {
             throw new InternalServerError('Failed to update user record');
           }
           user = updatedUser;
         } else {
           // Create new user
-          const [newUser] = await tx
-            .insert(users)
-            .values({
-              id: canonicalUserId,
-              oauth3Id,
-              privyId: oauth3Id, // Keep for legacy compatibility
-              ...baseUserData,
-              referredBy: resolvedReferrerId,
-              updatedAt: new Date(),
-            })
-            .returning();
+          const [newUser] = (await tx.insert(users).values({
+            id: canonicalUserId,
+            oauth3Id,
+            /** @deprecated privyId is a legacy field from Privy auth migration - use oauth3Id instead */
+            privyId: oauth3Id,
+            ...baseUserData,
+            referredBy: resolvedReferrerId,
+            updatedAt: new Date(),
+          })) as (typeof users.$inferSelect)[];
           if (!newUser) {
             throw new InternalServerError('Failed to create user record');
           }
@@ -368,7 +369,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         // Create referral record AFTER user exists (to satisfy FK constraint)
         if (resolvedReferrerId && normalizedCode) {
           // Check if referral record already exists
-          const [existingReferral] = await tx
+          const [existingReferral] = (await tx
             .select({ id: referrals.id })
             .from(referrals)
             .where(
@@ -377,7 +378,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
                 eq(referrals.referredUserId, user.id)
               )
             )
-            .limit(1);
+            .limit(1)) as unknown as { id: string }[];
 
           if (existingReferral) {
             // Update existing record
@@ -389,16 +390,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           } else {
             // Create new referral record
             const referralId = await generateSnowflakeId();
-            const [referralRecord] = await tx
-              .insert(referrals)
-              .values({
-                id: referralId,
-                referrerId: resolvedReferrerId,
-                referralCode: normalizedCode,
-                referredUserId: user.id,
-                status: 'pending',
-              })
-              .returning({ id: referrals.id });
+            const [referralRecord] = (await tx.insert(referrals).values({
+              id: referralId,
+              referrerId: resolvedReferrerId,
+              referralCode: normalizedCode,
+              referredUserId: user.id,
+              status: 'pending',
+            })) as (typeof referrals.$inferSelect)[];
             if (!referralRecord) {
               throw new InternalServerError('Failed to create referral record');
             }

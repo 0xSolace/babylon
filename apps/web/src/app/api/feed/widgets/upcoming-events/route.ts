@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Upcoming Events Widget API
  *

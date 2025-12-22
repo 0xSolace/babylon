@@ -1,7 +1,7 @@
 /**
  * Wallet utility functions for smart wallet detection and validation
  *
- * Migrated from Privy to OAuth3/MPC wallets.
+ * Supports OAuth3/MPC wallets and external wallets.
  */
 
 /**

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * NPC Reputation-Adjusted Allocation API
  *

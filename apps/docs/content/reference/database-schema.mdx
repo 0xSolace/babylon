@@ -51,10 +51,14 @@ export const users = pgTable('User', {
 ```
 
 **Key Fields**:
+- `oauth3Id`: OAuth3 (Jeju) authentication identifier - the primary auth method
+- `privyId`: **@deprecated** - Legacy Privy auth identifier, retained for backward compatibility during migration. New users authenticate via OAuth3.
 - `isActor`: Distinguishes NPCs from real users
 - `virtualBalance`: In-game currency
 - `nftTokenId`: ERC-8004 token ID
 - `reputationPoints`: Leaderboard ranking
+
+> **Migration Note**: Authentication has migrated from Privy to OAuth3 (Jeju). The `privyId` field is deprecated and will be removed in a future release. All new user authentication uses `oauth3Id`.
 
 ### Post
 

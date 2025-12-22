@@ -456,8 +456,11 @@ export function createCQLClient(): CQLClient {
       let sql = `SELECT ${selectParts.length > 0 ? selectParts.join(', ') : '*'} FROM "${mainTableName}"`;
 
       // Add JOINs
+      // Note: CQL JOIN conditions use a simplified `ON true` clause. Drizzle condition
+      // objects are not parsed into SQL. For queries requiring specific JOIN conditions,
+      // use raw SQL via db.$queryRaw or db.query() instead.
       for (const join of joins) {
-        sql += ` ${join.type} JOIN "${join.tableName}" ON true`; // TODO: Parse actual condition
+        sql += ` ${join.type} JOIN "${join.tableName}" ON true`;
       }
 
       sql += whereClause + orderByClause + limitClause + offsetClause;
@@ -545,14 +548,18 @@ export function createCQLClient(): CQLClient {
       'from'
     > => ({
       where: (condition: unknown) => {
+        // Note: Drizzle WHERE conditions are not fully parsed. This compatibility
+        // layer accepts the condition but generates a placeholder `WHERE 1=1`.
+        // For complex filtering, use raw SQL via db.$queryRaw or db.query().
         if (condition) {
-          // TODO: Parse Drizzle conditions properly
           whereClause = ' WHERE 1=1';
         }
         return createBuilderMethods<TResult>() as SelectBuilder<TResult>;
       },
       orderBy: (..._orders: unknown[]) => {
-        // TODO: Parse order by expressions
+        // Note: Drizzle ORDER BY expressions are not parsed. This compatibility
+        // layer accepts the arguments but does not generate an ORDER BY clause.
+        // For ordered queries, use raw SQL via db.$queryRaw or db.query().
         orderByClause = '';
         return createBuilderMethods<TResult>() as SelectBuilder<TResult>;
       },

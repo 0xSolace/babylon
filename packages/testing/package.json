@@ -23,6 +23,7 @@
   "dependencies": {
     "@babylon/api": "workspace:*",
     "@babylon/auth": "workspace:*",
+    "@babylon/core": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@babylon/engine": "workspace:*",
     "@babylon/db": "workspace:*",

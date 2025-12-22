@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Posts Feed API
  *

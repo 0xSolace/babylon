@@ -43,16 +43,6 @@ export function isEmbeddedWallet(wallet?: ConnectedWallet | null): boolean {
 }
 
 /**
- * @deprecated Legacy function from Privy migration - use isEmbeddedWallet instead.
- * This wrapper exists for backward compatibility during OAuth3/MPC wallet migration.
- */
-export function isEmbeddedPrivyWallet(
-  wallet?: ConnectedWallet | null
-): boolean {
-  return isEmbeddedWallet(wallet);
-}
-
-/**
  * Check if a wallet is an external wallet (not embedded)
  *
  * @description Determines if a connected wallet is an external wallet (e.g., MetaMask,

@@ -46,7 +46,7 @@ function getRedirectUri(): string {
  * Root providers component wrapping the application with all necessary providers.
  *
  * Provides all application-level context providers including:
- * - Jeju OAuth3 authentication (replaces Privy)
+ * - Jeju OAuth3 authentication
  * - React Query
  * - Theme
  * - Font size

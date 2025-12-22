@@ -1,19 +1,14 @@
-// TODO: @babylon/core is not in testing package dependencies - add it or fix import path
-// import { beforeEach, describe, expect, mock, test } from 'bun:test';
-// import type {
-//   PredictionDbPort,
-//   PredictionMarketRecord,
-//   PredictionPositionRecord,
-//   PredictionServiceDeps,
-//   QuestionRecord,
-// } from '@babylon/core/markets/prediction';
-// import { PredictionMarketService } from '@babylon/core/markets/prediction';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type {
+  PredictionDbPort,
+  PredictionMarketRecord,
+  PredictionPositionRecord,
+  PredictionServiceDeps,
+  QuestionRecord,
+} from '@babylon/core/markets/prediction';
+import { PredictionMarketService } from '@babylon/core/markets/prediction';
 
-import { describe } from 'bun:test';
-
-describe.skip('PredictionMarketService broadcast events', () => {
-  // TODO: Uncomment when @babylon/core is added to testing package dependencies
-  /*
+describe('PredictionMarketService broadcast events', () => {
   const mockBroadcast = {
     emit: mock(
       async (_channel: string, _payload: Record<string, unknown>) => {}
@@ -192,5 +187,4 @@ describe.skip('PredictionMarketService broadcast events', () => {
 
     expect(mockBroadcast.emit).not.toHaveBeenCalled();
   });
-  */
 });

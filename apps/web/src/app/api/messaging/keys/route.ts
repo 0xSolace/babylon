@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Decentralized Messaging Keys API
  *

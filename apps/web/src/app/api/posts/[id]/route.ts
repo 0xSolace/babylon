@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * API Route: /api/posts/[id]
  * Methods: GET (get single post details), DELETE (soft delete post)

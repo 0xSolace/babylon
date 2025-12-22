@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import {
   checkDecentralizationHealth,
   type DecentralizationHealthStatus,

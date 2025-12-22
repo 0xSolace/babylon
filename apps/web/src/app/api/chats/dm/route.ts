@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Direct Message (DM) Chat API
  *

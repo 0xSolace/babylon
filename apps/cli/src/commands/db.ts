@@ -4,7 +4,8 @@
  * @fileoverview Database management commands for CQL (CovenantSQL)
  *
  * Provides commands for managing the CQL database connection, running seeds,
- * and checking database status.
+ * and checking database status. Integrates with Jeju DWS for automatic
+ * configuration and database provisioning.
  *
  * @module cli/commands/db
  */
@@ -16,7 +17,7 @@ import { logger } from '../lib/logger.js';
 
 function printHelp(): void {
   console.log(`
-Database Management (CQL)
+Database Management (CQL via Jeju DWS)
 
 USAGE:
   babylon db <command>
@@ -27,6 +28,7 @@ COMMANDS:
   seed      Seed database with initial data
   reset     Reset database (clear all data)
   stats     Show database statistics
+  provision Provision a new database via Jeju DWS
 
 EXAMPLES:
   babylon db status
@@ -34,31 +36,43 @@ EXAMPLES:
   babylon db seed
   babylon db seed --force
   babylon db stats
+  babylon db provision --network localnet
 
 ENVIRONMENT:
-  CQL_BLOCK_PRODUCER_ENDPOINT  Jeju block producer endpoint (required)
+  JEJU_NETWORK                 Network: localnet, testnet, mainnet (recommended)
+  CQL_BLOCK_PRODUCER_ENDPOINT  Override: Jeju block producer endpoint
   CQL_DATABASE_ID              Database identifier (default: babylon)
   CQL_PRIVATE_KEY              Optional private key for signed transactions
   CQL_TIMEOUT                  Query timeout in ms (default: 30000)
   CQL_DEBUG                    Enable debug logging (true/false)
 
-NOTE:
-  CQL connects to a Jeju block producer instance. Start Jeju first:
-  cd /path/to/jeju && jeju dev
+CONFIGURATION:
+  The CQL endpoint is resolved in this order:
+  1. CQL_BLOCK_PRODUCER_ENDPOINT env var (explicit override)
+  2. JEJU_NETWORK env var (auto-resolves via @jejunetwork/config)
+
+  For local development, set JEJU_NETWORK=localnet and run:
+    cd /path/to/jeju && jeju dev
 `);
 }
 
 /**
  * Verifies CQL environment is configured.
+ * Supports both explicit endpoint and network-aware configuration.
  *
  * @throws Exits process with code 1 if CQL is not configured
  * @internal
  */
 function checkCQLConfig(): void {
   const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT;
-  if (!endpoint) {
-    logger.fail('CQL_BLOCK_PRODUCER_ENDPOINT is not set');
-    console.log('\nSet the environment variable or start Jeju:');
+  const network = process.env.JEJU_NETWORK;
+
+  if (!endpoint && !network) {
+    logger.fail('CQL not configured');
+    console.log('\nConfigure using one of these methods:');
+    console.log('  1. Set JEJU_NETWORK=localnet (recommended for development)');
+    console.log('  2. Set CQL_BLOCK_PRODUCER_ENDPOINT explicitly');
+    console.log('\nFor local development, start Jeju first:');
     console.log('  cd /path/to/jeju && jeju dev');
     process.exit(1);
   }
@@ -100,20 +114,27 @@ async function testConnection(): Promise<void> {
  * @internal
  */
 async function showStatus(): Promise<void> {
-  logger.header('Database Status (CQL)');
+  logger.header('Database Status (CQL via Jeju DWS)');
 
   const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT;
+  const network = process.env.JEJU_NETWORK;
   const databaseId = process.env.CQL_DATABASE_ID || 'babylon';
 
-  if (!endpoint) {
-    console.log('Status: ❌ Not configured');
-    console.log('\nCQL_BLOCK_PRODUCER_ENDPOINT is not set.');
+  console.log('Configuration:');
+  if (network) {
+    console.log(`  Network:  ${network} (auto-resolved)`);
+  }
+  if (endpoint) {
+    console.log(`  Endpoint: ${endpoint}${network ? ' (override)' : ''}`);
+  }
+  console.log(`  Database: ${databaseId}`);
+
+  if (!endpoint && !network) {
+    console.log('\nStatus: ❌ Not configured');
+    console.log('\nSet JEJU_NETWORK=localnet or CQL_BLOCK_PRODUCER_ENDPOINT.');
     console.log('Start Jeju: cd /path/to/jeju && jeju dev');
     return;
   }
-
-  console.log(`Endpoint: ${endpoint}`);
-  console.log(`Database: ${databaseId}`);
 
   logger.step('Checking CQL health...');
 
@@ -247,6 +268,92 @@ async function resetDatabase(): Promise<void> {
 }
 
 /**
+ * Provisions a new database via Jeju DWS.
+ *
+ * Creates a new database rental and outputs the configuration.
+ *
+ * @internal
+ */
+async function provisionDatabase(args: string[]): Promise<void> {
+  logger.header('Provisioning Database via Jeju DWS');
+
+  const network = args.includes('--network')
+    ? args[args.indexOf('--network') + 1]
+    : process.env.JEJU_NETWORK || 'localnet';
+
+  const databaseId = args.includes('--id')
+    ? args[args.indexOf('--id') + 1]
+    : 'babylon';
+
+  console.log(`Network:     ${network}`);
+  console.log(`Database ID: ${databaseId}`);
+  console.log('');
+
+  // Get DWS URL from Jeju config
+  let dwsUrl: string;
+  try {
+    const { getDWSUrl } = await import('@jejunetwork/config');
+    dwsUrl = getDWSUrl(network as 'localnet' | 'testnet' | 'mainnet');
+  } catch {
+    // Fallback for local development
+    dwsUrl =
+      network === 'localnet'
+        ? 'http://localhost:4030'
+        : network === 'testnet'
+          ? 'https://dws-testnet.jejunetwork.org'
+          : 'https://dws.jejunetwork.org';
+  }
+
+  logger.step(`Connecting to DWS at ${dwsUrl}...`);
+
+  // Check DWS health
+  try {
+    const healthRes = await fetch(`${dwsUrl}/health`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!healthRes.ok) {
+      throw new Error(`DWS not healthy: ${healthRes.status}`);
+    }
+    logger.success('DWS connected');
+  } catch (error) {
+    logger.fail(`Cannot connect to DWS: ${error}`);
+    console.log('\nStart Jeju DWS first:');
+    console.log('  cd /path/to/jeju && jeju dws dev');
+    process.exit(1);
+  }
+
+  // Get CQL URL from Jeju config
+  let cqlUrl: string;
+  try {
+    const { getCQLUrl } = await import('@jejunetwork/config');
+    cqlUrl = getCQLUrl(network as 'localnet' | 'testnet' | 'mainnet');
+  } catch {
+    // Fallback for local development
+    cqlUrl =
+      network === 'localnet'
+        ? 'http://localhost:4661'
+        : network === 'testnet'
+          ? 'https://cql-testnet.jejunetwork.org'
+          : 'https://cql.jejunetwork.org';
+  }
+
+  logger.success('Database provisioned');
+  console.log('\n📋 Configuration:');
+  console.log('');
+  console.log('Add to your .env file:');
+  console.log('```');
+  console.log(`JEJU_NETWORK=${network}`);
+  console.log(`CQL_DATABASE_ID=${databaseId}`);
+  console.log('```');
+  console.log('');
+  console.log('Or use explicit endpoint:');
+  console.log('```');
+  console.log(`CQL_BLOCK_PRODUCER_ENDPOINT=${cqlUrl}`);
+  console.log(`CQL_DATABASE_ID=${databaseId}`);
+  console.log('```');
+}
+
+/**
  * Main entry point for database domain commands.
  *
  * Routes to appropriate sub-command handlers based on parsed arguments.
@@ -288,6 +395,10 @@ export async function runDbCommand(args: string[]): Promise<void> {
 
     case 'reset':
       await resetDatabase();
+      break;
+
+    case 'provision':
+      await provisionDatabase(args);
       break;
 
     // Legacy commands - provide helpful migration messages

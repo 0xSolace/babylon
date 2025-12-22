@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Group Invite Decline API
  *
