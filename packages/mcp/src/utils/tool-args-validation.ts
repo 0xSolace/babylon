@@ -1,120 +1,44 @@
 /**
  * MCP Tool Arguments Validation
  *
- * Validation schemas for each tool's arguments
+ * Zod schemas for validating tool arguments.
+ * Types are inferred from schemas using z.infer<> - no duplication.
  */
 
 import { JsonValueSchema } from '@babylon/shared';
 import { z } from 'zod';
-import type {
-  AcceptGroupInviteArgs,
-  AppealBanArgs,
-  AppealBanWithEscrowArgs,
-  BlockUserArgs,
-  BuySharesArgs,
-  CheckBlockStatusArgs,
-  CheckMuteStatusArgs,
-  ClosePositionArgs,
-  CreateCommentArgs,
-  CreateEscrowPaymentArgs,
-  CreateGroupArgs,
-  CreatePostArgs,
-  DeclineGroupInviteArgs,
-  DeleteCommentArgs,
-  DeletePostArgs,
-  FavoriteProfileArgs,
-  FollowUserArgs,
-  GetBalanceArgs,
-  GetBlocksArgs,
-  GetChatMessagesArgs,
-  GetChatsArgs,
-  GetCommentsArgs,
-  GetFavoritePostsArgs,
-  GetFavoritesArgs,
-  GetFollowersArgs,
-  GetFollowingArgs,
-  GetGroupInvitesArgs,
-  GetLeaderboardArgs,
-  GetMarketDataArgs,
-  GetMarketPricesArgs,
-  GetMarketsArgs,
-  GetMutesArgs,
-  GetNotificationsArgs,
-  GetOrganizationsArgs,
-  GetPerpetualsArgs,
-  GetPositionsArgs,
-  GetPostsByTagArgs,
-  GetReferralCodeArgs,
-  GetReferralStatsArgs,
-  GetReferralsArgs,
-  GetReputationArgs,
-  GetReputationBreakdownArgs,
-  GetSystemStatsArgs,
-  GetTradeHistoryArgs,
-  GetTradesArgs,
-  GetTrendingTagsArgs,
-  GetUnreadCountArgs,
-  GetUserProfileArgs,
-  GetUserStatsArgs,
-  GetUserWalletArgs,
-  LeaveChatArgs,
-  LikeCommentArgs,
-  LikePostArgs,
-  ListEscrowPaymentsArgs,
-  MarkNotificationsReadArgs,
-  MuteUserArgs,
-  OpenPositionArgs,
-  PaymentReceiptArgs,
-  PaymentRequestArgs,
-  PlaceBetArgs,
-  QueryFeedArgs,
-  RefundEscrowPaymentArgs,
-  ReportPostArgs,
-  ReportUserArgs,
-  SearchUsersArgs,
-  SellSharesArgs,
-  SendMessageArgs,
-  SharePostArgs,
-  TransferPointsArgs,
-  UnblockUserArgs,
-  UnfavoriteProfileArgs,
-  UnfollowUserArgs,
-  UnlikePostArgs,
-  UnmuteUserArgs,
-  UpdateProfileArgs,
-  VerifyEscrowPaymentArgs,
-} from '../types/mcp';
 
-const GetMarketsArgsSchema = z.object({
+// Core Market Operations
+export const GetMarketsArgsSchema = z.object({
   type: z.enum(['prediction', 'perpetuals', 'all']).optional(),
-}) satisfies z.ZodType<GetMarketsArgs>;
+});
 
-const PlaceBetArgsSchema = z.object({
+export const PlaceBetArgsSchema = z.object({
   marketId: z.string().min(1),
   side: z.enum(['YES', 'NO']),
   amount: z.number().positive(),
-}) satisfies z.ZodType<PlaceBetArgs>;
+});
 
-const GetBalanceArgsSchema = z.object({}) satisfies z.ZodType<GetBalanceArgs>;
+export const GetBalanceArgsSchema = z.object({});
 
-const GetPositionsArgsSchema = z.object({
+export const GetPositionsArgsSchema = z.object({
   marketId: z.string().optional(),
   limit: z.number().int().positive().optional(),
   offset: z.number().int().nonnegative().optional(),
-}) satisfies z.ZodType<GetPositionsArgs>;
+});
 
-const ClosePositionArgsSchema = z.object({
+export const ClosePositionArgsSchema = z.object({
   positionId: z.string().min(1),
-}) satisfies z.ZodType<ClosePositionArgs>;
+});
 
-const GetMarketDataArgsSchema = z.object({
+export const GetMarketDataArgsSchema = z.object({
   marketId: z.string().min(1),
-}) satisfies z.ZodType<GetMarketDataArgs>;
+});
 
-const QueryFeedArgsSchema = z.object({
+export const QueryFeedArgsSchema = z.object({
   limit: z.number().int().positive().optional(),
   questionId: z.string().optional(),
-}) satisfies z.ZodType<QueryFeedArgs>;
+});
 
 /**
  * Validate and parse tool arguments
@@ -148,345 +72,425 @@ export function validateQueryFeedArgs(args: unknown): QueryFeedArgs {
 }
 
 // Market Operations - Validation Schemas
-const BuySharesArgsSchema = z.object({
+export const BuySharesArgsSchema = z.object({
   marketId: z.string().min(1),
   outcome: z.enum(['YES', 'NO']),
   amount: z.number().positive(),
-}) satisfies z.ZodType<BuySharesArgs>;
+});
 
-const SellSharesArgsSchema = z.object({
+export const SellSharesArgsSchema = z.object({
   positionId: z.string().min(1),
   shares: z.number().positive(),
-}) satisfies z.ZodType<SellSharesArgs>;
+});
 
-const OpenPositionArgsSchema = z.object({
+export const OpenPositionArgsSchema = z.object({
   ticker: z.string().min(1),
   side: z.enum(['LONG', 'SHORT']),
   amount: z.number().positive(),
   leverage: z.number().min(1).max(100),
-}) satisfies z.ZodType<OpenPositionArgs>;
+});
 
-const GetMarketPricesArgsSchema = z.object({
+export const GetMarketPricesArgsSchema = z.object({
   marketId: z.string().min(1),
-}) satisfies z.ZodType<GetMarketPricesArgs>;
+});
 
-const GetPerpetualsArgsSchema = z.object(
-  {}
-) satisfies z.ZodType<GetPerpetualsArgs>;
+export const GetPerpetualsArgsSchema = z.object({});
 
-const GetTradesArgsSchema = z.object({
+export const GetTradesArgsSchema = z.object({
   limit: z.number().int().positive().optional(),
   marketId: z.string().optional(),
-}) satisfies z.ZodType<GetTradesArgs>;
+});
 
-const GetTradeHistoryArgsSchema = z.object({
+export const GetTradeHistoryArgsSchema = z.object({
   userId: z.string().min(1),
   limit: z.number().int().positive().optional(),
-}) satisfies z.ZodType<GetTradeHistoryArgs>;
+});
 
 // Social Features - Validation Schemas
-const CreatePostArgsSchema = z.object({
+export const CreatePostArgsSchema = z.object({
   content: z.string().min(1).max(5000),
   type: z.enum(['post', 'article']).optional().default('post'),
-}) satisfies z.ZodType<CreatePostArgs>;
+});
 
-const DeletePostArgsSchema = z.object({
+export const DeletePostArgsSchema = z.object({
   postId: z.string().min(1),
-}) satisfies z.ZodType<DeletePostArgs>;
+});
 
-const LikePostArgsSchema = z.object({
+export const LikePostArgsSchema = z.object({
   postId: z.string().min(1),
-}) satisfies z.ZodType<LikePostArgs>;
+});
 
-const UnlikePostArgsSchema = z.object({
+export const UnlikePostArgsSchema = z.object({
   postId: z.string().min(1),
-}) satisfies z.ZodType<UnlikePostArgs>;
+});
 
-const SharePostArgsSchema = z.object({
+export const SharePostArgsSchema = z.object({
   postId: z.string().min(1),
   comment: z.string().optional(),
-}) satisfies z.ZodType<SharePostArgs>;
+});
 
-const GetCommentsArgsSchema = z.object({
+export const GetCommentsArgsSchema = z.object({
   postId: z.string().min(1),
   limit: z.number().int().positive().optional().default(50),
-}) satisfies z.ZodType<GetCommentsArgs>;
+});
 
-const CreateCommentArgsSchema = z.object({
+export const CreateCommentArgsSchema = z.object({
   postId: z.string().min(1),
   content: z.string().min(1).max(2000),
-}) satisfies z.ZodType<CreateCommentArgs>;
+});
 
-const DeleteCommentArgsSchema = z.object({
+export const DeleteCommentArgsSchema = z.object({
   commentId: z.string().min(1),
-}) satisfies z.ZodType<DeleteCommentArgs>;
+});
 
-const LikeCommentArgsSchema = z.object({
+export const LikeCommentArgsSchema = z.object({
   commentId: z.string().min(1),
-}) satisfies z.ZodType<LikeCommentArgs>;
+});
 
-const GetPostsByTagArgsSchema = z.object({
+export const GetPostsByTagArgsSchema = z.object({
   tag: z.string().min(1),
   limit: z.number().int().positive().optional().default(20),
   offset: z.number().int().nonnegative().optional().default(0),
-}) satisfies z.ZodType<GetPostsByTagArgs>;
+});
 
 // User Management - Validation Schemas
-const GetUserProfileArgsSchema = z.object({
+export const GetUserProfileArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<GetUserProfileArgs>;
+});
 
-const UpdateProfileArgsSchema = z.object({
+export const UpdateProfileArgsSchema = z.object({
   displayName: z.string().optional(),
   bio: z.string().max(500).optional(),
   username: z.string().optional(),
   profileImageUrl: z.string().optional(),
-}) satisfies z.ZodType<UpdateProfileArgs>;
+});
 
-const FollowUserArgsSchema = z.object({
+export const FollowUserArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<FollowUserArgs>;
+});
 
-const UnfollowUserArgsSchema = z.object({
+export const UnfollowUserArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<UnfollowUserArgs>;
+});
 
-const GetFollowersArgsSchema = z.object({
-  userId: z.string().min(1),
-  limit: z.number().int().positive().optional().default(50),
-}) satisfies z.ZodType<GetFollowersArgs>;
-
-const GetFollowingArgsSchema = z.object({
+export const GetFollowersArgsSchema = z.object({
   userId: z.string().min(1),
   limit: z.number().int().positive().optional().default(50),
-}) satisfies z.ZodType<GetFollowingArgs>;
+});
 
-const SearchUsersArgsSchema = z.object({
+export const GetFollowingArgsSchema = z.object({
+  userId: z.string().min(1),
+  limit: z.number().int().positive().optional().default(50),
+});
+
+export const SearchUsersArgsSchema = z.object({
   query: z.string().min(1),
   limit: z.number().int().positive().optional().default(20),
-}) satisfies z.ZodType<SearchUsersArgs>;
+});
 
-const GetUserWalletArgsSchema = z.object({
+export const GetUserWalletArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<GetUserWalletArgs>;
+});
 
-const GetUserStatsArgsSchema = z.object({
+export const GetUserStatsArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<GetUserStatsArgs>;
+});
 
 // Chats & Messaging - Validation Schemas
-const GetChatsArgsSchema = z.object({
+export const GetChatsArgsSchema = z.object({
   filter: z.enum(['all', 'dms', 'groups']).optional(),
-}) satisfies z.ZodType<GetChatsArgs>;
+});
 
-const GetChatMessagesArgsSchema = z.object({
+export const GetChatMessagesArgsSchema = z.object({
   chatId: z.string().min(1),
   limit: z.number().int().positive().optional().default(50),
   offset: z.number().int().nonnegative().optional().default(0),
-}) satisfies z.ZodType<GetChatMessagesArgs>;
+});
 
-const SendMessageArgsSchema = z.object({
+export const SendMessageArgsSchema = z.object({
   chatId: z.string().min(1),
   content: z.string().min(1).max(5000),
-}) satisfies z.ZodType<SendMessageArgs>;
+});
 
-const CreateGroupArgsSchema = z.object({
+export const CreateGroupArgsSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   memberIds: z.array(z.string().min(1)).min(1),
-}) satisfies z.ZodType<CreateGroupArgs>;
+});
 
-const LeaveChatArgsSchema = z.object({
+export const LeaveChatArgsSchema = z.object({
   chatId: z.string().min(1),
-}) satisfies z.ZodType<LeaveChatArgs>;
+});
 
-const GetUnreadCountArgsSchema = z.object(
-  {}
-) satisfies z.ZodType<GetUnreadCountArgs>;
+export const GetUnreadCountArgsSchema = z.object({});
 
 // Notifications - Validation Schemas
-const GetNotificationsArgsSchema = z.object({
+export const GetNotificationsArgsSchema = z.object({
   limit: z.number().int().positive().optional().default(100),
-}) satisfies z.ZodType<GetNotificationsArgs>;
+});
 
-const MarkNotificationsReadArgsSchema = z.object({
+export const MarkNotificationsReadArgsSchema = z.object({
   notificationIds: z.array(z.string().min(1)),
-}) satisfies z.ZodType<MarkNotificationsReadArgs>;
+});
 
-const GetGroupInvitesArgsSchema = z.object(
-  {}
-) satisfies z.ZodType<GetGroupInvitesArgs>;
+export const GetGroupInvitesArgsSchema = z.object({});
 
-const AcceptGroupInviteArgsSchema = z.object({
+export const AcceptGroupInviteArgsSchema = z.object({
   inviteId: z.string().min(1),
-}) satisfies z.ZodType<AcceptGroupInviteArgs>;
+});
 
-const DeclineGroupInviteArgsSchema = z.object({
+export const DeclineGroupInviteArgsSchema = z.object({
   inviteId: z.string().min(1),
-}) satisfies z.ZodType<DeclineGroupInviteArgs>;
+});
 
 // Leaderboard & Stats - Validation Schemas
-const GetLeaderboardArgsSchema = z.object({
+export const GetLeaderboardArgsSchema = z.object({
   page: z.number().int().positive().optional().default(1),
   pageSize: z.number().int().positive().optional().default(100),
   pointsType: z.enum(['all', 'earned', 'referral']).optional().default('all'),
   minPoints: z.number().nonnegative().optional().default(0),
-}) satisfies z.ZodType<GetLeaderboardArgs>;
+});
 
-const GetSystemStatsArgsSchema = z.object(
-  {}
-) satisfies z.ZodType<GetSystemStatsArgs>;
+export const GetSystemStatsArgsSchema = z.object({});
 
 // Referrals & Rewards - Validation Schemas
-const GetReferralCodeArgsSchema = z.object(
-  {}
-) satisfies z.ZodType<GetReferralCodeArgs>;
+export const GetReferralCodeArgsSchema = z.object({});
 
-const GetReferralsArgsSchema = z.object(
-  {}
-) satisfies z.ZodType<GetReferralsArgs>;
+export const GetReferralsArgsSchema = z.object({});
 
-const GetReferralStatsArgsSchema = z.object(
-  {}
-) satisfies z.ZodType<GetReferralStatsArgs>;
+export const GetReferralStatsArgsSchema = z.object({});
 
 // Reputation - Validation Schemas
-const GetReputationArgsSchema = z.object({
+export const GetReputationArgsSchema = z.object({
   userId: z.string().optional(),
-}) satisfies z.ZodType<GetReputationArgs>;
+});
 
-const GetReputationBreakdownArgsSchema = z.object({
+export const GetReputationBreakdownArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<GetReputationBreakdownArgs>;
+});
 
 // Trending & Discovery - Validation Schemas
-const GetTrendingTagsArgsSchema = z.object({
+export const GetTrendingTagsArgsSchema = z.object({
   limit: z.number().int().positive().optional().default(20),
-}) satisfies z.ZodType<GetTrendingTagsArgs>;
+});
 
 // Organizations - Validation Schemas
-const GetOrganizationsArgsSchema = z.object({
+export const GetOrganizationsArgsSchema = z.object({
   limit: z.number().int().positive().optional().default(50),
-}) satisfies z.ZodType<GetOrganizationsArgs>;
+});
 
 // x402 Micropayments - Validation Schemas
-const PaymentRequestArgsSchema = z.object({
+export const PaymentRequestArgsSchema = z.object({
   to: z.string().min(1),
   amount: z.string().min(1),
   service: z.string().min(1),
   metadata: z.record(z.string(), JsonValueSchema).optional(),
   from: z.string().optional(),
-}) satisfies z.ZodType<PaymentRequestArgs>;
+});
 
-const PaymentReceiptArgsSchema = z.object({
+export const PaymentReceiptArgsSchema = z.object({
   requestId: z.string().min(1),
   txHash: z.string().min(1),
-}) satisfies z.ZodType<PaymentReceiptArgs>;
+});
 
 // Moderation - Validation Schemas
-const BlockUserArgsSchema = z.object({
+export const BlockUserArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<BlockUserArgs>;
+});
 
-const UnblockUserArgsSchema = z.object({
+export const UnblockUserArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<UnblockUserArgs>;
+});
 
-const MuteUserArgsSchema = z.object({
+export const MuteUserArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<MuteUserArgs>;
+});
 
-const UnmuteUserArgsSchema = z.object({
+export const UnmuteUserArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<UnmuteUserArgs>;
+});
 
-const ReportUserArgsSchema = z.object({
+export const ReportUserArgsSchema = z.object({
   userId: z.string().min(1),
   reason: z.string().min(1),
-}) satisfies z.ZodType<ReportUserArgs>;
+});
 
-const ReportPostArgsSchema = z.object({
+export const ReportPostArgsSchema = z.object({
   postId: z.string().min(1),
   reason: z.string().min(1),
-}) satisfies z.ZodType<ReportPostArgs>;
+});
 
-const GetBlocksArgsSchema = z.object({}) satisfies z.ZodType<GetBlocksArgs>;
+export const GetBlocksArgsSchema = z.object({});
 
-const GetMutesArgsSchema = z.object({}) satisfies z.ZodType<GetMutesArgs>;
+export const GetMutesArgsSchema = z.object({});
 
-const CheckBlockStatusArgsSchema = z.object({
+export const CheckBlockStatusArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<CheckBlockStatusArgs>;
+});
 
-const CheckMuteStatusArgsSchema = z.object({
+export const CheckMuteStatusArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<CheckMuteStatusArgs>;
+});
 
 // Moderation Escrow - Validation Schemas
-const CreateEscrowPaymentArgsSchema = z.object({
+export const CreateEscrowPaymentArgsSchema = z.object({
   recipientId: z.string().min(1),
   amountUSD: z.number().positive(),
   reason: z.string().optional(),
   recipientWalletAddress: z.string().min(1),
-}) satisfies z.ZodType<CreateEscrowPaymentArgs>;
+});
 
-const VerifyEscrowPaymentArgsSchema = z.object({
+export const VerifyEscrowPaymentArgsSchema = z.object({
   escrowId: z.string().min(1),
   txHash: z.string().min(1),
   fromAddress: z.string().min(1),
   toAddress: z.string().min(1),
   amount: z.string().min(1),
-}) satisfies z.ZodType<VerifyEscrowPaymentArgs>;
+});
 
-const RefundEscrowPaymentArgsSchema = z.object({
+export const RefundEscrowPaymentArgsSchema = z.object({
   escrowId: z.string().min(1),
   refundTxHash: z.string().min(1),
   reason: z.string().optional(),
-}) satisfies z.ZodType<RefundEscrowPaymentArgs>;
+});
 
-const ListEscrowPaymentsArgsSchema = z.object({
+export const ListEscrowPaymentsArgsSchema = z.object({
   recipientId: z.string().optional(),
   adminId: z.string().optional(),
   status: z.enum(['pending', 'paid', 'refunded', 'expired']).optional(),
   limit: z.number().int().positive().max(100).optional().default(50),
   offset: z.number().int().nonnegative().optional().default(0),
-}) satisfies z.ZodType<ListEscrowPaymentsArgs>;
+});
 
 // Ban Appeals - Validation Schemas
-const AppealBanArgsSchema = z.object({
+export const AppealBanArgsSchema = z.object({
   reason: z.string().min(10).max(2000),
-}) satisfies z.ZodType<AppealBanArgs>;
+});
 
-const AppealBanWithEscrowArgsSchema = z.object({
+export const AppealBanWithEscrowArgsSchema = z.object({
   reason: z.string().min(10).max(2000),
   escrowPaymentTxHash: z.string().min(1),
-}) satisfies z.ZodType<AppealBanWithEscrowArgs>;
+});
 
 // Favorites - Validation Schemas
-const FavoriteProfileArgsSchema = z.object({
+export const FavoriteProfileArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<FavoriteProfileArgs>;
+});
 
-const UnfavoriteProfileArgsSchema = z.object({
+export const UnfavoriteProfileArgsSchema = z.object({
   userId: z.string().min(1),
-}) satisfies z.ZodType<UnfavoriteProfileArgs>;
+});
 
-const GetFavoritesArgsSchema = z.object({
+export const GetFavoritesArgsSchema = z.object({
   limit: z.number().int().positive().max(100).optional().default(50),
   offset: z.number().int().nonnegative().optional().default(0),
-}) satisfies z.ZodType<GetFavoritesArgs>;
+});
 
-const GetFavoritePostsArgsSchema = z.object({
+export const GetFavoritePostsArgsSchema = z.object({
   limit: z.number().int().positive().max(100).optional().default(20),
   offset: z.number().int().nonnegative().optional().default(0),
-}) satisfies z.ZodType<GetFavoritePostsArgs>;
+});
 
 // Points Transfer - Validation Schemas
-const TransferPointsArgsSchema = z.object({
+export const TransferPointsArgsSchema = z.object({
   recipientId: z.string().min(1),
   amount: z.number().int().positive(),
   message: z.string().max(200).optional(),
-}) satisfies z.ZodType<TransferPointsArgs>;
+});
+
+// Inferred Types from Schemas - Single Source of Truth
+export type GetMarketsArgs = z.infer<typeof GetMarketsArgsSchema>;
+export type PlaceBetArgs = z.infer<typeof PlaceBetArgsSchema>;
+export type GetBalanceArgs = z.infer<typeof GetBalanceArgsSchema>;
+export type GetPositionsArgs = z.infer<typeof GetPositionsArgsSchema>;
+export type ClosePositionArgs = z.infer<typeof ClosePositionArgsSchema>;
+export type GetMarketDataArgs = z.infer<typeof GetMarketDataArgsSchema>;
+export type QueryFeedArgs = z.infer<typeof QueryFeedArgsSchema>;
+export type BuySharesArgs = z.infer<typeof BuySharesArgsSchema>;
+export type SellSharesArgs = z.infer<typeof SellSharesArgsSchema>;
+export type OpenPositionArgs = z.infer<typeof OpenPositionArgsSchema>;
+export type GetMarketPricesArgs = z.infer<typeof GetMarketPricesArgsSchema>;
+export type GetPerpetualsArgs = z.infer<typeof GetPerpetualsArgsSchema>;
+export type GetTradesArgs = z.infer<typeof GetTradesArgsSchema>;
+export type GetTradeHistoryArgs = z.infer<typeof GetTradeHistoryArgsSchema>;
+export type CreatePostArgs = z.infer<typeof CreatePostArgsSchema>;
+export type DeletePostArgs = z.infer<typeof DeletePostArgsSchema>;
+export type LikePostArgs = z.infer<typeof LikePostArgsSchema>;
+export type UnlikePostArgs = z.infer<typeof UnlikePostArgsSchema>;
+export type SharePostArgs = z.infer<typeof SharePostArgsSchema>;
+export type GetCommentsArgs = z.infer<typeof GetCommentsArgsSchema>;
+export type CreateCommentArgs = z.infer<typeof CreateCommentArgsSchema>;
+export type DeleteCommentArgs = z.infer<typeof DeleteCommentArgsSchema>;
+export type LikeCommentArgs = z.infer<typeof LikeCommentArgsSchema>;
+export type GetPostsByTagArgs = z.infer<typeof GetPostsByTagArgsSchema>;
+export type GetUserProfileArgs = z.infer<typeof GetUserProfileArgsSchema>;
+export type UpdateProfileArgs = z.infer<typeof UpdateProfileArgsSchema>;
+export type FollowUserArgs = z.infer<typeof FollowUserArgsSchema>;
+export type UnfollowUserArgs = z.infer<typeof UnfollowUserArgsSchema>;
+export type GetFollowersArgs = z.infer<typeof GetFollowersArgsSchema>;
+export type GetFollowingArgs = z.infer<typeof GetFollowingArgsSchema>;
+export type SearchUsersArgs = z.infer<typeof SearchUsersArgsSchema>;
+export type GetUserWalletArgs = z.infer<typeof GetUserWalletArgsSchema>;
+export type GetUserStatsArgs = z.infer<typeof GetUserStatsArgsSchema>;
+export type GetChatsArgs = z.infer<typeof GetChatsArgsSchema>;
+export type GetChatMessagesArgs = z.infer<typeof GetChatMessagesArgsSchema>;
+export type SendMessageArgs = z.infer<typeof SendMessageArgsSchema>;
+export type CreateGroupArgs = z.infer<typeof CreateGroupArgsSchema>;
+export type LeaveChatArgs = z.infer<typeof LeaveChatArgsSchema>;
+export type GetUnreadCountArgs = z.infer<typeof GetUnreadCountArgsSchema>;
+export type GetNotificationsArgs = z.infer<typeof GetNotificationsArgsSchema>;
+export type MarkNotificationsReadArgs = z.infer<
+  typeof MarkNotificationsReadArgsSchema
+>;
+export type GetGroupInvitesArgs = z.infer<typeof GetGroupInvitesArgsSchema>;
+export type AcceptGroupInviteArgs = z.infer<typeof AcceptGroupInviteArgsSchema>;
+export type DeclineGroupInviteArgs = z.infer<
+  typeof DeclineGroupInviteArgsSchema
+>;
+export type GetLeaderboardArgs = z.infer<typeof GetLeaderboardArgsSchema>;
+export type GetSystemStatsArgs = z.infer<typeof GetSystemStatsArgsSchema>;
+export type GetReferralCodeArgs = z.infer<typeof GetReferralCodeArgsSchema>;
+export type GetReferralsArgs = z.infer<typeof GetReferralsArgsSchema>;
+export type GetReferralStatsArgs = z.infer<typeof GetReferralStatsArgsSchema>;
+export type GetReputationArgs = z.infer<typeof GetReputationArgsSchema>;
+export type GetReputationBreakdownArgs = z.infer<
+  typeof GetReputationBreakdownArgsSchema
+>;
+export type GetTrendingTagsArgs = z.infer<typeof GetTrendingTagsArgsSchema>;
+export type GetOrganizationsArgs = z.infer<typeof GetOrganizationsArgsSchema>;
+export type PaymentRequestArgs = z.infer<typeof PaymentRequestArgsSchema>;
+export type PaymentReceiptArgs = z.infer<typeof PaymentReceiptArgsSchema>;
+export type BlockUserArgs = z.infer<typeof BlockUserArgsSchema>;
+export type UnblockUserArgs = z.infer<typeof UnblockUserArgsSchema>;
+export type MuteUserArgs = z.infer<typeof MuteUserArgsSchema>;
+export type UnmuteUserArgs = z.infer<typeof UnmuteUserArgsSchema>;
+export type ReportUserArgs = z.infer<typeof ReportUserArgsSchema>;
+export type ReportPostArgs = z.infer<typeof ReportPostArgsSchema>;
+export type GetBlocksArgs = z.infer<typeof GetBlocksArgsSchema>;
+export type GetMutesArgs = z.infer<typeof GetMutesArgsSchema>;
+export type CheckBlockStatusArgs = z.infer<typeof CheckBlockStatusArgsSchema>;
+export type CheckMuteStatusArgs = z.infer<typeof CheckMuteStatusArgsSchema>;
+export type CreateEscrowPaymentArgs = z.infer<
+  typeof CreateEscrowPaymentArgsSchema
+>;
+export type VerifyEscrowPaymentArgs = z.infer<
+  typeof VerifyEscrowPaymentArgsSchema
+>;
+export type RefundEscrowPaymentArgs = z.infer<
+  typeof RefundEscrowPaymentArgsSchema
+>;
+export type ListEscrowPaymentsArgs = z.infer<
+  typeof ListEscrowPaymentsArgsSchema
+>;
+export type AppealBanArgs = z.infer<typeof AppealBanArgsSchema>;
+export type AppealBanWithEscrowArgs = z.infer<
+  typeof AppealBanWithEscrowArgsSchema
+>;
+export type FavoriteProfileArgs = z.infer<typeof FavoriteProfileArgsSchema>;
+export type UnfavoriteProfileArgs = z.infer<typeof UnfavoriteProfileArgsSchema>;
+export type GetFavoritesArgs = z.infer<typeof GetFavoritesArgsSchema>;
+export type GetFavoritePostsArgs = z.infer<typeof GetFavoritePostsArgsSchema>;
+export type TransferPointsArgs = z.infer<typeof TransferPointsArgsSchema>;
 
 // Validation Functions - Market Operations
 export function validateBuySharesArgs(args: unknown): BuySharesArgs {

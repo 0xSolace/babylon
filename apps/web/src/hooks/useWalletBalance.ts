@@ -1,5 +1,6 @@
 'use client';
 
+import { WalletBalanceApiResponseSchema } from '@babylon/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -25,11 +26,6 @@ const defaultState: WalletBalanceState = {
   balance: 0,
   lifetimePnL: 0,
 };
-
-interface BalanceApiResponse {
-  balance: number | string;
-  lifetimePnL: number | string;
-}
 
 /**
  * Hook for fetching and managing user wallet balance.
@@ -84,7 +80,8 @@ export function useWalletBalance(
         throw new Error('Failed to fetch wallet balance');
       }
 
-      const data = (await response.json()) as BalanceApiResponse;
+      const json: unknown = await response.json();
+      const data = WalletBalanceApiResponseSchema.parse(json);
 
       return {
         balance: Number(data.balance) || 0,

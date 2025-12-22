@@ -65,7 +65,9 @@ export async function checkContractDeployed(
   if (!address) return false;
 
   const code = await client.getCode({ address }).catch(() => null);
-  return code !== null && code !== '0x' && code.length > 2;
+  return (
+    code !== null && code !== undefined && code !== '0x' && code.length > 2
+  );
 }
 
 export async function checkMessagingContracts(
@@ -112,12 +114,18 @@ export async function checkMessagingContracts(
   const contracts: ContractStatus[] = [
     {
       name: 'KeyRegistry',
-      deployed: await checkContractDeployed(client, keyRegistryAddress),
+      deployed: await checkContractDeployed(
+        client as PublicClient,
+        keyRegistryAddress
+      ),
       address: keyRegistryAddress,
     },
     {
       name: 'MessageNodeRegistry',
-      deployed: await checkContractDeployed(client, messageNodeRegistryAddress),
+      deployed: await checkContractDeployed(
+        client as PublicClient,
+        messageNodeRegistryAddress
+      ),
       address: messageNodeRegistryAddress,
     },
   ];

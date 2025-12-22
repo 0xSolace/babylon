@@ -151,7 +151,7 @@ export const LEGACY_BABYLON_SCHEMAS: CQLTableSchema[] = [
       { name: 'referralCode', type: 'TEXT', nullable: true, unique: true },
       { name: 'referralCount', type: 'INTEGER', nullable: false, default: 0 },
       { name: 'referredBy', type: 'TEXT', nullable: true },
-      { name: 'privyId', type: 'TEXT', nullable: true, unique: true },
+      { name: 'oauth3Id', type: 'TEXT', nullable: true, unique: true },
       { name: 'isAdmin', type: 'BOOLEAN', nullable: false, default: false },
       { name: 'isBanned', type: 'BOOLEAN', nullable: false, default: false },
       { name: 'isAgent', type: 'BOOLEAN', nullable: false, default: false },

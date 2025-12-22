@@ -1,112 +1,44 @@
-import type { NextRequest } from 'next/server';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-const mockVerifyAgentSession = vi.fn();
-const mockVerifyAuthToken = vi.fn();
-const mockFindUnique = vi.fn();
+/**
+ * Auth Middleware Tests
+ *
+ * The auth middleware now re-exports from @babylon/api which uses OAuth3.
+ * Tests for the actual authentication logic are in packages/api.
+ *
+ * This test file verifies the re-export works correctly.
+ */
 
-vi.mock('@/lib/auth/agent-auth', () => ({
-  verifyAgentSession: mockVerifyAgentSession,
-}));
-
-vi.mock('@/lib/database-service', () => ({
-  prisma: {
-    user: {
-      findUnique: mockFindUnique,
-    },
+vi.mock('@babylon/api', () => ({
+  authenticate: vi.fn(),
+  authenticateUser: vi.fn(),
+  authenticateWithDbUser: vi.fn(),
+  authErrorResponse: vi.fn(),
+  AuthenticationError: class AuthenticationError extends Error {
+    code = 'AUTH_FAILED';
   },
+  extractErrorMessage: vi.fn((e) =>
+    e instanceof Error ? e.message : String(e)
+  ),
+  getAuthClient: vi.fn(),
+  isAuthenticationError: vi.fn((e) => e?.code === 'AUTH_FAILED'),
+  optionalAuth: vi.fn(),
+  optionalAuthFromHeaders: vi.fn(),
 }));
 
-vi.mock('@privy-io/server-auth', () => ({
-  PrivyClient: vi.fn().mockImplementation(() => ({
-    verifyAuthToken: mockVerifyAuthToken,
-  })),
-}));
+describe('auth-middleware re-exports', () => {
+  it('exports authentication functions from @babylon/api', async () => {
+    const exports = await import('../auth-middleware');
 
-const createRequest = (token: string) =>
-  ({
-    headers: {
-      get: (name: string) =>
-        name.toLowerCase() === 'authorization' ? `Bearer ${token}` : null,
-    },
-  }) as unknown as NextRequest;
-
-describe('authenticate middleware', () => {
-  let authenticate: (request: NextRequest) => Promise<unknown>;
-
-  beforeAll(async () => {
-    ({ authenticate } = await import('../auth-middleware'));
-  });
-
-  beforeEach(() => {
-    mockVerifyAgentSession.mockReset();
-    mockVerifyAuthToken.mockReset();
-    mockFindUnique.mockReset();
-    process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app';
-    process.env.PRIVY_APP_SECRET = 'test-secret';
-  });
-
-  it('returns agent user when session token is valid', async () => {
-    mockVerifyAgentSession.mockReturnValueOnce({ agentId: 'agent-123' });
-
-    const request = createRequest('agent-session-token');
-    const result = await authenticate(request);
-
-    expect(result).toEqual({
-      userId: 'agent-123',
-      privyId: 'agent-123',
-      isAgent: true,
-    });
-    expect(mockVerifyAuthToken).not.toHaveBeenCalled();
-    expect(mockFindUnique).not.toHaveBeenCalled();
-  });
-
-  it('falls back to privy claims when agent session missing and db user absent', async () => {
-    mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
-    mockFindUnique.mockResolvedValueOnce(null);
-
-    const request = createRequest('privy-token');
-    const result = await authenticate(request);
-
-    expect(result).toMatchObject({
-      userId: 'privy-user',
-      dbUserId: undefined,
-      privyId: 'privy-user',
-      isAgent: false,
-    });
-  });
-
-  it('returns canonical id when privy user exists in db', async () => {
-    mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
-    mockFindUnique.mockResolvedValueOnce({
-      id: 'db-user-id',
-      walletAddress: '0xabc',
-    });
-
-    const request = createRequest('privy-token');
-    const result = await authenticate(request);
-
-    expect(result).toMatchObject({
-      userId: 'db-user-id',
-      dbUserId: 'db-user-id',
-      privyId: 'privy-user',
-      walletAddress: '0xabc',
-    });
-  });
-
-  it('throws descriptive error when privy token is expired', async () => {
-    mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockRejectedValueOnce(
-      new Error('token expired: exp mismatch')
-    );
-
-    const request = createRequest('expired-token');
-
-    await expect(authenticate(request)).rejects.toMatchObject({
-      message: 'Authentication token has expired. Please refresh your session.',
-      code: 'AUTH_FAILED',
-    });
+    expect(exports.authenticate).toBeDefined();
+    expect(exports.authenticateUser).toBeDefined();
+    expect(exports.authenticateWithDbUser).toBeDefined();
+    expect(exports.authErrorResponse).toBeDefined();
+    expect(exports.AuthenticationError).toBeDefined();
+    expect(exports.extractErrorMessage).toBeDefined();
+    expect(exports.getAuthClient).toBeDefined();
+    expect(exports.isAuthenticationError).toBeDefined();
+    expect(exports.optionalAuth).toBeDefined();
+    expect(exports.optionalAuthFromHeaders).toBeDefined();
   });
 });

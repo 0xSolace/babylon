@@ -45,7 +45,7 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// Create chainable mock for Drizzle query builder API
+// Create chainable mock for CQL query builder API
 const createChainableMock = (
   returnValue: Array<Record<string, unknown>> = []
 ) => {
@@ -71,15 +71,13 @@ const createChainableMock = (
   return chainable;
 };
 
-// Mock database BEFORE importing MarketDecisionEngine
+// Mock CQL database client BEFORE importing MarketDecisionEngine
 const mockDb = {
-  actor: {
+  // Table repositories (CQL style)
+  actorState: {
     findMany: mock(async () => []),
   },
-  organization: {
-    findMany: mock(async () => []),
-  },
-  organizationMapping: {
+  organizationState: {
     findMany: mock(async () => []),
   },
   question: {
@@ -88,19 +86,24 @@ const mockDb = {
   post: {
     findMany: mock(async () => []),
   },
-  // Add other models if needed
   market: { findMany: mock(async () => []) },
-  nPCTrade: { findMany: mock(async () => []) },
+  npcTrade: { findMany: mock(async () => []) },
   worldFact: { findMany: mock(async () => []) },
   agentTrade: { findMany: mock(async () => []) },
-  // Add Drizzle query builder API
+  // CQL query builder API
   select: () => createChainableMock([]),
   insert: () => createChainableMock([]),
   update: () => createChainableMock([]),
   delete: () => createChainableMock([]),
+  // Raw query methods
+  query: mock(async () => []),
+  queryOne: mock(async () => null),
+  exec: mock(async () => ({ rowsAffected: 0 })),
+  $queryRaw: mock(async () => []),
+  $executeRaw: mock(async () => 0),
 };
 
-// Mock Drizzle operators and schema tables
+// Mock table objects (for Drizzle schema references)
 const mockTable = {};
 const mockOperator = () => ({});
 
@@ -109,13 +112,13 @@ mock.module('@babylon/db', () => ({
   // Schema tables
   markets: mockTable,
   questions: mockTable,
-  organizations: mockTable,
-  actors: mockTable,
+  organizationState: mockTable,
+  actorState: mockTable,
   posts: mockTable,
   worldFacts: mockTable,
   users: mockTable,
   perpPositions: mockTable,
-  // Drizzle operators
+  // Drizzle operators (re-exported from CQL)
   eq: mockOperator,
   and: mockOperator,
   or: mockOperator,
@@ -130,6 +133,10 @@ mock.module('@babylon/db', () => ({
   isNotNull: mockOperator,
   inArray: mockOperator,
   sql: () => ({}),
+  // CQL initialization functions
+  initializeDB: mock(async () => {}),
+  resetDB: mock(() => {}),
+  getDB: mock(() => mockDb),
 }));
 
 import type { BabylonLLMClient } from '../llm/openai-client';
@@ -330,13 +337,14 @@ describe('MarketDecisionEngine - Token Management', () => {
 
   describe('Batch Size Calculation', () => {
     test('should calculate correct batch size for small NPC count', async () => {
-      // With 400 tokens per NPC and 108k context, should fit ~270 NPCs per batch
+      // With Groq provider, batch size is limited to 4 NPCs for output token limits
+      // For 10 NPCs: ceil(10/4) = 3 batches
       const npcs = Array.from({ length: 10 }, (_, i) =>
         createMockNPC(`npc-${i}`, `NPC ${i}`)
       );
       mockContext.setMockNPCs(npcs);
 
-      // Mock response
+      // Mock response - need responses for each batch
       const mockDecisions = npcs.map((npc) => ({
         npcId: npc.npcId,
         npcName: npc.npcName,
@@ -353,19 +361,19 @@ describe('MarketDecisionEngine - Token Management', () => {
       const decisions = await engine.generateBatchDecisions();
 
       expect(decisions.length).toBe(10);
-      expect(mockLLMInstance.getCallCount()).toBe(1);
+      // Groq batches 4 NPCs at a time: 10 NPCs = 3 batches
+      expect(mockLLMInstance.getCallCount()).toBe(3);
     });
 
     test('should split large NPC count into multiple batches', async () => {
-      // Create 100 NPCs (should require 5 batches with current config: 20 NPCs per batch max)
-      // Batch size is capped at 20 to avoid hitting output token limits (32k)
-      // 100 NPCs / 20 = 5 batches
+      // Create 100 NPCs (with Groq: 4 NPCs per batch = 25 batches)
+      // Groq output token limit requires smaller batches
       const npcs = Array.from({ length: 100 }, (_, i) =>
         createMockNPC(`npc-${i}`, `NPC ${i}`)
       );
       mockContext.setMockNPCs(npcs);
 
-      // Mock responses for each batch (20 NPCs per batch max)
+      // Mock responses for each batch (4 NPCs per batch for Groq)
       const createBatch = (start: number, count: number) =>
         npcs.slice(start, start + count).map((npc) => ({
           npcId: npc.npcId,
@@ -378,17 +386,16 @@ describe('MarketDecisionEngine - Token Management', () => {
           timestamp: new Date().toISOString(),
         }));
 
-      mockLLMInstance.setMockResponse(createBatch(0, 20));
-      mockLLMInstance.setMockResponse(createBatch(20, 20));
-      mockLLMInstance.setMockResponse(createBatch(40, 20));
-      mockLLMInstance.setMockResponse(createBatch(60, 20));
-      mockLLMInstance.setMockResponse(createBatch(80, 20)); // Last batch has 20 NPCs
+      // Set up mock responses for all 25 batches
+      for (let i = 0; i < 25; i++) {
+        mockLLMInstance.setMockResponse(createBatch(i * 4, 4));
+      }
 
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
       const decisions = await engine.generateBatchDecisions();
 
       expect(decisions.length).toBe(100);
-      expect(mockLLMInstance.getCallCount()).toBe(5); // 5 batches of 20 NPCs each
+      expect(mockLLMInstance.getCallCount()).toBe(25); // 25 batches of 4 NPCs each
     });
   });
 

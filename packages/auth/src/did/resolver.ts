@@ -5,6 +5,11 @@
  * Supports caching and multiple resolution strategies.
  */
 
+import {
+  ExternalServiceError,
+  retryIfRetryable,
+  ValidationError,
+} from '@babylon/shared';
 import type { DID, DIDDocument } from '../types/index';
 import { parseDID, validateDID } from './utils';
 
@@ -50,7 +55,7 @@ export class DIDResolver {
    */
   async resolve(did: DID): Promise<DIDDocument | null> {
     if (!validateDID(did)) {
-      throw new Error(`Invalid DID: ${did}`);
+      throw new ValidationError(`Invalid DID format: ${did}`, ['did']);
     }
 
     // Check cache
@@ -83,22 +88,41 @@ export class DIDResolver {
     const endpoint = this.config.endpoints[network];
 
     if (!endpoint) {
-      throw new Error(`Unknown network: ${network}`);
+      throw new ValidationError(`Unknown network: ${network}`, ['network']);
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const response = await retryIfRetryable(
+      async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10_000);
 
-    const response = await fetch(`${endpoint}/did/${encodeURIComponent(did)}`, {
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+        const res = await fetch(`${endpoint}/did/${encodeURIComponent(did)}`, {
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
+
+        if (!res.ok && res.status !== 404) {
+          const errorWithStatus = new Error(
+            `DID resolution failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (response.status === 404) {
       return null;
     }
 
     if (!response.ok) {
-      throw new Error(`Resolution failed: ${response.status}`);
+      throw new ExternalServiceError(
+        'DID Resolver',
+        `Resolution failed: ${response.status}`,
+        response.status
+      );
     }
 
     return response.json() as Promise<DIDDocument>;

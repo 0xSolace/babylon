@@ -50,7 +50,10 @@ export async function trackExternalShare(
   }
 
   const token =
-    typeof window !== 'undefined' ? window.__privyAccessToken : null;
+    typeof window !== 'undefined'
+      ? ((window as { __oauth3AccessToken?: string }).__oauth3AccessToken ??
+        null)
+      : null;
   if (!token) {
     logger.warn(
       'No access token available when attempting to track external share',

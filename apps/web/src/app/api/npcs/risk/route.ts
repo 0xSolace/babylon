@@ -8,9 +8,10 @@
  * GET /api/npcs/risk?actorId=<id>
  */
 
-import { getServerSession } from '@babylon/auth';
+import { authenticate } from '@babylon/api';
 import { getNPCRiskManagementService } from '@babylon/engine';
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 interface RiskStatusResponse {
   success: boolean;
@@ -57,9 +58,9 @@ interface RiskStatusResponse {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const session = await getServerSession();
-
-  if (!session?.user?.id) {
+  try {
+    await authenticate(request);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Unauthorized' },
       { status: 401 }

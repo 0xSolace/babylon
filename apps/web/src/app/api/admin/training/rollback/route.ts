@@ -16,7 +16,7 @@
  *     summary: Rollback model version
  *     description: Rolls back to previous model version (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

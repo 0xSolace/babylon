@@ -4,27 +4,80 @@
  * Debug script to check agent data and trade records
  */
 
-import { db } from '@babylon/db';
-import { agentTrades, perpPositions, users } from '@babylon/db/schema';
-import { desc, eq, sql } from 'drizzle-orm';
+import { db, initializeDB } from '@babylon/db';
+
+interface TradeCount {
+  count: number;
+}
+
+interface AgentTrade {
+  agentUserId: string;
+  action: string;
+  ticker: string | null;
+  executedAt: Date;
+}
+
+interface AgentUser {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  isAgent: boolean;
+  managedBy: string | null;
+  autonomousTrading: boolean;
+  agentStatus: string | null;
+  agentCount: number;
+  createdAt: Date;
+}
+
+interface TradeByAgent {
+  agentUserId: string;
+  count: number;
+}
+
+interface AutonomousUser {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  isAgent: boolean;
+  autonomousTrading: boolean;
+  agentStatus: string | null;
+}
+
+interface PerpPosition {
+  userId: string;
+  ticker: string;
+  side: string;
+  size: string;
+  openedAt: Date;
+  closedAt: Date | null;
+}
+
+interface UserInfo {
+  id: string;
+  username: string | null;
+  isAgent: boolean;
+  autonomousTrading: boolean;
+}
 
 async function debugAgentData() {
+  await initializeDB();
   console.log('🔍 Debugging agent data...\n');
 
   // Check if there are ANY trades in AgentTrade table
-  const totalTrades = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(agentTrades);
+  const totalTrades = await db.query<TradeCount>(
+    `SELECT COUNT(*)::int AS count FROM "AgentTrade"`
+  );
 
   console.log(`📊 Total trades in AgentTrade table: ${totalTrades[0].count}\n`);
 
   if (totalTrades[0].count > 0) {
     // Show sample trades
-    const sampleTrades = await db
-      .select()
-      .from(agentTrades)
-      .orderBy(desc(agentTrades.executedAt))
-      .limit(5);
+    const sampleTrades = await db.query<AgentTrade>(
+      `SELECT "agentUserId", action, ticker, "executedAt"
+       FROM "AgentTrade"
+       ORDER BY "executedAt" DESC
+       LIMIT 5`
+    );
 
     console.log('Sample trades:');
     sampleTrades.forEach((trade, idx) => {
@@ -36,21 +89,13 @@ async function debugAgentData() {
   }
 
   // Check users with isAgent=true
-  const agentUsers = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      isAgent: users.isAgent,
-      managedBy: users.managedBy,
-      autonomousTrading: users.autonomousTrading,
-      agentStatus: users.agentStatus,
-      agentCount: users.agentCount,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .where(eq(users.isAgent, true))
-    .limit(20);
+  const agentUsers = await db.query<AgentUser>(
+    `SELECT id, username, "displayName", "isAgent", "managedBy", "autonomousTrading", 
+            "agentStatus", "agentCount", "createdAt"
+     FROM "User"
+     WHERE "isAgent" = true
+     LIMIT 20`
+  );
 
   console.log(`👤 Users with isAgent=true: ${agentUsers.length}\n`);
 
@@ -61,26 +106,21 @@ async function debugAgentData() {
         `${idx + 1}. ${user.username || user.displayName || user.id} | ` +
           `Status: ${user.agentStatus} | ` +
           `Autonomous Trading: ${user.autonomousTrading} | ` +
-          `Created: ${user.createdAt.toISOString()}`
+          `Created: ${new Date(user.createdAt).toISOString()}`
       );
     });
     console.log('');
 
-    // Check if these agents have any trades (using IN clause instead of ANY)
+    // Check if these agents have any trades
     const agentIds = agentUsers.map((u) => u.id);
-    const tradesForAgents = await db
-      .select({
-        agentUserId: agentTrades.agentUserId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(agentTrades)
-      .where(
-        sql`${agentTrades.agentUserId} IN (${sql.join(
-          agentIds.map((id) => sql`${id}`),
-          sql`, `
-        )})`
-      )
-      .groupBy(agentTrades.agentUserId);
+    const placeholders = agentIds.map((_, i) => `$${i + 1}`).join(', ');
+    const tradesForAgents = await db.query<TradeByAgent>(
+      `SELECT "agentUserId", COUNT(*)::int AS count
+       FROM "AgentTrade"
+       WHERE "agentUserId" IN (${placeholders})
+       GROUP BY "agentUserId"`,
+      agentIds
+    );
 
     console.log('Trades by agent users:');
     if (tradesForAgents.length === 0) {
@@ -97,18 +137,12 @@ async function debugAgentData() {
   }
 
   // Check if there are users with autonomousTrading enabled
-  const autonomousUsers = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      isAgent: users.isAgent,
-      autonomousTrading: users.autonomousTrading,
-      agentStatus: users.agentStatus,
-    })
-    .from(users)
-    .where(eq(users.autonomousTrading, true))
-    .limit(20);
+  const autonomousUsers = await db.query<AutonomousUser>(
+    `SELECT id, username, "displayName", "isAgent", "autonomousTrading", "agentStatus"
+     FROM "User"
+     WHERE "autonomousTrading" = true
+     LIMIT 20`
+  );
 
   console.log(
     `🤖 Users with autonomousTrading=true: ${autonomousUsers.length}\n`
@@ -127,18 +161,12 @@ async function debugAgentData() {
   }
 
   // Check PerpPositions for any recent trading activity
-  const recentPositions = await db
-    .select({
-      userId: perpPositions.userId,
-      ticker: perpPositions.ticker,
-      side: perpPositions.side,
-      size: perpPositions.size,
-      openedAt: perpPositions.openedAt,
-      closedAt: perpPositions.closedAt,
-    })
-    .from(perpPositions)
-    .orderBy(desc(perpPositions.openedAt))
-    .limit(10);
+  const recentPositions = await db.query<PerpPosition>(
+    `SELECT "userId", ticker, side, size, "openedAt", "closedAt"
+     FROM "PerpPosition"
+     ORDER BY "openedAt" DESC
+     LIMIT 10`
+  );
 
   console.log(
     `📈 Recent perp positions (last 10): ${recentPositions.length}\n`
@@ -148,7 +176,7 @@ async function debugAgentData() {
     console.log('Recent positions:');
     recentPositions.forEach((pos, idx) => {
       const status = pos.closedAt ? 'CLOSED' : 'OPEN';
-      const timeAgo = getTimeAgo(pos.openedAt);
+      const timeAgo = getTimeAgo(new Date(pos.openedAt));
       console.log(
         `${idx + 1}. User: ${pos.userId.slice(0, 8)}... | ` +
           `${pos.ticker} ${pos.side} | ` +
@@ -159,22 +187,15 @@ async function debugAgentData() {
     });
     console.log('');
 
-    // Check if these users are agents (using IN clause instead of ANY)
+    // Check if these users are agents
     const userIds = [...new Set(recentPositions.map((p) => p.userId))];
-    const usersData = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        isAgent: users.isAgent,
-        autonomousTrading: users.autonomousTrading,
-      })
-      .from(users)
-      .where(
-        sql`${users.id} IN (${sql.join(
-          userIds.map((id) => sql`${id}`),
-          sql`, `
-        )})`
-      );
+    const userPlaceholders = userIds.map((_, i) => `$${i + 1}`).join(', ');
+    const usersData = await db.query<UserInfo>(
+      `SELECT id, username, "isAgent", "autonomousTrading"
+       FROM "User"
+       WHERE id IN (${userPlaceholders})`,
+      userIds
+    );
 
     console.log('Are these users agents?');
     usersData.forEach((user) => {
@@ -207,7 +228,7 @@ debugAgentData()
     console.log('✅ Debug complete');
     process.exit(0);
   })
-  .catch((error) => {
+  .catch((error: Error) => {
     console.error('❌ Debug failed:', error);
     process.exit(1);
   });

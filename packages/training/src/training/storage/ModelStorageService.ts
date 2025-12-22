@@ -11,9 +11,9 @@
 import type { StorageClient as JejuStorageClient } from '@babylon/api';
 import { db } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import fs from 'fs/promises';
 import path from 'path';
-import { logger } from '../../utils/logger';
 
 // ============================================================================
 // Types
@@ -171,15 +171,15 @@ export class ModelStorageService {
     pathParts.pop();
     const metadataUrl = `${pathParts.join('/')}/metadata.json`;
 
+    // Metadata is optional - fetch with timeout, default to empty on failure
+    const metadataResponse = await fetch(metadataUrl, {
+      signal: AbortSignal.timeout(10000),
+    }).catch(() => null);
+
     let metadata: ModelVersion['metadata'] = {};
-    try {
-      const metadataResponse = await fetch(metadataUrl, {
-        signal: AbortSignal.timeout(10000),
-      });
-      if (metadataResponse.ok) {
-        metadata = (await metadataResponse.json()) as ModelVersion['metadata'];
-      }
-    } catch {
+    if (metadataResponse?.ok) {
+      metadata = (await metadataResponse.json()) as ModelVersion['metadata'];
+    } else if (metadataResponse === null) {
       logger.warn('Could not fetch model metadata', { version, metadataUrl });
     }
 

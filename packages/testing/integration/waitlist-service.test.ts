@@ -97,7 +97,7 @@ describeWaitlist('WaitlistService', () => {
       const userId = await generateSnowflakeId();
       await db.insert(users).values({
         id: userId,
-        privyId: `test-privy-${Date.now()}`,
+        oauth3Id: `test-oauth3-${Date.now()}`,
         username: `testuser${Date.now()}`,
         displayName: 'Test User',
         reputationPoints: 100,
@@ -135,7 +135,7 @@ describeWaitlist('WaitlistService', () => {
       const userId = await generateSnowflakeId();
       await db.insert(users).values({
         id: userId,
-        privyId: `test-privy-${Date.now()}`,
+        oauth3Id: `test-oauth3-${Date.now()}`,
         username: `testuser${Date.now()}`,
         displayName: 'Test User',
         reputationPoints: 100,
@@ -167,7 +167,7 @@ describeWaitlist('WaitlistService', () => {
       const referrerId = await generateSnowflakeId();
       await db.insert(users).values({
         id: referrerId,
-        privyId: `test-privy-ref-${Date.now()}`,
+        oauth3Id: `test-oauth3-ref-${Date.now()}`,
         username: `referrer${Date.now()}`,
         displayName: 'Referrer',
         reputationPoints: 100,
@@ -182,7 +182,7 @@ describeWaitlist('WaitlistService', () => {
       const userId = await generateSnowflakeId();
       await db.insert(users).values({
         id: userId,
-        privyId: `test-privy-${Date.now()}`,
+        oauth3Id: `test-oauth3-${Date.now()}`,
         username: `testuser${Date.now()}`,
         displayName: 'Test User',
         reputationPoints: 100,
@@ -218,7 +218,7 @@ describeWaitlist('WaitlistService', () => {
       const referrerId = await generateSnowflakeId();
       await db.insert(users).values({
         id: referrerId,
-        privyId: `test-privy-ref-${Date.now()}`,
+        oauth3Id: `test-oauth3-ref-${Date.now()}`,
         username: `referrer${Date.now()}`,
         displayName: 'Referrer',
         reputationPoints: 100,
@@ -235,7 +235,7 @@ describeWaitlist('WaitlistService', () => {
       const userId = await generateSnowflakeId();
       await db.insert(users).values({
         id: userId,
-        privyId: `test-privy-${Date.now()}`,
+        oauth3Id: `test-oauth3-${Date.now()}`,
         username: `testuser${Date.now()}`,
         displayName: 'Test User',
         reputationPoints: 100,
@@ -274,7 +274,7 @@ describeWaitlist('WaitlistService', () => {
       const userAId = await generateSnowflakeId();
       await db.insert(users).values({
         id: userAId,
-        privyId: `test-a-${Date.now()}`,
+        oauth3Id: `test-a-${Date.now()}`,
         username: `usera${Date.now()}`,
         displayName: 'User A',
         reputationPoints: 100,
@@ -290,7 +290,7 @@ describeWaitlist('WaitlistService', () => {
       const userBId = await generateSnowflakeId();
       await db.insert(users).values({
         id: userBId,
-        privyId: `test-b-${Date.now()}`,
+        oauth3Id: `test-b-${Date.now()}`,
         username: `userb${Date.now()}`,
         displayName: 'User B',
         reputationPoints: 150,
@@ -328,7 +328,7 @@ describeWaitlist('WaitlistService', () => {
       const user1Id = await generateSnowflakeId();
       await db.insert(users).values({
         id: user1Id,
-        privyId: `test-1-${now}`,
+        oauth3Id: `test-1-${now}`,
         username: `user1${now}`,
         displayName: 'User 1',
         invitePoints: 100,
@@ -343,7 +343,7 @@ describeWaitlist('WaitlistService', () => {
       const user2Id = await generateSnowflakeId();
       await db.insert(users).values({
         id: user2Id,
-        privyId: `test-2-${now}`,
+        oauth3Id: `test-2-${now}`,
         username: `user2${now}`,
         displayName: 'User 2',
         invitePoints: 100, // Same points
@@ -371,7 +371,7 @@ describeWaitlist('WaitlistService', () => {
       const userId = await generateSnowflakeId();
       await db.insert(users).values({
         id: userId,
-        privyId: `test-perc-${Date.now()}`,
+        oauth3Id: `test-perc-${Date.now()}`,
         username: `userperc${Date.now()}`,
         displayName: 'User Percentile',
         invitePoints: 100,
@@ -395,7 +395,7 @@ describeWaitlist('WaitlistService', () => {
       const userId = await generateSnowflakeId();
       await db.insert(users).values({
         id: userId,
-        privyId: `test-wallet-${Date.now()}`,
+        oauth3Id: `test-wallet-${Date.now()}`,
         username: `userwallet${Date.now()}`,
         displayName: 'Test Wallet User',
         reputationPoints: 100,
@@ -436,7 +436,7 @@ describeWaitlist('WaitlistService', () => {
       const user1Id = await generateSnowflakeId();
       await db.insert(users).values({
         id: user1Id,
-        privyId: `test-top1-${timestamp}`,
+        oauth3Id: `test-top1-${timestamp}`,
         username: `top1${timestamp}`,
         displayName: 'Top 1',
         invitePoints: 150, // Most invites
@@ -449,7 +449,7 @@ describeWaitlist('WaitlistService', () => {
       const user2Id = await generateSnowflakeId();
       await db.insert(users).values({
         id: user2Id,
-        privyId: `test-top2-${timestamp}`,
+        oauth3Id: `test-top2-${timestamp}`,
         username: `top2${timestamp}`,
         displayName: 'Top 2',
         invitePoints: 100,
@@ -462,7 +462,7 @@ describeWaitlist('WaitlistService', () => {
       const user3Id = await generateSnowflakeId();
       await db.insert(users).values({
         id: user3Id,
-        privyId: `test-top3-${timestamp}`,
+        oauth3Id: `test-top3-${timestamp}`,
         username: `top3${timestamp}`,
         displayName: 'Top 3',
         invitePoints: 50,

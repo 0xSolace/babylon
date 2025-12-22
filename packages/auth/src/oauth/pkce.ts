@@ -5,6 +5,7 @@
  * Used for secure OAuth without a client secret.
  */
 
+import { PKCEParamsSchema } from '../schemas/index';
 import type { PKCEParams } from './types';
 
 /**
@@ -101,7 +102,11 @@ export class PKCEUtils {
     }
 
     sessionStorage.removeItem(key);
-    return JSON.parse(stored) as PKCEParams;
+    const parseResult = PKCEParamsSchema.safeParse(JSON.parse(stored));
+    if (!parseResult.success) {
+      return null;
+    }
+    return parseResult.data;
   }
 
   /**

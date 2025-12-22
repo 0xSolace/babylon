@@ -17,7 +17,7 @@
  *     summary: Remove member from group
  *     description: Removes member from group (self or admin only, cannot remove creator)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id

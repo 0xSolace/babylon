@@ -1,72 +1,41 @@
 /**
  * Common Type Definitions
  *
- * Shared types for common patterns that replace 'unknown' and 'any'
+ * Re-exports shared types from @babylon/shared for common patterns.
+ * Engine-specific types that don't exist in shared are defined here.
  */
 
-/**
- * JSON-serializable value types
- */
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+// Re-export common types from @babylon/shared
+export type {
+  ApiResponse,
+  ErrorLike,
+  FilterParams,
+  JsonRpcParams,
+  JsonRpcResult,
+  JsonValue,
+  LogData,
+  PaginatedResponse,
+  PaginationParams,
+  QueryParams,
+  SortOrder,
+  SortParams,
+  StringRecord,
+} from '@babylon/shared';
 
 /**
- * Generic key-value record with string keys
- */
-export type StringRecord<T = JsonValue> = Record<string, T>;
-
-/**
- * Log data payload - structured data for logging
- * Accepts JsonValue, Error, or any object that can be serialized
- */
-export type LogData =
-  | JsonValue
-  | StringRecord
-  | Error
-  | { [key: string]: JsonValue | unknown }
-  | unknown;
-
-/**
- * Error-like object that may have a message property
- */
-export interface ErrorLike {
-  message?: string;
-  name?: string;
-  stack?: string;
-  code?: string | number;
-  [key: string]: JsonValue | undefined;
-}
-
-/**
- * Parameters for JSON-RPC requests
- */
-export type JsonRpcParams = StringRecord<JsonValue> | JsonValue[];
-
-/**
- * Result type for JSON-RPC responses
- */
-export type JsonRpcResult = JsonValue | StringRecord<JsonValue> | JsonValue[];
-
-/**
- * WebSocket message data payload
+ * WebSocket message data payload (engine-specific)
  */
 export interface WebSocketData {
   type: string;
-  payload?: JsonValue;
+  payload?: import('@babylon/shared').JsonValue;
   timestamp?: string;
-  [key: string]: JsonValue | undefined;
+  [key: string]: import('@babylon/shared').JsonValue | undefined;
 }
 
 /**
- * LLM response wrapper
+ * LLM response wrapper (engine-specific)
  */
-export interface LLMResponse<T = JsonValue> {
+export interface LLMResponse<T = import('@babylon/shared').JsonValue> {
   content: string;
   parsed?: T;
   raw?: string;
@@ -75,62 +44,4 @@ export interface LLMResponse<T = JsonValue> {
     tokens?: number;
     temperature?: number;
   };
-}
-
-/**
- * API response wrapper
- */
-export interface ApiResponse<T = JsonValue> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
-/**
- * Pagination parameters
- */
-export interface PaginationParams {
-  limit: number;
-  offset: number;
-  page?: number;
-}
-
-/**
- * Paginated response
- */
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  limit: number;
-  offset: number;
-  hasMore: boolean;
-}
-
-/**
- * Sort order
- */
-export type SortOrder = 'asc' | 'desc';
-
-/**
- * Sort parameters
- */
-export interface SortParams {
-  field: string;
-  order: SortOrder;
-}
-
-/**
- * Filter parameters
- */
-export interface FilterParams {
-  [key: string]: JsonValue | JsonValue[] | undefined;
-}
-
-/**
- * Query parameters combining pagination, sorting, and filtering
- */
-export interface QueryParams extends PaginationParams {
-  sort?: SortParams;
-  filters?: FilterParams;
 }

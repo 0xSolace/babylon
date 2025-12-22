@@ -6,8 +6,8 @@
  */
 
 import { db } from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { getAgentRuntimeManager } from '../dependencies';
-import { logger } from '../utils/logger';
 
 export interface DeploymentOptions {
   modelVersion: string;

@@ -149,6 +149,7 @@ class DatabaseService {
     sentiment?: string;
     slant?: string;
     category?: string;
+    imageUrl?: string;
     authorId: string;
     gameId?: string;
     dayNumber?: number;
@@ -184,6 +185,7 @@ class DatabaseService {
         sentiment: data.sentiment,
         slant: data.slant,
         category: data.category,
+        imageUrl: data.imageUrl,
         authorId: data.authorId,
         gameId: data.gameId,
         dayNumber: safeDayNumber,

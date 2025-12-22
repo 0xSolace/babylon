@@ -2,7 +2,7 @@
  * Synpress configuration for E2E tests with MetaMask integration.
  *
  * Uses @synthetixio/synpress for real MetaMask wallet interaction.
- * The default Anvil test wallet is used for authentication via Privy.
+ * The default Anvil test wallet is used for authentication via OAuth3 (Jeju).
  *
  * @module testing/synpress.config
  * @see https://docs.synpress.io/docs/playwright/configuration

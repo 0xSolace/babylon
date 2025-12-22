@@ -3,10 +3,21 @@ import type {
   CachePort,
   ClockPort,
   FeeConfig,
+  FeeProcessor,
   WalletPort,
 } from '../shared/common';
 
-export type PerpSide = 'long' | 'short';
+// Import types from schemas (single source of truth)
+import type { PerpCloseInput, PerpOpenInput, PerpSide } from './schemas';
+// Re-export for consumers
+export type { PerpCloseInput, PerpOpenInput, PerpSide };
+
+// Re-export schemas for runtime validation
+export {
+  PerpCloseInputSchema,
+  PerpOpenInputSchema,
+  PerpSideSchema,
+} from './schemas';
 
 export interface PerpMarketRecord {
   ticker: string;
@@ -120,27 +131,7 @@ export interface PerpDbPort {
   ): Promise<void>;
 }
 
-// DTOs
-export interface PerpOpenInput {
-  userId: string;
-  ticker: string;
-  side: PerpSide;
-  size: number;
-  leverage: number;
-  /** Maximum slippage tolerance (0-1, e.g., 0.01 = 1%). Rejects if price moved beyond this. */
-  maxSlippage?: number;
-}
-
-export interface PerpCloseInput {
-  userId: string;
-  positionId: string;
-  /** Close only a portion of the position (0-1, e.g., 0.5 = 50%). Defaults to 1 (full close). */
-  percentage?: number;
-  /** Override exit price for liquidations or testing. */
-  exitPriceOverride?: number;
-  /** Maximum slippage tolerance (0-1). Rejects if price moved beyond this. */
-  maxSlippage?: number;
-}
+// DTOs are now defined via Zod schemas in ./schemas.ts and re-exported above
 
 export interface PerpTradeResult {
   positionId: string;
@@ -169,4 +160,5 @@ export interface PerpServiceDeps {
   cache?: CachePort;
   clock?: ClockPort;
   fees: FeeConfig;
+  feeProcessor?: FeeProcessor;
 }

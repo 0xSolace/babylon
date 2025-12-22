@@ -1,321 +1,213 @@
 #!/usr/bin/env bun
 
 /**
- * @fileoverview Database management commands
+ * @fileoverview Database management commands for CQL (CovenantSQL)
  *
- * Provides commands for managing the PostgreSQL database container, running migrations,
- * seeding data, and checking database status using Docker and docker-compose.
+ * Provides commands for managing the CQL database connection, running seeds,
+ * and checking database status.
  *
  * @module cli/commands/db
  */
 
+import { db, getDB, initializeDB, resetDB } from '@babylon/db';
 import { $ } from 'bun';
-import { existsSync } from 'fs';
-import { join } from 'path';
 import { parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';
 
-const CONTAINER_NAME = 'babylon-postgres';
-const COMPOSE_FILE = 'docker-compose.yml';
-
 function printHelp(): void {
   console.log(`
-Database Management
+Database Management (CQL)
 
 USAGE:
   babylon db <command>
 
 COMMANDS:
-  start     Start PostgreSQL container
-  stop      Stop PostgreSQL container
-  restart   Restart PostgreSQL container
-  status    Show database status
-  migrate   Run database migrations
+  status    Show CQL database status and health
+  connect   Test CQL connection and show info
   seed      Seed database with initial data
-  reset     Reset database (drop + migrate)
+  reset     Reset database (clear all data)
+  stats     Show database statistics
 
 EXAMPLES:
-  babylon db start
-  babylon db migrate
-  babylon db seed
   babylon db status
+  babylon db connect
+  babylon db seed
+  babylon db seed --force
+  babylon db stats
 
 ENVIRONMENT:
-  DATABASE_URL should be set in your .env file:
-  DATABASE_URL="postgresql://babylon:babylon_dev_password@localhost:5432/babylon"
+  CQL_BLOCK_PRODUCER_ENDPOINT  Jeju block producer endpoint (required)
+  CQL_DATABASE_ID              Database identifier (default: babylon)
+  CQL_PRIVATE_KEY              Optional private key for signed transactions
+  CQL_TIMEOUT                  Query timeout in ms (default: 30000)
+  CQL_DEBUG                    Enable debug logging (true/false)
+
+NOTE:
+  CQL connects to a Jeju block producer instance. Start Jeju first:
+  cd /path/to/jeju && jeju dev
 `);
 }
 
 /**
- * Verifies Docker is installed and running.
+ * Verifies CQL environment is configured.
  *
- * Checks both Docker installation and daemon status before proceeding with
- * database operations.
- *
- * @throws Exits process with code 1 if Docker is not installed or not running
+ * @throws Exits process with code 1 if CQL is not configured
  * @internal
  */
-async function checkDocker(): Promise<void> {
-  logger.step('Checking Docker installation...');
-  await $`docker --version`.quiet();
-  await $`docker info`.quiet();
-  logger.success('Docker is running');
-}
-
-/**
- * Verifies docker-compose.yml exists in project root.
- *
- * @throws Exits process with code 1 if compose file not found
- * @internal
- */
-function checkComposeFile(): void {
-  const composePath = join(process.cwd(), COMPOSE_FILE);
-  if (!existsSync(composePath)) {
-    logger.fail(`${COMPOSE_FILE} not found in project root`);
+function checkCQLConfig(): void {
+  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT;
+  if (!endpoint) {
+    logger.fail('CQL_BLOCK_PRODUCER_ENDPOINT is not set');
+    console.log('\nSet the environment variable or start Jeju:');
+    console.log('  cd /path/to/jeju && jeju dev');
     process.exit(1);
   }
 }
 
 /**
- * Checks if the PostgreSQL container is currently running.
- *
- * @returns `true` if container is running, `false` otherwise
- * @internal
- */
-async function isContainerRunning(): Promise<boolean> {
-  const result =
-    await $`docker ps --filter name=${CONTAINER_NAME} --format "{{.Names}}"`
-      .quiet()
-      .text()
-      .catch(() => '');
-  return result.trim() === CONTAINER_NAME;
-}
-
-/**
- * Checks if the PostgreSQL container exists (running or stopped).
- *
- * @returns `true` if container exists, `false` otherwise
- * @internal
- */
-async function doesContainerExist(): Promise<boolean> {
-  const result =
-    await $`docker ps -a --filter name=${CONTAINER_NAME} --format "{{.Names}}"`
-      .quiet()
-      .text()
-      .catch(() => '');
-  return result.trim() === CONTAINER_NAME;
-}
-
-/**
- * Starts the PostgreSQL database container.
- *
- * Creates container if it doesn't exist and waits for health check to pass.
- * Uses docker-compose to manage the container lifecycle.
+ * Tests the CQL connection and displays connection info.
  *
  * @internal
  */
-async function startDatabase(): Promise<void> {
-  logger.header('Starting PostgreSQL');
+async function testConnection(): Promise<void> {
+  logger.header('Testing CQL Connection');
 
-  await checkDocker();
-  checkComposeFile();
+  checkCQLConfig();
 
-  if (await isContainerRunning()) {
-    logger.success('PostgreSQL is already running');
-    await showConnectionInfo();
-    return;
+  logger.step('Initializing CQL client...');
+  await initializeDB();
+
+  logger.step('Checking health...');
+  const cqlDb = getDB();
+  const healthy = await cqlDb.isHealthy();
+
+  if (!healthy) {
+    logger.fail('CQL is not healthy');
+    console.log('\nEnsure Jeju is running:');
+    console.log('  cd /path/to/jeju && jeju dev');
+    process.exit(1);
   }
 
-  logger.step('Starting container...');
-  await $`docker-compose up -d postgres`;
-
-  logger.step('Waiting for PostgreSQL to be ready...');
-
-  let attempts = 0;
-  const maxAttempts = 30;
-
-  while (attempts < maxAttempts) {
-    const health =
-      await $`docker inspect --format='{{.State.Health.Status}}' ${CONTAINER_NAME}`
-        .quiet()
-        .text()
-        .catch(() => '');
-
-    if (health.trim() === 'healthy') {
-      logger.success('PostgreSQL is ready');
-      await showConnectionInfo();
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    attempts++;
-  }
-
-  logger.warn('Health check timeout - PostgreSQL may still be starting...');
+  logger.success('CQL connection established');
   await showConnectionInfo();
 }
 
 /**
- * Stops the PostgreSQL database container.
+ * Displays the current database status.
  *
- * Gracefully stops the container using docker-compose stop.
- *
- * @internal
- */
-async function stopDatabase(): Promise<void> {
-  logger.header('Stopping PostgreSQL');
-
-  await checkDocker();
-
-  if (!(await isContainerRunning())) {
-    logger.success('PostgreSQL is not running');
-    return;
-  }
-
-  logger.step('Stopping container...');
-  await $`docker-compose stop postgres`;
-  logger.success('PostgreSQL stopped');
-}
-
-/**
- * Restarts the PostgreSQL database container.
- *
- * Stops and then starts the container with a brief delay between operations.
- *
- * @internal
- */
-async function restartDatabase(): Promise<void> {
-  logger.header('Restarting PostgreSQL');
-
-  await stopDatabase();
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-  await startDatabase();
-}
-
-/**
- * Displays the current database container status.
- *
- * Shows running state, uptime, health status, and connection information.
- * Provides helpful messages if container doesn't exist or isn't running.
+ * Shows connection state, health status, and configuration.
  *
  * @internal
  */
 async function showStatus(): Promise<void> {
-  logger.header('Database Status');
+  logger.header('Database Status (CQL)');
 
-  await checkDocker();
+  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT;
+  const databaseId = process.env.CQL_DATABASE_ID || 'babylon';
 
-  const exists = await doesContainerExist();
-  const isRunning = await isContainerRunning();
-
-  if (!exists) {
-    console.log('Status: Not created');
-    console.log("\nRun 'babylon db start' to create and start the database.");
+  if (!endpoint) {
+    console.log('Status: ❌ Not configured');
+    console.log('\nCQL_BLOCK_PRODUCER_ENDPOINT is not set.');
+    console.log('Start Jeju: cd /path/to/jeju && jeju dev');
     return;
   }
 
-  if (isRunning) {
-    console.log('Status: ✅ Running');
+  console.log(`Endpoint: ${endpoint}`);
+  console.log(`Database: ${databaseId}`);
 
-    const uptime =
-      await $`docker inspect --format='{{.State.StartedAt}}' ${CONTAINER_NAME}`
-        .quiet()
-        .text()
-        .catch(() => '');
-    if (uptime) {
-      console.log(`Started: ${uptime.trim()}`);
-    }
+  logger.step('Checking CQL health...');
 
-    const health =
-      await $`docker inspect --format='{{.State.Health.Status}}' ${CONTAINER_NAME}`
-        .quiet()
-        .text()
-        .catch(() => '');
-    if (health) {
-      console.log(`Health: ${health.trim()}`);
-    }
+  await initializeDB();
+  const cqlDb = getDB();
+  const healthy = await cqlDb.isHealthy();
 
-    await showConnectionInfo();
+  if (healthy) {
+    console.log('Status: ✅ Connected');
+
+    const blockHeight = await cqlDb.getBlockHeight();
+    console.log(`Block Height: ${blockHeight}`);
   } else {
-    console.log('Status: ⏸️  Stopped');
-    console.log("\nRun 'babylon db start' to start the database.");
+    console.log('Status: ❌ Unhealthy');
+    console.log('\nEnsure Jeju is running:');
+    console.log('  cd /path/to/jeju && jeju dev');
   }
 }
 
 /**
  * Displays database connection information.
  *
- * Shows host, port, database name, user, password, and connection URL
- * for the PostgreSQL container.
- *
  * @internal
  */
 async function showConnectionInfo(): Promise<void> {
+  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT || 'not set';
+  const databaseId = process.env.CQL_DATABASE_ID || 'babylon';
+  const timeout = process.env.CQL_TIMEOUT || '30000';
+  const debug = process.env.CQL_DEBUG || 'false';
+
   console.log('\nConnection Info:');
-  console.log('  Host:     localhost');
-  console.log('  Port:     5432');
-  console.log('  Database: babylon');
-  console.log('  User:     babylon');
-  console.log('  Password: babylon_dev_password');
-  console.log(
-    '\n  URL: postgresql://babylon:babylon_dev_password@localhost:5432/babylon'
-  );
-}
+  console.log(`  Endpoint:    ${endpoint}`);
+  console.log(`  Database ID: ${databaseId}`);
+  console.log(`  Timeout:     ${timeout}ms`);
+  console.log(`  Debug:       ${debug}`);
 
-/**
- * Runs database migrations using drizzle-kit push.
- *
- * Pushes schema changes from Drizzle ORM definitions to the database.
- * Requires the database container to be running.
- *
- * @throws Exits process with code 1 if database is not running
- * @internal
- */
-async function runMigrations(): Promise<void> {
-  logger.header('Running Database Migrations');
-
-  if (!(await isContainerRunning())) {
-    logger.fail('PostgreSQL is not running!');
-    console.log('Start it first with: babylon db start');
-    process.exit(1);
+  const cqlDb = getDB();
+  if (cqlDb.isInitialized()) {
+    const blockHeight = await cqlDb.getBlockHeight();
+    console.log(`  Block Height: ${blockHeight}`);
   }
-
-  logger.step('Pushing schema changes...');
-  await $`bunx drizzle-kit push --config=packages/db/drizzle.config.ts`;
-  logger.success('Migrations complete');
 }
 
 /**
  * Seeds the database with initial data.
  *
  * Runs the seed script to populate the database with actors, organizations,
- * and other initial data. Requires the database container to be running.
+ * and other initial data. Requires CQL connection.
  *
- * @throws Exits process with code 1 if database is not running
  * @internal
  */
-async function seedDatabase(): Promise<void> {
+async function seedDatabase(args: string[]): Promise<void> {
   logger.header('Seeding Database');
 
-  if (!(await isContainerRunning())) {
-    logger.fail('PostgreSQL is not running!');
-    console.log('Start it first with: babylon db start');
+  checkCQLConfig();
+
+  logger.step('Initializing CQL...');
+  await initializeDB();
+
+  const cqlDb = getDB();
+  const healthy = await cqlDb.isHealthy();
+  if (!healthy) {
+    logger.fail('CQL is not healthy');
+    console.log('Start Jeju first: cd /path/to/jeju && jeju dev');
     process.exit(1);
   }
 
   logger.step('Running seed script...');
   const rootDir = import.meta.dirname.replace('/apps/cli/src/commands', '');
-  await $`bun run ${rootDir}/scripts/seed-database.ts`;
+  const seedArgs = args.filter((arg) => arg.startsWith('--'));
+  await $`bun run ${rootDir}/scripts/seed-database.ts ${seedArgs}`;
   logger.success('Database seeded');
 }
 
 /**
- * Resets the database by dropping and recreating schema.
+ * Shows database statistics.
  *
- * **Warning:** This will delete all data! Forces schema push using drizzle-kit.
- * Requires the database container to be running.
+ * @internal
+ */
+async function showStats(): Promise<void> {
+  logger.header('Database Statistics');
+
+  checkCQLConfig();
+
+  logger.step('Fetching stats...');
+  const rootDir = import.meta.dirname.replace('/apps/cli/src/commands', '');
+  await $`bun run ${rootDir}/scripts/seed-database.ts --stats`;
+}
+
+/**
+ * Resets the database by clearing all data.
  *
- * @throws Exits process with code 1 if database is not running
+ * **Warning:** This will delete all data!
+ *
  * @internal
  */
 async function resetDatabase(): Promise<void> {
@@ -323,15 +215,35 @@ async function resetDatabase(): Promise<void> {
 
   logger.warn('This will delete all data!');
 
-  if (!(await isContainerRunning())) {
-    logger.fail('PostgreSQL is not running!');
-    console.log('Start it first with: babylon db start');
+  checkCQLConfig();
+
+  logger.step('Initializing CQL...');
+  await initializeDB();
+
+  const cqlDb = getDB();
+  const healthy = await cqlDb.isHealthy();
+  if (!healthy) {
+    logger.fail('CQL is not healthy');
     process.exit(1);
   }
 
-  logger.step('Resetting schema...');
-  await $`bunx drizzle-kit push --force --config=packages/db/drizzle.config.ts`;
+  logger.step('Clearing database...');
+
+  // Get list of all tables and truncate them
+  // Note: CQL/SQLite uses sqlite_master, not information_schema
+  const tables = await db.query<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cql_%'`
+  );
+
+  for (const table of tables) {
+    logger.step(`Clearing table: ${table.name}`);
+    await db.exec(`DELETE FROM "${table.name}"`);
+  }
+
   logger.success('Database reset complete');
+
+  // Reset the client to clear any cached state
+  resetDB();
 }
 
 /**
@@ -340,13 +252,11 @@ async function resetDatabase(): Promise<void> {
  * Routes to appropriate sub-command handlers based on parsed arguments.
  *
  * **Supported Commands:**
- * - `start` - Start PostgreSQL container
- * - `stop` - Stop PostgreSQL container
- * - `restart` - Restart PostgreSQL container
- * - `status` - Show database status
- * - `migrate` - Run database migrations
+ * - `status` - Show CQL database status
+ * - `connect` - Test CQL connection
  * - `seed` - Seed database with initial data
- * - `reset` - Reset database (drop + migrate)
+ * - `stats` - Show database statistics
+ * - `reset` - Reset database (clear all data)
  *
  * @param args - Raw command-line arguments for the database domain
  * @throws Exits process with code 1 on error, 0 on success
@@ -360,32 +270,39 @@ export async function runDbCommand(args: string[]): Promise<void> {
   }
 
   switch (parsed.command) {
-    case 'start':
-      await startDatabase();
-      break;
-
-    case 'stop':
-      await stopDatabase();
-      break;
-
-    case 'restart':
-      await restartDatabase();
-      break;
-
     case 'status':
       await showStatus();
       break;
 
-    case 'migrate':
-      await runMigrations();
+    case 'connect':
+      await testConnection();
       break;
 
     case 'seed':
-      await seedDatabase();
+      await seedDatabase(args);
+      break;
+
+    case 'stats':
+      await showStats();
       break;
 
     case 'reset':
       await resetDatabase();
+      break;
+
+    // Legacy commands - provide helpful migration messages
+    case 'start':
+    case 'stop':
+    case 'restart':
+      logger.warn(`The '${parsed.command}' command is not needed with CQL.`);
+      console.log('\nCQL connects to a Jeju block producer instance.');
+      console.log('Start Jeju instead: cd /path/to/jeju && jeju dev');
+      break;
+
+    case 'migrate':
+      logger.warn("The 'migrate' command is not needed with CQL.");
+      console.log('\nCQL handles schema management automatically.');
+      console.log('Use "babylon db status" to check connection health.');
       break;
 
     default:

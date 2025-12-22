@@ -1,22 +1,17 @@
 /**
  * Configuration Validator
  *
- * Validates RL pipeline configuration before execution.
+ * Validates RL pipeline configuration before execution using Zod schemas.
  */
 
+import { logger } from '@babylon/shared';
+import { type ZodError, z } from 'zod';
 import type { BenchmarkConfig } from '../benchmark/BenchmarkDataGenerator';
-import { logger } from '../utils/logger';
-
-export interface TrainingConfig {
-  min_trajectories_per_batch: number;
-  batch_size: number;
-  learning_rate: number;
-  kl_penalty: number;
-  iterations_per_window: number;
-  warmup_steps: number;
-  max_grad_norm: number;
-  gamma: number;
-}
+import {
+  BenchmarkConfigSchema,
+  type TrainingConfig,
+  TrainingConfigSchema,
+} from '../schemas';
 
 /**
  * Shared validation result type for configuration validation.
@@ -27,77 +22,69 @@ export interface ValidationResult {
   warnings: string[];
 }
 
+/**
+ * Convert Zod errors to string array
+ */
+function zodErrorsToStrings(error: ZodError): string[] {
+  return error.issues.map((issue) => {
+    const path = issue.path.map(String).join('.');
+    return path ? `${path}: ${issue.message}` : issue.message;
+  });
+}
+
+/**
+ * Check for warnings based on validated config values
+ */
+function getTrainingWarnings(config: TrainingConfig): string[] {
+  const warnings: string[] = [];
+
+  if (config.batch_size > 64) {
+    warnings.push('batch_size > 64 may cause memory issues');
+  }
+
+  if (config.learning_rate > 1e-3) {
+    warnings.push('learning_rate > 1e-3 may cause training instability');
+  }
+
+  if (config.learning_rate < 1e-8) {
+    warnings.push(
+      'learning_rate < 1e-8 may be too small for effective learning'
+    );
+  }
+
+  if (config.kl_penalty > 1.0) {
+    warnings.push('kl_penalty > 1.0 may be too high');
+  }
+
+  return warnings;
+}
+
+export { type TrainingConfig };
+
 export class ConfigValidator {
   /**
-   * Validate training configuration
+   * Validate training configuration using Zod
    */
   static validateTrainingConfig(config: TrainingConfig): ValidationResult {
-    const errors: string[] = [];
-    const warnings: string[] = [];
+    const result = TrainingConfigSchema.safeParse(config);
 
-    // Validate batch size
-    if (config.batch_size <= 0) {
-      errors.push('batch_size must be greater than 0');
-    }
-    if (config.batch_size > 64) {
-      warnings.push('batch_size > 64 may cause memory issues');
-    }
-
-    // Validate learning rate
-    if (config.learning_rate <= 0) {
-      errors.push('learning_rate must be greater than 0');
-    }
-    if (config.learning_rate > 1e-3) {
-      warnings.push('learning_rate > 1e-3 may cause training instability');
-    }
-    if (config.learning_rate < 1e-8) {
-      warnings.push(
-        'learning_rate < 1e-8 may be too small for effective learning'
-      );
-    }
-
-    // Validate KL penalty
-    if (config.kl_penalty < 0) {
-      errors.push('kl_penalty must be non-negative');
-    }
-    if (config.kl_penalty > 1.0) {
-      warnings.push('kl_penalty > 1.0 may be too high');
-    }
-
-    // Validate iterations
-    if (config.iterations_per_window <= 0) {
-      errors.push('iterations_per_window must be greater than 0');
-    }
-
-    // Validate warmup steps
-    if (config.warmup_steps < 0) {
-      errors.push('warmup_steps must be non-negative');
-    }
-
-    // Validate max grad norm
-    if (config.max_grad_norm <= 0) {
-      errors.push('max_grad_norm must be greater than 0');
-    }
-
-    // Validate gamma
-    if (config.gamma < 0 || config.gamma > 1) {
-      errors.push('gamma must be between 0 and 1');
-    }
-
-    // Validate min trajectories
-    if (config.min_trajectories_per_batch <= 0) {
-      errors.push('min_trajectories_per_batch must be greater than 0');
+    if (!result.success) {
+      return {
+        valid: false,
+        errors: zodErrorsToStrings(result.error),
+        warnings: [],
+      };
     }
 
     return {
-      valid: errors.length === 0,
-      errors,
-      warnings,
+      valid: true,
+      errors: [],
+      warnings: getTrainingWarnings(result.data),
     };
   }
 
   /**
-   * Validate benchmark configuration
+   * Validate benchmark configuration using Zod
    */
   static validateBenchmarkConfig(config: {
     duration_minutes: number;
@@ -105,33 +92,27 @@ export class ConfigValidator {
     num_prediction_markets: number;
     num_perpetual_markets: number;
   }): ValidationResult {
-    const errors: string[] = [];
+    const result = BenchmarkConfigSchema.safeParse(config);
     const warnings: string[] = [];
 
-    if (config.duration_minutes <= 0) {
-      errors.push('duration_minutes must be greater than 0');
+    if (!result.success) {
+      return {
+        valid: false,
+        errors: zodErrorsToStrings(result.error),
+        warnings: [],
+      };
     }
-    if (config.duration_minutes > 10080) {
+
+    // Add warnings for valid but potentially problematic values
+    if (result.data.duration_minutes > 10080) {
       warnings.push(
         'duration_minutes > 10080 (1 week) may take a long time to generate'
       );
     }
 
-    if (config.tick_interval_seconds <= 0) {
-      errors.push('tick_interval_seconds must be greater than 0');
-    }
-
-    if (config.num_prediction_markets <= 0) {
-      errors.push('num_prediction_markets must be greater than 0');
-    }
-
-    if (config.num_perpetual_markets <= 0) {
-      errors.push('num_perpetual_markets must be greater than 0');
-    }
-
     return {
-      valid: errors.length === 0,
-      errors,
+      valid: true,
+      errors: [],
       warnings,
     };
   }
@@ -166,11 +147,15 @@ export class ConfigValidator {
       warnings.push(...trainingResult.warnings);
     }
 
-    // Validate agent config
-    if (config.agents.test_agent_count <= 0) {
-      errors.push('test_agent_count must be greater than 0');
-    }
-    if (config.agents.test_agent_count > 10) {
+    // Validate agent config using Zod
+    const agentSchema = z.object({
+      test_agent_count: z.number().int().positive(),
+    });
+    const agentResult = agentSchema.safeParse(config.agents);
+
+    if (!agentResult.success) {
+      errors.push(...zodErrorsToStrings(agentResult.error));
+    } else if (agentResult.data.test_agent_count > 10) {
       warnings.push('test_agent_count > 10 may be slow');
     }
 

@@ -5,6 +5,7 @@
  * Simulates daily training cycles as described in the TEE paper.
  */
 
+import { logger } from '@babylon/shared';
 import type { Hex } from 'viem';
 import type { AIAgent, TrainingSample } from './agent.js';
 import type { GameEnvironment } from './environment.js';
@@ -47,7 +48,7 @@ export class AITrainer {
     this.config = config;
     this.agent = agent;
     this.environment = environment;
-    console.log(
+    logger.info(
       `[Trainer] Initialized (batch: ${config.batchSize}, epochs: ${config.epochsPerCycle})`
     );
   }
@@ -60,7 +61,7 @@ export class AITrainer {
     const startTime = Date.now();
     this.cycleCounter++;
 
-    console.log(`\n[Trainer] === TRAINING CYCLE ${this.cycleCounter} ===`);
+    logger.info(`\n[Trainer] === TRAINING CYCLE ${this.cycleCounter} ===`);
 
     // Record initial state
     const modelHashBefore = this.agent.getModelHash();
@@ -70,7 +71,7 @@ export class AITrainer {
     const samples = this.environment.generateTrainingBatch(
       this.config.batchSize
     );
-    console.log(`[Trainer] Generated ${samples.length} training samples`);
+    logger.info(`[Trainer] Generated ${samples.length} training samples`);
 
     // Run training epochs
     let epochsRun = 0;
@@ -88,7 +89,7 @@ export class AITrainer {
 
       // Early stopping if we hit target loss
       if (currentLoss < this.config.targetLoss) {
-        console.log(
+        logger.info(
           `[Trainer] Early stop: reached target loss ${currentLoss.toFixed(4)}`
         );
         break;
@@ -114,7 +115,7 @@ export class AITrainer {
 
     this.cycleHistory.push(result);
 
-    console.log(
+    logger.info(
       `[Trainer] Cycle ${this.cycleCounter} complete: ` +
         `loss ${initialStats.averageLoss.toFixed(4)} -> ${currentLoss.toFixed(4)}, ` +
         `${epochsRun} epochs, ${(endTime - startTime) / 1000}s`

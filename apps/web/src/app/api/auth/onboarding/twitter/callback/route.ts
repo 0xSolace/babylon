@@ -46,20 +46,13 @@
 
 import { withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, TwitterOnboardingCallbackQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const TwitterCallbackQuerySchema = z.object({
-  code: z.string().optional(),
-  state: z.string().optional(),
-  error: z.string().optional(),
-});
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams;
-  const parsed = TwitterCallbackQuerySchema.safeParse(
+  const parsed = TwitterOnboardingCallbackQuerySchema.safeParse(
     Object.fromEntries(searchParams)
   );
 

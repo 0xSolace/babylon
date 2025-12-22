@@ -17,7 +17,7 @@
  *     summary: Send test DM messages
  *     description: Sends bulk test messages between users for testing (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -71,15 +71,12 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  generateSnowflakeId,
+  logger,
+  TestDMMessagesSchema,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const TestDMMessagesSchema = z.object({
-  senderId: z.string().min(1),
-  recipientId: z.string().min(1),
-  messageCount: z.number().min(1).max(200).default(100),
-});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   // Require admin authentication
@@ -101,7 +98,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     'POST /api/admin/test-dm-messages'
   );
 
-  // Verify both users exist (supports ID, username, or privyId)
+  // Verify both users exist (supports ID, username, oauth3Id, or privyId for migration)
   const [sender, recipient] = await Promise.all([
     findUserByIdentifier(senderId, {
       id: true,

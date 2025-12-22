@@ -16,7 +16,7 @@
  *     summary: Get all group chats
  *     description: Returns all group chats with filtering and sorting (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: creator

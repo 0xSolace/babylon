@@ -12,17 +12,19 @@
     "typecheck": "echo 'Bun-only package, types checked at runtime'"
   },
   "dependencies": {
+    "@babylon/a2a": "workspace:*",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "viem": "^2.41.2",
-    "ws": "^8.18.3"
+    "viem": "^2.43.2",
+    "ws": "^8.18.3",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",
     "@types/express": "^4.17.21",
     "@types/ws": "^8.5.10",
     "@types/cors": "^2.8.17",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.10.0",
     "typescript": "^5.9.3",
     "vitest": "^2.0.0"
   }

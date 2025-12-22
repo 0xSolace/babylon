@@ -5,6 +5,7 @@
  * the next value in various sequences.
  */
 
+import { logger } from '@babylon/shared';
 import type { TrainingSample } from './agent.js';
 
 export interface GameConfig {
@@ -49,7 +50,7 @@ export class GameEnvironment {
 
   constructor(config: GameConfig) {
     this.config = config;
-    console.log(
+    logger.info(
       `[Game] Environment initialized (sequence length: ${config.sequenceLength})`
     );
   }
@@ -144,7 +145,7 @@ export class GameEnvironment {
     this.currentSession = session;
     this.sessions.push(session);
 
-    console.log(`[Game] New session ${session.id} (${type} pattern)`);
+    logger.info(`[Game] New session ${session.id} (${type} pattern)`);
 
     return session;
   }
@@ -194,7 +195,7 @@ export class GameEnvironment {
 
     this.currentSession.completed = true;
 
-    console.log(
+    logger.info(
       `[Game] Round complete: actual=${actual}, player=${playerGuess}${playerCorrect ? '✓' : '✗'}, agent=${agentGuess}${agentCorrect ? '✓' : '✗'}`
     );
 
@@ -309,6 +310,6 @@ export class GameEnvironment {
     this.sessions = [];
     this.currentSession = null;
     this.sessionCounter = 0;
-    console.log('[Game] Environment reset');
+    logger.info('[Game] Environment reset');
   }
 }

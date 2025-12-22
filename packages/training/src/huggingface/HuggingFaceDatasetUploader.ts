@@ -7,7 +7,8 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import type { SimulationMetrics } from '../benchmark/SimulationEngine';
+// TODO: SimulationEngine.ts was deleted in merge - using type export from benchmark/index
+import type { SimulationMetrics } from '../benchmark';
 import { calculateArrayStats, logger } from '../utils';
 import {
   getHuggingFaceToken,

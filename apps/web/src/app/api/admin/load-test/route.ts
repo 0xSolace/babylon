@@ -17,7 +17,7 @@
  *     summary: Run load test
  *     description: Runs load test with specified scenario (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -48,7 +48,7 @@
  *     summary: Get load test status/results
  *     description: Returns load test status or results (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: type
@@ -80,16 +80,10 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { LoadTestRequestSchema, logger } from '@babylon/shared';
 import type { LoadTestResult } from '@babylon/testing';
 import { LoadTestSimulator, TEST_SCENARIOS } from '@babylon/testing';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const LoadTestRequestSchema = z.object({
-  scenario: z.enum(['LIGHT', 'NORMAL', 'HEAVY', 'STRESS']),
-  baseUrl: z.string().url().optional(),
-});
 
 // Store active load test
 let activeTest: {
@@ -118,12 +112,18 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const { scenario, baseUrl } = LoadTestRequestSchema.parse(body);
 
   // Get configuration
-  const config = TEST_SCENARIOS[scenario];
+  const scenarioConfig = TEST_SCENARIOS[scenario];
   const testBaseUrl =
     baseUrl ||
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:5007');
+
+  // Make a mutable copy of the config to satisfy LoadTestConfig type
+  const config = {
+    ...scenarioConfig,
+    endpoints: [...scenarioConfig.endpoints],
+  };
 
   logger.info(
     'Starting load test',

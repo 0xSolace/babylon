@@ -150,13 +150,21 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       request
     ).catch(() => null);
 
+    // Filter out items with null tags before processing
+    const validTrending = trending.filter(
+      (item): item is typeof item & { tag: NonNullable<typeof item.tag> } =>
+        item.tag !== null
+    );
+
     // First, get all trending items with summaries
+    type RecentPostResult = { postId: string; postContent: string | null };
     const trendingItems: TrendingTag[] = await Promise.all(
-      trending.map(async (item) => {
-        const recentPosts =
+      validTrending.map(async (item) => {
+        // CQL join doesn't preserve select fields in types, so we type assert
+        const recentPosts: RecentPostResult[] =
           authUser && authUser.userId
             ? await asUser(authUser, async (db) => {
-                return await db
+                return (await db
                   .select({
                     postId: postTags.postId,
                     postContent: posts.content,
@@ -165,10 +173,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                   .innerJoin(posts, eq(postTags.postId, posts.id))
                   .where(eq(postTags.tagId, item.tag.id))
                   .orderBy(desc(postTags.createdAt))
-                  .limit(3);
+                  .limit(3)) as unknown as RecentPostResult[];
               })
             : await asPublic(async (db) => {
-                return await db
+                return (await db
                   .select({
                     postId: postTags.postId,
                     postContent: posts.content,
@@ -177,10 +185,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                   .innerJoin(posts, eq(postTags.postId, posts.id))
                   .where(eq(postTags.tagId, item.tag.id))
                   .orderBy(desc(postTags.createdAt))
-                  .limit(3);
+                  .limit(3)) as unknown as RecentPostResult[];
               });
 
-        const postContents = recentPosts.map((pt) => pt.postContent);
+        const postContents = recentPosts.map((pt) => pt.postContent ?? '');
 
         const summary = await generateTrendingSummary(
           item.tag.displayName,

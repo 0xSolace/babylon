@@ -9,8 +9,8 @@
  */
 
 import type { JsonValue } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import fs from 'fs/promises';
-import { logger } from '../../utils/logger';
 
 // ============================================================================
 // Types

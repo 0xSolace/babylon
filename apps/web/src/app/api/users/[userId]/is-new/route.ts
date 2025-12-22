@@ -16,7 +16,7 @@
  *     summary: Check if user is new
  *     description: Returns whether user needs profile setup (optional auth)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId

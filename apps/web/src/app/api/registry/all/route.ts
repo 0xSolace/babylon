@@ -20,7 +20,7 @@
  *     summary: Get all registry entities
  *     description: Returns all entities from ERC8004 registry and database (optional auth for RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Entities retrieved successfully
@@ -49,8 +49,7 @@
 
 import { SubgraphClient } from '@babylon/agents';
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
-import type { DrizzleClient } from '@babylon/db';
-import { asPublic } from '@babylon/db';
+import { asPublic, type DbClient } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -70,7 +69,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Fetch users from database
   const fetchUsers = async () => {
-    const dbOperation = async (db: DrizzleClient) => {
+    const dbOperation = async (db: DbClient) => {
       const conditions: Record<string, unknown>[] = [];
 
       if (onChainOnly) {
@@ -177,7 +176,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   };
 
   const fetchActors = async () => {
-    const dbOperation = async (db: DrizzleClient) => {
+    const dbOperation = async (db: DbClient) => {
       // Get all static actors
       let actors = StaticDataRegistry.getAllActors();
 

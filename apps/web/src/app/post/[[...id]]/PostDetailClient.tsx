@@ -62,18 +62,7 @@ export default function PostDetailClient() {
     setIsCommentModalOpen(true);
   };
 
-  // Redirect to feed if no post ID provided
-  useEffect(() => {
-    if (!postId) {
-      router.replace('/');
-    }
-  }, [postId, router]);
-
-  // Don't render with missing postId - redirect will happen via useEffect
-  if (!postId) {
-    return null;
-  }
-
+  // Fetch post data with react-query
   const {
     data: post,
     isLoading,
@@ -107,11 +96,12 @@ export default function PostDetailClient() {
         authorUsername: postData.authorUsername || null,
         authorProfileImageUrl: postData.authorProfileImageUrl || null,
         timestamp: postData.timestamp,
-        likeCount: postData.likeCount ?? 0,
-        commentCount: postData.commentCount ?? 0,
-        shareCount: postData.shareCount ?? 0,
-        isLiked: postData.isLiked ?? false,
-        isShared: postData.isShared ?? false,
+        likeCount: postData.likeCount !== undefined ? postData.likeCount : 0,
+        commentCount:
+          postData.commentCount !== undefined ? postData.commentCount : 0,
+        shareCount: postData.shareCount !== undefined ? postData.shareCount : 0,
+        isLiked: postData.isLiked !== undefined ? postData.isLiked : false,
+        isShared: postData.isShared !== undefined ? postData.isShared : false,
         // Repost metadata (new clean structure)
         isRepost: postData.isRepost || false,
         isQuote: postData.isQuote || false,
@@ -150,10 +140,12 @@ export default function PostDetailClient() {
     enabled: !!postId,
   });
 
-  const error = queryError?.message ?? null;
+  const error = queryError && queryError.message ? queryError.message : null;
 
   // Subscribe to interaction store changes and update query data
   useEffect(() => {
+    if (!postId) return;
+
     const unsubscribe = useInteractionStore.subscribe((state) => {
       const storeData = state.postInteractions.get(postId);
       if (storeData) {
@@ -188,6 +180,18 @@ export default function PostDetailClient() {
 
     return () => unsubscribe();
   }, [postId, queryClient]);
+
+  // Redirect to feed if no post ID provided
+  useEffect(() => {
+    if (!postId) {
+      router.replace('/');
+    }
+  }, [postId, router]);
+
+  // Don't render with missing postId - redirect will happen via useEffect
+  if (!postId) {
+    return null;
+  }
 
   if (isLoading) {
     return (

@@ -5,6 +5,7 @@
  * This simulates what a real ML model would do in the TEE.
  */
 
+import { logger } from '@babylon/shared';
 import { type Hex, keccak256, toBytes } from 'viem';
 
 export interface AgentConfig {
@@ -48,7 +49,7 @@ export class AIAgent {
   constructor(config: AgentConfig) {
     this.config = config;
     this.state = this.initializeState();
-    console.log(
+    logger.info(
       `[AI Agent] Initialized (${config.inputSize} -> ${config.hiddenSize} -> ${config.outputSize})`
     );
   }
@@ -248,7 +249,7 @@ export class AIAgent {
    */
   loadState(state: AgentState): void {
     this.state = JSON.parse(JSON.stringify(state));
-    console.log(
+    logger.info(
       `[AI Agent] Loaded state (epoch ${state.epoch}, loss ${state.averageLoss.toFixed(4)})`
     );
   }

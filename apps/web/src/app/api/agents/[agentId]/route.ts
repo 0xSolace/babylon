@@ -19,7 +19,7 @@
  *     summary: Get agent details
  *     description: Returns complete agent profile with real-time performance statistics, points balance, and operational status.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: agentId
@@ -49,7 +49,7 @@
  *     summary: Update agent configuration
  *     description: Updates agent settings, permissions, and configuration. Supports partial updates.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: agentId
@@ -87,7 +87,7 @@
  *     summary: Delete agent
  *     description: Permanently deletes agent and all associated data. This action cannot be undone.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: agentId

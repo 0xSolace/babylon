@@ -228,8 +228,8 @@ export class RulerScoringService {
               providerId: uuidv4(),
               providerName: p.providerName,
               timestamp: s.timestamp || stepTimestamp + idx,
-              query: p.data as Record<string, JsonValue>,
-              data: p.data,
+              query: (p.data ?? {}) as Record<string, JsonValue>,
+              data: (p.data ?? {}) as Record<string, JsonValue>,
               purpose: p.purpose,
             })),
             llmCalls: (s.llmCalls || []).map((l) => ({
@@ -252,25 +252,39 @@ export class RulerScoringService {
                 | 'other',
               actionType: l.actionType,
             })),
-            action: {
-              attemptId: uuidv4(),
-              timestamp: s.timestamp || stepTimestamp + idx,
-              actionType: s.action.actionType,
-              actionName: s.action.actionType,
-              parameters: s.action.parameters,
-              reasoning: s.action.reasoning,
-              success: s.action.success,
-              result: s.action.result,
-              error: s.action.error,
-            },
-            reward: s.reward,
+            action: s.action
+              ? {
+                  attemptId: uuidv4(),
+                  timestamp: s.timestamp || stepTimestamp + idx,
+                  actionType: s.action.actionType,
+                  actionName: s.action.actionType,
+                  parameters: (s.action.parameters ?? {}) as Record<
+                    string,
+                    JsonValue
+                  >,
+                  reasoning: s.action.reasoning,
+                  success: s.action.success,
+                  result: (s.action.result ?? undefined) as
+                    | Record<string, JsonValue>
+                    | undefined,
+                  error: s.action.error,
+                }
+              : {
+                  attemptId: uuidv4(),
+                  timestamp: s.timestamp || stepTimestamp + idx,
+                  actionType: 'unknown',
+                  actionName: 'unknown',
+                  parameters: {} as Record<string, JsonValue>,
+                  success: false,
+                },
+            reward: s.reward ?? 0,
             done: idx === steps.length - 1,
             metadata: {},
           })
         ),
-        totalReward: steps.reduce((sum, s) => sum + s.reward, 0),
+        totalReward: steps.reduce((sum, s) => sum + (s.reward ?? 0), 0),
         rewardComponents: {
-          environmentReward: steps.reduce((sum, s) => sum + s.reward, 0),
+          environmentReward: steps.reduce((sum, s) => sum + (s.reward ?? 0), 0),
         },
         metrics: {
           episodeLength: dbTraj.episodeLength || steps.length,

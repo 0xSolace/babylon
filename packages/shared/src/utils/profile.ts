@@ -40,7 +40,7 @@ export function getProfileUrl(
  * Check if a profile identifier is a username (not a user ID)
  *
  * @description Determines if an identifier string is a username rather than
- * a user ID. User IDs are typically DIDs (did:privy:...), UUIDs, or contain
+ * a user ID. User IDs are typically DIDs (did:jeju:...), UUIDs, or contain
  * dashes. Usernames are shorter strings without special patterns.
  *
  * @param {string} identifier - The identifier to check
@@ -49,7 +49,7 @@ export function getProfileUrl(
  * @example
  * ```typescript
  * isUsername('alice') // Returns true
- * isUsername('did:privy:abc123') // Returns false
+ * isUsername('did:jeju:mainnet:0x1234...') // Returns false
  * isUsername('@alice') // Returns true
  * isUsername('550e8400-e29b-41d4-a716-446655440000') // Returns false (UUID)
  * ```
@@ -58,11 +58,6 @@ export function isUsername(identifier: string): boolean {
   // If it starts with @, it's definitely a username
   if (identifier.startsWith('@')) {
     return true;
-  }
-
-  // If it contains "privy" anywhere, it's definitely a user ID, not a username
-  if (identifier.toLowerCase().includes('privy')) {
-    return false;
   }
 
   // If it starts with "did:", it's a DID (user ID)
@@ -79,7 +74,7 @@ export function isUsername(identifier: string): boolean {
   }
 
   // If it's a short string without dashes and not a DID, it's likely a username
-  // User IDs are typically: "did:privy:..." (long) or UUIDs (contain dashes)
+  // User IDs are typically: "did:jeju:..." (long) or UUIDs (contain dashes)
   return identifier.length <= 42 && !identifier.includes('-');
 }
 

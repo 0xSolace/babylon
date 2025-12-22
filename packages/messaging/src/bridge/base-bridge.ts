@@ -12,6 +12,7 @@
  * @packageDocumentation
  */
 
+import { ExternalServiceError } from '@babylon/shared';
 import type { Address, Hex } from 'viem';
 
 /**
@@ -144,8 +145,10 @@ export class BaseBridgeClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
-        `Failed to register keys: ${response.status} ${errorText}`
+      throw new ExternalServiceError(
+        'BridgeRelay',
+        `Failed to register keys: ${errorText}`,
+        response.status
       );
     }
 
@@ -195,8 +198,10 @@ export class BaseBridgeClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
-        `Failed to send cross-chain message: ${response.status} ${errorText}`
+      throw new ExternalServiceError(
+        'BridgeRelay',
+        `Failed to send cross-chain message: ${errorText}`,
+        response.status
       );
     }
 
@@ -220,8 +225,10 @@ export class BaseBridgeClient {
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to get message status: ${response.status} ${response.statusText}`
+      throw new ExternalServiceError(
+        'BridgeRelay',
+        `Failed to get message status: ${response.statusText}`,
+        response.status
       );
     }
 
@@ -241,8 +248,10 @@ export class BaseBridgeClient {
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to fetch cross-chain messages: ${response.status} ${response.statusText}`
+      throw new ExternalServiceError(
+        'BridgeRelay',
+        `Failed to fetch cross-chain messages: ${response.statusText}`,
+        response.status
       );
     }
 
@@ -266,8 +275,10 @@ export class BaseBridgeClient {
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to check keys on chain: ${response.status} ${response.statusText}`
+      throw new ExternalServiceError(
+        'BridgeRelay',
+        `Failed to check keys on chain: ${response.statusText}`,
+        response.status
       );
     }
 
@@ -293,8 +304,10 @@ export class BaseBridgeClient {
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to get message route: ${response.status} ${response.statusText}`
+      throw new ExternalServiceError(
+        'BridgeRelay',
+        `Failed to get message route: ${response.statusText}`,
+        response.status
       );
     }
 

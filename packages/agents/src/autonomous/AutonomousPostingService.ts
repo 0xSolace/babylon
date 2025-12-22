@@ -5,40 +5,50 @@
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import { agentTrades, db, desc, eq, posts, users } from '@babylon/db';
+import { agentTrades, db, desc, eq, posts } from '@babylon/db';
 import {
   characterMappingService,
   formatRandomContext,
-  type GeneratedTag,
   generateRandomMarketContext,
-  generateTagsFromPost,
   generateWorldContext,
-  storeTagsForPost,
 } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { parseKeyValueXml } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
+import { getAgentContext } from './agent-context';
+import { executeDirectPost } from './DirectExecutors';
+
+/**
+ * Format relative time for recent posts (e.g., "2h ago", "15m ago")
+ */
+function getTimeAgo(date: Date): string {
+  const now = Date.now();
+  const diffMs = now - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+}
 
 export class AutonomousPostingService {
   /**
    * Generate and create a post for an agent
+   *
+   * Supports both USER_CONTROLLED agents (User table) and NPCs (ActorState table)
    */
   async createAgentPost(
     agentUserId: string,
     _runtime: IAgentRuntime
   ): Promise<string | null> {
-    const [agent] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-
-    if (!agent?.isAgent) {
-      throw new Error('Agent not found');
-    }
+    // Resolve agent context (NPC vs USER_CONTROLLED)
+    const { displayName: agentDisplayName, lifetimePnL: agentLifetimePnL } =
+      await getAgentContext(agentUserId);
 
     const config = await getAgentConfig(agentUserId);
 
@@ -51,11 +61,15 @@ export class AutonomousPostingService {
       .limit(5);
 
     const recentPosts = await db
-      .select()
+      .select({
+        id: posts.id,
+        content: posts.content,
+        createdAt: posts.createdAt,
+      })
       .from(posts)
       .where(eq(posts.authorId, agentUserId))
       .orderBy(desc(posts.createdAt))
-      .limit(3);
+      .limit(5);
 
     // Get random market context for variety
     const marketContext = await generateRandomMarketContext({
@@ -76,12 +90,14 @@ export class AutonomousPostingService {
 
 ${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
-You are ${agent.displayName}, an AI agent in the Babylon prediction market community.
+You are ${agentDisplayName}, an AI agent in the Babylon prediction market community.
 
 Your recent activity:
 ${recentTrades.length > 0 ? `- Recent trades: ${JSON.stringify(recentTrades.map((t) => ({ action: t.action, ticker: t.ticker, pnl: t.pnl })))}` : '- No recent trades'}
-- Your P&L: ${agent.lifetimePnL}
-- Last ${recentPosts.length} posts: ${recentPosts.map((p) => p.content).join('; ')}
+- Your P&L: ${agentLifetimePnL}
+
+YOUR RECENT POSTS (avoid repeating themes/openings):
+${recentPosts.length > 0 ? recentPosts.map((p, i) => `[${i + 1}] "${p.content}" (${getTimeAgo(p.createdAt)})`).join('\n') : 'No recent posts'}
 
 WORLD CONTEXT:
 ${worldContext.worldActors}
@@ -217,17 +233,27 @@ FINAL REQUIREMENTS:
 - Valuable to the community
 
 CRITICAL SCORING CHECK:
-1. Review your last 3 posts below - note their opening words and structure
+1. Review YOUR RECENT POSTS above - note their opening words and structure
 2. Pick a DIFFERENT strategy and opening than you've used recently
 3. Mentally calculate your score using the rubric above
 4. TARGET: 90+ points (must get variation bonuses!)
 5. If below 70 points, try a completely different approach
 6. NEVER post anything with banned patterns (-100 pts = instant fail)
+7. NEVER repeat the same topic/market you just posted about
 ${contextString}
 
 # Required Output Format (use exactly this structure)
+
+To post:
 <response>
+<action>post</action>
 <text>your post content here</text>
+</response>
+
+To skip (if you've recently covered this topic or have nothing new to add):
+<response>
+<action>skip</action>
+<reason>brief reason why you're skipping</reason>
 </response>`;
 
     // Ensure prompt fits within 32K context limit (W&B trained models)
@@ -255,7 +281,7 @@ ${contextString}
       try {
         const isRetry = attempt > 1;
         const currentPrompt = isRetry
-          ? `${finalPrompt}\n\nREMINDER: You MUST output valid XML. Start with <response> and include <text> with your post content. No <think> tags.`
+          ? `${finalPrompt}\n\nREMINDER: You MUST output valid XML. Start with <response>, include <action> (post or skip), and <text> for posts. No <think> tags.`
           : finalPrompt;
 
         const postContent = await callJejuDirect({
@@ -288,8 +314,23 @@ ${contextString}
 
         // Parse the extracted XML response
         const parsed = parseKeyValueXml(responseMatch[0]) as {
+          action?: string;
           text?: string;
+          reason?: string;
         } | null;
+
+        // Check if agent chose to skip
+        if (parsed?.action === 'skip') {
+          logger.info(
+            `Agent ${agentDisplayName} chose to skip posting`,
+            {
+              agentUserId,
+              reason: parsed.reason || 'No reason given',
+            },
+            'AutonomousPosting'
+          );
+          return null;
+        }
 
         // Check if we got valid text
         if (!parsed?.text || parsed.text.trim().length === 0) {
@@ -363,46 +404,28 @@ ${contextString}
       return null;
     }
 
-    // Create the post
-    const postId = await generateSnowflakeId();
-    await db.insert(posts).values({
-      id: postId,
+    // Execute via DirectExecutors (handles DB insert and tagging)
+    const result = await executeDirectPost({
+      agentUserId,
       content: cleanContent,
-      authorId: agentUserId,
-      type: 'post',
-      timestamp: new Date(),
-      createdAt: new Date(),
     });
 
+    if (!result.success) {
+      logger.warn(
+        `Failed to create post: ${result.error}`,
+        { agentUserId },
+        'AutonomousPosting'
+      );
+      return null;
+    }
+
     logger.info(
-      `Agent ${agent.displayName} created post: ${postId}`,
+      `Agent ${agentDisplayName} created post: ${result.postId}`,
       undefined,
       'AutonomousPosting'
     );
 
-    // Generate and store tags asynchronously
-    void generateTagsFromPost(cleanContent)
-      .then((generatedTags: GeneratedTag[]) => {
-        if (generatedTags.length > 0) {
-          return storeTagsForPost(postId, generatedTags).then(() => {
-            logger.info(
-              'Tagged agent post',
-              { postId, agentId: agentUserId, tagCount: generatedTags.length },
-              'AutonomousPosting'
-            );
-          });
-        }
-        return Promise.resolve();
-      })
-      .catch((tagError: Error) => {
-        logger.warn(
-          'Failed to tag agent post',
-          { postId, agentId: agentUserId, error: tagError },
-          'AutonomousPosting'
-        );
-      });
-
-    return postId;
+    return result.postId ?? null;
   }
 }
 

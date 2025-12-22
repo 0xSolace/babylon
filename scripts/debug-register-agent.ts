@@ -12,7 +12,7 @@ import type { Address } from 'viem';
  *   --endpoint https://example.com/agent/<address>
  *
  * The script calls viem's `simulateContract` so we can see the exact revert reason
- * that Privy's paymaster would encounter.
+ * that a paymaster would encounter.
  */
 import { createPublicClient, http, parseAbi } from 'viem';
 import { baseSepolia } from 'viem/chains';

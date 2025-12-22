@@ -17,7 +17,7 @@
  *     summary: Register agent on-chain
  *     description: Registers agent to EIP-8004 Identity Registry on Base Sepolia
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -163,7 +163,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       },
       create: {
         id: await generateSnowflakeId(),
-        privyId: agentId,
+        oauth3Id: agentId,
+        privyId: agentId, // @deprecated - kept for migration compatibility
         username: agentId,
         displayName: agentName || agentId,
         virtualBalance: '10000', // Start with 10k points
@@ -173,9 +174,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       },
     });
 
-    // Fetch the user with selected fields
+    // Fetch the user with selected fields (use oauth3Id as primary identifier)
     const userWithFields = await db.user.findUnique({
-      where: { privyId: agentId },
+      where: { oauth3Id: agentId },
       select: {
         id: true,
         username: true,
@@ -251,14 +252,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   });
 
   if (receipt.status !== 'success') {
-    throw new InternalServerError(
-      'Agent registration transaction failed',
-      'TRANSACTION_FAILED',
-      {
-        txHash,
-        receipt: receipt.status,
-      }
-    );
+    throw new InternalServerError('Agent registration transaction failed', {
+      txHash,
+      receipt: receipt.status,
+      code: 'TRANSACTION_FAILED',
+    });
   }
 
   const agentRegisteredLog = receipt.logs.find((log) => {
@@ -273,10 +271,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   if (!agentRegisteredLog) {
     throw new InternalServerError(
       'AgentRegistered event not found in transaction receipt',
-      'EVENT_NOT_FOUND',
       {
         txHash,
         logCount: receipt.logs.length,
+        code: 'EVENT_NOT_FOUND',
       }
     );
   }
@@ -292,10 +290,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   if (!tokenId || isNaN(tokenId)) {
     throw new InternalServerError(
       'Invalid tokenId received from registration event',
-      'INVALID_TOKEN_ID',
       {
         txHash,
         tokenIdRaw: String(decodedLog.args.tokenId),
+        code: 'INVALID_TOKEN_ID',
       }
     );
   }

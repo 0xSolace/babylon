@@ -9,6 +9,9 @@
  * - Stake management
  */
 
+import type { JsonValue } from '@babylon/shared';
+import { z } from 'zod';
+
 // Types matching Jeju ModerationMarketplace
 export enum BanStatus {
   NONE = 0,
@@ -24,20 +27,59 @@ export enum VotePosition {
   NO = 1,
 }
 
+// Zod schemas for moderation parameters
+export const GetBanStatusParamsSchema = z.object({
+  address: z.string().min(1),
+});
+
+export const ProposeBanParamsSchema = z.object({
+  targetAddress: z.string().min(1),
+  reason: z.string().min(1),
+  category: z.string().min(1),
+  evidence: z.string().optional(),
+});
+
+export const ChallengeBanParamsSchema = z.object({
+  caseId: z.string().min(1),
+  stakeAmount: z.string().min(1),
+});
+
+export const VoteParamsSchema = z.object({
+  caseId: z.string().min(1),
+  position: z.enum(['yes', 'no']),
+});
+
+export const GetActiveCasesParamsSchema = z.object({
+  limit: z.number().optional().default(10),
+  offset: z.number().optional().default(0),
+});
+
+export const GetStakeParamsSchema = z.object({
+  address: z.string().min(1),
+});
+
+// Inferred types from schemas
+export type GetBanStatusParams = z.infer<typeof GetBanStatusParamsSchema>;
+export type ProposeBanParams = z.infer<typeof ProposeBanParamsSchema>;
+export type ChallengeBanParams = z.infer<typeof ChallengeBanParamsSchema>;
+export type VoteParams = z.infer<typeof VoteParamsSchema>;
+export type GetActiveCasesParams = z.infer<typeof GetActiveCasesParamsSchema>;
+export type GetStakeParams = z.infer<typeof GetStakeParamsSchema>;
+
 export interface ModerationRequest {
   method: string;
-  params: Record<string, unknown>;
+  params: Record<string, JsonValue>;
 }
 
 export interface ModerationResponse {
   success: boolean;
-  data?: unknown;
+  data?: JsonValue;
   error?: string;
 }
 
 // Handler function type
 type ModerationHandler = (
-  params: Record<string, unknown>
+  params: Record<string, JsonValue>
 ) => Promise<ModerationResponse>;
 
 // Handler registry
@@ -81,12 +123,12 @@ export function getSupportedModerationMethods(): string[] {
 // Default handlers (stubs that can be overridden with actual implementations)
 
 registerModerationHandler('moderation.getBanStatus', async (params) => {
-  const address = params.address as string;
+  const validated = GetBanStatusParamsSchema.parse(params);
   // This would be implemented by the application using the ModerationClient
   return {
     success: true,
     data: {
-      address,
+      address: validated.address,
       status: BanStatus.NONE,
       message: 'Ban status check requires ModerationClient configuration',
     },
@@ -94,72 +136,63 @@ registerModerationHandler('moderation.getBanStatus', async (params) => {
 });
 
 registerModerationHandler('moderation.proposeBan', async (params) => {
-  const { targetAddress, reason, category, evidence } = params as {
-    targetAddress: string;
-    reason: string;
-    category: string;
-    evidence?: string;
-  };
+  const validated = ProposeBanParamsSchema.parse(params);
 
   return {
     success: false,
     error:
       'Ban proposals require staking. Configure ModerationClient to enable.',
-    data: { targetAddress, reason, category, evidence },
+    data: {
+      targetAddress: validated.targetAddress,
+      reason: validated.reason,
+      category: validated.category,
+      evidence: validated.evidence ?? null,
+    },
   };
 });
 
 registerModerationHandler('moderation.challengeBan', async (params) => {
-  const { caseId, stakeAmount } = params as {
-    caseId: string;
-    stakeAmount: string;
-  };
+  const validated = ChallengeBanParamsSchema.parse(params);
 
   return {
     success: false,
     error: 'Challenge requires staking. Configure ModerationClient to enable.',
-    data: { caseId, stakeAmount },
+    data: { caseId: validated.caseId, stakeAmount: validated.stakeAmount },
   };
 });
 
 registerModerationHandler('moderation.vote', async (params) => {
-  const { caseId, position } = params as {
-    caseId: string;
-    position: 'yes' | 'no';
-  };
+  const validated = VoteParamsSchema.parse(params);
 
   return {
     success: false,
     error: 'Voting requires staking. Configure ModerationClient to enable.',
-    data: { caseId, position },
+    data: { caseId: validated.caseId, position: validated.position },
   };
 });
 
 registerModerationHandler('moderation.getActiveCases', async (params) => {
-  const { limit = 10, offset = 0 } = params as {
-    limit?: number;
-    offset?: number;
-  };
+  const validated = GetActiveCasesParamsSchema.parse(params);
 
   return {
     success: true,
     data: {
       cases: [],
       total: 0,
-      limit,
-      offset,
+      limit: validated.limit,
+      offset: validated.offset,
       message: 'Active cases query requires ModerationClient configuration',
     },
   };
 });
 
 registerModerationHandler('moderation.getStake', async (params) => {
-  const address = params.address as string;
+  const validated = GetStakeParamsSchema.parse(params);
 
   return {
     success: true,
     data: {
-      address,
+      address: validated.address,
       amount: '0',
       isStaked: false,
       canReport: false,

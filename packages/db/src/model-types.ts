@@ -4,11 +4,22 @@
  * Exports inferred types for all database tables.
  * Use these types when you need to explicitly type variables holding database records.
  *
+ * These types are database-agnostic and work with both:
+ * - CQL (CovenantSQL) - the PRIMARY database
+ * - Legacy Drizzle/PostgreSQL - for migration compatibility
+ *
+ * The types are inferred from the Drizzle schema definitions in src/schema/
+ * but are compatible with CQL's table repositories.
+ *
  * Example:
  *   import type { User, Post, Market } from '@babylon/db';
  *
- *   const user: User = await db.user.findUnique({ where: { id } });
- *   const posts: Post[] = await db.post.findMany({ where: { authorId: user.id } });
+ *   // With CQL (primary)
+ *   const user: User | null = await db.user.findUnique({ where: { id } });
+ *   const posts: Post[] = await db.post.findMany({ where: { authorId: user?.id } });
+ *
+ * @see cql-client.ts - Primary database interface
+ * @see src/schema/ - Schema definitions used by both CQL and Drizzle
  */
 
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';

@@ -36,7 +36,7 @@
  *     summary: Search for users
  *     description: Search for users by username or display name (min 2 chars, max 20 results)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: q

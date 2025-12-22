@@ -32,17 +32,22 @@ async function loadDeployments() {
 
     if (stat.isDirectory()) {
       const indexPath = path.join(networkPath, 'index.json');
-      try {
-        const content = await fs.readFile(indexPath, 'utf-8');
-        const data = JSON.parse(content);
-        deployments.push({
-          network: data.network || network,
-          ...data,
-        });
-      } catch {
-        // index.json doesn't exist, skip this network
+      const indexExists = await fs
+        .stat(indexPath)
+        .then((s) => s.isFile())
+        .catch(() => false);
+
+      if (!indexExists) {
         console.warn(`No index.json found for ${network}, skipping...`);
+        continue;
       }
+
+      const content = await fs.readFile(indexPath, 'utf-8');
+      const data = JSON.parse(content) as DeploymentInfo;
+      deployments.push({
+        ...data,
+        network: data.network || network,
+      });
     }
   }
 
@@ -76,8 +81,9 @@ function generateMarkdown(deployments: DeploymentInfo[]): string {
     md += '|----------|---------|----------|\n';
 
     for (const [name, address] of Object.entries(deployment.contracts)) {
-      const explorerUrl = deployment.explorer?.[name] || '#';
-      md += `| ${name} | \`${address}\` | [View →](${explorerUrl}) |\n`;
+      const explorerUrl = deployment.explorer?.[name];
+      const explorerLink = explorerUrl ? `[View →](${explorerUrl})` : 'N/A';
+      md += `| ${name} | \`${address}\` | ${explorerLink} |\n`;
     }
 
     md += '\n';
@@ -115,7 +121,7 @@ function generateMarkdown(deployments: DeploymentInfo[]): string {
 
   md += '### Contract ABIs\n\n';
   md +=
-    'Contract ABIs are available in the [`contracts/` directory](https://github.com/elizaos/babylon/tree/main/contracts) or can be fetched from the block explorer.\n\n';
+    'Contract ABIs are available in the [`contracts/` directory](https://github.com/BabylonSocial/babylon/tree/main/contracts) or can be fetched from the block explorer.\n\n';
 
   return md;
 }
@@ -142,8 +148,9 @@ function generateContractReference(deployments: DeploymentInfo[]): string {
     for (const deployment of deployments) {
       const address = deployment.contracts[contractName];
       if (address) {
-        const explorerUrl = deployment.explorer?.[contractName] || '#';
-        md += `| ${deployment.network} | \`${address}\` | [View →](${explorerUrl}) |\n`;
+        const explorerUrl = deployment.explorer?.[contractName];
+        const explorerLink = explorerUrl ? `[View →](${explorerUrl})` : 'N/A';
+        md += `| ${deployment.network} | \`${address}\` | ${explorerLink} |\n`;
       }
     }
 

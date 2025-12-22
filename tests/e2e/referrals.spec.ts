@@ -19,8 +19,8 @@ import { expect, type Page, test } from '@playwright/test';
 // Helper function to mock authentication
 async function mockAuth(page: Page, userId: string = 'test-user-1') {
   await page.addInitScript((userId) => {
-    // Mock Privy authentication
-    window.__privyAccessToken = 'mock-token-' + userId;
+    // Mock OAuth3 authentication
+    window.__oauth3GetAccessToken = async () => 'mock-token-' + userId;
 
     // Mock authenticated user
     localStorage.setItem('authenticated', 'true');

@@ -98,3 +98,15 @@ export const ChatSchema = z.object({
   participants: z.array(ChatParticipantSchema).optional(),
   lastMessage: ChatMessageSchema.optional(),
 });
+
+// Type exports
+export type ChatMessageContent = z.infer<typeof ChatMessageContentSchema>;
+export type ChatMessageCreate = z.infer<typeof ChatMessageCreateSchema>;
+export type ChatCreate = z.infer<typeof ChatCreateSchema>;
+export type DMChatCreate = z.infer<typeof DMChatCreateSchema>;
+export type ChatIdParam = z.infer<typeof ChatIdParamSchema>;
+export type ChatQuery = z.infer<typeof ChatQuerySchema>;
+export type ChatMessageQuery = z.infer<typeof ChatMessageQuerySchema>;
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+export type ChatParticipant = z.infer<typeof ChatParticipantSchema>;
+export type Chat = z.infer<typeof ChatSchema>;

@@ -37,7 +37,7 @@ async function createTestUser(
 
   await db.insert(users).values({
     id: userId,
-    privyId: `did:privy:test-${userId}`,
+    oauth3Id: `did:oauth3:test-${userId}`,
     username,
     displayName: username,
     profileComplete: true,
@@ -187,12 +187,12 @@ describe('Referral Points Integration Tests', () => {
       const sameIpHash = 'test-ip-hash-12345';
       const now = new Date();
 
-      // Create referrer without unique identifiers (no privyId, wallet, farcaster, twitter)
+      // Create referrer without unique identifiers (no oauth3Id, wallet, farcaster, twitter)
       // This simulates a scenario where we can't distinguish users by identity
       const { userId: referrerId } = await createTestUser({
         registrationIpHash: sameIpHash,
         createdAt: now,
-        privyId: null, // Remove unique identifier to test self-referral detection
+        oauth3Id: null, // Remove unique identifier to test self-referral detection
         walletAddress: null,
         farcasterFid: null,
         twitterId: null,
@@ -204,7 +204,7 @@ describe('Referral Points Integration Tests', () => {
         referredBy: referrerId,
         registrationIpHash: sameIpHash,
         createdAt: fiveMinutesLater,
-        privyId: null, // Remove unique identifier to test self-referral detection
+        oauth3Id: null, // Remove unique identifier to test self-referral detection
         walletAddress: null,
         farcasterFid: null,
         twitterId: null,

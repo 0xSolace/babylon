@@ -10,64 +10,75 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useDeferredValue,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard';
-import { CategoryPnLShareModal } from '@/components/markets/CategoryPnLShareModal';
-import { MarketsWidgetSidebar } from '@/components/markets/MarketsWidgetSidebar';
 import { PerpPositionsList } from '@/components/markets/PerpPositionsList';
 import { PortfolioPnLCard } from '@/components/markets/PortfolioPnLCard';
-import { PortfolioPnLShareModal } from '@/components/markets/PortfolioPnLShareModal';
 import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList';
-import { BuyPointsModal } from '@/components/points/BuyPointsModal';
+import { MarketsToggle } from '@/components/shared/MarketsToggle';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton, WidgetPanelSkeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { usePerpMarkets } from '@/hooks/usePerpMarkets';
 import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
 import { useUserPositions } from '@/hooks/useUserPositions';
-import { type PerpMarket, usePerpMarkets } from '@/stores/perpMarketsStore';
+import type {
+  MarketTab,
+  PerpMarket,
+  PredictionMarket,
+  PredictionMarketWithPosition,
+  PredictionSort,
+} from '@/types/markets';
 
-interface PredictionUserPosition {
-  id: string;
-  marketId: string;
-  question?: string;
-  side: 'YES' | 'NO';
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-  currentValue: number;
-  costBasis: number;
-  unrealizedPnL: number;
-  resolved?: boolean;
-  resolution?: boolean | null;
-}
+// Lazy load heavy modals - not needed for initial render
+const CategoryPnLShareModal = dynamic(
+  () =>
+    import('@/components/markets/CategoryPnLShareModal').then((m) => ({
+      default: m.CategoryPnLShareModal,
+    })),
+  { ssr: false }
+);
 
-interface PredictionMarket {
-  id: number | string;
-  text: string;
-  status: 'active' | 'resolved' | 'cancelled';
-  createdDate?: string;
-  resolutionDate?: string;
-  resolvedOutcome?: boolean;
-  scenario: number;
-  yesShares?: number;
-  noShares?: number;
-  userPosition?: PredictionUserPosition | null;
-  userPositions?: PredictionUserPosition[];
-  oracleCommitTxHash?: string | null;
-  oracleRevealTxHash?: string | null;
-  oraclePublishedAt?: string | null;
-}
+const PortfolioPnLShareModal = dynamic(
+  () =>
+    import('@/components/markets/PortfolioPnLShareModal').then((m) => ({
+      default: m.PortfolioPnLShareModal,
+    })),
+  { ssr: false }
+);
 
-type MarketTab = 'dashboard' | 'futures' | 'predictions';
+const BuyPointsModal = dynamic(
+  () =>
+    import('@/components/points/BuyPointsModal').then((m) => ({
+      default: m.BuyPointsModal,
+    })),
+  { ssr: false }
+);
 
-type PredictionSort = 'trending' | 'newest' | 'ending-soon' | 'volume';
+// Lazy load sidebar - only needed on desktop
+const MarketsWidgetSidebar = dynamic(
+  () =>
+    import('@/components/markets/MarketsWidgetSidebar').then((m) => ({
+      default: m.MarketsWidgetSidebar,
+    })),
+  { ssr: false }
+);
 
 export default function MarketsPage() {
   const router = useRouter();
   const { user, authenticated, login } = useAuth();
   const [activeTab, setActiveTab] = useState<MarketTab>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
+  // Defer search to keep input responsive during filtering
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [predictionSort, setPredictionSort] =
     useState<PredictionSort>('trending');
   const [showBuyPointsModal, setShowBuyPointsModal] = useState(false);
@@ -85,7 +96,7 @@ export default function MarketsPage() {
 
   // Use react-query for predictions
   interface PredictionsResponse {
-    questions?: PredictionMarket[];
+    questions?: PredictionMarketWithPosition[];
   }
 
   const {
@@ -94,7 +105,7 @@ export default function MarketsPage() {
     refetch: refetchPredictions,
   } = useQuery({
     queryKey: ['markets', 'predictions', authenticated ? user?.id : null],
-    queryFn: async (): Promise<PredictionMarket[]> => {
+    queryFn: async (): Promise<PredictionMarketWithPosition[]> => {
       const isAuth = authenticated;
       const userId = user?.id;
 
@@ -109,6 +120,8 @@ export default function MarketsPage() {
       const data = (await predictionsRes.json()) as PredictionsResponse;
       return data.questions || [];
     },
+    staleTime: 30_000, // Consider data fresh for 30 seconds
+    refetchInterval: 60_000, // Refetch every minute for live updates
   });
 
   const predictions = predictionsData || [];
@@ -131,22 +144,16 @@ export default function MarketsPage() {
   } = useUserPositions(user?.id, { enabled: authenticated });
 
   // Use refs to store latest values to break dependency chains
-  const fetchDataRef = useRef<(() => Promise<void> | void) | null>(null);
   const refreshPositionsRef = useRef<(() => Promise<void> | void) | null>(
     refreshUserPositions
   );
   const authenticatedRef = useRef(authenticated);
   const userIdRef = useRef<string | null>(user ? user.id : null);
 
-  // Update refs when values change
-  useEffect(() => {
-    authenticatedRef.current = authenticated;
-    userIdRef.current = user ? user.id : null;
-  }, [authenticated, user]);
-
-  useEffect(() => {
-    refreshPositionsRef.current = refreshUserPositions;
-  }, [refreshUserPositions]);
+  // Update refs when values change - keeps refs in sync for fetchData callback
+  authenticatedRef.current = authenticated;
+  userIdRef.current = user ? user.id : null;
+  refreshPositionsRef.current = refreshUserPositions;
 
   const handlePositionsRefresh = useCallback(async () => {
     if (refreshPositionsRef.current) {
@@ -157,7 +164,7 @@ export default function MarketsPage() {
     void refreshPortfolio();
   }, [refetchPerps, refetchPredictions, refreshPortfolio]);
 
-  // fetchData just calls refetch for backward compatibility
+  // fetchData calls refetch for backward compatibility with child components
   const fetchData = useCallback(async () => {
     await refetchPredictions();
     if (
@@ -170,33 +177,28 @@ export default function MarketsPage() {
     void refreshPortfolio();
   }, [refetchPredictions, refreshPortfolio]);
 
-  // Store fetchData in ref for child components
-  useEffect(() => {
-    fetchDataRef.current = fetchData;
-  }, [fetchData]);
+  // Note: Real-time updates via SSE removed - react-query handles polling via refetchInterval
 
-  // Note: Real-time updates via SSE removed - using periodic polling instead
-
-  // Memoize filtered markets
+  // Memoize filtered markets using deferred search for better responsiveness
   const filteredPerpMarkets = useMemo(
     () =>
       perpMarkets.filter(
         (m) =>
-          !searchQuery.trim() ||
-          m.ticker.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          m.name.toLowerCase().includes(searchQuery.toLowerCase())
+          !deferredSearchQuery.trim() ||
+          m.ticker.toLowerCase().includes(deferredSearchQuery.toLowerCase()) ||
+          m.name.toLowerCase().includes(deferredSearchQuery.toLowerCase())
       ),
-    [perpMarkets, searchQuery]
+    [perpMarkets, deferredSearchQuery]
   );
 
   const filteredPredictions = useMemo(
     () =>
       predictions.filter(
         (p) =>
-          !searchQuery.trim() ||
-          p.text.toLowerCase().includes(searchQuery.toLowerCase())
+          !deferredSearchQuery.trim() ||
+          p.text.toLowerCase().includes(deferredSearchQuery.toLowerCase())
       ),
-    [predictions, searchQuery]
+    [predictions, deferredSearchQuery]
   );
 
   // Sort predictions based on selected option
@@ -382,62 +384,15 @@ export default function MarketsPage() {
       {/* Desktop: Content + Widgets layout */}
       <div className="hidden flex-1 overflow-hidden xl:flex">
         {/* Main content */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-[rgba(120,120,120,0.5)] lg:border-r lg:border-l">
           {/* Header */}
           <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
-            <div className="space-y-3 p-3 sm:space-y-4 sm:p-4">
-              {/* Tabs */}
-              <div
-                role="tablist"
-                aria-label="Market sections"
-                className="scrollbar-hide flex gap-0 overflow-x-auto"
-              >
-                <button
-                  role="tab"
-                  aria-selected={activeTab === 'dashboard'}
-                  aria-controls="dashboard-panel"
-                  onClick={() => setActiveTab('dashboard')}
-                  className={cn(
-                    'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
-                    activeTab === 'dashboard'
-                      ? 'font-bold text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  Dashboard
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={activeTab === 'futures'}
-                  aria-controls="futures-panel"
-                  onClick={() => router.push('/markets/perps')}
-                  className={cn(
-                    'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
-                    activeTab === 'futures'
-                      ? 'font-bold text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  Perps
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={activeTab === 'predictions'}
-                  aria-controls="predictions-panel"
-                  onClick={() => router.push('/markets/predictions')}
-                  className={cn(
-                    'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
-                    activeTab === 'predictions'
-                      ? 'font-bold text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  Predictions
-                </button>
-              </div>
-
-              {/* Search - hide on dashboard */}
-              {activeTab !== 'dashboard' && (
+            <div className="px-3 sm:px-4 lg:px-6">
+              <MarketsToggle activeTab={activeTab} onTabChange={setActiveTab} />
+            </div>
+            {/* Search - hide on dashboard */}
+            {activeTab !== 'dashboard' && (
+              <div className="px-3 pb-3 sm:px-4 lg:px-6">
                 <div className="relative">
                   <Search
                     className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -446,12 +401,12 @@ export default function MarketsPage() {
                   <input
                     type="search"
                     aria-label={
-                      activeTab === 'futures'
+                      activeTab === 'perps'
                         ? 'Search tickers'
                         : 'Search questions'
                     }
                     placeholder={
-                      activeTab === 'futures'
+                      activeTab === 'perps'
                         ? 'Search tickers...'
                         : 'Search questions...'
                     }
@@ -460,8 +415,8 @@ export default function MarketsPage() {
                     className="w-full rounded bg-muted/50 py-3 pr-4 pl-10 text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
                   />
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Content */}
@@ -669,11 +624,11 @@ export default function MarketsPage() {
                   </div>
                 )}
               </div>
-            ) : activeTab === 'futures' ? (
+            ) : activeTab === 'perps' ? (
               <div
-                id="futures-panel"
+                id="perps-panel"
                 role="tabpanel"
-                aria-labelledby="futures-tab"
+                aria-labelledby="perps-tab"
                 className="p-4"
               >
                 {/* Category P&L Card */}
@@ -1038,59 +993,12 @@ export default function MarketsPage() {
       <div className="flex flex-1 flex-col overflow-hidden xl:hidden">
         {/* Header */}
         <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
-          <div className="space-y-3 p-3 sm:space-y-4 sm:p-4">
-            {/* Tabs */}
-            <div
-              role="tablist"
-              aria-label="Market sections"
-              className="scrollbar-hide flex gap-0 overflow-x-auto"
-            >
-              <button
-                role="tab"
-                aria-selected={activeTab === 'dashboard'}
-                aria-controls="dashboard-panel"
-                onClick={() => setActiveTab('dashboard')}
-                className={cn(
-                  'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
-                  activeTab === 'dashboard'
-                    ? 'font-bold text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                Dashboard
-              </button>
-              <button
-                role="tab"
-                aria-selected={activeTab === 'futures'}
-                aria-controls="futures-panel"
-                onClick={() => router.push('/markets/perps')}
-                className={cn(
-                  'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
-                  activeTab === 'futures'
-                    ? 'font-bold text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                Perps
-              </button>
-              <button
-                role="tab"
-                aria-selected={activeTab === 'predictions'}
-                aria-controls="predictions-panel"
-                onClick={() => router.push('/markets/predictions')}
-                className={cn(
-                  'flex-1 cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm transition-all sm:px-4 sm:text-base',
-                  activeTab === 'predictions'
-                    ? 'font-bold text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                Predictions
-              </button>
-            </div>
-
-            {/* Search - hide on dashboard */}
-            {activeTab !== 'dashboard' && (
+          <div className="px-3 sm:px-4">
+            <MarketsToggle activeTab={activeTab} onTabChange={setActiveTab} />
+          </div>
+          {/* Search - hide on dashboard */}
+          {activeTab !== 'dashboard' && (
+            <div className="px-3 pb-3 sm:px-4">
               <div className="relative">
                 <Search
                   className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -1099,12 +1007,12 @@ export default function MarketsPage() {
                 <input
                   type="search"
                   aria-label={
-                    activeTab === 'futures'
+                    activeTab === 'perps'
                       ? 'Search tickers'
                       : 'Search questions'
                   }
                   placeholder={
-                    activeTab === 'futures'
+                    activeTab === 'perps'
                       ? 'Search tickers...'
                       : 'Search questions...'
                   }
@@ -1113,8 +1021,8 @@ export default function MarketsPage() {
                   className="w-full rounded bg-muted/50 py-3 pr-4 pl-10 text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
                 />
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -1314,11 +1222,11 @@ export default function MarketsPage() {
                 </div>
               )}
             </div>
-          ) : activeTab === 'futures' ? (
+          ) : activeTab === 'perps' ? (
             <div
-              id="futures-panel"
+              id="perps-panel"
               role="tabpanel"
-              aria-labelledby="futures-tab"
+              aria-labelledby="perps-tab"
               className="p-4"
             >
               {/* Category P&L Card */}
@@ -1664,13 +1572,16 @@ export default function MarketsPage() {
         )}
       </div>
 
-      <PortfolioPnLShareModal
-        isOpen={showPnLShareModal}
-        onClose={() => setShowPnLShareModal(false)}
-        data={portfolioPnL}
-        user={user || null}
-        lastUpdated={portfolioUpdatedAt}
-      />
+      {/* Lazy loaded modals - only mount when needed */}
+      {showPnLShareModal && (
+        <PortfolioPnLShareModal
+          isOpen={showPnLShareModal}
+          onClose={() => setShowPnLShareModal(false)}
+          data={portfolioPnL}
+          user={user ?? null}
+          lastUpdated={portfolioUpdatedAt}
+        />
+      )}
 
       {/* Category P&L Share Modals */}
       {showCategoryPnLShareModal === 'perps' && (
@@ -1695,15 +1606,17 @@ export default function MarketsPage() {
         />
       )}
 
-      {/* Buy Points Modal */}
-      <BuyPointsModal
-        isOpen={showBuyPointsModal}
-        onClose={() => setShowBuyPointsModal(false)}
-        onSuccess={() => {
-          void refreshPortfolio();
-          void fetchData();
-        }}
-      />
+      {/* Buy Points Modal - lazy loaded */}
+      {showBuyPointsModal && (
+        <BuyPointsModal
+          isOpen={showBuyPointsModal}
+          onClose={() => setShowBuyPointsModal(false)}
+          onSuccess={() => {
+            void refreshPortfolio();
+            void fetchData();
+          }}
+        />
+      )}
     </PageContainer>
   );
 }

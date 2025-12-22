@@ -148,10 +148,10 @@ export async function GET(request: Request) {
 
     return {
       rank: index + 1,
-      actorId: actor?.id || pool.npcActorId,
-      actorName: actor?.name || 'Unknown',
-      personality: actor?.personality || null,
-      profileImageUrl: actor?.profileImageUrl || null,
+      actorId: pool.npcActorId,
+      actorName: actor ? actor.name : 'Unknown',
+      personality: actor ? actor.personality : null,
+      profileImageUrl: actor ? actor.profileImageUrl : null,
       poolId: pool.id,
       performance: {
         totalValue: Math.round(totalValue),

@@ -9,18 +9,37 @@
  */
 
 import { agentRegistry } from '@babylon/agents';
-import { db } from '@babylon/db';
-import { agentRegistries, users } from '@babylon/db/schema';
-import { eq } from 'drizzle-orm';
+import { db, initializeDB } from '@babylon/db';
+
+interface RegisteredAgent {
+  userId: string | null;
+}
+
+interface AgentUser {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  agentSystem: string | null;
+  agentPersonality: string | null;
+  agentTradingStrategy: string | null;
+  autonomousTrading: boolean;
+  autonomousPosting: boolean;
+  autonomousCommenting: boolean;
+  autonomousDMs: boolean;
+  autonomousGroupChats: boolean;
+  agentPointsBalance: number;
+}
 
 async function registerExistingAgents() {
+  await initializeDB();
   console.log('🔍 Finding unregistered agent users...\n');
 
   // 1. Get all user IDs that are already registered
-  const registeredAgents = await db
-    .select({ userId: agentRegistries.userId })
-    .from(agentRegistries)
-    .where(eq(agentRegistries.type, 'USER_CONTROLLED'));
+  const registeredAgents = await db.query<RegisteredAgent>(
+    `SELECT "userId"
+     FROM "AgentRegistry"
+     WHERE type = 'USER_CONTROLLED'`
+  );
 
   const registeredUserIds = registeredAgents
     .map((r) => r.userId)
@@ -31,23 +50,14 @@ async function registerExistingAgents() {
   );
 
   // 2. Get all agent users from User table
-  const allAgentUsers = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      agentSystem: users.agentSystem,
-      agentPersonality: users.agentPersonality,
-      agentTradingStrategy: users.agentTradingStrategy,
-      autonomousTrading: users.autonomousTrading,
-      autonomousPosting: users.autonomousPosting,
-      autonomousCommenting: users.autonomousCommenting,
-      autonomousDMs: users.autonomousDMs,
-      autonomousGroupChats: users.autonomousGroupChats,
-      agentPointsBalance: users.agentPointsBalance,
-    })
-    .from(users)
-    .where(eq(users.isAgent, true));
+  const allAgentUsers = await db.query<AgentUser>(
+    `SELECT id, username, "displayName", "agentSystem", "agentPersonality",
+            "agentTradingStrategy", "autonomousTrading", "autonomousPosting",
+            "autonomousCommenting", "autonomousDMs", "autonomousGroupChats",
+            "agentPointsBalance"
+     FROM "User"
+     WHERE "isAgent" = true`
+  );
 
   console.log(
     `Found ${allAgentUsers.length} total user agents in User table\n`
@@ -69,68 +79,61 @@ async function registerExistingAgents() {
   // 4. Register each unregistered agent
   console.log('📝 Registering agents...\n');
   let successCount = 0;
-  let errorCount = 0;
+  const errorCount = 0;
   const errors: Array<{ agent: string; error: string }> = [];
 
   for (const agent of unregisteredAgents) {
     const agentName = agent.displayName || agent.username || agent.id;
 
-    try {
-      // Determine default capabilities based on enabled features
-      const strategies: string[] = ['prediction_markets', 'social_interaction'];
-      if (agent.autonomousTrading) strategies.push('trading_autonomous');
-      if (agent.autonomousPosting) strategies.push('content_generation');
+    // Determine default capabilities based on enabled features
+    const strategies: string[] = ['prediction_markets', 'social_interaction'];
+    if (agent.autonomousTrading) strategies.push('trading_autonomous');
+    if (agent.autonomousPosting) strategies.push('content_generation');
 
-      const actions: string[] = [];
-      if (agent.autonomousTrading) actions.push('trade');
-      if (agent.autonomousPosting) actions.push('post');
-      if (agent.autonomousCommenting) actions.push('comment');
-      if (agent.autonomousDMs) actions.push('message');
-      if (agent.autonomousGroupChats) actions.push('group_chat');
+    const actions: string[] = [];
+    if (agent.autonomousTrading) actions.push('trade');
+    if (agent.autonomousPosting) actions.push('post');
+    if (agent.autonomousCommenting) actions.push('comment');
+    if (agent.autonomousDMs) actions.push('message');
+    if (agent.autonomousGroupChats) actions.push('group_chat');
 
-      // Register the agent
-      await agentRegistry.registerUserAgent({
-        userId: agent.id,
-        name: agentName,
-        systemPrompt:
-          agent.agentSystem ||
-          `You are ${agentName}, an autonomous AI agent on Babylon prediction market platform.`,
-        capabilities: {
-          strategies,
-          markets: ['prediction', 'perpetual', 'spot'],
-          actions: actions.length > 0 ? actions : ['analyze_market'],
-          version: '1.0.0',
-          x402Support: true,
-          platform: 'babylon',
-          userType: 'user_controlled',
-          skills: [],
-          domains: [],
-        },
-      });
+    // Register the agent
+    await agentRegistry.registerUserAgent({
+      userId: agent.id,
+      name: agentName,
+      systemPrompt:
+        agent.agentSystem ||
+        `You are ${agentName}, an autonomous AI agent on Babylon prediction market platform.`,
+      capabilities: {
+        strategies,
+        markets: ['prediction', 'perpetual', 'spot'],
+        actions: actions.length > 0 ? actions : ['analyze_market'],
+        version: '1.0.0',
+        x402Support: true,
+        platform: 'babylon',
+        userType: 'user_controlled',
+        skills: [],
+        domains: [],
+      },
+    });
 
-      successCount++;
-      console.log(
-        `✅ ${successCount}/${unregisteredAgents.length} - ` +
-          `Registered: ${agentName} | ` +
-          `Features: ${
-            [
-              agent.autonomousTrading && 'trading',
-              agent.autonomousPosting && 'posting',
-              agent.autonomousCommenting && 'commenting',
-              agent.autonomousDMs && 'DMs',
-              agent.autonomousGroupChats && 'group-chats',
-            ]
-              .filter(Boolean)
-              .join(', ') || 'none'
-          } | ` +
-          `Points: ${agent.agentPointsBalance}`
-      );
-    } catch (error) {
-      errorCount++;
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      errors.push({ agent: agentName, error: errorMsg });
-      console.error(`❌ Failed to register ${agentName}:`, errorMsg);
-    }
+    successCount++;
+    console.log(
+      `✅ ${successCount}/${unregisteredAgents.length} - ` +
+        `Registered: ${agentName} | ` +
+        `Features: ${
+          [
+            agent.autonomousTrading && 'trading',
+            agent.autonomousPosting && 'posting',
+            agent.autonomousCommenting && 'commenting',
+            agent.autonomousDMs && 'DMs',
+            agent.autonomousGroupChats && 'group-chats',
+          ]
+            .filter(Boolean)
+            .join(', ') || 'none'
+        } | ` +
+        `Points: ${agent.agentPointsBalance}`
+    );
   }
 
   // 5. Summary
@@ -169,7 +172,7 @@ registerExistingAgents()
     console.log('\n✅ Script complete');
     process.exit(0);
   })
-  .catch((error) => {
+  .catch((error: Error) => {
     console.error('\n❌ Script failed:', error);
     process.exit(1);
   });

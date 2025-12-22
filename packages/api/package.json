@@ -20,8 +20,9 @@
     "@babylon/messaging": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@jejunetwork/sdk": "workspace:*",
-    "uuid": "^11.1.0",
-    "viem": "^2.41.2"
+    "uuid": "^13.0.0",
+    "viem": "^2.43.2",
+    "zod": "^4.1.12"
   },
   "peerDependencies": {
     "@babylon/engine": "workspace:*",

@@ -350,48 +350,81 @@ Respond with a JSON object containing:
 
   /**
    * Parse agent decision from model response
+   *
+   * Attempts to extract structured JSON from the response first,
+   * then falls back to keyword matching for unstructured responses.
+   * If JSON is present but malformed, we still fall back to keywords
+   * since LLM output can be unpredictable.
    */
   private parseAgentDecision(response: string): {
     action: 'trade' | 'post' | 'observe';
     direction?: 'long' | 'short';
     confidence?: number;
   } {
-    try {
-      // Try to extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          action: parsed.action || 'observe',
-          direction: parsed.direction,
-          confidence: parsed.confidence || 0.5,
-        };
+    // Try to extract JSON from response
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parseResult = this.parseJsonDecision(jsonMatch[0]);
+      if (parseResult) {
+        const { action, direction, confidence } = parseResult;
+
+        if (action === 'trade' || action === 'post' || action === 'observe') {
+          return {
+            action,
+            direction:
+              direction === 'long' || direction === 'short'
+                ? direction
+                : undefined,
+            confidence: confidence ?? 0.5,
+          };
+        }
       }
-    } catch {
-      // Failed to parse, default to observe
     }
 
-    // Default behavior based on response content
+    // Fallback: keyword matching for unstructured responses
+    const lowerResponse = response.toLowerCase();
+
     if (
-      response.toLowerCase().includes('trade') ||
-      response.toLowerCase().includes('buy') ||
-      response.toLowerCase().includes('sell')
+      lowerResponse.includes('trade') ||
+      lowerResponse.includes('buy') ||
+      lowerResponse.includes('sell')
     ) {
       return {
         action: 'trade',
-        direction: response.toLowerCase().includes('short') ? 'short' : 'long',
+        direction: lowerResponse.includes('short') ? 'short' : 'long',
         confidence: 0.5,
       };
     }
 
-    if (
-      response.toLowerCase().includes('post') ||
-      response.toLowerCase().includes('share')
-    ) {
+    if (lowerResponse.includes('post') || lowerResponse.includes('share')) {
       return { action: 'post' };
     }
 
     return { action: 'observe' };
+  }
+
+  /**
+   * Parse JSON from LLM output
+   * Throws if JSON is malformed - surfaces prompt/model issues
+   */
+  private parseJsonDecision(
+    json: string
+  ): { action?: string; direction?: string; confidence?: number } | null {
+    const parseResult: unknown = JSON.parse(json);
+
+    if (typeof parseResult !== 'object' || parseResult === null) {
+      logger.warn('LLM returned non-object JSON', { json: json.slice(0, 100) });
+      return null;
+    }
+
+    const result = parseResult as Record<string, unknown>;
+    return {
+      action: typeof result.action === 'string' ? result.action : undefined,
+      direction:
+        typeof result.direction === 'string' ? result.direction : undefined,
+      confidence:
+        typeof result.confidence === 'number' ? result.confidence : undefined,
+    };
   }
 
   /**

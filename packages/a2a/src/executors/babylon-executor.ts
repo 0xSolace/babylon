@@ -20,8 +20,9 @@ import type {
 } from '@a2a-js/sdk/server';
 import { db } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, JsonValueSchema, logger } from '@babylon/shared';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
 import {
   handleAppealBanWithEscrow,
   handleCreateEscrowPayment,
@@ -30,6 +31,13 @@ import {
   handleVerifyEscrowPayment,
 } from '../handlers/escrow-handlers';
 import type { JsonRpcRequest } from '../types/a2a';
+
+// Schema for validating command parameters
+const CommandParamsSchema = z.record(z.string(), JsonValueSchema);
+const CommandDataSchema = z.object({
+  operation: z.string(),
+  params: CommandParamsSchema.optional(),
+});
 
 /**
  * Main executor implementing all Babylon game operations
@@ -379,15 +387,15 @@ export class BabylonAgentExecutor implements AgentExecutor {
     );
 
     if (dataPart && dataPart.data && typeof dataPart.data === 'object') {
-      const data = dataPart.data as Record<string, JsonValue>;
-      const operation = data.operation;
-      const params = data.params;
-      if (typeof operation !== 'string') {
-        throw new Error('Data part must include an "operation" string');
+      const result = CommandDataSchema.safeParse(dataPart.data);
+      if (!result.success) {
+        throw new Error(
+          `Invalid data part: ${result.error.issues.map((e) => e.message).join(', ')}`
+        );
       }
       return {
-        operation,
-        params: this.ensureRecord(params),
+        operation: result.data.operation,
+        params: result.data.params ?? {},
       };
     }
 
@@ -398,25 +406,22 @@ export class BabylonAgentExecutor implements AgentExecutor {
       .trim();
 
     if (textPayload.length > 0) {
-      const parsed = JSON.parse(textPayload);
-      if (typeof parsed.operation === 'string') {
-        return {
-          operation: parsed.operation,
-          params: this.ensureRecord(parsed.params),
-        };
+      const parsed = JSON.parse(textPayload) as Record<string, unknown>;
+      const result = CommandDataSchema.safeParse(parsed);
+      if (!result.success) {
+        throw new Error(
+          `Invalid command JSON: ${result.error.issues.map((e) => e.message).join(', ')}`
+        );
       }
+      return {
+        operation: result.data.operation,
+        params: result.data.params ?? {},
+      };
     }
 
     throw new Error(
       'Structured command required. Provide a data part with { "operation": "...", "params": {...} }'
     );
-  }
-
-  private ensureRecord(value: unknown): Record<string, JsonValue> {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      return value as Record<string, JsonValue>;
-    }
-    return {};
   }
 
   private async createPost(

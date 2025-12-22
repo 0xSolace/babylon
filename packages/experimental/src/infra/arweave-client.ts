@@ -118,8 +118,8 @@ export class PermissionlessStorage {
   /**
    * Upload JSON to permanent storage
    */
-  async uploadJSON(
-    data: unknown,
+  async uploadJSON<T extends Record<string, unknown>>(
+    data: T,
     tags?: Record<string, string>
   ): Promise<UploadResult> {
     const json = JSON.stringify(data);

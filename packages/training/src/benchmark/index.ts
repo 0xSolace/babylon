@@ -24,8 +24,13 @@ export { BenchmarkChartGenerator } from './BenchmarkChartGenerator';
 export type {
   BenchmarkConfig,
   BenchmarkGameSnapshot,
+  CausalEventType,
+  GroundTruth,
+  HiddenNarrativeFact,
+  ScheduledCausalEvent,
+  VolatilityBucket,
 } from './BenchmarkDataGenerator';
-export { BenchmarkDataGenerator } from './BenchmarkDataGenerator';
+export { BenchmarkDataGenerator, SeededRandom } from './BenchmarkDataGenerator';
 export { BenchmarkDataViewer } from './BenchmarkDataViewer';
 export type {
   BenchmarkHistoryQuery,
@@ -41,7 +46,13 @@ export { BenchmarkRunner } from './BenchmarkRunner';
 export { BenchmarkValidator } from './BenchmarkValidator';
 export type { FastEvalConfig, FastEvalResult } from './FastEvalRunner';
 export { FastEvalRunner } from './FastEvalRunner';
-export { MetricsValidator } from './MetricsValidator';
+// TODO: MetricsValidator was deleted in merge - restore or remove usage
+// export { MetricsValidator } from './MetricsValidator';
+// MetricsVisualizer stub - provides minimal visualization output
+export type {
+  ComparisonData,
+  VisualizationOptions,
+} from './MetricsVisualizer';
 export { MetricsVisualizer } from './MetricsVisualizer';
 export type {
   AverageMetrics,
@@ -76,7 +87,10 @@ export {
   wasDecisionOptimal,
 } from './RulerBenchmarkIntegration';
 export { SimulationA2AInterface } from './SimulationA2AInterface';
+// SimulationEngine class is deprecated but still referenced in some code
+// The stub throws at runtime; prefer game engine simulation instead
 export type {
+  AgentAction,
   SimulationConfig,
   SimulationMetrics,
   SimulationResult,

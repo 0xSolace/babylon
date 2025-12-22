@@ -9,7 +9,7 @@ export const TEST_USER = {
   username: 'test_user_' + Date.now(),
   displayName: 'Test User',
   bio: 'This is a test user account for E2E testing',
-  email: process.env.PRIVY_TEST_EMAIL || '',
+  email: process.env.OAUTH3_TEST_EMAIL || '',
 };
 
 /**

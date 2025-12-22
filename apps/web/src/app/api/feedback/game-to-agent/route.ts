@@ -71,19 +71,13 @@ import {
 import type { JsonValue } from '@babylon/db';
 import { db } from '@babylon/db';
 import { updateFeedbackMetrics, updateGameMetrics } from '@babylon/engine';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  GameFeedbackSchema,
+  generateSnowflakeId,
+  logger,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const GameFeedbackSchema = z.object({
-  agentId: z.string().min(1, 'agentId is required'),
-  gameId: z.string().min(1, 'gameId is required'),
-  score: z.number().min(0).max(100),
-  won: z.boolean(),
-  comment: z.string().max(5000).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   requireCronAuth(request, { jobName: 'GameFeedback' });

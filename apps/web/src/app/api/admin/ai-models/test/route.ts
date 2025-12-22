@@ -17,7 +17,7 @@
  *     summary: Test AI model configuration
  *     description: Tests current AI model with simple completion (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Test completed successfully

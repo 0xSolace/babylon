@@ -19,7 +19,7 @@ import {
   type UserAgentConfig,
   withTransaction,
 } from '@babylon/db';
-import type { AgentCapabilities } from '@babylon/shared';
+import type { AgentCapabilities, JsonValue } from '@babylon/shared';
 import {
   getCurrentChainId,
   IDENTITY_REGISTRY_BASE_SEPOLIA,
@@ -31,8 +31,7 @@ import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
 import type { AgentPerformance, CreateAgentParams } from '../types';
-import type { JsonValue } from '../types/common';
-import { getService } from './interfaces';
+import { agentRegistry } from './agent-registry.service';
 
 /** User with agent configuration */
 export type UserWithConfig = User & { agentConfig: UserAgentConfig | null };
@@ -103,7 +102,7 @@ export class AgentServiceV2 {
       const totalPoints = Number(manager.reputationPoints);
       if (totalPoints < initialDeposit) {
         throw new Error(
-          `Insufficient points. Have: ${totalPoints}, Need: ${initialDeposit}`
+          `Insufficient balance. Have: ${totalPoints}, Need: ${initialDeposit}`
         );
       }
     }
@@ -119,7 +118,7 @@ export class AgentServiceV2 {
     const agent = await withTransaction(async (tx) => {
       // Create the user record
       const userInsertResult = await tx.query<User>(
-        `INSERT INTO "users" (
+        `INSERT INTO "User" (
           "id", "username", "displayName", "bio", "profileImageUrl", "coverImageUrl",
           "isAgent", "managedBy", "virtualBalance", "totalDeposited", "reputationPoints",
           "profileComplete", "hasUsername", "hasBio", "hasProfileImage", "updatedAt"
@@ -153,7 +152,7 @@ export class AgentServiceV2 {
       // Create the agent config record
       const configId = await generateSnowflakeId();
       await tx.exec(
-        `INSERT INTO "userAgentConfigs" (
+        `INSERT INTO "UserAgentConfig" (
           "id", "userId", "systemPrompt", "personality", "tradingStrategy",
           "messageExamples", "pointsBalance", "totalDeposited", "a2aEnabled", "updatedAt"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -175,7 +174,7 @@ export class AgentServiceV2 {
         const initialManagerPoints = Number(manager.reputationPoints);
 
         await tx.exec(
-          `UPDATE "users" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
+          `UPDATE "User" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
           [
             initialManagerPoints - initialDeposit,
             new Date().toISOString(),
@@ -203,7 +202,7 @@ export class AgentServiceV2 {
 
         const pointsTxId = await generateSnowflakeId();
         await tx.exec(
-          `INSERT INTO "pointsTransactions" (
+          `INSERT INTO "PointsTransaction" (
             "id", "userId", "amount", "pointsBefore", "pointsAfter", "reason", "metadata"
           ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
@@ -220,7 +219,7 @@ export class AgentServiceV2 {
 
       const logId = await generateSnowflakeId();
       await tx.exec(
-        `INSERT INTO "agentLogs" (
+        `INSERT INTO "AgentLog" (
           "id", "agentUserId", "type", "level", "message", "metadata"
         ) VALUES ($1, $2, $3, $4, $5, $6)`,
         [
@@ -242,8 +241,7 @@ export class AgentServiceV2 {
       'AgentService'
     );
 
-    // Register agent in registry if service is available
-    const agentRegistry = getService('agentRegistry');
+    // Register agent in registry
     if (agentRegistry) {
       const capabilities: AgentCapabilities = {
         strategies: [
@@ -339,8 +337,8 @@ export class AgentServiceV2 {
     // If filtering by autonomousTrading, we need to use raw SQL for the join
     if (filters?.autonomousTrading !== undefined) {
       const results = await db.query<User>(
-        `SELECT u.* FROM "users" u
-         INNER JOIN "userAgentConfigs" uac ON u."id" = uac."userId"
+        `SELECT u.* FROM "User" u
+         INNER JOIN "UserAgentConfig" uac ON u."id" = uac."userId"
          WHERE u."isAgent" = true
          AND u."managedBy" = $1
          AND uac."autonomousTrading" = $2
@@ -467,17 +465,17 @@ export class AgentServiceV2 {
       Number(agentWithConfig.agentConfig?.pointsBalance) || 0;
 
     await withTransaction(async (tx) => {
-      // Return remaining points to manager
+      // Return remaining ops budget to manager's points
       if (pointsBalance > 0) {
         const managerResult = await tx.queryOne<{ reputationPoints: number }>(
-          `SELECT "reputationPoints" FROM "users" WHERE "id" = $1`,
+          `SELECT "reputationPoints" FROM "User" WHERE "id" = $1`,
           [managerUserId]
         );
 
         const currentPoints = Number(managerResult?.reputationPoints) || 0;
 
         await tx.exec(
-          `UPDATE "users" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
+          `UPDATE "User" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
           [
             currentPoints + pointsBalance,
             new Date().toISOString(),
@@ -487,7 +485,7 @@ export class AgentServiceV2 {
 
         const pointsTxId = await generateSnowflakeId();
         await tx.exec(
-          `INSERT INTO "pointsTransactions" (
+          `INSERT INTO "PointsTransaction" (
             "id", "userId", "amount", "pointsBefore", "pointsAfter", "reason", "metadata"
           ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
@@ -506,12 +504,12 @@ export class AgentServiceV2 {
       }
 
       // Delete agent config
-      await tx.exec(`DELETE FROM "userAgentConfigs" WHERE "userId" = $1`, [
+      await tx.exec(`DELETE FROM "UserAgentConfig" WHERE "userId" = $1`, [
         agentUserId,
       ]);
 
       // Delete agent user
-      await tx.exec(`DELETE FROM "users" WHERE "id" = $1`, [agentUserId]);
+      await tx.exec(`DELETE FROM "User" WHERE "id" = $1`, [agentUserId]);
     });
 
     // Clear runtime from agent runtime manager
@@ -520,6 +518,18 @@ export class AgentServiceV2 {
     logger.info(`Agent deleted: ${agentUserId}`, undefined, 'AgentService');
   }
 
+  /**
+   * Deposit ops budget points from manager's reputationPoints to agent's pointsBalance
+   *
+   * Transfers points from user to fund agent operations.
+   * This is used for AI operations like chat, tick, posting.
+   *
+   * @param agentUserId - Agent user ID
+   * @param managerUserId - Manager (owner) user ID
+   * @param amount - Amount to deposit
+   * @returns Updated agent User
+   * @throws Error if insufficient balance or agent not found
+   */
   async depositPoints(
     agentUserId: string,
     managerUserId: string,
@@ -544,7 +554,7 @@ export class AgentServiceV2 {
     const totalPoints = Number(manager.reputationPoints);
     if (totalPoints < amount) {
       throw new Error(
-        `Insufficient points. Have: ${totalPoints}, Need: ${amount}`
+        `Insufficient balance. Have: ${totalPoints}, Need: ${amount}`
       );
     }
 
@@ -553,7 +563,7 @@ export class AgentServiceV2 {
 
     await withTransaction(async (tx) => {
       await tx.exec(
-        `UPDATE "userAgentConfigs" SET "pointsBalance" = $1, "totalDeposited" = $2, "updatedAt" = $3 WHERE "userId" = $4`,
+        `UPDATE "UserAgentConfig" SET "pointsBalance" = $1, "totalDeposited" = $2, "updatedAt" = $3 WHERE "userId" = $4`,
         [
           configPointsBalance + amount,
           configTotalDeposited + amount,
@@ -563,7 +573,7 @@ export class AgentServiceV2 {
       );
 
       await tx.exec(
-        `UPDATE "users" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
+        `UPDATE "User" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
         [totalPoints - amount, new Date().toISOString(), managerUserId]
       );
 
@@ -587,7 +597,7 @@ export class AgentServiceV2 {
 
       const pointsTxId = await generateSnowflakeId();
       await tx.exec(
-        `INSERT INTO "pointsTransactions" (
+        `INSERT INTO "PointsTransaction" (
           "id", "userId", "amount", "pointsBefore", "pointsAfter", "reason", "metadata"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
@@ -617,6 +627,17 @@ export class AgentServiceV2 {
     return result as User;
   }
 
+  /**
+   * Withdraw ops budget points from agent's pointsBalance to manager's reputationPoints
+   *
+   * Transfers points from agent's ops budget back to user.
+   *
+   * @param agentUserId - Agent user ID
+   * @param managerUserId - Manager (owner) user ID
+   * @param amount - Amount to withdraw
+   * @returns Updated agent User
+   * @throws Error if insufficient balance or agent not found
+   */
   async withdrawPoints(
     agentUserId: string,
     managerUserId: string,
@@ -643,7 +664,7 @@ export class AgentServiceV2 {
 
     await withTransaction(async (tx) => {
       await tx.exec(
-        `UPDATE "userAgentConfigs" SET "pointsBalance" = $1, "totalWithdrawn" = $2, "updatedAt" = $3 WHERE "userId" = $4`,
+        `UPDATE "UserAgentConfig" SET "pointsBalance" = $1, "totalWithdrawn" = $2, "updatedAt" = $3 WHERE "userId" = $4`,
         [
           configPointsBalance - amount,
           configTotalWithdrawn + amount,
@@ -653,14 +674,14 @@ export class AgentServiceV2 {
       );
 
       const managerResult = await tx.queryOne<{ reputationPoints: number }>(
-        `SELECT "reputationPoints" FROM "users" WHERE "id" = $1`,
+        `SELECT "reputationPoints" FROM "User" WHERE "id" = $1`,
         [managerUserId]
       );
 
       const managerPoints = Number(managerResult?.reputationPoints) || 0;
 
       await tx.exec(
-        `UPDATE "users" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
+        `UPDATE "User" SET "reputationPoints" = $1, "updatedAt" = $2 WHERE "id" = $3`,
         [managerPoints + amount, new Date().toISOString(), managerUserId]
       );
 
@@ -684,7 +705,7 @@ export class AgentServiceV2 {
 
       const pointsTxId = await generateSnowflakeId();
       await tx.exec(
-        `INSERT INTO "pointsTransactions" (
+        `INSERT INTO "PointsTransaction" (
           "id", "userId", "amount", "pointsBefore", "pointsAfter", "reason", "metadata"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
@@ -734,7 +755,7 @@ export class AgentServiceV2 {
 
     const newBalance = await withTransaction(async (tx) => {
       await tx.exec(
-        `UPDATE "userAgentConfigs" SET "pointsBalance" = $1, "totalPointsSpent" = $2, "updatedAt" = $3 WHERE "userId" = $4`,
+        `UPDATE "UserAgentConfig" SET "pointsBalance" = $1, "totalPointsSpent" = $2, "updatedAt" = $3 WHERE "userId" = $4`,
         [
           configPointsBalance - amount,
           configTotalPointsSpent + amount,
@@ -745,7 +766,7 @@ export class AgentServiceV2 {
 
       // Get the user to find manager
       const userResult = await tx.queryOne<{ managedBy: string | null }>(
-        `SELECT "managedBy" FROM "users" WHERE "id" = $1`,
+        `SELECT "managedBy" FROM "User" WHERE "id" = $1`,
         [agentUserId]
       );
 
@@ -905,14 +926,14 @@ export class AgentServiceV2 {
       return false;
     }
 
-    // Require Privy credentials outside development so we do not spam errors
-    const hasPrivyConfig = Boolean(
-      process.env.NEXT_PUBLIC_PRIVY_APP_ID && process.env.PRIVY_APP_SECRET
+    // Require OAuth3 credentials outside development so we do not spam errors
+    const hasOAuth3Config = Boolean(
+      process.env.JEJU_OAUTH3_SERVICE_URL && process.env.BABYLON_OAUTH3_APP_ID
     );
 
-    if (!hasPrivyConfig && process.env.NODE_ENV !== 'development') {
+    if (!hasOAuth3Config && process.env.NODE_ENV !== 'development') {
       logger.warn(
-        'Skipping automatic agent identity setup - Privy credentials missing',
+        'Skipping automatic agent identity setup - OAuth3 credentials missing',
         undefined,
         'AgentService'
       );

@@ -146,10 +146,10 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import type { DrizzleClient } from '@babylon/db';
-import { asPublic, asUser } from '@babylon/db';
+import { asPublic, asUser, type DbClient } from '@babylon/db';
 import { logger, RegistryQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+
 /**
  * GET /api/registry
  * Fetch all registered users with optional filtering
@@ -181,7 +181,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     : { createdAt: 'desc' as const };
 
   // Fetch users from database with RLS (public registry, no auth required)
-  const dbOperation = async (db: DrizzleClient) => {
+  const dbOperation = async (db: DbClient) => {
     const usersList = await db.user.findMany({
       where,
       orderBy,

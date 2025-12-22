@@ -16,7 +16,7 @@
  *     summary: Transfer points
  *     description: Transfers points from authenticated user to another user
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -67,16 +67,13 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  generateSnowflakeId,
+  logger,
+  TransferPointsSchema,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const TransferPointsSchema = z.object({
-  recipientId: z.string().min(1, 'Recipient ID is required'),
-  amount: z.number().int().positive('Amount must be a positive integer'),
-  message: z.string().max(200).optional(),
-});
 
 /**
  * POST /api/points/transfer
@@ -92,11 +89,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const validation = TransferPointsSchema.safeParse(body);
 
   if (!validation.success) {
-    const firstError = validation.error.issues?.[0];
-    return NextResponse.json(
-      { error: firstError?.message || 'Invalid request data' },
-      { status: 400 }
-    );
+    const firstError = validation.error.issues[0];
+    if (!firstError) {
+      return NextResponse.json({ error: 'Validation failed' }, { status: 400 });
+    }
+    return NextResponse.json({ error: firstError.message }, { status: 400 });
   }
 
   const { recipientId, amount, message } = validation.data;

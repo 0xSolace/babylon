@@ -16,7 +16,7 @@
  *     summary: Verify Farcaster follow
  *     description: Verifies user is following @playbabylon and awards points (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId

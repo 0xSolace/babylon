@@ -21,7 +21,11 @@ import {
   npcInteractions,
   or,
 } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  generateSnowflakeId,
+  logger,
+  RelationshipDescriptionSchema,
+} from '@babylon/shared';
 import type { BabylonLLMClient } from './llm/openai-client';
 import { StaticDataRegistry } from './services/static-data-registry';
 import type { Actor, ActorRelationship, Organization } from './types/shared';
@@ -411,7 +415,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
       const maxRetries = 3;
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
-        const response = await this.llm.generateJSON<{
+        const rawResponse = await this.llm.generateJSON<{
           description: string;
           type: string;
           sentiment: number;
@@ -425,14 +429,32 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
           }
         );
 
-        if (response.description && response.description.trim().length > 0) {
+        // Validate response using Zod schema
+        const parseResult =
+          RelationshipDescriptionSchema.safeParse(rawResponse);
+        if (!parseResult.success) {
+          logger.warn(
+            'Relationship update failed validation',
+            {
+              error: parseResult.error.message,
+              actor1: actor1.name,
+              actor2: actor2.name,
+            },
+            'RelationshipEvolutionEngine'
+          );
+        }
+
+        if (
+          rawResponse.description &&
+          rawResponse.description.trim().length > 0
+        ) {
           // LLM determines everything - no hardcoded rules
           // Don't trim - let LLM decide length (they know the context)
-          newHistory = response.description.toLowerCase().trim();
-          newType = response.type || 'acquaintances';
+          newHistory = rawResponse.description.toLowerCase().trim();
+          newType = rawResponse.type || 'acquaintances';
           newSentiment = Math.max(
             -1,
-            Math.min(1, response.sentiment || avgSentiment)
+            Math.min(1, rawResponse.sentiment || avgSentiment)
           );
           break; // Success
         }

@@ -19,7 +19,6 @@ import {
   createPublicClient,
   createWalletClient,
   formatEther,
-  getAddress,
   type Hex,
   http,
   padHex,
@@ -43,32 +42,16 @@ if (existsSync(envPath)) {
   }
 }
 
+import { DEPLOYED_NETWORKS, SOLANA_DEVNET } from '../src/config/networks';
+
 // =============================================================================
-// DEPLOYED CONTRACTS
+// DEPLOYED CONTRACTS (using consolidated config)
 // =============================================================================
 
 const DEPLOYED = {
-  baseSepolia: {
-    chainId: 84532,
-    domainId: 84532,
-    token: getAddress('0x3586d05d61523c81d2d79c4e1132ffa1b3bcad5f'),
-    warpRoute: getAddress('0x2071a7d3b7e72ed0ee7a60da6d98edaeebdb3d2d'),
-    rpc: process.env.BASE_SEPOLIA_RPC_URL ?? 'https://sepolia.base.org',
-  },
-  sepolia: {
-    chainId: 11155111,
-    domainId: 11155111,
-    token: getAddress('0xa8f3b42dfb4cb9c583b487beec75c2d90e9cecab'),
-    warpRoute: getAddress('0x5ea72ab480fa99f9bc8a00786faaf0d01fe88eb1'),
-    rpc:
-      process.env.SEPOLIA_RPC_URL ??
-      'https://ethereum-sepolia-rpc.publicnode.com',
-  },
-  solanaDevnet: {
-    mint: 'GXEEEAuq37vT7aQvNCvcoNsE2C1pXhrNt3PsG1pph2hF',
-    domainId: 1399811150,
-    mailbox: 'E588QtVUvresuXq2KoNEwAmoifCzYGpRBdHByN9KQMbi',
-  },
+  baseSepolia: DEPLOYED_NETWORKS.baseSepolia,
+  sepolia: DEPLOYED_NETWORKS.sepolia,
+  solanaDevnet: SOLANA_DEVNET,
 };
 
 const ERC20_ABI = [

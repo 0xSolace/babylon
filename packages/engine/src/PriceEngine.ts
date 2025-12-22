@@ -33,7 +33,7 @@ import type {
   PriceUpdate,
   StockPrice,
   WorldEvent,
-} from '@/shared/types';
+} from './types/shared';
 
 /**
  * Seeded PRNG using Mulberry32 algorithm

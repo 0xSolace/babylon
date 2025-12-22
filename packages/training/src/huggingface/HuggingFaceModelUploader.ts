@@ -7,8 +7,9 @@
 import { db } from '@babylon/db';
 import { promises as fs } from 'fs';
 import * as path from 'path';
+// TODO: SimulationEngine.ts was deleted in merge - using type export from benchmark/index
+import type { SimulationMetrics } from '../benchmark';
 import { parseSimulationMetrics } from '../benchmark/parseSimulationMetrics';
-import type { SimulationMetrics } from '../benchmark/SimulationEngine';
 import { logger } from '../utils';
 import {
   getHuggingFaceToken,

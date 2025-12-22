@@ -357,7 +357,7 @@ export function OnboardingModal({
       setUsernameSuggestion(
         usernameCheckResult.available
           ? null
-          : (usernameCheckResult.suggestion ?? null)
+          : usernameCheckResult.suggestion || null
       );
     }
   }, [stage, debouncedUsername, usernameCheckResult]);
@@ -418,15 +418,21 @@ export function OnboardingModal({
       // These fields trigger automatic reward point awards (300 points per social account)
       importedFrom: importedData?.platform || null,
       twitterId:
-        importedData?.platform === 'twitter' ? importedData.twitterId : null,
+        importedData && importedData.platform === 'twitter'
+          ? importedData.twitterId
+          : null,
       twitterUsername:
-        importedData?.platform === 'twitter' ? importedData.username : null,
+        importedData && importedData.platform === 'twitter'
+          ? importedData.username
+          : null,
       farcasterFid:
-        importedData?.platform === 'farcaster'
+        importedData && importedData.platform === 'farcaster'
           ? importedData.farcasterFid
           : null,
       farcasterUsername:
-        importedData?.platform === 'farcaster' ? importedData.username : null,
+        importedData && importedData.platform === 'farcaster'
+          ? importedData.username
+          : null,
       // Legal acceptance
       tosAccepted: acceptedTerms,
       privacyPolicyAccepted: acceptedTerms,

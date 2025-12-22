@@ -2795,6 +2795,15 @@ ${req.members
         content?: string;
       };
       type ExtractedGroup = { groupId: string; messages: GroupMessageItem[] };
+      // Type for nested XML group structures from LLM
+      type NestedGroupData =
+        | ExtractedGroup[]
+        | { group: ExtractedGroup | ExtractedGroup[] }
+        | ExtractedGroup;
+      // Type for messages that may be nested in XML structure
+      type NestedMessages =
+        | GroupMessageItem[]
+        | { message: GroupMessageItem | GroupMessageItem[] };
 
       let extractedGroups: ExtractedGroup[] = [];
 
@@ -2802,7 +2811,7 @@ ${req.members
       const responseData =
         'response' in rawResponse && rawResponse.response
           ? rawResponse.response
-          : (rawResponse as { groups: unknown });
+          : (rawResponse as { groups: NestedGroupData });
 
       // Now extract groups - handle various XML structures
       if (
@@ -2810,20 +2819,23 @@ ${req.members
         typeof responseData === 'object' &&
         'groups' in responseData
       ) {
-        const groupsData = responseData.groups;
+        const groupsData = responseData.groups as NestedGroupData;
 
         if (Array.isArray(groupsData)) {
           // Direct array: { groups: [{...}, {...}] }
-          extractedGroups = groupsData as ExtractedGroup[];
+          extractedGroups = groupsData;
         } else if (groupsData && typeof groupsData === 'object') {
           // Check for XML nested structure: { groups: { group: [...] } } or { groups: { group: {...} } }
           if ('group' in groupsData) {
-            const groupContent = (groupsData as { group: unknown }).group;
+            const nestedData = groupsData as {
+              group: ExtractedGroup | ExtractedGroup[];
+            };
+            const groupContent = nestedData.group;
             if (Array.isArray(groupContent)) {
-              extractedGroups = groupContent as ExtractedGroup[];
+              extractedGroups = groupContent;
             } else if (groupContent && typeof groupContent === 'object') {
               // Single group wrapped in object
-              extractedGroups = [groupContent as ExtractedGroup];
+              extractedGroups = [groupContent];
             }
           } else {
             // Single group returned directly as object: { groups: { groupId: "...", messages: [...] } }
@@ -2834,22 +2846,29 @@ ${req.members
 
       // Ensure messages arrays are properly formatted (handle XML nested message structure)
       extractedGroups = extractedGroups.map((g) => {
-        let groupMessages = g.messages;
-        if (
-          groupMessages &&
-          typeof groupMessages === 'object' &&
-          !Array.isArray(groupMessages)
+        let groupMessages: GroupMessageItem[] = [];
+        const rawMessages = g.messages as NestedMessages | undefined;
+
+        if (!rawMessages) {
+          return { ...g, messages: [] };
+        }
+
+        if (Array.isArray(rawMessages)) {
+          groupMessages = rawMessages;
+        } else if (
+          typeof rawMessages === 'object' &&
+          'message' in rawMessages
         ) {
           // Handle { messages: { message: [...] } } or { messages: { message: {...} } }
-          if ('message' in groupMessages) {
-            const messageContent = (groupMessages as { message: unknown })
-              .message;
-            groupMessages = Array.isArray(messageContent)
-              ? messageContent
-              : [messageContent as GroupMessageItem];
-          }
+          const nestedMsgs = rawMessages as {
+            message: GroupMessageItem | GroupMessageItem[];
+          };
+          const messageContent = nestedMsgs.message;
+          groupMessages = Array.isArray(messageContent)
+            ? messageContent
+            : [messageContent];
         }
-        return { ...g, messages: groupMessages || [] };
+        return { ...g, messages: groupMessages };
       });
 
       if (

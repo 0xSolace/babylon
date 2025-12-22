@@ -64,6 +64,8 @@
     "dist",
     "**/__tests__/**/*",
     "src/generate-actor-images.ts",
-    "src/migrate-images-to-blob.ts"
+    "src/migrate-images-to-blob.ts",
+    "src/realtime-daemon.ts",
+    "src/autonomous-agents-demo.ts"
   ]
 }

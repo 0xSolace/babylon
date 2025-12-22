@@ -1,6 +1,7 @@
 'use client';
 
 import { logger, signInWithFarcaster } from '@babylon/shared';
+import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -15,6 +16,31 @@ interface UseSocialVerificationOptions {
   pointsAwardedForTwitterFollow: boolean | undefined;
   pointsAwardedForDiscordJoin: boolean | undefined;
   onPointsAwarded: () => Promise<void>;
+}
+
+// Response types for API endpoints
+interface LinkFarcasterResponse {
+  success: boolean;
+  pointsAwarded: number;
+  error?: string;
+}
+
+interface VerifyFollowResponse {
+  verified: boolean;
+  message?: string;
+  points?: {
+    awarded: number;
+  };
+}
+
+interface FarcasterSignInResult {
+  message: string;
+  signature: string;
+  fid: number;
+  username: string;
+  displayName: string;
+  pfpUrl: string;
+  state: string;
 }
 
 interface UseSocialVerificationReturn {
@@ -54,25 +80,19 @@ export function useSocialVerification({
 }: UseSocialVerificationOptions): UseSocialVerificationReturn {
   const { getAccessToken, refresh } = useAuth();
 
-  // Farcaster state
-  const [hasFarcasterFollow, setHasFarcasterFollow] = useState(false);
-  const [isVerifyingFollow, setIsVerifyingFollow] = useState(false);
+  // UI state for showing verify buttons
   const [showVerifyFollowButton, setShowVerifyFollowButton] = useState(false);
-
-  // Twitter state
-  const [hasTwitterFollow, setHasTwitterFollow] = useState(false);
-  const [isVerifyingTwitterFollow, setIsVerifyingTwitterFollow] =
-    useState(false);
   const [showVerifyTwitterFollowButton, setShowVerifyTwitterFollowButton] =
     useState(false);
-
-  // Discord state
-  const [hasDiscordJoin, setHasDiscordJoin] = useState(false);
-  const [isVerifyingDiscordJoin, setIsVerifyingDiscordJoin] = useState(false);
   const [showVerifyDiscordJoinButton, setShowVerifyDiscordJoinButton] =
     useState(false);
 
-  // Check if user has already been awarded follow rewards on page load
+  // Track verified status locally (derived from mutations or props)
+  const [hasFarcasterFollow, setHasFarcasterFollow] = useState(false);
+  const [hasTwitterFollow, setHasTwitterFollow] = useState(false);
+  const [hasDiscordJoin, setHasDiscordJoin] = useState(false);
+
+  // Sync props to local state on mount/prop changes
   useEffect(() => {
     if (!authenticated || !userId) return;
 
@@ -94,6 +114,213 @@ export function useSocialVerification({
     pointsAwardedForTwitterFollow,
     pointsAwardedForDiscordJoin,
   ]);
+
+  // Mutation: Link Farcaster account
+  const linkFarcasterMutation = useMutation({
+    mutationFn: async (result: FarcasterSignInResult) => {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(userId!)}/link-farcaster`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            message: result.message,
+            signature: result.signature,
+            fid: result.fid,
+            username: result.username,
+            displayName: result.displayName,
+            pfpUrl: result.pfpUrl,
+            state: result.state,
+          }),
+        }
+      );
+
+      const data = (await response.json()) as LinkFarcasterResponse;
+
+      if (!response.ok) {
+        const errorMessage = data.error || 'Failed to link Farcaster account';
+        if (response.status === 409) {
+          throw new Error(
+            errorMessage.includes('already linked')
+              ? errorMessage
+              : 'This Farcaster account is already linked to another user'
+          );
+        }
+        throw new Error(errorMessage);
+      }
+
+      return data;
+    },
+    onSuccess: async (data) => {
+      await refresh();
+      await onPointsAwarded();
+
+      if (data.pointsAwarded > 0) {
+        toast.success(
+          `Farcaster linked! +${data.pointsAwarded} points awarded`
+        );
+      } else {
+        toast.success('Farcaster account linked successfully!');
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // Mutation: Verify Farcaster follow
+  const verifyFarcasterFollowMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(userId!)}/verify-farcaster-follow`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      const data = (await response.json()) as VerifyFollowResponse;
+
+      if (!response.ok || !data.verified) {
+        throw new Error(
+          data.message ||
+            'Could not verify follow. Please make sure you followed @playbabylon on Farcaster.'
+        );
+      }
+
+      return data;
+    },
+    onSuccess: async (data) => {
+      setHasFarcasterFollow(true);
+      setShowVerifyFollowButton(false);
+      await onPointsAwarded();
+
+      if (data.points?.awarded && data.points.awarded > 0) {
+        toast.success(
+          `Follow verified! +${data.points.awarded} points awarded`
+        );
+      } else {
+        toast.success(
+          'Follow verified! You already received points for this action.'
+        );
+      }
+    },
+    onError: (error: Error) => {
+      logger.error(
+        'Error verifying Farcaster follow',
+        { error: error.message, userId },
+        'useSocialVerification'
+      );
+      toast.error(error.message);
+    },
+  });
+
+  // Mutation: Verify Twitter follow
+  const verifyTwitterFollowMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(userId!)}/verify-twitter-follow`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      const data = (await response.json()) as VerifyFollowResponse;
+
+      if (!response.ok || !data.verified) {
+        throw new Error(
+          data.message || 'Could not claim reward. Please try again.'
+        );
+      }
+
+      return data;
+    },
+    onSuccess: async (data) => {
+      setHasTwitterFollow(true);
+      setShowVerifyTwitterFollowButton(false);
+      await onPointsAwarded();
+
+      if (data.points?.awarded && data.points.awarded > 0) {
+        toast.success(
+          `Thank you for following! +${data.points.awarded} points awarded`
+        );
+      } else {
+        toast.success('You already received points for this action.');
+      }
+    },
+    onError: (error: Error) => {
+      logger.error(
+        'Error claiming Twitter follow reward',
+        { error: error.message, userId },
+        'useSocialVerification'
+      );
+      toast.error(error.message);
+    },
+  });
+
+  // Mutation: Verify Discord join
+  const verifyDiscordJoinMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(userId!)}/verify-discord-join`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      const data = (await response.json()) as VerifyFollowResponse;
+
+      if (!response.ok || !data.verified) {
+        throw new Error(
+          data.message ||
+            'Could not verify membership. Please make sure you joined the Babylon Discord server.'
+        );
+      }
+
+      return data;
+    },
+    onSuccess: async (data) => {
+      setHasDiscordJoin(true);
+      setShowVerifyDiscordJoinButton(false);
+      await onPointsAwarded();
+
+      if (data.points?.awarded && data.points.awarded > 0) {
+        toast.success(
+          `Discord membership verified! +${data.points.awarded} points awarded`
+        );
+      } else {
+        toast.success(
+          'Membership verified! You already received points for this action.'
+        );
+      }
+    },
+    onError: (error: Error) => {
+      logger.error(
+        'Error verifying Discord join',
+        { error: error.message, userId },
+        'useSocialVerification'
+      );
+      toast.error(error.message);
+    },
+  });
 
   // OAuth handlers
   const handleTwitterOAuth = useCallback(() => {
@@ -149,52 +376,7 @@ export function useSocialVerification({
         },
       });
 
-      const token = await getAccessToken();
-      const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/link-farcaster`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            message: result.message,
-            signature: result.signature,
-            fid: result.fid,
-            username: result.username,
-            displayName: result.displayName,
-            pfpUrl: result.pfpUrl,
-            state: result.state,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        await refresh();
-        await onPointsAwarded();
-
-        if (data.pointsAwarded > 0) {
-          toast.success(
-            `Farcaster linked! +${data.pointsAwarded} points awarded`
-          );
-        } else {
-          toast.success('Farcaster account linked successfully!');
-        }
-      } else {
-        const errorMessage = data.error || 'Failed to link Farcaster account';
-        if (response.status === 409) {
-          toast.error(
-            errorMessage.includes('already linked')
-              ? errorMessage
-              : 'This Farcaster account is already linked to another user'
-          );
-        } else {
-          toast.error(errorMessage);
-        }
-      }
+      await linkFarcasterMutation.mutateAsync(result as FarcasterSignInResult);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -225,7 +407,7 @@ export function useSocialVerification({
       );
       toast.error('Failed to connect Farcaster. Please try again.');
     }
-  }, [userId, getAccessToken, refresh, onPointsAwarded]);
+  }, [userId, linkFarcasterMutation]);
 
   // Farcaster follow handlers
   const handleFarcasterFollow = useCallback(() => {
@@ -251,57 +433,8 @@ export function useSocialVerification({
 
   const handleVerifyFollow = useCallback(async () => {
     if (!userId) return;
-
-    setIsVerifyingFollow(true);
-    try {
-      const token = await getAccessToken();
-      const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/verify-farcaster-follow`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.ok && data.verified) {
-        setHasFarcasterFollow(true);
-        setShowVerifyFollowButton(false);
-        await onPointsAwarded();
-
-        if (data.points?.awarded > 0) {
-          toast.success(
-            `Follow verified! +${data.points.awarded} points awarded`
-          );
-        } else {
-          toast.success(
-            'Follow verified! You already received points for this action.'
-          );
-        }
-      } else {
-        toast.error(
-          data.message ||
-            'Could not verify follow. Please make sure you followed @playbabylon on Farcaster.'
-        );
-      }
-    } catch (error) {
-      logger.error(
-        'Error verifying Farcaster follow',
-        {
-          error: error instanceof Error ? error.message : String(error),
-          userId,
-        },
-        'useSocialVerification'
-      );
-      toast.error('Failed to verify follow. Please try again.');
-    } finally {
-      setIsVerifyingFollow(false);
-    }
-  }, [userId, getAccessToken, onPointsAwarded]);
+    await verifyFarcasterFollowMutation.mutateAsync();
+  }, [userId, verifyFarcasterFollowMutation]);
 
   // Twitter follow handlers
   const handleTwitterFollow = useCallback(() => {
@@ -330,54 +463,8 @@ export function useSocialVerification({
 
   const handleVerifyTwitterFollow = useCallback(async () => {
     if (!userId) return;
-
-    setIsVerifyingTwitterFollow(true);
-    try {
-      const token = await getAccessToken();
-      const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/verify-twitter-follow`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.ok && data.verified) {
-        setHasTwitterFollow(true);
-        setShowVerifyTwitterFollowButton(false);
-        await onPointsAwarded();
-
-        if (data.points?.awarded > 0) {
-          toast.success(
-            `Thank you for following! +${data.points.awarded} points awarded`
-          );
-        } else {
-          toast.success('You already received points for this action.');
-        }
-      } else {
-        toast.error(
-          data.message || 'Could not claim reward. Please try again.'
-        );
-      }
-    } catch (error) {
-      logger.error(
-        'Error claiming Twitter follow reward',
-        {
-          error: error instanceof Error ? error.message : String(error),
-          userId,
-        },
-        'useSocialVerification'
-      );
-      toast.error('Failed to claim reward. Please try again.');
-    } finally {
-      setIsVerifyingTwitterFollow(false);
-    }
-  }, [userId, getAccessToken, onPointsAwarded]);
+    await verifyTwitterFollowMutation.mutateAsync();
+  }, [userId, verifyTwitterFollowMutation]);
 
   // Discord join handlers
   const handleDiscordJoin = useCallback(() => {
@@ -406,76 +493,27 @@ export function useSocialVerification({
 
   const handleVerifyDiscordJoin = useCallback(async () => {
     if (!userId) return;
-
-    setIsVerifyingDiscordJoin(true);
-    try {
-      const token = await getAccessToken();
-      const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/verify-discord-join`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.ok && data.verified) {
-        setHasDiscordJoin(true);
-        setShowVerifyDiscordJoinButton(false);
-        await onPointsAwarded();
-
-        if (data.points?.awarded > 0) {
-          toast.success(
-            `Discord membership verified! +${data.points.awarded} points awarded`
-          );
-        } else {
-          toast.success(
-            'Membership verified! You already received points for this action.'
-          );
-        }
-      } else {
-        toast.error(
-          data.message ||
-            'Could not verify membership. Please make sure you joined the Babylon Discord server.'
-        );
-      }
-    } catch (error) {
-      logger.error(
-        'Error verifying Discord join',
-        {
-          error: error instanceof Error ? error.message : String(error),
-          userId,
-        },
-        'useSocialVerification'
-      );
-      toast.error('Failed to verify Discord membership. Please try again.');
-    } finally {
-      setIsVerifyingDiscordJoin(false);
-    }
-  }, [userId, getAccessToken, onPointsAwarded]);
+    await verifyDiscordJoinMutation.mutateAsync();
+  }, [userId, verifyDiscordJoinMutation]);
 
   return {
     // Farcaster
     hasFarcasterFollow,
-    isVerifyingFollow,
+    isVerifyingFollow: verifyFarcasterFollowMutation.isPending,
     showVerifyFollowButton,
     handleFarcasterOAuth,
     handleFarcasterFollow,
     handleVerifyFollow,
     // Twitter
     hasTwitterFollow,
-    isVerifyingTwitterFollow,
+    isVerifyingTwitterFollow: verifyTwitterFollowMutation.isPending,
     showVerifyTwitterFollowButton,
     handleTwitterOAuth,
     handleTwitterFollow,
     handleVerifyTwitterFollow,
     // Discord
     hasDiscordJoin,
-    isVerifyingDiscordJoin,
+    isVerifyingDiscordJoin: verifyDiscordJoinMutation.isPending,
     showVerifyDiscordJoinButton,
     handleDiscordOAuth,
     handleDiscordJoin,

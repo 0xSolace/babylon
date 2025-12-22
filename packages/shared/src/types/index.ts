@@ -23,11 +23,11 @@ export {
 } from './errors';
 // Social interaction types
 export * from './interactions';
+// Moderation types (BanStatus, VotePosition, etc.)
+export * from './moderation';
 // Agent monitoring types
 export * from './monitoring';
 // Payment types
 export * from './payments';
-// Profile widget types (balance, positions, etc.)
+// Profile types (user/actor profiles, balance, positions, etc.)
 export * from './profile';
-// Profile types (user/actor profiles)
-export * from './profiles';

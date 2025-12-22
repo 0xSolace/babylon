@@ -1,3 +1,15 @@
+import {
+  AuthorizationError,
+  ConflictError,
+  calculateFundingPayment,
+  calculateLiquidationPrice,
+  calculateUnrealizedPnL,
+  NotFoundError,
+  shouldLiquidate,
+  TradingError,
+  ValidationError,
+} from '@babylon/shared';
+import { PerpCloseInputSchema, PerpOpenInputSchema } from './schemas';
 import type {
   PerpCloseInput,
   PerpDbPort,
@@ -5,7 +17,6 @@ import type {
   PerpOpenInput,
   PerpPositionRecord,
   PerpServiceDeps,
-  PerpSide,
   PerpTradeResult,
 } from './types';
 
@@ -60,58 +71,75 @@ export class PerpMarketService {
    * @param input.maxSlippage - Maximum price deviation allowed from expected (0-1).
    */
   async openPosition(input: PerpOpenInput): Promise<PerpTradeResult> {
-    const { ticker, side, size, leverage, maxSlippage } = input;
+    // Validate input at service boundary
+    const validated = PerpOpenInputSchema.parse(input);
+    const { ticker, side, size, leverage, maxSlippage } = validated;
     const markets = await this.db.listMarkets();
     const market = markets.find((m) => m.ticker === ticker);
     if (!market) {
-      throw new Error(`Market not found: ${ticker}`);
+      throw new NotFoundError('Market', ticker);
     }
 
     const minOrderSize = market.minOrderSize ?? DEFAULT_MIN_ORDER_SIZE;
     const maxLeverage = market.maxLeverage ?? DEFAULT_MAX_LEVERAGE;
 
     if (size < minOrderSize) {
-      throw new Error(`Order size below minimum (${minOrderSize})`);
+      throw new TradingError(
+        `Order size below minimum (${minOrderSize})`,
+        ticker,
+        'RISK_LIMIT'
+      );
     }
     if (leverage < 1 || leverage > maxLeverage) {
-      throw new Error(`Invalid leverage (1-${maxLeverage})`);
+      throw new ValidationError(`Invalid leverage (1-${maxLeverage})`, [
+        'leverage',
+      ]);
     }
 
     const maxPositionSize = this.calculateMaxPositionSize(market.openInterest);
     if (size > maxPositionSize) {
-      throw new Error(
-        `Order size exceeds market limit (${maxPositionSize.toLocaleString()})`
+      throw new TradingError(
+        `Order size exceeds market limit (${maxPositionSize.toLocaleString()})`,
+        ticker,
+        'RISK_LIMIT'
       );
     }
 
     // Check for existing position on same ticker (prevent duplicates)
     const existingPosition = await this.db.getOpenPositionByUserAndTicker(
-      input.userId,
+      validated.userId,
       ticker
     );
     if (existingPosition) {
-      throw new Error(
+      throw new ConflictError(
         `Already have an open ${existingPosition.side} position on ${ticker} ` +
-          `(ID: ${existingPosition.id}). Close or modify existing position first.`
+          `(ID: ${existingPosition.id}). Close or modify existing position first.`,
+        `position:${existingPosition.id}`
       );
     }
 
     // Check total user exposure across all positions
-    const userPositions = await this.db.getOpenPositionsByUser(input.userId);
+    const userPositions = await this.db.getOpenPositionsByUser(
+      validated.userId
+    );
     const currentExposure = userPositions.reduce(
       (sum, p) => sum + p.size * p.leverage,
       0
     );
     const newNotional = size * leverage;
     if (currentExposure + newNotional > MAX_USER_EXPOSURE) {
-      throw new Error(
+      throw new TradingError(
         `Total exposure would exceed limit: current ${currentExposure.toLocaleString()}, ` +
-          `new ${newNotional.toLocaleString()}, max ${MAX_USER_EXPOSURE.toLocaleString()}`
+          `new ${newNotional.toLocaleString()}, max ${MAX_USER_EXPOSURE.toLocaleString()}`,
+        ticker,
+        'RISK_LIMIT'
       );
     }
     if (userPositions.length >= MAX_POSITIONS_PER_USER) {
-      throw new Error(
-        `Maximum positions reached (${MAX_POSITIONS_PER_USER}). Close a position first.`
+      throw new TradingError(
+        `Maximum positions reached (${MAX_POSITIONS_PER_USER}). Close a position first.`,
+        ticker,
+        'POSITION_LIMIT'
       );
     }
 
@@ -122,9 +150,11 @@ export class PerpMarketService {
       const priceDeviation =
         Math.abs(entryPrice - market.markPrice) / market.markPrice;
       if (priceDeviation > maxSlippage) {
-        throw new Error(
+        throw new TradingError(
           `Slippage exceeded: spot/mark price deviation ${(priceDeviation * 100).toFixed(2)}% ` +
-            `(max allowed: ${(maxSlippage * 100).toFixed(2)}%)`
+            `(max allowed: ${(maxSlippage * 100).toFixed(2)}%)`,
+          ticker,
+          'SLIPPAGE_EXCEEDED'
         );
       }
     }
@@ -138,7 +168,7 @@ export class PerpMarketService {
     const totalCost = marginRequired + fee;
 
     await this.deps.wallet.debit({
-      userId: input.userId,
+      userId: validated.userId,
       amount: totalCost,
       reason: 'perp_open',
       description: `Open ${leverage}x ${side} ${ticker}`,
@@ -147,7 +177,7 @@ export class PerpMarketService {
     const now = this.deps.clock?.now() ?? new Date();
     const position = await this.db.upsertPosition({
       id: undefined,
-      userId: input.userId,
+      userId: validated.userId,
       ticker,
       organizationId: market.organizationId,
       side,
@@ -170,6 +200,16 @@ export class PerpMarketService {
       volume24h: market.volume24h + size,
     });
 
+    if (this.deps.feeProcessor) {
+      await this.deps.feeProcessor.processTradingFee({
+        userId: validated.userId,
+        amount: size,
+        type: 'perp_open',
+        relatedId: ticker,
+        positionId: position.id,
+      });
+    }
+
     return {
       positionId: position.id,
       ticker,
@@ -180,7 +220,7 @@ export class PerpMarketService {
       liquidationPrice,
       marginPaid: marginRequired,
       feePaid: fee,
-      balance: (await this.deps.wallet.getBalance(input.userId)).balance,
+      balance: (await this.deps.wallet.getBalance(validated.userId)).balance,
     };
   }
 
@@ -191,47 +231,59 @@ export class PerpMarketService {
    * @param input.maxSlippage - Maximum price deviation from entry. Rejects if exceeded.
    */
   async closePosition(input: PerpCloseInput): Promise<PerpTradeResult> {
-    const position = await this.db.getPositionById(input.positionId);
+    // Validate input at service boundary
+    const validated = PerpCloseInputSchema.parse(input);
+
+    const position = await this.db.getPositionById(validated.positionId);
     if (!position) {
-      throw new Error(`Position not found: ${input.positionId}`);
+      throw new NotFoundError('Position', validated.positionId);
     }
-    if (position.userId !== input.userId) {
-      throw new Error('Not your position');
+    if (position.userId !== validated.userId) {
+      throw new AuthorizationError('Not your position', 'position', 'close');
     }
     if (position.closedAt) {
-      throw new Error('Position already closed');
+      throw new ConflictError(
+        'Position already closed',
+        `position:${position.id}`
+      );
     }
 
     const markets = await this.db.listMarkets();
     const market = markets.find((m) => m.ticker === position.ticker);
     if (!market) {
-      throw new Error(
+      throw new NotFoundError(
+        'Market',
+        position.ticker,
         `Market not found for position ticker ${position.ticker}`
       );
     }
 
-    const exitPrice = input.exitPriceOverride ?? market.currentPrice;
+    const exitPrice = validated.exitPriceOverride ?? market.currentPrice;
 
     // Slippage protection: reject if execution price deviates too far from mark price
     // This protects against executing at a price that differs significantly from fair value
-    if (input.maxSlippage !== undefined && input.maxSlippage > 0) {
+    if (validated.maxSlippage !== undefined && validated.maxSlippage > 0) {
       // Use mark price as the reference (more stable), falling back to position's tracked price
       const referencePrice = market.markPrice ?? market.currentPrice;
       const priceDeviation =
         Math.abs(exitPrice - referencePrice) / referencePrice;
-      if (priceDeviation > input.maxSlippage) {
-        throw new Error(
+      if (priceDeviation > validated.maxSlippage) {
+        throw new TradingError(
           `Slippage exceeded: execution price ${exitPrice.toFixed(2)} deviates ` +
             `${(priceDeviation * 100).toFixed(2)}% from mark price ${referencePrice.toFixed(2)} ` +
-            `(max allowed: ${(input.maxSlippage * 100).toFixed(2)}%)`
+            `(max allowed: ${(validated.maxSlippage * 100).toFixed(2)}%)`,
+          position.ticker,
+          'SLIPPAGE_EXCEEDED'
         );
       }
     }
 
     // Determine close percentage (default to full close)
-    const closePercentage = Math.min(1, Math.max(0, input.percentage ?? 1));
+    const closePercentage = Math.min(1, Math.max(0, validated.percentage ?? 1));
     if (closePercentage <= 0) {
-      throw new Error('Close percentage must be greater than 0');
+      throw new ValidationError('Close percentage must be greater than 0', [
+        'percentage',
+      ]);
     }
 
     const closeSize = position.size * closePercentage;
@@ -255,7 +307,7 @@ export class PerpMarketService {
 
     if (netSettlement > 0) {
       await this.deps.wallet.credit({
-        userId: input.userId,
+        userId: validated.userId,
         amount: netSettlement,
         reason: isFullClose ? 'perp_close' : 'perp_partial_close',
         description: `${isFullClose ? 'Close' : `Partial close ${(closePercentage * 100).toFixed(0)}%`} ${position.leverage}x ${position.side} ${position.ticker}`,
@@ -264,7 +316,7 @@ export class PerpMarketService {
     }
 
     await this.deps.wallet.recordPnL({
-      userId: input.userId,
+      userId: validated.userId,
       pnl: realizedPnL,
       reason: isFullClose ? 'perp_close' : 'perp_partial_close',
       relatedId: position.id,
@@ -308,6 +360,16 @@ export class PerpMarketService {
       volume24h: market.volume24h + closeSize,
     });
 
+    if (this.deps.feeProcessor) {
+      await this.deps.feeProcessor.processTradingFee({
+        userId: validated.userId,
+        amount: position.size,
+        type: 'perp_close',
+        relatedId: position.ticker,
+        positionId: position.id,
+      });
+    }
+
     return {
       positionId: position.id,
       ticker: position.ticker,
@@ -320,7 +382,7 @@ export class PerpMarketService {
       realizedPnL,
       feePaid: fee,
       marginPaid,
-      balance: (await this.deps.wallet.getBalance(input.userId)).balance,
+      balance: (await this.deps.wallet.getBalance(validated.userId)).balance,
       remainingSize: isFullClose ? 0 : remainingSize,
       fullyClosed: isFullClose,
     };
@@ -601,38 +663,6 @@ export class PerpMarketService {
   }
 }
 
-function calculateLiquidationPrice(
-  entryPrice: number,
-  side: PerpSide,
-  leverage: number
-): number {
-  // Guard against division by zero - leverage must be >= 1
-  if (leverage < 1) leverage = 1;
-  const liquidationThreshold = 0.9 / leverage;
-  if (side === 'long') {
-    return entryPrice * (1 - liquidationThreshold);
-  }
-  return entryPrice * (1 + liquidationThreshold);
-}
-
-function calculateUnrealizedPnL(
-  entryPrice: number,
-  currentPrice: number,
-  side: PerpSide,
-  size: number
-): { pnl: number; pnlPercent: number } {
-  // Guard against division by zero
-  if (entryPrice <= 0 || size <= 0) {
-    return { pnl: 0, pnlPercent: 0 };
-  }
-  const pnl =
-    side === 'long'
-      ? ((currentPrice - entryPrice) / entryPrice) * size
-      : ((entryPrice - currentPrice) / entryPrice) * size;
-  const pnlPercent = (pnl / size) * 100;
-  return { pnl, pnlPercent };
-}
-
 function normalizePriceMap(
   input: Map<string, number> | Record<string, number> | Array<[string, number]>
 ): Map<string, number> {
@@ -740,12 +770,6 @@ function calculateDynamicFundingRate(params: {
   };
 }
 
-function calculateFundingPayment(size: number, fundingRate: number): number {
-  return size * fundingRate;
-}
-
 function periodsPerYear(): number {
   return (365.25 * 24) / FUNDING_PERIOD_HOURS;
 }
-
-import { shouldLiquidate } from './utils';

@@ -6,7 +6,7 @@
  */
 
 import { db } from '@babylon/db';
-import { logger } from '../utils/logger';
+import { logger } from '@babylon/shared';
 import { MarketOutcomesTracker } from './MarketOutcomesTracker';
 import type { TrajectoryStep } from './types';
 
@@ -46,14 +46,15 @@ export class RewardBackpropagationService {
 
       // Update rewards for each step based on outcomes
       for (const step of steps) {
-        const originalReward = step.reward;
+        const originalReward = step.reward ?? 0;
         let updatedReward = originalReward;
 
         // Check if this step involved trading
         if (
-          step.action.actionType.includes('TRADING') ||
-          step.action.actionType.includes('BUY') ||
-          step.action.actionType.includes('SELL')
+          step.action &&
+          (step.action.actionType.includes('TRADING') ||
+            step.action.actionType.includes('BUY') ||
+            step.action.actionType.includes('SELL'))
         ) {
           // Extract market ID from action parameters
           const marketId = step.action.parameters?.marketId as
@@ -88,9 +89,9 @@ export class RewardBackpropagationService {
               // Long position: positive reward if price went up
               // Short position: positive reward if price went down
               if (side === 'long') {
-                updatedReward = Math.max(-1, Math.min(1, priceChange / 10)); // Normalize to -1 to 1
+                updatedReward = Math.max(-1, Math.min(1, priceChange / 10));
               } else if (side === 'short') {
-                updatedReward = Math.max(-1, Math.min(1, -priceChange / 10)); // Inverted for short
+                updatedReward = Math.max(-1, Math.min(1, -priceChange / 10));
               }
             }
           }
@@ -100,7 +101,7 @@ export class RewardBackpropagationService {
           step.reward = updatedReward;
           hasUpdates = true;
         }
-        totalReward += step.reward;
+        totalReward += step.reward ?? 0;
       }
 
       // Update trajectory if rewards changed

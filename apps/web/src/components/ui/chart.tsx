@@ -204,14 +204,14 @@ function ChartTooltipContent({
   const { config } = useChart();
 
   const filteredPayload = React.useMemo(() => {
-    if (!payload?.length) return [];
+    if (!payload || payload.length === 0) return [];
 
     const seen = new Set<string>();
     return payload.filter((item) => {
-      if (item?.value === undefined || item?.value === null) {
+      if (item.value === undefined || item.value === null) {
         return false;
       }
-      const key = `${item?.dataKey ?? item?.name ?? 'value'}`;
+      const key = `${item.dataKey ?? item.name ?? 'value'}`;
       if (seen.has(key)) {
         return false;
       }
@@ -226,10 +226,13 @@ function ChartTooltipContent({
     }
 
     const [item] = filteredPayload;
-    const key = `${labelKey || item?.dataKey || item?.name || 'value'}`;
-    const itemConfig = item
-      ? getPayloadConfigFromPayload(config, item as JsonValue, key)
-      : undefined;
+    if (!item) return null;
+    const key = `${labelKey || item.dataKey || item.name || 'value'}`;
+    const itemConfig = getPayloadConfigFromPayload(
+      config,
+      item as JsonValue,
+      key
+    );
     const value =
       !labelKey && typeof label === 'string'
         ? config[label as keyof typeof config]?.label || label
@@ -266,7 +269,7 @@ function ChartTooltipContent({
     return null;
   }
 
-  const nestLabel = (payload?.length ?? 0) === 1 && indicator !== 'dot';
+  const nestLabel = (payload?.length || 0) === 1 && indicator !== 'dot';
 
   return (
     <div
@@ -294,7 +297,7 @@ function ChartTooltipContent({
                 indicator === 'dot' && 'items-center'
               )}
             >
-              {formatter && item?.value !== undefined && item.name ? (
+              {formatter && item.value !== undefined && item.name ? (
                 formatter(
                   item.value,
                   item.name,

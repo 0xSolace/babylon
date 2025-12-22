@@ -119,9 +119,9 @@ export function FollowButton({
           throw new Error('Unable to follow this profile');
         }
         const errorMessage =
-          typeof errorData?.error === 'string'
+          typeof errorData.error === 'string'
             ? errorData.error
-            : (errorData?.error as { message?: string })?.message ||
+            : (errorData.error as { message?: string })?.message ||
               'Failed to update follow status';
         throw new Error(errorMessage);
       }
@@ -190,15 +190,6 @@ export function FollowButton({
   };
 
   const isLoading = followMutation.isPending;
-
-  // Don't show button if checking or if user is viewing their own profile
-  const isOwnProfile =
-    user &&
-    (user.id === userId ||
-      user.username === userId ||
-      (user.username &&
-        user.username.startsWith('@') &&
-        user.username.slice(1) === userId));
 
   if (isChecking || isOwnProfile) {
     return null;

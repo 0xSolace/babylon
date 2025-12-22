@@ -4,66 +4,27 @@ import { cn } from '@babylon/shared';
 import { Bell, Bot, Home, MessageCircle, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 
 /**
  * Bottom navigation content component for mobile devices.
  *
  * Provides mobile navigation with Feed, Markets, Chats, Agents, and Notifications tabs.
- * Shows unread message and notification badges. Automatically hides when WAITLIST_MODE
- * is enabled on home page.
+ * Shows unread message and notification badges. Uses shared hooks for consistent caching.
+ * Automatically hides when WAITLIST_MODE is enabled on home page.
  *
  * @returns Bottom navigation element or null if hidden
  */
 function BottomNavContent() {
   const pathname = usePathname();
-  const { authenticated, user } = useAuth();
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const { totalUnread: unreadMessages } = useUnreadMessages();
+  const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
   // Hide bottom nav when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
   const shouldHide = isWaitlistMode && isHomePage;
-
-  // Poll for unread notifications
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadNotifications(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-
-      if (!token) {
-        return;
-      }
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadNotifications(data.unreadCount || 0);
-      }
-    };
-
-    fetchUnreadCount();
-
-    // Refresh every 1 minute
-    const interval = setInterval(fetchUnreadCount, 60000); // 60 seconds = 1 minute
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
 
   // If should be hidden, don't render anything
   if (shouldHide) {

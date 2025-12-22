@@ -5,11 +5,30 @@
     },
     "src/app/api/cron/game-tick/route.ts": {
       "maxDuration": 800
+    },
+    "src/app/api/cron/npc-tick/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/world-facts/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/reputation-sync/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/perp-funding/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/weekly-dataset-upload/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
     {
       "path": "/api/cron/game-tick",
+      "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/npc-tick",
       "schedule": "*/1 * * * *"
     },
     {
@@ -27,6 +46,18 @@
     {
       "path": "/api/cron/perp-funding",
       "schedule": "0 */8 * * *"
+    },
+    {
+      "path": "/api/cron/world-facts",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/health-check",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/training-check",
+      "schedule": "0 * * * *"
     }
   ],
   "headers": [
@@ -35,7 +66,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "frame-src 'self' https://auth.privy.io https://privy.babylon.market https://verify.walletconnect.com https://verify.walletconnect.org https://vercel.live https://farcaster.xyz; frame-ancestors 'self' https://farcaster.xyz https://warpcast.com"
+          "value": "frame-src 'self' https://auth.jeju.network https://verify.walletconnect.com https://verify.walletconnect.org https://vercel.live https://farcaster.xyz; frame-ancestors 'self' https://farcaster.xyz https://warpcast.com"
         }
       ]
     },

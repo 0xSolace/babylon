@@ -12,6 +12,7 @@
 
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { AuthenticationError, logger } from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -77,17 +78,20 @@ function addressToBytes32(address: Address): Hex {
 // =============================================================================
 
 async function main() {
-  console.log('═'.repeat(60));
-  console.log('🚀 BBLN WARP ROUTE DEPLOYMENT');
-  console.log('═'.repeat(60));
+  logger.info('═'.repeat(60));
+  logger.info('🚀 BBLN WARP ROUTE DEPLOYMENT');
+  logger.info('═'.repeat(60));
 
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
   if (!privateKey) {
-    throw new Error('DEPLOYER_PRIVATE_KEY required');
+    throw new AuthenticationError(
+      'DEPLOYER_PRIVATE_KEY environment variable required',
+      'NO_TOKEN'
+    );
   }
 
   const account = privateKeyToAccount(privateKey as Hex);
-  console.log(`\n📍 Deployer: ${account.address}`);
+  logger.info(`\n📍 Deployer: ${account.address}`);
 
   // Create clients for both chains
   const baseSepoliaPublic = createPublicClient({
@@ -118,14 +122,14 @@ async function main() {
     address: account.address,
   });
 
-  console.log(`\n💰 Base Sepolia Balance: ${formatEther(baseBalance)} ETH`);
-  console.log(`💰 Sepolia Balance: ${formatEther(sepoliaBalance)} ETH`);
+  logger.info(`\n💰 Base Sepolia Balance: ${formatEther(baseBalance)} ETH`);
+  logger.info(`💰 Sepolia Balance: ${formatEther(sepoliaBalance)} ETH`);
 
   // ==========================================================================
   // Deploy Warp Route on Base Sepolia (Collateral mode)
   // ==========================================================================
-  console.log('\n' + '─'.repeat(60));
-  console.log('📦 Deploying WarpRoute on Base Sepolia (Collateral)...');
+  logger.info('\n' + '─'.repeat(60));
+  logger.info('📦 Deploying WarpRoute on Base Sepolia (Collateral)...');
 
   const { address: warpRouteBaseSepolia, txHash: txBase } =
     await deployContract(baseSepoliaPublic, baseSepoliaWallet, 'WarpRoute', [
@@ -135,15 +139,15 @@ async function main() {
       account.address, // owner
     ]);
 
-  console.log(`   ✅ Base Sepolia WarpRoute: ${warpRouteBaseSepolia}`);
-  console.log(`   Tx: ${txBase}`);
+  logger.info(`   ✅ Base Sepolia WarpRoute: ${warpRouteBaseSepolia}`);
+  logger.info(`   Tx: ${txBase}`);
 
   // ==========================================================================
   // Deploy BBLN Token on Sepolia (Synthetic)
   // Then deploy Warp Route
   // ==========================================================================
-  console.log('\n' + '─'.repeat(60));
-  console.log('📦 Deploying BBLN Token on Sepolia (Synthetic)...');
+  logger.info('\n' + '─'.repeat(60));
+  logger.info('📦 Deploying BBLN Token on Sepolia (Synthetic)...');
 
   const { address: bblnSepolia, txHash: txTokenSepolia } = await deployContract(
     sepoliaPublic,
@@ -158,10 +162,10 @@ async function main() {
     ]
   );
 
-  console.log(`   ✅ Sepolia BBLN Token: ${bblnSepolia}`);
-  console.log(`   Tx: ${txTokenSepolia}`);
+  logger.info(`   ✅ Sepolia BBLN Token: ${bblnSepolia}`);
+  logger.info(`   Tx: ${txTokenSepolia}`);
 
-  console.log('\n📦 Deploying WarpRoute on Sepolia (Synthetic)...');
+  logger.info('\n📦 Deploying WarpRoute on Sepolia (Synthetic)...');
 
   const { address: warpRouteSepolia, txHash: txWarpSepolia } =
     await deployContract(sepoliaPublic, sepoliaWallet, 'WarpRoute', [
@@ -171,17 +175,17 @@ async function main() {
       account.address, // owner
     ]);
 
-  console.log(`   ✅ Sepolia WarpRoute: ${warpRouteSepolia}`);
-  console.log(`   Tx: ${txWarpSepolia}`);
+  logger.info(`   ✅ Sepolia WarpRoute: ${warpRouteSepolia}`);
+  logger.info(`   Tx: ${txWarpSepolia}`);
 
   // ==========================================================================
   // Configure Warp Routes (enroll remote routers)
   // ==========================================================================
-  console.log('\n' + '─'.repeat(60));
-  console.log('🔧 Configuring Warp Routes...');
+  logger.info('\n' + '─'.repeat(60));
+  logger.info('🔧 Configuring Warp Routes...');
 
   // Enroll Sepolia router on Base Sepolia
-  console.log('   Enrolling Sepolia router on Base Sepolia...');
+  logger.info('   Enrolling Sepolia router on Base Sepolia...');
   const enrollBaseTx = await baseSepoliaWallet.writeContract({
     address: warpRouteBaseSepolia,
     abi: [
@@ -203,10 +207,10 @@ async function main() {
     ],
   });
   await baseSepoliaPublic.waitForTransactionReceipt({ hash: enrollBaseTx });
-  console.log(`   ✅ Enrolled on Base Sepolia: ${enrollBaseTx}`);
+  logger.info(`   ✅ Enrolled on Base Sepolia: ${enrollBaseTx}`);
 
   // Enroll Base Sepolia router on Sepolia
-  console.log('   Enrolling Base Sepolia router on Sepolia...');
+  logger.info('   Enrolling Base Sepolia router on Sepolia...');
   const enrollSepoliaTx = await sepoliaWallet.writeContract({
     address: warpRouteSepolia,
     abi: [
@@ -228,10 +232,10 @@ async function main() {
     ],
   });
   await sepoliaPublic.waitForTransactionReceipt({ hash: enrollSepoliaTx });
-  console.log(`   ✅ Enrolled on Sepolia: ${enrollSepoliaTx}`);
+  logger.info(`   ✅ Enrolled on Sepolia: ${enrollSepoliaTx}`);
 
   // Set IGP on both routes
-  console.log('   Setting IGP on Base Sepolia...');
+  logger.info('   Setting IGP on Base Sepolia...');
   const igpBaseTx = await baseSepoliaWallet.writeContract({
     address: warpRouteBaseSepolia,
     abi: [
@@ -247,9 +251,9 @@ async function main() {
     args: [HYPERLANE_CONFIG.baseSepolia.igp],
   });
   await baseSepoliaPublic.waitForTransactionReceipt({ hash: igpBaseTx });
-  console.log(`   ✅ IGP set on Base Sepolia: ${igpBaseTx}`);
+  logger.info(`   ✅ IGP set on Base Sepolia: ${igpBaseTx}`);
 
-  console.log('   Setting IGP on Sepolia...');
+  logger.info('   Setting IGP on Sepolia...');
   const igpSepoliaTx = await sepoliaWallet.writeContract({
     address: warpRouteSepolia,
     abi: [
@@ -265,13 +269,13 @@ async function main() {
     args: [HYPERLANE_CONFIG.sepolia.igp],
   });
   await sepoliaPublic.waitForTransactionReceipt({ hash: igpSepoliaTx });
-  console.log(`   ✅ IGP set on Sepolia: ${igpSepoliaTx}`);
+  logger.info(`   ✅ IGP set on Sepolia: ${igpSepoliaTx}`);
 
   // ==========================================================================
   // Authorize WarpRoute as minter on Sepolia BBLN
   // ==========================================================================
-  console.log('\n' + '─'.repeat(60));
-  console.log('🔧 Authorizing WarpRoute as minter on Sepolia BBLN...');
+  logger.info('\n' + '─'.repeat(60));
+  logger.info('🔧 Authorizing WarpRoute as minter on Sepolia BBLN...');
 
   const setMinterTx = await sepoliaWallet.writeContract({
     address: bblnSepolia,
@@ -291,7 +295,7 @@ async function main() {
     args: [warpRouteSepolia, true],
   });
   await sepoliaPublic.waitForTransactionReceipt({ hash: setMinterTx });
-  console.log(`   ✅ WarpRoute authorized as minter: ${setMinterTx}`);
+  logger.info(`   ✅ WarpRoute authorized as minter: ${setMinterTx}`);
 
   // ==========================================================================
   // Summary
@@ -322,10 +326,10 @@ async function main() {
   );
   await Bun.write(deploymentPath, JSON.stringify(deployment, null, 2));
 
-  console.log('\n' + '═'.repeat(60));
-  console.log('✅ WARP ROUTE DEPLOYMENT COMPLETE');
-  console.log('═'.repeat(60));
-  console.log(`
+  logger.info('\n' + '═'.repeat(60));
+  logger.info('✅ WARP ROUTE DEPLOYMENT COMPLETE');
+  logger.info('═'.repeat(60));
+  logger.info(`
 📋 Deployment Summary:
 
 Base Sepolia (Collateral):
@@ -349,6 +353,6 @@ Deployment saved: ${deploymentPath}
 }
 
 main().catch((error) => {
-  console.error('\n❌ Deployment failed:', error);
+  logger.error('\n❌ Deployment failed:', error);
   process.exit(1);
 });

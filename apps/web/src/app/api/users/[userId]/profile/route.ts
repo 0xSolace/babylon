@@ -147,7 +147,7 @@ export const GET = withErrorHandling(
     // Optional authentication
     await optionalAuth(request);
 
-    // Get user profile - use findUserByIdentifier to handle new Privy users gracefully
+    // Get user profile - use findUserByIdentifier to handle new OAuth3 users gracefully
     const dbUser = await findUserByIdentifier(userId, {
       id: true,
       walletAddress: true,
@@ -179,10 +179,10 @@ export const GET = withErrorHandling(
       createdAt: true,
     });
 
-    // If user doesn't exist yet (new Privy user who hasn't completed signup), return null
+    // If user doesn't exist yet (new OAuth3 user who hasn't completed signup), return null
     if (!dbUser) {
       logger.info(
-        "User not found - new Privy user who hasn't completed signup",
+        "User not found - new OAuth3 user who hasn't completed signup",
         { userId },
         'GET /api/users/[userId]/profile'
       );
@@ -228,7 +228,9 @@ export const GET = withErrorHandling(
         hasTwitter: dbUser.hasTwitter,
         farcasterUsername: dbUser.farcasterUsername,
         twitterUsername: dbUser.twitterUsername,
-        usernameChangedAt: dbUser.usernameChangedAt?.toISOString() || null,
+        usernameChangedAt: dbUser.usernameChangedAt
+          ? dbUser.usernameChangedAt.toISOString()
+          : null,
         createdAt: dbUser.createdAt.toISOString(),
         stats: stats || {
           positions: 0,

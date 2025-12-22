@@ -1,8 +1,35 @@
 'use client';
 
 import { useJejuAuth } from '@babylon/auth/client';
+import { useMutation } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
+
+interface AuthCallbackPayload {
+  code: string;
+  state: string | null;
+}
+
+interface AuthCallbackError {
+  error: string;
+}
+
+async function exchangeCodeForSession(
+  payload: AuthCallbackPayload
+): Promise<void> {
+  const response = await fetch('/api/auth/jeju/callback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data: AuthCallbackError = await response
+      .json()
+      .catch(() => ({ error: 'Unknown error' }));
+    throw new Error(data.error || 'Authentication failed');
+  }
+}
 
 /**
  * OAuth Callback Page Content
@@ -14,10 +41,16 @@ function CallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { authenticated, ready } = useJejuAuth();
-  const [status, setStatus] = useState<'processing' | 'success' | 'error'>(
-    'processing'
-  );
-  const [error, setError] = useState<string | null>(null);
+
+  // Track OAuth errors from URL params (not mutation errors)
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
+  const exchangeMutation = useMutation({
+    mutationFn: exchangeCodeForSession,
+    onSuccess: () => {
+      router.replace('/');
+    },
+  });
 
   useEffect(() => {
     // If already authenticated, redirect to home
@@ -26,7 +59,14 @@ function CallbackContent() {
       return;
     }
 
-    const handleCallback = async () => {
+    if (
+      ready &&
+      !authenticated &&
+      !exchangeMutation.isPending &&
+      !exchangeMutation.isSuccess &&
+      !exchangeMutation.isError &&
+      !oauthError
+    ) {
       const code = searchParams.get('code');
       const state = searchParams.get('state');
       const errorParam = searchParams.get('error');
@@ -34,54 +74,48 @@ function CallbackContent() {
 
       // Handle OAuth error from provider
       if (errorParam) {
-        setStatus('error');
-        setError(errorDescription ?? errorParam);
+        setOauthError(errorDescription ?? errorParam);
         return;
       }
 
       if (!code) {
-        setStatus('error');
-        setError('No authorization code received');
+        setOauthError('No authorization code received');
         return;
       }
 
-      // Exchange code for session via API route
-      const response = await fetch('/api/auth/jeju/callback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, state }),
-      });
-
-      if (!response.ok) {
-        const data = await response
-          .json()
-          .catch(() => ({ error: 'Unknown error' }));
-        setStatus('error');
-        setError((data as { error?: string }).error ?? 'Authentication failed');
-        return;
-      }
-
-      // Success - redirect to home
-      setStatus('success');
-      router.replace('/');
-    };
-
-    if (ready && !authenticated) {
-      void handleCallback();
+      // Exchange code for session via mutation
+      exchangeMutation.mutate({ code, state });
     }
-  }, [ready, authenticated, searchParams, router]);
+  }, [
+    ready,
+    authenticated,
+    searchParams,
+    router,
+    exchangeMutation,
+    oauthError,
+  ]);
+
+  // Derive status from mutation state and oauth errors
+  const hasError = oauthError || exchangeMutation.isError;
+  const errorMessage =
+    oauthError ??
+    (exchangeMutation.error instanceof Error
+      ? exchangeMutation.error.message
+      : 'Authentication failed');
+  const isSuccess = exchangeMutation.isSuccess;
+  const isProcessing = !hasError && !isSuccess;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-4 p-8">
-        {status === 'processing' && (
+        {isProcessing && (
           <>
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
             <p className="text-muted-foreground">Completing sign in...</p>
           </>
         )}
 
-        {status === 'success' && (
+        {isSuccess && (
           <>
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500">
               <svg
@@ -103,7 +137,7 @@ function CallbackContent() {
           </>
         )}
 
-        {status === 'error' && (
+        {hasError && (
           <>
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500">
               <svg
@@ -121,7 +155,7 @@ function CallbackContent() {
               </svg>
             </div>
             <p className="text-foreground">Sign in failed</p>
-            <p className="text-destructive text-sm">{error}</p>
+            <p className="text-destructive text-sm">{errorMessage}</p>
             <button
               type="button"
               onClick={() => router.replace('/')}

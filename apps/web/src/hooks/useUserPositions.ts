@@ -1,13 +1,13 @@
 'use client';
 
-import type { PerpPosition } from '@babylon/shared';
+import type { PerpPosition, UserPredictionPosition } from '@babylon/shared';
+import { UserPositionsApiResponseSchema } from '@babylon/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
 /**
- * Represents a user's position in a prediction market.
+ * Helper to safely convert API values to numbers.
  */
-
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -19,20 +19,8 @@ function toNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
-export interface UserPredictionPosition {
-  id: string;
-  marketId: string;
-  question: string;
-  side: 'YES' | 'NO';
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-  currentValue: number;
-  costBasis: number;
-  unrealizedPnL: number;
-  resolved: boolean;
-  resolution: boolean | null;
-}
+// Re-export for convenience
+export type { UserPredictionPosition } from '@babylon/shared';
 
 interface PerpStats {
   totalPositions: number;
@@ -161,10 +149,13 @@ export function useUserPositions(
         `/api/markets/positions/${encodeURIComponent(userId!)}`
       );
 
-      const responseData = (await response.json()) as PositionsApiResponse;
+      const json: unknown = await response.json();
+      const responseData = UserPositionsApiResponseSchema.parse(
+        json
+      ) as PositionsApiResponse;
 
-      const perpetuals = responseData?.perpetuals ?? {};
-      const predictions = responseData?.predictions ?? {};
+      const perpetuals = responseData.perpetuals ?? {};
+      const predictions = responseData.predictions ?? {};
 
       const normalizedPerps = (perpetuals.positions ?? []).map(
         (pos: ApiPerpPositionPayload) => ({

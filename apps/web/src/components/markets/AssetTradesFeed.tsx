@@ -2,6 +2,7 @@
 
 import { cn } from '@babylon/shared';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+
 import {
   AlertCircle,
   ArrowUpDown,
@@ -18,11 +19,11 @@ import { usePredictionMarketStream } from '@/hooks/usePredictionMarketStream';
 /**
  * Page size for pagination in trades feed.
  */
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 /**
  * Polling interval for fetching new trades (10 seconds).
  */
-const POLL_INTERVAL = 10000; // 10 seconds
+const POLL_INTERVAL = 30000; // 30 seconds
 /**
  * Scroll threshold in pixels from top to consider "at top" for auto-polling.
  */
@@ -215,7 +216,7 @@ export function AssetTradesFeed({
   // Flatten paginated trades and deduplicate
   const trades = useMemo(() => {
     if (!data?.pages) return [];
-    const allTrades = data.pages.flatMap((page) => page.trades);
+    const allTrades = data.pages.flatMap((page) => page?.trades ?? []);
     // Deduplicate by ID
     const seen = new Set<string>();
     return allTrades.filter((trade) => {
@@ -446,7 +447,7 @@ function TradeCard({ trade, formatCurrency, formatTime }: TradeCardProps) {
               href={user ? profileUrl : '#'}
               className="truncate font-medium text-sm hover:underline"
             >
-              {user?.displayName || user?.username || 'Unknown'}
+              {user?.displayName ?? user?.username ?? 'Unknown'}
             </Link>
             {user?.isActor && (
               <span className="rounded bg-purple-600/20 px-2 py-0.5 text-purple-600 text-xs">

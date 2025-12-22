@@ -60,7 +60,8 @@ export async function authenticate(
 
   if (!token) {
     throw new AuthenticationError(
-      'Missing or invalid authorization header or cookie'
+      'Missing or invalid authorization header or cookie',
+      'NO_TOKEN'
     );
   }
 
@@ -82,16 +83,20 @@ export async function authenticate(
     session = await auth.validateSession(token);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('expired') || message.includes('invalid')) {
+    if (message.includes('expired')) {
       throw new AuthenticationError(
-        'Authentication token has expired. Please refresh your session.'
+        'Authentication token has expired. Please refresh your session.',
+        'EXPIRED_TOKEN'
       );
     }
-    throw new AuthenticationError(message);
+    if (message.includes('invalid')) {
+      throw new AuthenticationError(message, 'INVALID_TOKEN');
+    }
+    throw new AuthenticationError(message, 'INVALID_CREDENTIALS');
   }
 
   if (!session) {
-    throw new AuthenticationError('Invalid session token');
+    throw new AuthenticationError('Invalid session token', 'INVALID_TOKEN');
   }
 
   // Get user from database using OAuth3 identity
@@ -138,7 +143,8 @@ export async function authenticateWithDbUser(
 
   if (!authUser.dbUserId) {
     throw new AuthenticationError(
-      'User profile not found. Please complete onboarding first.'
+      'User profile not found. Please complete onboarding first.',
+      'INVALID_CREDENTIALS'
     );
   }
 

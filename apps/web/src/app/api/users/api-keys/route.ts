@@ -30,10 +30,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Use asUser to enforce RLS
   const keys = await asUser(authUser.userId, async (dbClient) => {
-    return await dbClient.query.userApiKeys.findMany({
-      where: (keys, { eq, and: andFn, isNull: isNullFn }) =>
-        andFn(eq(keys.userId, authUser.userId), isNullFn(keys.revokedAt)),
-      orderBy: (keys, { desc }) => [desc(keys.createdAt)],
+    return await dbClient.userApiKey.findMany({
+      where: {
+        userId: authUser.userId,
+        revokedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
     });
   });
 

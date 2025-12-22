@@ -16,18 +16,11 @@ import {
 } from './decentralized/db';
 
 // ============================================================================
-// Types
+// Types - Import from shared types
 // ============================================================================
 
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonObject
-  | JsonArray;
-export type JsonObject = { [key: string]: JsonValue };
-export type JsonArray = JsonValue[];
+import type { JsonValue } from './types';
+export type { JsonValue };
 
 export type SQLValue =
   | string

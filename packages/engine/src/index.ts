@@ -13,6 +13,13 @@ export {
   truncateToTokenLimit,
   truncateToTokenLimitSync,
 } from '@babylon/api';
+// Prediction Pricing
+export {
+  calculateExpectedPayout,
+  PredictionPricing,
+  type ShareCalculation,
+  type ShareCalculationWithFees,
+} from '@babylon/core/markets/prediction';
 // Article Generator
 export { type Article, ArticleGenerator } from './ArticleGenerator';
 // Actors Data Loader
@@ -93,6 +100,18 @@ export {
   OrganizationBehavior,
   type OrganizationType,
 } from './GameGenerator';
+// Game Loop (tick-based simulation orchestrator)
+export { GameLoop } from './GameLoop';
+// Game Simulator (standalone simulation engine)
+export {
+  type GameConfig,
+  type GameEvent,
+  type GameResult,
+  GameSimulator,
+  type MarketState as SimulatedMarketState,
+  type ReputationChange,
+  type SimulatedAgent,
+} from './GameSimulator';
 // Game Tick (canonical tick executor)
 export {
   type ActiveMarket,
@@ -107,17 +126,20 @@ export {
 } from './GameTick';
 // Game World
 export {
+  type CausalEventContext,
+  type CausalEventType,
   type DayEvent,
   GameWorld,
   type GameWorldEvents,
   type GroupMessage,
   type MarketContext,
   type NPC,
+  type ScheduledCausalEvent,
   type WorldConfig,
   type WorldState,
 } from './GameWorld';
 // Game Service
-export { gameService } from './game-service';
+export { type ActiveMarketSummary, gameService } from './game-service';
 // Game Tick (realtime/cron execution)
 export {
   executeGameTick,
@@ -125,9 +147,12 @@ export {
   resolveQuestionPayouts,
 } from './game-tick';
 export {
+  cleanAndParseJSON,
   cleanMarkdownCodeBlocks,
+  extractJSONFromText,
   extractJsonFromText,
   parseContinuationContent,
+  parseIncompleteJSON,
 } from './llm/json-continuation-parser';
 // LLM Exports (re-exported for convenience)
 export {
@@ -136,7 +161,13 @@ export {
   setTokenUsageCallback,
   type TokenUsageCallback,
 } from './llm/openai-client';
-export { parseXML, type XMLParseResult } from './llm/xml-parser';
+export {
+  parseXML,
+  parseXMLAsync,
+  safeParseXML,
+  stripThinkingBlocks,
+  type XMLParseResult,
+} from './llm/xml-parser';
 // Market Decision Engine
 export { MarketDecisionEngine } from './MarketDecisionEngine';
 // News Article Pacing Engine
@@ -174,13 +205,6 @@ export {
   type PoolState,
   type RemovePositionResult,
 } from './prediction-concentrated-liquidity';
-// Prediction Pricing
-export {
-  calculateExpectedPayout,
-  PredictionPricing,
-  type ShareCalculation,
-  type ShareCalculationWithFees,
-} from './prediction-pricing';
 // Prompts
 export * from './prompts';
 // Question Manager

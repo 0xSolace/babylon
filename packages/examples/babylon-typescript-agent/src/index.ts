@@ -14,7 +14,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 import type { A2APerpPosition } from '@babylon/a2a';
-import fs from 'fs';
+import { logger } from '@babylon/shared';
 import { BabylonA2AClient } from './a2a-client';
 import { executeAction } from './actions';
 import {
@@ -26,34 +26,20 @@ import {
 import { AgentMemory } from './memory';
 import { registerAgent } from './registration';
 
-const LOG_FILE = './logs/agent.log';
-
-function log(message: string, level: 'info' | 'warn' | 'error' = 'info') {
-  const timestamp = new Date().toISOString();
-  const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message}\n`;
-
-  console.log(logLine.trim());
-
-  if (!fs.existsSync('./logs')) {
-    fs.mkdirSync('./logs', { recursive: true });
-  }
-  fs.appendFileSync(LOG_FILE, logLine);
-}
-
 async function main() {
-  log('🤖 Starting Autonomous Babylon Agent...');
-  log(`Strategy: ${process.env.AGENT_STRATEGY || 'balanced'}`);
-  log(`Tick Interval: ${process.env.TICK_INTERVAL || 30000}ms`);
+  logger.info('🤖 Starting Autonomous Babylon Agent...');
+  logger.info(`Strategy: ${process.env.AGENT_STRATEGY || 'balanced'}`);
+  logger.info(`Tick Interval: ${process.env.TICK_INTERVAL || 30000}ms`);
 
   // Phase 1: Register with Agent0
-  log('📝 Phase 1: Agent0 Registration...');
+  logger.info('📝 Phase 1: Agent0 Registration...');
   const agentIdentity = await registerAgent();
-  log(`✅ Registered with Agent0: Token ID ${agentIdentity.tokenId}`);
-  log(`   Address: ${agentIdentity.address}`);
-  log(`   Agent ID: ${agentIdentity.agentId}`);
+  logger.info(`✅ Registered with Agent0: Token ID ${agentIdentity.tokenId}`);
+  logger.info(`   Address: ${agentIdentity.address}`);
+  logger.info(`   Agent ID: ${agentIdentity.agentId}`);
 
   // Phase 2: Connect to Babylon A2A
-  log('🔌 Phase 2: Connecting to Babylon A2A...');
+  logger.info('🔌 Phase 2: Connecting to Babylon A2A...');
   const a2aClient = new BabylonA2AClient({
     baseUrl:
       process.env.BABYLON_API_URL?.replace('/api/a2a', '') ||
@@ -65,11 +51,11 @@ async function main() {
   });
 
   await a2aClient.connect();
-  log('✅ Connected to Babylon A2A');
-  log(`   Agent ID: ${a2aClient.agentId}`);
+  logger.info('✅ Connected to Babylon A2A');
+  logger.info(`   Agent ID: ${a2aClient.agentId}`);
 
   // Phase 3: Initialize Memory & Decision Maker
-  log('🧠 Phase 3: Initializing Memory & Decision System...');
+  logger.info('🧠 Phase 3: Initializing Memory & Decision System...');
   const memory = new AgentMemory({ maxEntries: 20 });
   const decisionMaker = new AgentDecisionMaker({
     strategy: (process.env.AGENT_STRATEGY || 'balanced') as
@@ -79,41 +65,41 @@ async function main() {
       | 'social',
     jejuGatewayUrl: process.env.JEJU_GATEWAY_URL,
   });
-  log('✅ Memory and decision system ready');
-  log(`   LLM Provider: ${decisionMaker.getProvider()}`);
+  logger.info('✅ Memory and decision system ready');
+  logger.info(`   LLM Provider: ${decisionMaker.getProvider()}`);
 
   // Phase 4: Autonomous Loop
-  log('🔄 Phase 4: Starting Autonomous Loop...');
-  log(`   Tick every ${process.env.TICK_INTERVAL || 30000}ms`);
-  log('');
+  logger.info('🔄 Phase 4: Starting Autonomous Loop...');
+  logger.info(`   Tick every ${process.env.TICK_INTERVAL || 30000}ms`);
+  logger.info('');
 
   let tickCount = 0;
 
   const runTick = async () => {
     tickCount++;
-    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    log(`🔄 TICK #${tickCount}`);
-    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.info(`🔄 TICK #${tickCount}`);
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // 1. Gather context
-    log('📊 Gathering context...');
+    logger.info('📊 Gathering context...');
 
     const portfolio = await a2aClient.getPortfolio();
     const markets = await a2aClient.getMarkets();
     const feed = await a2aClient.getFeed({ limit: 10 });
     const recentMemory = memory.getRecent(5);
 
-    log(`   Balance: $${portfolio.balance}`);
-    log(`   Positions: ${portfolio.positions.length}`);
-    log(`   P&L: $${portfolio.pnl}`);
-    log(
+    logger.info(`   Balance: $${portfolio.balance}`);
+    logger.info(`   Positions: ${portfolio.positions.length}`);
+    logger.info(`   P&L: $${portfolio.pnl}`);
+    logger.info(
       `   Available Markets: ${markets.predictions.length + markets.perps.length}`
     );
-    log(`   Recent Feed: ${feed.posts.length} posts`);
-    log(`   Memory: ${recentMemory.length} recent actions`);
+    logger.info(`   Recent Feed: ${feed.posts.length} posts`);
+    logger.info(`   Memory: ${recentMemory.length} recent actions`);
 
     // 2. Make decision
-    log('🤔 Making decision...');
+    logger.info('🤔 Making decision...');
 
     // A2A client returns data that matches our DecisionContext interface structure
     // Convert A2A types to DecisionContext types
@@ -151,19 +137,19 @@ async function main() {
       memory: recentMemory,
     });
 
-    log(`   Decision: ${decision.action}`);
+    logger.info(`   Decision: ${decision.action}`);
     if (decision.reasoning) {
-      log(`   Reasoning: ${decision.reasoning.substring(0, 100)}...`);
+      logger.info(`   Reasoning: ${decision.reasoning.substring(0, 100)}...`);
     }
 
     // 3. Execute action
     if (decision.action !== 'HOLD') {
-      log(`⚡ Executing: ${decision.action}`);
+      logger.info(`⚡ Executing: ${decision.action}`);
 
       const result = await executeAction(a2aClient, decision);
 
       if (result.success) {
-        log(`✅ Success: ${result.message}`);
+        logger.info(`✅ Success: ${result.message}`);
 
         // Store in memory
         memory.add({
@@ -173,15 +159,15 @@ async function main() {
           timestamp: Date.now(),
         });
       } else {
-        log(`❌ Failed: ${result.error}`, 'error');
+        logger.error(`❌ Failed: ${result.error}`);
       }
     } else {
-      log('⏸️  Holding - no action taken');
+      logger.info('⏸️  Holding - no action taken');
     }
 
-    log('');
-    log(`⏳ Next tick in ${process.env.TICK_INTERVAL || 30000}ms...`);
-    log('');
+    logger.info('');
+    logger.info(`⏳ Next tick in ${process.env.TICK_INTERVAL || 30000}ms...`);
+    logger.info('');
   };
 
   // Run first tick immediately
@@ -195,16 +181,16 @@ async function main() {
 
   // Graceful shutdown
   process.on('SIGINT', async () => {
-    log('');
-    log('🛑 Shutting down gracefully...');
+    logger.info('');
+    logger.info('🛑 Shutting down gracefully...');
     clearInterval(interval);
     await a2aClient.disconnect();
-    log('✅ Disconnected from A2A');
-    log('👋 Goodbye!');
+    logger.info('✅ Disconnected from A2A');
+    logger.info('👋 Goodbye!');
     process.exit(0);
   });
 
-  log('✅ Autonomous agent running! Press Ctrl+C to stop.');
+  logger.info('✅ Autonomous agent running! Press Ctrl+C to stop.');
 }
 
 main();

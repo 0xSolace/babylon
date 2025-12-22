@@ -158,7 +158,7 @@ async function updateBabylonRegistration() {
         maxLeverage: 100,
         socialFeatures: true,
         realtime: true,
-        authentication: ['privy', 'agent-secret', 'wallet-signature'],
+        authentication: ['oauth3', 'agent-secret', 'wallet-signature'],
       },
     });
 

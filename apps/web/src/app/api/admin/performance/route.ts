@@ -16,7 +16,7 @@
  *     summary: Get performance metrics
  *     description: Returns real-time performance metrics (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Metrics retrieved successfully

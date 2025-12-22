@@ -2,6 +2,7 @@
  * React hook for decentralized messaging in Babylon
  */
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Address } from 'viem';
 import { createMessagingClient, DecentralizedMessagingClient } from '../client';
@@ -66,12 +67,13 @@ export function useDecentralizedMessaging(
 ): UseDecentralizedMessagingReturn {
   const { config, autoFetch = true, walletSignature } = options;
 
+  const queryClient = useQueryClient();
   const clientRef = useRef<DecentralizedMessagingClient | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [messages, setMessages] = useState<DecryptedMessage[]>([]);
+  const [realtimeMessages, setRealtimeMessages] = useState<DecryptedMessage[]>(
+    []
+  );
 
   // Create client on mount
   useEffect(() => {
@@ -83,20 +85,54 @@ export function useDecentralizedMessaging(
     };
   }, [config]);
 
-  // Handle message events
+  // Query for fetching pending messages
+  const {
+    data: fetchedMessages = [],
+    isLoading: isFetchingMessages,
+    error: fetchError,
+    refetch: refetchMessages,
+  } = useQuery({
+    queryKey: ['decentralized-messages', config.address],
+    queryFn: async () => {
+      if (!clientRef.current) return [];
+      return clientRef.current.fetchPendingMessages();
+    },
+    enabled: isInitialized && !!clientRef.current && autoFetch,
+    staleTime: 30_000,
+  });
+
+  // Mutation for sending messages
+  const sendMessageMutation = useMutation({
+    mutationFn: async ({ to, content }: { to: Address; content: string }) => {
+      if (!clientRef.current || !isInitialized) {
+        throw new Error('Client not initialized');
+      }
+      return clientRef.current.sendMessage(to, content);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['decentralized-messages', config.address],
+      });
+    },
+  });
+
+  // Handle message events for real-time updates
   useEffect(() => {
     if (!clientRef.current || !isInitialized) return;
 
     const unsubscribe = clientRef.current.onMessage((event: MessageEvent) => {
       switch (event.type) {
         case 'message:new':
-          setMessages((prev: DecryptedMessage[]) => {
-            // Avoid duplicates
+          setRealtimeMessages((prev: DecryptedMessage[]) => {
             if (prev.some((m: DecryptedMessage) => m.id === event.data.id))
               return prev;
             return [...prev, event.data].sort(
               (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
             );
+          });
+          // Invalidate query to refetch
+          queryClient.invalidateQueries({
+            queryKey: ['decentralized-messages', config.address],
           });
           break;
         case 'connection:status':
@@ -106,45 +142,21 @@ export function useDecentralizedMessaging(
     });
 
     return unsubscribe;
-  }, [isInitialized]);
+  }, [isInitialized, queryClient, config.address]);
 
-  // Fetch pending messages
-  const fetchMessages = useCallback(async () => {
-    if (!clientRef.current || !isInitialized) return;
-
-    setIsLoading(true);
-
-    const pending = await clientRef.current.fetchPendingMessages();
-    setMessages((prev: DecryptedMessage[]) => {
-      const existingIds = new Set(prev.map((m: DecryptedMessage) => m.id));
-      const newMessages = pending.filter(
-        (m: DecryptedMessage) => !existingIds.has(m.id)
-      );
-      return [...prev, ...newMessages].sort(
-        (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
-      );
-    });
-    setIsLoading(false);
-  }, [isInitialized]);
+  // Merge fetched and real-time messages
+  const messages = [...fetchedMessages, ...realtimeMessages]
+    .filter(
+      (msg, index, self) => self.findIndex((m) => m.id === msg.id) === index
+    )
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
   // Initialize the client
-  const initialize = useCallback(
-    async (signature: string) => {
-      if (!clientRef.current) return;
-
-      setIsLoading(true);
-      setError(null);
-
-      await clientRef.current.initialize(signature);
-      setIsInitialized(true);
-      setIsLoading(false);
-
-      if (autoFetch) {
-        await fetchMessages();
-      }
-    },
-    [autoFetch, fetchMessages]
-  );
+  const initialize = useCallback(async (signature: string) => {
+    if (!clientRef.current) return;
+    await clientRef.current.initialize(signature);
+    setIsInitialized(true);
+  }, []);
 
   // Auto-initialize if signature provided
   useEffect(() => {
@@ -153,22 +165,18 @@ export function useDecentralizedMessaging(
     }
   }, [walletSignature, isInitialized, initialize]);
 
-  // Send a message
+  // Send a message wrapper
   const sendMessage = useCallback(
     async (to: Address, content: string): Promise<string> => {
-      if (!clientRef.current || !isInitialized) {
-        throw new Error('Client not initialized');
-      }
-
-      setIsLoading(true);
-
-      const messageId = await clientRef.current.sendMessage(to, content);
-      setIsLoading(false);
-
-      return messageId;
+      return sendMessageMutation.mutateAsync({ to, content });
     },
-    [isInitialized]
+    [sendMessageMutation]
   );
+
+  // Fetch messages wrapper
+  const fetchMessages = useCallback(async () => {
+    await refetchMessages();
+  }, [refetchMessages]);
 
   // Get public key
   const getPublicKeyHex = useCallback(() => {
@@ -181,8 +189,11 @@ export function useDecentralizedMessaging(
     clientRef.current?.disconnect();
     setIsInitialized(false);
     setIsConnected(false);
-    setMessages([]);
-  }, []);
+    setRealtimeMessages([]);
+    queryClient.removeQueries({
+      queryKey: ['decentralized-messages', config.address],
+    });
+  }, [queryClient, config.address]);
 
   // Get key derivation message
   const keyDerivationMessage =
@@ -192,8 +203,8 @@ export function useDecentralizedMessaging(
   return {
     isInitialized,
     isConnected,
-    isLoading,
-    error,
+    isLoading: isFetchingMessages || sendMessageMutation.isPending,
+    error: fetchError ?? sendMessageMutation.error ?? null,
     messages,
     initialize,
     sendMessage,

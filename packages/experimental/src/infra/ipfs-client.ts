@@ -5,6 +5,8 @@
  * Works with Pinata, Infura, local node, or any IPFS HTTP API.
  */
 
+import { ExternalServiceError, ValidationError } from '@babylon/shared';
+
 export interface IPFSConfig {
   /** IPFS API endpoint (e.g., https://ipfs.infura.io:5001 or http://localhost:5001) */
   apiUrl: string;
@@ -59,7 +61,11 @@ export class IPFSClient {
     });
 
     if (!response.ok) {
-      throw new Error(`IPFS upload failed: ${response.statusText}`);
+      throw new ExternalServiceError(
+        'IPFS',
+        `Upload failed: ${response.statusText}`,
+        response.status
+      );
     }
 
     const result = (await response.json()) as { Hash: string; Size: string };
@@ -72,7 +78,9 @@ export class IPFSClient {
   /**
    * Upload JSON to IPFS
    */
-  async uploadJSON(data: unknown): Promise<UploadResult> {
+  async uploadJSON<T extends Record<string, unknown>>(
+    data: T
+  ): Promise<UploadResult> {
     return this.upload(JSON.stringify(data));
   }
 
@@ -84,7 +92,11 @@ export class IPFSClient {
 
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`IPFS download failed: ${response.statusText}`);
+      throw new ExternalServiceError(
+        'IPFS',
+        `Download failed: ${response.statusText}`,
+        response.status
+      );
     }
 
     const buffer = await response.arrayBuffer();
@@ -158,7 +170,9 @@ export function createIPFSClient(
 
     case 'infura':
       if (!options?.projectId || !options?.projectSecret) {
-        throw new Error('Infura requires projectId and projectSecret');
+        throw new ValidationError(
+          'Infura requires projectId and projectSecret'
+        );
       }
       return new IPFSClient({
         apiUrl: 'https://ipfs.infura.io:5001',
@@ -178,7 +192,7 @@ export function createIPFSClient(
 
     case 'custom':
       if (!options?.apiUrl) {
-        throw new Error('Custom provider requires apiUrl');
+        throw new ValidationError('Custom provider requires apiUrl');
       }
       return new IPFSClient({
         apiUrl: options.apiUrl,
@@ -186,6 +200,6 @@ export function createIPFSClient(
       });
 
     default:
-      throw new Error(`Unknown provider: ${provider}`);
+      throw new ValidationError(`Unknown provider: ${provider}`);
   }
 }

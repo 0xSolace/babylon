@@ -17,11 +17,11 @@
  */
 
 import { db } from '@babylon/db';
+import type { JsonValue } from '@babylon/shared';
 import { createDecipheriv } from 'crypto';
 import { logger } from '../shared/logger';
 import type { AgentCard } from '../types/agent-registry';
 import { TrustLevel } from '../types/agent-registry';
-import type { JsonValue } from '../types/common';
 
 // Re-export TrustLevel from types for backwards compatibility
 export { TrustLevel } from '../types/agent-registry';

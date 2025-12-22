@@ -41,7 +41,6 @@ export * from './llm';
 export {
   babylonPlugin,
   initializeAgentA2AClient,
-  initializeBabylonPlugin,
 } from './plugins/babylon';
 export type { BabylonRuntime } from './plugins/babylon/types';
 // Plugin utilities - Jeju Compute (decentralized inference)

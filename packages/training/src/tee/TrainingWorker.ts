@@ -19,6 +19,7 @@
  * - BENCHMARK: CPU/GPU benchmarking
  */
 
+import { logger } from '@babylon/shared';
 import type { Address, Hex } from 'viem';
 import { keccak256, toBytes } from 'viem';
 import type {
@@ -26,7 +27,6 @@ import type {
   TrajectoryBatch,
 } from '../storage/EncryptedTrajectoryStorage';
 import type { TrajectoryStep } from '../training/types';
-import { logger } from '../utils/logger';
 
 // ============================================================================
 // Types
@@ -490,8 +490,8 @@ export class TrainingWorker {
       trajectoryCount: trajectories.length,
       data: trajectories.map((t) => ({
         steps: t.length,
-        actions: t.map((s) => s.action.actionType),
-        rewards: t.map((s) => s.reward),
+        actions: t.map((s) => s.action?.actionType ?? 'unknown'),
+        rewards: t.map((s) => s.reward ?? 0),
       })),
     };
   }

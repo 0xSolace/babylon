@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FeedPostSchema } from './api-responses';
 
 export const ActorTierSchema = z.enum([
   'S_TIER',
@@ -181,49 +182,7 @@ export const GroupChatSchema = z.object({
   theme: z.string(),
 });
 
-export const FeedPostSchema = z.object({
-  id: z.string(),
-  day: z.number().optional(),
-  timestamp: z.string(),
-  createdAt: z.string().optional(),
-  type: z.string().optional(), // PostType
-  content: z.string(),
-  fullContent: z.string().nullable().optional(),
-  articleTitle: z.string().nullable().optional(),
-  byline: z.string().nullable().optional(),
-  biasScore: z.number().nullable().optional(),
-  sentiment: z.number().nullable().optional(),
-  slant: z.string().nullable().optional(),
-  category: z.string().nullable().optional(),
-  tags: z.array(z.string()).optional(),
-  author: z.string(),
-  authorId: z.string().optional(),
-  authorName: z.string(),
-  authorUsername: z.string().nullable().optional(),
-  authorProfileImageUrl: z.string().nullable().optional(),
-  replyTo: z.string().optional(),
-  relatedQuestion: z.number().optional(),
-  relatedEvent: z.string().nullable().optional(),
-  gameId: z.string().nullable().optional(),
-  dayNumber: z.number().nullable().optional(),
-  clueStrength: z.number().optional(),
-  pointsToward: z.boolean().nullable().optional(),
-  likeCount: z.number().optional(),
-  commentCount: z.number().optional(),
-  shareCount: z.number().optional(),
-  isLiked: z.boolean().optional(),
-  isShared: z.boolean().optional(),
-  isRepost: z.boolean().optional(),
-  isQuote: z.boolean().optional(),
-  quoteComment: z.string().nullable().optional(),
-  originalPostId: z.string().nullable().optional(),
-  // originalPost: ... (recursive, simplified for now)
-  originalAuthorId: z.string().nullable().optional(),
-  originalAuthorName: z.string().nullable().optional(),
-  originalAuthorUsername: z.string().nullable().optional(),
-  originalAuthorProfileImageUrl: z.string().nullable().optional(),
-  originalContent: z.string().nullable().optional(),
-});
+// FeedPostSchema is imported from api-responses.ts to avoid duplication
 
 export const LuckChangeSchema = z.object({
   actor: z.string(),
@@ -243,7 +202,7 @@ export const DayTimelineSchema = z.object({
   day: z.number(),
   summary: z.string(),
   events: z.array(WorldEventSchema),
-  groupChats: z.record(z.array(GroupChatMessageSchema)),
+  groupChats: z.record(z.string(), z.array(GroupChatMessageSchema)),
   feedPosts: z.array(FeedPostSchema),
   luckChanges: z.array(LuckChangeSchema),
   moodChanges: z.array(MoodChangeSchema),
@@ -417,3 +376,182 @@ export const ArticleSchema = z.object({
   tags: z.array(z.string()),
   publishedAt: z.union([z.date(), z.string()]),
 });
+
+// Market context schemas for NPC trading decisions
+
+export const PerpMarketSnapshotSchema = z.object({
+  ticker: z.string(),
+  organizationId: z.string(),
+  name: z.string(),
+  currentPrice: z.number(),
+  change24h: z.number(),
+  changePercent24h: z.number(),
+  high24h: z.number(),
+  low24h: z.number(),
+  volume24h: z.number(),
+  openInterest: z.number(),
+});
+
+export const PredictionMarketSnapshotSchema = z.object({
+  id: z.union([z.number(), z.string()]), // Can be number or string (snowflake ID)
+  text: z.string(),
+  yesPrice: z.number(),
+  noPrice: z.number(),
+  totalVolume: z.number(),
+  resolutionDate: z.string(),
+  daysUntilResolution: z.number(),
+});
+
+export const NPCPositionSchema = z.object({
+  id: z.string(),
+  marketType: MarketTypeSchema,
+  ticker: z.string().optional(),
+  marketId: z.union([z.number(), z.string()]).optional(), // Can be number or string
+  side: z.string(),
+  entryPrice: z.number(),
+  currentPrice: z.number(),
+  size: z.number(),
+  shares: z.number().optional(),
+  unrealizedPnL: z.number(),
+  openedAt: z.string(),
+});
+
+export const FeedPostContextSchema = z.object({
+  author: z.string(),
+  authorName: z.string(),
+  content: z.string(),
+  timestamp: z.string(),
+  articleTitle: z.string().optional(),
+});
+
+export const GroupChatContextSchema = z.object({
+  chatId: z.string(),
+  chatName: z.string(),
+  from: z.string(),
+  fromName: z.string(),
+  message: z.string(),
+  timestamp: z.string(),
+});
+
+export const EventContextSchema = z.object({
+  type: z.string(),
+  description: z.string(),
+  timestamp: z.string(),
+  relatedQuestion: z.number().optional(),
+  pointsToward: z.string().optional(),
+  actors: z.array(z.string()).optional(),
+});
+
+export const RelationshipContextSchema = z.object({
+  actorId: z.string(),
+  actorName: z.string(),
+  relationshipType: z.string(),
+  strength: z.number(),
+  sentiment: z.number(),
+  history: z.string().optional(),
+});
+
+export const MarketSignalContextSchema = z.object({
+  marketId: z.string(),
+  yesSignal: z.number(),
+  noSignal: z.number(),
+  netSignal: z.number(),
+  strength: z.number(),
+  suggestedOutcome: z.enum(['YES', 'NO', 'UNCERTAIN']),
+  confidence: z.number(),
+});
+
+export const NPCMarketContextSchema = z.object({
+  npcId: z.string(),
+  npcName: z.string(),
+  personality: z.string(),
+  tier: z.string(),
+  availableBalance: z.number(),
+  recentPosts: z.array(FeedPostContextSchema),
+  groupChatMessages: z.array(GroupChatContextSchema),
+  recentEvents: z.array(EventContextSchema),
+  relationships: z.array(RelationshipContextSchema).optional(),
+  perpMarkets: z.array(PerpMarketSnapshotSchema),
+  predictionMarkets: z.array(PredictionMarketSnapshotSchema),
+  currentPositions: z.array(NPCPositionSchema),
+  marketSignals: z.array(MarketSignalContextSchema).optional(),
+});
+
+export const TradingExecutionResultSchema = z.object({
+  totalDecisions: z.number(),
+  successfulTrades: z.number(),
+  failedTrades: z.number(),
+  holdDecisions: z.number(),
+  totalVolumePerp: z.number(),
+  totalVolumePrediction: z.number(),
+  errors: z.array(
+    z.object({
+      npcId: z.string(),
+      decision: TradingDecisionSchema,
+      error: z.string(),
+    })
+  ),
+  executedTrades: z.array(ExecutedTradeSchema),
+});
+
+// Trending topics schema for LLM response validation
+
+export const TrendingTopicSchema = z.object({
+  trendName: z.string(),
+  description: z.string(),
+});
+
+export const TrendingTopicsResponseSchema = z.object({
+  trends: z.array(TrendingTopicSchema),
+});
+
+// Relationship evolution schema for LLM response validation
+
+export const RelationshipDescriptionSchema = z.object({
+  description: z.string(),
+  type: z.string(),
+  sentiment: z.number(),
+});
+
+// Type exports
+// Note: Core game types (Actor, Organization, Scenario, Question, etc.) are exported
+// from game-types.ts as interfaces. These schemas are for runtime validation only.
+// Only export NEW types that don't exist in game-types.ts.
+
+// Input types for API/validation
+export type QuestionInput = z.infer<typeof QuestionInputSchema>;
+export type PostInput = z.infer<typeof PostInputSchema>;
+export type EventInput = z.infer<typeof EventInputSchema>;
+export type ArticleInput = z.infer<typeof ArticleInputSchema>;
+export type TradeInput = z.infer<typeof TradeInputSchema>;
+
+// Market/trading types (not in game-types.ts)
+export type MarketAction = z.infer<typeof MarketActionSchema>;
+export type MarketType = z.infer<typeof MarketTypeSchema>;
+export type TradingDecision = z.infer<typeof TradingDecisionSchema>;
+export type ExecutedTrade = z.infer<typeof ExecutedTradeSchema>;
+
+// Market context types for NPC trading (not in game-types.ts)
+export type PerpMarketSnapshot = z.infer<typeof PerpMarketSnapshotSchema>;
+export type PredictionMarketSnapshot = z.infer<
+  typeof PredictionMarketSnapshotSchema
+>;
+export type NPCPosition = z.infer<typeof NPCPositionSchema>;
+export type FeedPostContext = z.infer<typeof FeedPostContextSchema>;
+export type GroupChatContext = z.infer<typeof GroupChatContextSchema>;
+export type EventContext = z.infer<typeof EventContextSchema>;
+export type RelationshipContext = z.infer<typeof RelationshipContextSchema>;
+export type MarketSignalContext = z.infer<typeof MarketSignalContextSchema>;
+export type NPCMarketContext = z.infer<typeof NPCMarketContextSchema>;
+export type TradingExecutionResult = z.infer<
+  typeof TradingExecutionResultSchema
+>;
+
+// LLM response validation types
+export type TrendingTopic = z.infer<typeof TrendingTopicSchema>;
+export type TrendingTopicsResponse = z.infer<
+  typeof TrendingTopicsResponseSchema
+>;
+export type RelationshipDescription = z.infer<
+  typeof RelationshipDescriptionSchema
+>;

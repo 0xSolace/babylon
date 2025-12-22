@@ -8,14 +8,13 @@ import {
   type PolicyCondition,
   type SecretPolicy,
 } from '@babylon/api';
+import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { Address, Hex } from 'viem';
 import type {
   AccessCondition,
   AccessControlPolicy,
 } from '../mpc/ProductionMPCConfig';
 import type { TrajectoryStep } from '../training/types';
-import { logger } from '../utils/logger';
-import { generateSnowflakeId } from '../utils/snowflake';
 
 export interface EncryptedPayload {
   ciphertext: string;

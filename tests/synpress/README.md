@@ -10,7 +10,7 @@ bun install
 
 # Configure test environment
 cp .env.synpress.example .env.local
-# Edit .env.local with your Privy test credentials
+# Edit .env.local with your OAuth3 test credentials
 
 # Run all tests
 bun run test:synpress
@@ -46,7 +46,7 @@ bun run test:synpress:wallet
 
 Located in `helpers/`:
 
-- `privy-auth.ts` - Privy authentication helpers
+- `oauth3-auth.ts` - OAuth3 authentication helpers
 - `page-helpers.ts` - Page interaction utilities
 - `test-data.ts` - Test data and constants
 

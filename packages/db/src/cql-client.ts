@@ -26,7 +26,7 @@ import {
 import * as schema from './schema';
 
 // Re-export types
-export type { JsonValue, SQLValue };
+export type { JsonValue, QueryParam, SQLValue };
 
 // ============================================================================
 // Table Type Definitions

@@ -15,8 +15,8 @@
  */
 
 import { db, eq, trainedModels } from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { BenchmarkService } from '../src/training/BenchmarkService';
-import { logger } from '../src/utils/logger';
 
 interface TestConfig {
   modelId?: string;

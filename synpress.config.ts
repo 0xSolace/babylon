@@ -60,7 +60,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // Wallet setup commented out - Privy uses embedded wallets, not MetaMask extension
+        // Wallet setup commented out - OAuth3 uses MPC wallets, not MetaMask extension
         // ...defineWalletSetup(SEED_PHRASE, PASSWORD),
       },
     },

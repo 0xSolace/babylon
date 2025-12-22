@@ -18,8 +18,10 @@ import {
   deriveKeyPair,
   encryptMessage,
   generateKeyPair,
+  hexToBytes,
   publicKeyToBytes32,
 } from './crypto';
+import { RelayMessagesResponseSchema, WebSocketMessageSchema } from './schemas';
 import type {
   DecryptedMessage,
   EncryptionKeys,
@@ -182,20 +184,17 @@ export class DecentralizedMessagingClient {
     );
     if (!response.ok) return [];
 
-    const data = (await response.json()) as {
-      messages: Array<{
-        id: string;
-        from: string;
-        to: string;
-        ciphertext: string;
-        nonce: string;
-        ephemeralPublicKey: string;
-        timestamp: number;
-      }>;
-    };
+    const parseResult = RelayMessagesResponseSchema.safeParse(
+      await response.json()
+    );
+
+    if (!parseResult.success) {
+      console.error('[Messaging] Invalid relay response:', parseResult.error);
+      return [];
+    }
 
     return Promise.all(
-      data.messages.map(async (msg) => ({
+      parseResult.data.messages.map(async (msg) => ({
         id: msg.id,
         from: msg.from as Address,
         to: msg.to as Address,
@@ -240,18 +239,19 @@ export class DecentralizedMessagingClient {
     };
 
     this.ws.onmessage = async (event) => {
-      const data = JSON.parse(event.data as string) as {
-        type: string;
-        message?: {
-          id: string;
-          from: string;
-          to: string;
-          ciphertext: string;
-          nonce: string;
-          ephemeralPublicKey: string;
-          timestamp: number;
-        };
-      };
+      const parseResult = WebSocketMessageSchema.safeParse(
+        JSON.parse(event.data as string)
+      );
+
+      if (!parseResult.success) {
+        console.error(
+          '[Messaging] Invalid WebSocket message:',
+          parseResult.error
+        );
+        return;
+      }
+
+      const data = parseResult.data;
 
       if (data.type === 'new_message' && data.message) {
         const msg = data.message;
@@ -296,14 +296,6 @@ export class DecentralizedMessagingClient {
   get initialized(): boolean {
     return this.isInitialized;
   }
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-  const bytes = new Uint8Array(cleanHex.length / 2);
-  for (let i = 0; i < bytes.length; i++)
-    bytes[i] = parseInt(cleanHex.slice(i * 2, i * 2 + 2), 16);
-  return bytes;
 }
 
 export const createMessagingClient = (config: MessagingConfig) =>

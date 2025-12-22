@@ -2,7 +2,7 @@
  * Records training cycles and state updates on-chain for audit and verification.
  */
 
-import { keccak256, stringToHex } from '@babylon/shared';
+import { keccak256, logger, stringToHex } from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -16,7 +16,6 @@ import {
   type WalletClient,
 } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
-import { logger } from '../utils/logger';
 
 const BABYLON_TREASURY_ABI = [
   {

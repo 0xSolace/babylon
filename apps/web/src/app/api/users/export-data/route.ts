@@ -17,7 +17,7 @@
  *     summary: Export user data
  *     description: Exports all user data for GDPR compliance (right to data portability)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: User data exported successfully

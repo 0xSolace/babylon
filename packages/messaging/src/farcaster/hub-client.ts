@@ -36,10 +36,8 @@ const USER_DATA_TYPES = {
  */
 export class FarcasterHubClient {
   private client: HubRpcClient;
-  private hubUrl: string;
 
   constructor(hubUrl: string) {
-    this.hubUrl = hubUrl;
     this.client = getSSLHubRpcClient(hubUrl);
   }
 
@@ -293,8 +291,9 @@ export class FarcasterHubClient {
           callback(cast);
         }
 
-        if (casts.length > 0) {
-          lastHash = casts[0].hash;
+        const firstCast = casts[0];
+        if (firstCast) {
+          lastHash = firstCast.hash;
         }
 
         // Poll every 30 seconds

@@ -12,6 +12,7 @@ import {
 
 /**
  * Open perp position schema
+ * NOTE: Uses lowercase 'long' | 'short' to match core types
  */
 export const OpenPerpPositionSchema = z.object({
   ticker: z
@@ -19,7 +20,7 @@ export const OpenPerpPositionSchema = z.object({
     .min(1)
     .max(20)
     .regex(/^[A-Z0-9-]+$/, 'Ticker must be uppercase alphanumeric'),
-  side: z.enum(['LONG', 'SHORT']),
+  side: z.enum(['long', 'short']),
   size: NumericStringSchema, // Position size as string for precision
   leverage: z
     .number()
@@ -109,7 +110,8 @@ export const MarketIdParamSchema = z.object({
 });
 
 /**
- * Ticker param schema
+ * Ticker param schema (strict uppercase)
+ * Use for APIs that require uppercase tickers
  */
 export const TickerParamSchema = z.object({
   ticker: z
@@ -118,3 +120,114 @@ export const TickerParamSchema = z.object({
     .max(20)
     .regex(/^[A-Z0-9-]+$/),
 });
+
+/**
+ * Ticker param schema (permissive)
+ * Use for APIs that accept any case ticker
+ */
+export const TickerParamPermissiveSchema = z.object({
+  ticker: z.string().min(1).max(20),
+});
+
+// =============================================================================
+// Market API Response Schemas (for store validation)
+// =============================================================================
+
+/**
+ * Funding rate schema for perp markets
+ */
+export const FundingRateSchema = z.object({
+  rate: z.number(),
+  nextFundingTime: z.string(),
+  predictedRate: z.number(),
+});
+
+/**
+ * Perp market API response schema
+ * Used for validating data from /api/markets/perps
+ */
+export const PerpMarketSchema = z.object({
+  ticker: z.string(),
+  organizationId: z.string(),
+  name: z.string(),
+  currentPrice: z.number(),
+  change24h: z.number(),
+  changePercent24h: z.number(),
+  high24h: z.number(),
+  low24h: z.number(),
+  volume24h: z.number(),
+  openInterest: z.number(),
+  fundingRate: FundingRateSchema,
+  maxLeverage: z.number(),
+  minOrderSize: z.number(),
+});
+
+export type PerpMarketFromSchema = z.infer<typeof PerpMarketSchema>;
+
+/**
+ * Perp markets API response schema
+ */
+export const PerpMarketsResponseSchema = z.object({
+  markets: z.array(PerpMarketSchema),
+});
+
+/**
+ * Prediction market API response schema
+ * Used for validating data from /api/markets/predictions
+ */
+export const PredictionMarketSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  text: z.string(),
+  status: z.enum(['active', 'resolved', 'cancelled']),
+  createdDate: z.string().optional(),
+  resolutionDate: z.string().optional(),
+  resolvedOutcome: z.boolean().optional(),
+  scenario: z.number(),
+  yesShares: z.number().optional(),
+  noShares: z.number().optional(),
+  oracleCommitTxHash: z.string().nullable().optional(),
+  oracleRevealTxHash: z.string().nullable().optional(),
+  oraclePublishedAt: z.string().nullable().optional(),
+});
+
+export type PredictionMarketFromSchema = z.infer<typeof PredictionMarketSchema>;
+
+/**
+ * Prediction markets API response schema
+ */
+export const PredictionMarketsResponseSchema = z.object({
+  questions: z.array(PredictionMarketSchema),
+});
+
+/**
+ * History query schema for price/market history endpoints
+ * Handles null values from query params and applies sensible defaults
+ */
+export const HistoryQuerySchema = z.object({
+  limit: z
+    .preprocess(
+      (value) => (value === null ? undefined : value),
+      z.coerce.number().min(1).max(1000)
+    )
+    .optional()
+    .default(200),
+});
+
+// Type exports
+export type OpenPerpPosition = z.infer<typeof OpenPerpPositionSchema>;
+export type ClosePerpPosition = z.infer<typeof ClosePerpPositionSchema>;
+export type BuyPredictionShares = z.infer<typeof BuyPredictionSharesSchema>;
+export type SellPredictionShares = z.infer<typeof SellPredictionSharesSchema>;
+export type MarketQuery = z.infer<typeof MarketQuerySchema>;
+export type UserPositionsQuery = z.infer<typeof UserPositionsQuerySchema>;
+export type PositionIdParam = z.infer<typeof PositionIdParamSchema>;
+export type MarketIdParam = z.infer<typeof MarketIdParamSchema>;
+export type TickerParam = z.infer<typeof TickerParamSchema>;
+export type TickerParamPermissive = z.infer<typeof TickerParamPermissiveSchema>;
+// Note: FundingRate, PerpMarket types already exported from perps-types.ts
+// Use PerpMarketFromSchema and PredictionMarketFromSchema for Zod inferred types
+export type PerpMarketsResponse = z.infer<typeof PerpMarketsResponseSchema>;
+export type PredictionMarketsResponse = z.infer<
+  typeof PredictionMarketsResponseSchema
+>;
+export type HistoryQuery = z.infer<typeof HistoryQuerySchema>;

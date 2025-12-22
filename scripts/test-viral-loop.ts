@@ -26,7 +26,7 @@ async function testViralLoop() {
     // Create User 1
     const user1 = await prisma.user.create({
       data: {
-        privyId: 'test-privy-id-1',
+        oauth3Id: 'test-oauth3-id-1',
         username: 'testuser1',
         displayName: 'Test User 1',
         reputationPoints: 100, // Waitlist user
@@ -78,7 +78,7 @@ async function testViralLoop() {
 
     const user2 = await prisma.user.create({
       data: {
-        privyId: 'test-privy-id-2',
+        oauth3Id: 'test-oauth3-id-2',
         username: 'testuser2',
         displayName: 'Test User 2',
         reputationPoints: 100,
@@ -139,7 +139,7 @@ async function testViralLoop() {
 
     const user3 = await prisma.user.create({
       data: {
-        privyId: 'test-privy-id-3',
+        oauth3Id: 'test-oauth3-id-3',
         username: 'testuser3',
         displayName: 'Test User 3',
         reputationPoints: 100,
@@ -300,8 +300,8 @@ async function testViralLoop() {
     console.log('\n🧹 Cleaning up test data...');
     await prisma.user.deleteMany({
       where: {
-        privyId: {
-          in: ['test-privy-id-1', 'test-privy-id-2'],
+        oauth3Id: {
+          in: ['test-oauth3-id-1', 'test-oauth3-id-2'],
         },
       },
     });

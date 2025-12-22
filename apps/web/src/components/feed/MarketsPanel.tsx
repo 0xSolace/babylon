@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
-import { usePerpMarkets } from '@/stores/perpMarketsStore';
+import { usePerpMarkets } from '@/hooks/usePerpMarkets';
 
 /**
  * Prediction market structure for markets panel.

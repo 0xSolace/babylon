@@ -5,9 +5,8 @@
  * Similar to X/Twitter trending topics
  */
 
-import { db, trendingTags } from '@babylon/db';
+import { db, desc, trendingTags } from '@babylon/db';
 import { logger } from '@babylon/shared';
-import { desc } from 'drizzle-orm';
 import {
   getRelatedTags,
   getTagStatistics,

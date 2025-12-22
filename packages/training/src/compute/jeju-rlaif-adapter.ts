@@ -281,20 +281,33 @@ export class BabylonJejuAdapter {
         response: call.response,
         reasoning: call.reasoning,
         temperature: call.temperature,
+        maxTokens: call.maxTokens ?? 0,
         latencyMs: call.latencyMs ?? 0,
-        purpose: call.purpose,
+        purpose: (call.purpose === 'other' ? 'response' : call.purpose) as
+          | 'action'
+          | 'reasoning'
+          | 'response'
+          | 'evaluation',
       }));
 
       return {
         stepNumber: idx,
         timestamp: step.timestamp,
         observation: this.extractObservation(step),
-        action: {
-          type: step.action.actionType,
-          parameters: step.action.parameters,
-          reasoning: step.action.reasoning,
-        },
-        reward: step.reward,
+        action: step.action
+          ? {
+              type: step.action.actionType,
+              parameters: (step.action.parameters ?? {}) as Record<
+                string,
+                JsonValue
+              >,
+              reasoning: step.action.reasoning,
+            }
+          : {
+              type: 'unknown',
+              parameters: {} as Record<string, JsonValue>,
+            },
+        reward: step.reward ?? 0,
         done: idx === babylonSteps.length - 1,
         llmCalls,
       };

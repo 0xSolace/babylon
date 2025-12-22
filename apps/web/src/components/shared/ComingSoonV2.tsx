@@ -1,6 +1,7 @@
 'use client';
 
-import { usePrivy } from '@privy-io/react-auth';
+import { logger } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
   Copy,
@@ -13,9 +14,8 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { logger } from '@/lib/logger';
 
 interface WaitlistData {
   position: number; // Leaderboard rank (dynamic)
@@ -46,166 +46,203 @@ interface TopUser {
   rank: number;
 }
 
+interface LeaderboardResponse {
+  leaderboard: TopUser[];
+}
+
+// API functions
+async function fetchWaitlistPosition(
+  userId: string
+): Promise<WaitlistData | null> {
+  const response = await fetch(`/api/waitlist/position?userId=${userId}`);
+  if (!response.ok) return null;
+  return response.json() as Promise<WaitlistData>;
+}
+
+async function fetchLeaderboard(): Promise<TopUser[]> {
+  const response = await fetch('/api/waitlist/leaderboard?limit=10');
+  if (!response.ok) return [];
+  const data = (await response.json()) as LeaderboardResponse;
+  return data.leaderboard ?? [];
+}
+
+async function markWaitlisted(params: {
+  userId: string;
+  referralCode?: string;
+}): Promise<void> {
+  const response = await fetch('/api/waitlist/mark', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to mark as waitlisted');
+  }
+}
+
+async function awardEmailBonusApi(params: {
+  userId: string;
+  email: string;
+}): Promise<void> {
+  const response = await fetch('/api/waitlist/bonus/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to award email bonus');
+  }
+}
+
+async function awardWalletBonusApi(params: {
+  userId: string;
+  walletAddress: string;
+}): Promise<void> {
+  const response = await fetch('/api/waitlist/bonus/wallet', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to award wallet bonus');
+  }
+}
+
 export function ComingSoon() {
-  const { login, authenticated, user: privyUser, logout } = usePrivy();
-  const { user: dbUser } = useAuth();
+  const { login, authenticated, user: dbUser, wallet, logout } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isLoading, setIsLoading] = useState(false);
-  const [waitlistData, setWaitlistData] = useState<WaitlistData | null>(null);
+  const queryClient = useQueryClient();
+
   const [copiedCode, setCopiedCode] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [previousRank, setPreviousRank] = useState<number | null>(null);
   const [showRankImprovement, setShowRankImprovement] = useState(false);
-  const [topUsers, setTopUsers] = useState<TopUser[]>([]);
+  const hasSetupWaitlist = useRef(false);
 
-  // If user completes onboarding, mark as waitlisted and fetch position
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Functions are stable, only need to run on auth/user change
+  const userId = dbUser?.id;
+
+  // Query for waitlist position
+  const { data: waitlistData } = useQuery({
+    queryKey: ['waitlist-position', userId],
+    queryFn: () => fetchWaitlistPosition(userId!),
+    enabled: !!userId && authenticated,
+  });
+
+  // Query for leaderboard
+  const { data: topUsers = [] } = useQuery({
+    queryKey: ['waitlist-leaderboard'],
+    queryFn: fetchLeaderboard,
+    enabled: !!userId && authenticated,
+  });
+
+  // Mutation to mark user as waitlisted
+  const markWaitlistedMutation = useMutation({
+    mutationFn: markWaitlisted,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['waitlist-position', userId],
+      });
+    },
+  });
+
+  // Mutation to award email bonus
+  const emailBonusMutation = useMutation({
+    mutationFn: awardEmailBonusApi,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['waitlist-position', userId],
+      });
+      setShowEmailModal(false);
+      setEmailInput('');
+    },
+    onError: (error: Error) => {
+      logger.error('Error adding email', error, 'ComingSoon');
+    },
+  });
+
+  // Mutation to award wallet bonus
+  const walletBonusMutation = useMutation({
+    mutationFn: awardWalletBonusApi,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['waitlist-position', userId],
+      });
+    },
+  });
+
+  // Track rank improvements
   useEffect(() => {
-    if (!authenticated || !dbUser || !dbUser.id) return;
+    if (waitlistData?.leaderboardRank) {
+      if (
+        previousRank !== null &&
+        waitlistData.leaderboardRank < previousRank
+      ) {
+        setShowRankImprovement(true);
+        const timeout = setTimeout(() => setShowRankImprovement(false), 5000);
+        return () => clearTimeout(timeout);
+      }
+      setPreviousRank(waitlistData.leaderboardRank);
+    }
+    return undefined;
+  }, [waitlistData?.leaderboardRank, previousRank]);
 
-    const setupWaitlist = async (userId: string) => {
-      try {
-        // Check if already on waitlist
-        const existingPosition = await fetchWaitlistPosition(userId);
-        if (existingPosition) {
-          // Already setup, just refresh data
-          return;
-        }
+  // Setup waitlist on first load for authenticated users
+  useEffect(() => {
+    if (!authenticated || !userId || hasSetupWaitlist.current) return undefined;
+    if (waitlistData) {
+      hasSetupWaitlist.current = true;
+      return undefined;
+    }
 
-        // Mark user as waitlisted (they completed onboarding)
-        const referralCode = searchParams.get('ref') || undefined;
-        const response = await fetch('/api/waitlist/mark', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            referralCode,
-          }),
-        });
+    const setupWaitlist = async () => {
+      hasSetupWaitlist.current = true;
+      const referralCode = searchParams.get('ref') ?? undefined;
 
-        if (!response.ok) {
-          throw new Error('Failed to mark as waitlisted');
-        }
+      await markWaitlistedMutation.mutateAsync({ userId, referralCode });
 
-        // Fetch position data
-        await fetchWaitlistPosition(userId);
+      // Award bonuses if available
+      const emailFromUser = dbUser?.email;
+      if (emailFromUser) {
+        await emailBonusMutation.mutateAsync({ userId, email: emailFromUser });
+      }
 
-        // Award bonuses if available
-        const googleEmail =
-          privyUser && 'google' in privyUser
-            ? (privyUser as { google?: { email?: string } }).google?.email
-            : undefined;
-        const emailFromOAuth = privyUser?.email?.address || googleEmail;
-        if (emailFromOAuth) {
-          await awardEmailBonus(userId, emailFromOAuth);
-        }
-
-        const walletAddress = privyUser?.wallet?.address;
-        if (walletAddress) {
-          await awardWalletBonus(userId, walletAddress);
-        }
-      } catch (error) {
-        logger.error('Error setting up waitlist', error, 'ComingSoon');
+      const walletAddress = wallet?.address;
+      if (walletAddress) {
+        await walletBonusMutation.mutateAsync({ userId, walletAddress });
       }
     };
 
-    void setupWaitlist(dbUser.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated, dbUser?.id, privyUser]);
-
-  const fetchWaitlistPosition = async (userId: string): Promise<boolean> => {
-    try {
-      const [positionResponse, leaderboardResponse] = await Promise.all([
-        fetch(`/api/waitlist/position?userId=${userId}`),
-        fetch('/api/waitlist/leaderboard?limit=10'),
-      ]);
-
-      if (!positionResponse.ok) {
-        // User might not be on waitlist yet
-        return false;
-      }
-
-      const data = await positionResponse.json();
-
-      // Check if rank improved
-      if (previousRank !== null && data.leaderboardRank < previousRank) {
-        setShowRankImprovement(true);
-        setTimeout(() => setShowRankImprovement(false), 5000);
-      }
-      setPreviousRank(data.leaderboardRank);
-
-      setWaitlistData(data);
-
-      // Fetch leaderboard
-      if (leaderboardResponse.ok) {
-        const leaderboardData = await leaderboardResponse.json();
-        setTopUsers(leaderboardData.leaderboard || []);
-      }
-
-      return true;
-    } catch (error) {
-      logger.error('Error fetching waitlist position', error, 'ComingSoon');
-      return false;
-    }
-  };
-
-  const awardEmailBonus = async (userId: string, email: string) => {
-    try {
-      const response = await fetch('/api/waitlist/bonus/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, email }),
-      });
-      if (response.ok) {
-        await fetchWaitlistPosition(userId);
-      }
-    } catch (error) {
-      logger.error('Error awarding email bonus', error, 'ComingSoon');
-    }
-  };
-
-  const awardWalletBonus = async (userId: string, walletAddress: string) => {
-    try {
-      const response = await fetch('/api/waitlist/bonus/wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, walletAddress }),
-      });
-      if (response.ok) {
-        await fetchWaitlistPosition(userId);
-      }
-    } catch (error) {
-      logger.error('Error awarding wallet bonus', error, 'ComingSoon');
-    }
-  };
+    void setupWaitlist();
+  }, [
+    authenticated,
+    userId,
+    waitlistData,
+    dbUser?.email,
+    wallet?.address,
+    searchParams,
+    markWaitlistedMutation,
+    emailBonusMutation,
+    walletBonusMutation,
+  ]);
 
   const handleCopyInviteCode = useCallback(() => {
     if (waitlistData?.inviteCode) {
       const inviteUrl = `${window.location.origin}/?ref=${waitlistData.inviteCode}&comingsoon=true`;
-      navigator.clipboard.writeText(inviteUrl);
+      void navigator.clipboard.writeText(inviteUrl);
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
     }
   }, [waitlistData]);
 
-  const handleAddEmail = async () => {
-    if (!emailInput || !dbUser?.id) return;
-    setIsLoading(true);
-    try {
-      await awardEmailBonus(dbUser.id, emailInput);
-      setShowEmailModal(false);
-      setEmailInput('');
-    } catch (error) {
-      logger.error('Error adding email', error, 'ComingSoon');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleAddEmail = () => {
+    if (!emailInput || !userId) return;
+    emailBonusMutation.mutate({ userId, email: emailInput });
   };
 
   const handleJoinWaitlist = () => {
-    // Trigger Privy login with waitlist context
+    // Trigger OAuth3 login with waitlist context
     // After login, OnboardingProvider will handle profile setup
     // Then we'll mark as waitlisted in the useEffect above
     const currentUrl = new URL(window.location.href);
@@ -260,10 +297,9 @@ export function ComingSoon() {
           <div className="mb-12 animate-fadeIn">
             <button
               onClick={handleJoinWaitlist}
-              disabled={isLoading}
-              className="rounded-xl bg-primary px-12 py-5 font-bold text-white text-xl shadow-lg transition-all duration-300 hover:scale-105 hover:bg-primary/90 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl bg-primary px-12 py-5 font-bold text-white text-xl shadow-lg transition-all duration-300 hover:scale-105 hover:bg-primary/90 hover:shadow-xl"
             >
-              {isLoading ? 'Loading...' : 'Join Waitlist'}
+              Join Waitlist
             </button>
             <p className="mt-4 text-muted-foreground text-sm">
               Sign in with X, Farcaster, Gmail, or Wallet
@@ -512,7 +548,7 @@ export function ComingSoon() {
                     </span>
                   </button>
                 )}
-                {privyUser?.wallet?.address ? (
+                {wallet?.address ? (
                   <div className="flex w-full items-center justify-between rounded-lg border border-green-500/20 bg-green-500/10 p-4">
                     <div className="flex items-center gap-3">
                       <Check className="h-5 w-5 text-green-500" />
@@ -682,10 +718,12 @@ export function ComingSoon() {
             />
             <button
               onClick={handleAddEmail}
-              disabled={!emailInput || isLoading}
+              disabled={!emailInput || emailBonusMutation.isPending}
               className="w-full rounded-lg bg-primary px-4 py-3 font-semibold text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLoading ? 'Adding...' : 'Add Email & Earn Points'}
+              {emailBonusMutation.isPending
+                ? 'Adding...'
+                : 'Add Email & Earn Points'}
             </button>
           </div>
         </div>

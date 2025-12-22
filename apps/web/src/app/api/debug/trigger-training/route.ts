@@ -16,7 +16,7 @@
  *     summary: Trigger training manually
  *     description: Manually triggers training workflow (admin/dev only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: force

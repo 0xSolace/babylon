@@ -117,3 +117,17 @@ export const CommentRepliesQuerySchema = PaginationSchema.extend({
 export const FavoriteProfileSchema = z.object({
   targetUserId: SnowflakeIdSchema,
 });
+
+// Type exports
+export type PostIdParam = z.infer<typeof PostIdParamSchema>;
+export type CreatePost = z.infer<typeof CreatePostSchema>;
+export type UpdatePost = z.infer<typeof UpdatePostSchema>;
+export type CreateComment = z.infer<typeof CreateCommentSchema>;
+export type UpdateComment = z.infer<typeof UpdateCommentSchema>;
+export type Like = z.infer<typeof LikeSchema>;
+export type SharePost = z.infer<typeof SharePostSchema>;
+export type ReplyToPost = z.infer<typeof ReplyToPostSchema>;
+export type PostFeedQuery = z.infer<typeof PostFeedQuerySchema>;
+export type PostInteractionsQuery = z.infer<typeof PostInteractionsQuerySchema>;
+export type CommentRepliesQuery = z.infer<typeof CommentRepliesQuerySchema>;
+export type FavoriteProfileInput = z.infer<typeof FavoriteProfileSchema>;

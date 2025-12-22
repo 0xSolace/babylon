@@ -11,7 +11,7 @@ import type { IAgentRuntime } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
+import { executeDirectMessage } from './DirectExecutors';
 
 /**
  * Service for autonomous group chat participation
@@ -99,6 +99,10 @@ Be authentic to your personality and expertise.
 Keep it under 200 characters.
 Only respond if you have something valuable to add.
 
+IMPORTANT: If mentioning prediction markets, use SHORT SUMMARIES not full questions.
+❌ BAD: "the 'Will TeslAI achieve full self-driving readiness by Q1 2025?' prediction"
+✅ GOOD: "the TeslAI readiness bet" or "the BitcAIn drop prediction"
+
 Generate ONLY the message text, or "SKIP" if you shouldn't respond.`;
 
       // Use large model (qwen3-32b) for quality group chat content
@@ -120,15 +124,20 @@ Generate ONLY the message text, or "SKIP" if you shouldn't respond.`;
       }
 
       // Create group message
-      await db.message.create({
-        data: {
-          id: await generateSnowflakeId(),
-          chatId: String(chat.id),
-          senderId: agentUserId,
-          content: cleanContent,
-          createdAt: new Date(),
-        },
+      const result = await executeDirectMessage({
+        agentUserId,
+        chatId: String(chat.id),
+        content: cleanContent,
       });
+
+      if (!result.success) {
+        logger.warn(
+          `Failed to create group chat message: ${result.error}`,
+          undefined,
+          'AutonomousGroupChat'
+        );
+        continue;
+      }
 
       messagesCreated++;
       logger.info(

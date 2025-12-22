@@ -2,7 +2,18 @@
  * JSON Database Client
  *
  * Creates a DrizzleClient-compatible interface backed by JSON storage.
- * All table repositories use the same API as the PostgreSQL version.
+ * All table repositories use the same API as the PostgreSQL/CQL version.
+ *
+ * This client provides an in-memory/file-based database for:
+ * - Testing without a real database connection
+ * - Simulation mode for game/training scenarios
+ * - Offline development
+ *
+ * Note: This client implements the legacy DrizzleClient interface.
+ * For production use, the CQL client (cql-client.ts) is the primary interface.
+ *
+ * @see cql-client.ts - Production database interface (CQL)
+ * @see json-storage.ts - JSON storage implementation
  */
 
 import type { DrizzleClient, SQLValue } from './client';

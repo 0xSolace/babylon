@@ -6,8 +6,8 @@
  */
 
 import { db } from '@babylon/db';
+import { logger } from '@babylon/shared';
 import type { IAgentRuntime } from '@elizaos/core';
-import { logger } from '../utils/logger';
 
 export interface ModelUsageStats {
   agentId: string;
@@ -42,7 +42,7 @@ export class ModelUsageVerifier {
 
     // Check for different model providers
     const groqModel = String(
-      settings?.LARGE_GROQ_MODEL || settings?.SMALL_GROQ_MODEL || ''
+      settings?.GROQ_LARGE_MODEL || settings?.GROQ_SMALL_MODEL || ''
     );
     const claudeModel = String(settings?.CLAUDE_MODEL || '');
     const openaiModel = String(settings?.OPENAI_MODEL || '');

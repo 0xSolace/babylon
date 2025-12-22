@@ -18,20 +18,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, RegisterKeysSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const RegisterKeysSchema = z.object({
-  publicKey: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid public key format'),
-  signedPreKey: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid pre-key format')
-    .optional(),
-  signature: z.string().optional(), // For on-chain registration verification
-});
 
 /**
  * POST /api/messaging/keys

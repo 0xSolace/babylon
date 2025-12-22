@@ -19,7 +19,7 @@
  *     summary: Get group details
  *     description: Returns group information including members and admins
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: groupId
@@ -60,7 +60,7 @@
  *     summary: Update group
  *     description: Updates group name and description (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: groupId
@@ -96,7 +96,7 @@
  *     summary: Delete group
  *     description: Permanently deletes group (creator/admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: groupId
@@ -142,14 +142,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { asUser } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, UpdateGroupSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const UpdateGroupSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional(),
-});
 
 /**
  * GET /api/groups/[groupId]

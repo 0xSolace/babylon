@@ -14,7 +14,7 @@ declare global {
       address: string;
       chainId: string;
     };
-    __privyAccessToken?: string;
+    __oauth3GetAccessToken?: () => Promise<string | null>;
   }
 }
 
@@ -32,8 +32,8 @@ export const TEST_USER = {
   onChainRegistered: true,
 };
 
-// Mock Privy access token
-export const MOCK_ACCESS_TOKEN = 'mock-privy-access-token-for-testing';
+// Mock OAuth3 access token
+export const MOCK_ACCESS_TOKEN = 'mock-oauth3-access-token-for-testing';
 
 /**
  * Set up authentication state in the browser
@@ -62,39 +62,34 @@ export async function setupAuthState(page: Page, navigateToUrl?: string) {
     });
   });
 
-  // Mock Privy API calls to return authenticated state
-  await page.route('**privy.io/api/**', (route: Route) => {
+  // Mock OAuth3 API calls to return authenticated state
+  await page.route('**/oauth3/**', (route: Route) => {
     const url = route.request().url();
 
-    // Mock the authenticated user endpoint
-    if (url.includes('/api/v1/users/me')) {
+    // Mock the session validation endpoint
+    if (url.includes('/session/validate')) {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          id: TEST_USER.id,
-          email: { address: TEST_USER.email },
-          wallet: { address: TEST_USER.walletAddress },
-          created_at: Date.now(),
+          identityId: TEST_USER.id,
+          smartAccount: TEST_USER.walletAddress,
+          expiresAt: Date.now() + 3600000,
         }),
       });
     }
-    // Mock the access token endpoint
-    else if (url.includes('/api/v1/sessions')) {
+    // Mock the token refresh endpoint
+    else if (url.includes('/token/refresh')) {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          token: MOCK_ACCESS_TOKEN,
-          refresh_token: 'mock-refresh-token',
-          user: {
-            id: TEST_USER.id,
-            email: { address: TEST_USER.email },
-          },
+          accessToken: MOCK_ACCESS_TOKEN,
+          expiresAt: Date.now() + 3600000,
         }),
       });
     }
-    // Allow other Privy calls through or mock as needed
+    // Allow other OAuth3 calls through or mock as needed
     else {
       route.continue();
     }
@@ -111,54 +106,37 @@ export async function setupAuthState(page: Page, navigateToUrl?: string) {
         chainId: 'eip155:1',
       };
 
-      // Set Privy token for API calls
-      window.__privyAccessToken = data.token;
+      // Set OAuth3 token getter for API calls (matches packages/api/src/fetch.ts pattern)
+      window.__oauth3GetAccessToken = async () => data.token;
 
-      // Mock Privy's localStorage state to simulate authenticated session
-      const privyState = {
-        'privy:connections': JSON.stringify([
-          {
-            type: 'wallet',
-            address: data.user.walletAddress,
-            chainId: 'eip155:1',
-          },
-        ]),
-        'privy:token': data.token,
-        'privy:refresh_token': 'mock-refresh-token',
-        'privy:user': JSON.stringify({
+      // Mock OAuth3 localStorage state to simulate authenticated session
+      const oauth3State = {
+        'oauth3:session': JSON.stringify({
+          identityId: data.user.id,
+          smartAccount: data.user.walletAddress,
+          expiresAt: Date.now() + 3600000,
+        }),
+        'oauth3:user': JSON.stringify({
           id: data.user.id,
-          created_at: Date.now(),
-          linked_accounts: [
-            {
-              type: 'wallet',
-              address: data.user.walletAddress,
-            },
-          ],
-          email: data.user.email ? { address: data.user.email } : undefined,
+          walletAddress: data.user.walletAddress,
+          email: data.user.email,
+          createdAt: Date.now(),
         }),
       };
 
       // Set each key in localStorage
-      Object.entries(privyState).forEach(([key, value]) => {
+      Object.entries(oauth3State).forEach(([key, value]) => {
         localStorage.setItem(key, value);
       });
     },
     { user: TEST_USER, token: MOCK_ACCESS_TOKEN }
   );
 
-  // Set cookies
+  // Set cookies (oauth3-token matches packages/api/src/auth-middleware.ts)
   await page.context().addCookies([
     {
-      name: 'privy-token',
+      name: 'oauth3-token',
       value: MOCK_ACCESS_TOKEN,
-      domain: 'localhost',
-      path: '/',
-      httpOnly: true,
-      sameSite: 'Lax',
-    },
-    {
-      name: 'privy-refresh-token',
-      value: 'mock-refresh-token',
       domain: 'localhost',
       path: '/',
       httpOnly: true,
@@ -179,7 +157,7 @@ export async function setupAuthState(page: Page, navigateToUrl?: string) {
           address: data.user.walletAddress,
           chainId: 'eip155:1',
         };
-        window.__privyAccessToken = data.token;
+        window.__oauth3GetAccessToken = async () => data.token;
       },
       { user: TEST_USER, token: MOCK_ACCESS_TOKEN }
     );

@@ -3,11 +3,8 @@
 import { cn } from '@babylon/shared';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/shared/Skeleton';
-import {
-  type PerpMarket,
-  usePerpMarketsPolling,
-  usePerpTopMovers,
-} from '@/stores/perpMarketsStore';
+import { type PerpMarket, usePerpTopMovers } from '@/hooks/usePerpMarkets';
+import { MARKETS_CONFIG } from '@/types/markets';
 
 /**
  * Top movers panel component for displaying biggest gainers and losers.
@@ -31,9 +28,11 @@ interface TopMoversPanelProps {
 }
 
 export function TopMoversPanel({ onMarketClick }: TopMoversPanelProps) {
-  // Use shared store with polling
-  const { topGainers, topLosers, loading } = usePerpTopMovers(4);
-  usePerpMarketsPolling(30000); // Enable 30s polling
+  // Use react-query with polling
+  const { topGainers, topLosers, loading } = usePerpTopMovers(
+    MARKETS_CONFIG.TOP_MOVERS_COUNT,
+    { pollingInterval: MARKETS_CONFIG.DEFAULT_POLLING_INTERVAL_MS }
+  );
 
   const formatPrice = (p: number) => `$${p.toFixed(2)}`;
 

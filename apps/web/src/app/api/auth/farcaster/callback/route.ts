@@ -99,21 +99,10 @@
 
 import { PointsService, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { FarcasterCallbackBodySchema, logger } from '@babylon/shared';
 import { createAppClient, viemConnector } from '@farcaster/auth-client';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const FarcasterCallbackBodySchema = z.object({
-  message: z.string(),
-  signature: z.string(),
-  fid: z.number(),
-  username: z.string(),
-  displayName: z.string().optional(),
-  pfpUrl: z.string().url().optional(),
-  state: z.string(),
-});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const body = await request.json();
@@ -129,7 +118,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     parsed.data;
 
   // Verify state format and get user ID
-  // State format: userId|timestamp|random (using pipe because userId may contain colons like did:privy:xxx)
+  // State format: userId|timestamp|random (using pipe because userId may contain colons like OAuth3 identifiers)
   const stateParts = state.split('|');
 
   // Format: [userId, timestamp, random]

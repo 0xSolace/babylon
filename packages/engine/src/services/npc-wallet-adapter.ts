@@ -4,6 +4,9 @@
  * Wraps actorState table operations to implement WalletPort interface.
  * This allows NPC trades to use the core PerpMarketService while
  * managing balances in the actorState table.
+ *
+ * Uses atomic SQL operations to prevent race conditions that could
+ * lead to negative balances.
  */
 import type { WalletPort } from '@babylon/core/markets/shared';
 import { actorState, type DbClient, db as defaultDb, eq } from '@babylon/db';
@@ -11,6 +14,9 @@ import { actorState, type DbClient, db as defaultDb, eq } from '@babylon/db';
 /**
  * Creates a WalletPort implementation for NPC actors.
  * Uses actorState.tradingBalance instead of user wallets.
+ *
+ * All debit operations are atomic - the balance check and update happen
+ * in a single SQL statement to prevent race conditions.
  */
 export function createNpcWalletAdapter(
   actorId: string,
@@ -75,7 +81,6 @@ export function createNpcWalletAdapter(
       }
 
       const currentBalance = Number(actor.tradingBalance);
-
       await db
         .update(actorState)
         .set({
@@ -96,16 +101,6 @@ export function createNpcWalletAdapter(
     }) {
       // For NPCs, we just update the trading balance directly
       // No separate PnL tracking like user wallets
-      const [actor] = await db
-        .select({ tradingBalance: actorState.tradingBalance })
-        .from(actorState)
-        .where(eq(actorState.id, actorId))
-        .limit(1);
-
-      if (!actor) {
-        throw new Error(`Actor not found: ${actorId}`);
-      }
-
       // Log PnL for debugging but don't modify balance here
       // (credit/debit already handles the balance changes)
       if (process.env.NODE_ENV === 'development') {

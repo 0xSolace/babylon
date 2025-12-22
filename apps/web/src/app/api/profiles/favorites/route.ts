@@ -16,7 +16,7 @@
  *     summary: Get favorited profiles
  *     description: Returns profiles favorited by authenticated user
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: limit

@@ -10,19 +10,22 @@
 
 import { expect, test } from '@playwright/test';
 import {
+  getOAuth3TestAccount,
+  loginWithOAuth3Email,
+} from './helpers/oauth3-auth';
+import {
   isVisible,
   navigateTo,
   verifyNavigation,
   waitForPageLoad,
 } from './helpers/page-helpers';
-import { getPrivyTestAccount, loginWithPrivyEmail } from './helpers/privy-auth';
 import { ROUTES } from './helpers/test-data';
 
 test.describe('Navigation - Authenticated', () => {
   test.beforeEach(async ({ page }) => {
     // Login before each test
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await waitForPageLoad(page);
   });
 
@@ -150,7 +153,7 @@ test.describe('Navigation - Authenticated', () => {
 test.describe('Navigation - Sidebar Links', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await waitForPageLoad(page);
   });
 
@@ -193,7 +196,7 @@ test.describe('Navigation - Mobile Bottom Nav', () => {
     // Set mobile viewport
     await page.setViewportSize({ width: 375, height: 667 });
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await waitForPageLoad(page);
   });
 
@@ -238,7 +241,7 @@ test.describe('Navigation - Mobile Bottom Nav', () => {
 test.describe('Navigation - Browser Navigation', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await waitForPageLoad(page);
   });
 
@@ -279,7 +282,7 @@ test.describe('Navigation - Browser Navigation', () => {
 test.describe('Navigation - Deep Links', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
   });
 
   test('should handle direct URL access to all pages', async ({ page }) => {

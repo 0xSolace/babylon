@@ -36,13 +36,61 @@ import { logger } from '@babylon/shared';
 import type { BabylonLLMClient } from '../llm/openai-client';
 import type { EventContext, FeedPostContext } from '../types/market-context';
 import { stripHashtagsAndEmojis } from '../utils/shared-utils';
+import { generateArticleImageWithRetry } from './article-image-service';
 import { characterMappingService } from './character-mapping-service';
+import {
+  getArcPlan,
+  getPhaseForDay,
+  getPhaseGuidance,
+  getSignalDirection,
+} from './narrative-state-service';
 import { StaticDataRegistry } from './static-data-registry';
 import type { GeneratedTag } from './tag-service';
 import { generateTagsFromPost, storeTagsForPost } from './tag-service';
 
+/**
+ * NPC-to-NPC interaction cooldown tracking (in-memory for simplicity)
+ * Key: "replierNpcId:targetNpcId", Value: last interaction timestamp
+ */
+const npcInteractionCooldowns = new Map<string, Date>();
+
+/** Minimum cooldown between NPC interactions with same target NPC (2 hours) */
+const NPC_INTERACTION_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Check if an NPC can reply to another NPC (cooldown check)
+ */
+function canNPCReplyToNPC(replierNpcId: string, targetNpcId: string): boolean {
+  const key = `${replierNpcId}:${targetNpcId}`;
+  const lastInteraction = npcInteractionCooldowns.get(key);
+
+  if (!lastInteraction) return true;
+
+  const timeSince = Date.now() - lastInteraction.getTime();
+  return timeSince >= NPC_INTERACTION_COOLDOWN_MS;
+}
+
+/**
+ * Record an NPC-to-NPC interaction for cooldown tracking
+ */
+function recordNPCInteraction(replierNpcId: string, targetNpcId: string): void {
+  const key = `${replierNpcId}:${targetNpcId}`;
+  npcInteractionCooldowns.set(key, new Date());
+
+  // Clean up old entries (older than 24 hours) to prevent memory leak
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  for (const [k, v] of npcInteractionCooldowns.entries()) {
+    if (v < oneDayAgo) {
+      npcInteractionCooldowns.delete(k);
+    }
+  }
+}
+
 // Minimal question type for post generation (only fields actually used)
-type QuestionForPost = Pick<Question, 'id' | 'text' | 'questionNumber'>;
+// outcome is optional - only used for arc plan signal direction, and the code handles missing outcome
+type QuestionForPost = Pick<Question, 'id' | 'text' | 'questionNumber'> & {
+  outcome?: boolean | null;
+};
 
 // Minimal actor type for post generation
 interface ActorForPost {
@@ -101,10 +149,11 @@ const MAX_ARTICLE_TOKENS = 16384; // No practical limit
  * Call this ONCE in game-tick.ts, then pass the result to generateNPCPost()
  * This eliminates N+1 query problems where each NPC would fetch the same data
  */
-export async function loadSharedPostContext(): Promise<SharedPostContext> {
-  const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
-  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-  const now = new Date();
+export async function loadSharedPostContext(
+  asOf: Date
+): Promise<SharedPostContext> {
+  const twelveHoursAgo = new Date(asOf.getTime() - 12 * 60 * 60 * 1000);
+  const threeDaysAgo = new Date(asOf.getTime() - 3 * 24 * 60 * 60 * 1000);
 
   // Fetch feed posts and events in parallel - ONE query each
   const [recentPostsRaw, recentEventsRaw] = await Promise.all([
@@ -114,11 +163,12 @@ export async function loadSharedPostContext(): Promise<SharedPostContext> {
       .where(
         and(
           eq(posts.type, 'post'),
-          gte(posts.createdAt, twelveHoursAgo),
+          gte(posts.timestamp, twelveHoursAgo),
+          lte(posts.timestamp, asOf),
           isNull(posts.deletedAt)
         )
       )
-      .orderBy(desc(posts.createdAt))
+      .orderBy(desc(posts.timestamp))
       .limit(50),
     db
       .select()
@@ -126,7 +176,7 @@ export async function loadSharedPostContext(): Promise<SharedPostContext> {
       .where(
         and(
           gte(worldEvents.timestamp, threeDaysAgo),
-          lte(worldEvents.timestamp, now), // Don't include future events
+          lte(worldEvents.timestamp, asOf), // Don't include future events
           eq(worldEvents.visibility, 'public')
         )
       )
@@ -147,7 +197,7 @@ export async function loadSharedPostContext(): Promise<SharedPostContext> {
         post.content.length > 150
           ? post.content.slice(0, 150) + '...'
           : post.content,
-      timestamp: post.createdAt.toISOString(),
+      timestamp: post.timestamp.toISOString(),
       articleTitle: post.articleTitle || undefined,
     };
   });
@@ -349,6 +399,7 @@ async function getNPCPositions(
  * @param worldFactsContext - Shared world facts (parody names, etc)
  * @param timestamp - Timestamp for the post
  * @param sharedContext - Pre-loaded shared context (optional, will load if not provided)
+ * @param currentDay - Current game day (optional, used for arc plan signal guidance)
  */
 export async function generateNPCPost(
   llmClient: BabylonLLMClient,
@@ -356,10 +407,11 @@ export async function generateNPCPost(
   question: QuestionForPost,
   worldFactsContext: string,
   timestamp: Date,
-  sharedContext?: SharedPostContext
+  sharedContext?: SharedPostContext,
+  currentDay?: number
 ): Promise<boolean> {
   // Use provided shared context or load it (fallback for backward compatibility)
-  const context = sharedContext || (await loadSharedPostContext());
+  const context = sharedContext || (await loadSharedPostContext(timestamp));
 
   // Build NPC-specific context from shared data (NO DB CALLS)
   const npcContext = buildNPCContext(actor, context);
@@ -387,7 +439,43 @@ export async function generateNPCPost(
           .join('\n')}`
       : '';
 
-  const prompt = `You ARE ${actor.name}. Post EXACTLY as they would.
+  // Build signal guidance from arc plan if available
+  let signalGuidance = '';
+  if (currentDay !== undefined) {
+    const arcPlan = await getArcPlan(question.id);
+    if (arcPlan) {
+      const phase = getPhaseForDay(currentDay, arcPlan);
+      const outcome = question.outcome ?? true;
+      const signal = getSignalDirection(arcPlan, phase, actor.id, outcome);
+
+      if (signal.reason === 'insider') {
+        signalGuidance = `[INTERNAL: You have insider knowledge that the answer is likely ${signal.direction}.
+          Subtly reflect this confidence in your post without being too obvious or explicit about predictions.]`;
+      } else if (signal.reason === 'deceiver') {
+        signalGuidance = `[INTERNAL: You believe (perhaps incorrectly) that the answer is ${signal.direction}.
+          Post with confidence in this direction. You might be spreading misinformation.]`;
+      } else {
+        // Regular NPC - phase-appropriate guidance
+        signalGuidance = getPhaseGuidance(phase);
+      }
+
+      logger.debug(
+        'NPC signal guidance determined',
+        {
+          actorId: actor.id,
+          actorName: actor.name,
+          questionId: question.id,
+          currentDay,
+          phase,
+          signalDirection: signal.direction,
+          signalReason: signal.reason,
+        },
+        'PostGeneration'
+      );
+    }
+  }
+
+  const prompt = `${signalGuidance ? `${signalGuidance}\n\n` : ''}You ARE ${actor.name}. Post EXACTLY as they would.
 
 === YOUR CHARACTER ===
 ${actor.description || ''}
@@ -480,7 +568,7 @@ Return as XML:
     content: transformed.transformedText,
     authorId: actor.id,
     gameId: 'continuous',
-    dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
+    dayNumber: currentDay,
     timestamp,
   });
 
@@ -495,7 +583,8 @@ export async function generateOrgPost(
   org: OrganizationForPost,
   question: QuestionForPost,
   worldFactsContext: string,
-  timestamp: Date
+  timestamp: Date,
+  currentDay?: number
 ): Promise<boolean> {
   const orgName = org.name || 'Unknown Org';
 
@@ -577,7 +666,7 @@ Return your response as XML in this exact format:
     content: transformed.transformedText,
     authorId: org.id,
     gameId: 'continuous',
-    dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
+    dayNumber: currentDay,
     timestamp,
   });
 
@@ -592,7 +681,8 @@ export async function generateOrgArticle(
   org: OrganizationForPost,
   question: QuestionForPost,
   worldFactsContext: string,
-  timestamp: Date
+  timestamp: Date,
+  currentDay?: number
 ): Promise<boolean> {
   const orgName = org.name || 'Unknown Org';
 
@@ -704,6 +794,16 @@ Return your response as XML in this exact format:
     );
   }
 
+  // Generate article cover image (non-blocking, with retry)
+  let imageUrl: string | null = null;
+  if (process.env.FAL_KEY) {
+    imageUrl = await generateArticleImageWithRetry({
+      title: articleTitle,
+      summary: transformedSummary.transformedText,
+      category: question.text.slice(0, 100), // Use question as category hint
+    });
+  }
+
   const postId = await generateSnowflakeId();
   await getDbInstance().createPostWithAllFields({
     id: postId,
@@ -711,15 +811,16 @@ Return your response as XML in this exact format:
     content: transformedSummary.transformedText,
     fullContent: transformedBody.transformedText,
     articleTitle: articleTitle,
+    imageUrl: imageUrl || undefined,
     authorId: org.id,
     gameId: 'continuous',
-    dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
+    dayNumber: currentDay,
     timestamp,
   });
 
   logger.debug(
     'Created org article',
-    { org: org.name, timestamp },
+    { org: org.name, timestamp, hasImage: Boolean(imageUrl) },
     'PostGeneration'
   );
 
@@ -793,7 +894,8 @@ export async function generateNPCRepliesFromPreviousTicks(
   actors: DiscourseActor[],
   worldFactsContext: string,
   timestamp: Date,
-  maxReplies = 4
+  maxReplies = 4,
+  currentDay?: number
 ): Promise<number> {
   if (actors.length < 2) {
     logger.debug(
@@ -896,11 +998,21 @@ export async function generateNPCRepliesFromPreviousTicks(
   // 70% chance of reply, 30% chance of quote post for variety
   const discoursePromises = postsToReplyTo.map(async (originalPost) => {
     // Pick a random actor to engage (not the original author)
+    // Filter by cooldown to prevent repetitive interactions
     const availableEngagers = actors.filter(
-      (a) => a.id !== originalPost.authorId
+      (a) =>
+        a.id !== originalPost.authorId &&
+        canNPCReplyToNPC(a.id, originalPost.authorId)
     );
-    if (availableEngagers.length === 0)
+
+    if (availableEngagers.length === 0) {
+      logger.debug(
+        'No eligible engagers for post (all on cooldown or same author)',
+        { postAuthor: originalPost.authorName },
+        'PostGeneration'
+      );
       return { type: 'none' as const, success: false };
+    }
 
     const engager =
       availableEngagers[Math.floor(Math.random() * availableEngagers.length)];
@@ -911,25 +1023,45 @@ export async function generateNPCRepliesFromPreviousTicks(
     const shouldQuote =
       originalPost.commentOnPostId === null && Math.random() < 0.3;
 
+    let success = false;
     if (shouldQuote) {
-      const success = await generateNPCQuotePost(
+      success = await generateNPCQuotePost(
         llmClient,
         engager,
         originalPost,
         worldFactsContext,
-        timestamp
+        timestamp,
+        currentDay
       );
-      return { type: 'quote' as const, success };
     } else {
-      const success = await generateNPCReplyToPost(
+      success = await generateNPCReplyToPost(
         llmClient,
         engager,
         originalPost,
         worldFactsContext,
-        timestamp
+        timestamp,
+        currentDay
       );
-      return { type: 'reply' as const, success };
     }
+
+    // Record interaction for cooldown tracking if successful
+    if (success) {
+      recordNPCInteraction(engager.id, originalPost.authorId);
+      logger.debug(
+        'Recorded NPC interaction for cooldown',
+        {
+          replier: engager.name,
+          target: originalPost.authorName,
+          type: shouldQuote ? 'quote' : 'reply',
+        },
+        'PostGeneration'
+      );
+    }
+
+    return {
+      type: shouldQuote ? ('quote' as const) : ('reply' as const),
+      success,
+    };
   });
 
   const results = await Promise.allSettled(discoursePromises);
@@ -970,7 +1102,8 @@ async function generateNPCReplyToPost(
   replier: DiscourseActor,
   originalPost: PostForReply,
   worldFactsContext: string,
-  timestamp: Date
+  timestamp: Date,
+  currentDay?: number
 ): Promise<boolean> {
   // Build replier's personality context
   const personalityContext = replier.personality
@@ -1096,7 +1229,7 @@ Return your response as XML in this exact format:
     commentOnPostId: originalPost.id,
     originalPostId: rootPostId ?? originalPost.id, // Root of the chain
     gameId: 'continuous',
-    dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
+    dayNumber: currentDay,
     timestamp,
   });
 
@@ -1122,7 +1255,8 @@ async function generateNPCQuotePost(
   quoter: DiscourseActor,
   originalPost: PostForReply,
   worldFactsContext: string,
-  timestamp: Date
+  timestamp: Date,
+  currentDay?: number
 ): Promise<boolean> {
   // Build quoter's personality context
   const personalityContext = quoter.personality
@@ -1235,7 +1369,7 @@ Return your response as XML in this exact format:
     authorId: quoter.id,
     originalPostId: originalPost.id, // The post being quoted
     gameId: 'continuous',
-    dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
+    dayNumber: currentDay,
     timestamp,
   });
 

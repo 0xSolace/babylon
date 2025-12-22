@@ -17,7 +17,7 @@
  *     summary: Configure market biases
  *     description: Sets, removes, or bulk-sets market biases for entities
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

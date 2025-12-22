@@ -7,6 +7,7 @@
  * @packageDocumentation
  */
 
+import type { JsonValue } from '@babylon/shared';
 import type {
   ExternalAgentMessage as AgentMessage,
   AgentResponse,
@@ -14,7 +15,6 @@ import type {
 import { getExternalAgentAdapter } from '../external/ExternalAgentAdapter';
 import { agentRegistry } from '../services/agent-registry.service';
 import { AgentType } from '../types/agent-registry';
-import type { JsonValue } from '../types/common';
 import type { AgentEvent, EventBus } from './EventBus';
 import { getEventBus } from './EventBus';
 

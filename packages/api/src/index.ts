@@ -7,6 +7,7 @@
 
 // Re-export auth types from shared
 export type { AuthenticatedUser } from '@babylon/shared';
+// Re-export common validation schemas for API consumers
 // Logger
 export {
   extractErrorMessage,
@@ -14,6 +15,10 @@ export {
   Logger,
   type LogLevel,
   logger,
+  PaginationSchema,
+  SnowflakeIdSchema,
+  UserIdSchema,
+  WalletAddressSchema,
 } from '@babylon/shared';
 // Admin Audit Logging
 export {
@@ -38,13 +43,11 @@ export {
 } from './agent-auth';
 // Auth Middleware
 export {
-  type AuthenticationError,
   authErrorResponse,
   authenticate,
   authenticateUser,
   authenticateWithDbUser,
   getAuthClient,
-  isAuthenticationError,
   optionalAuth,
   optionalAuthFromHeaders,
 } from './auth-middleware';
@@ -113,19 +116,29 @@ export {
   successResponse,
   withErrorHandling,
 } from './error-handler';
-// Errors
+// Errors - re-exported from @babylon/shared via ./errors
 export {
   ApiError,
+  AuthenticationError,
   AuthenticationError as AuthError,
   AuthorizationError,
   BabylonError,
   BadRequestError,
   BusinessLogicError,
   ConflictError,
+  DatabaseError,
+  ExternalServiceError,
   ForbiddenError,
   InternalServerError,
+  isAuthenticationError,
   isAuthenticationError as isAuthError,
   isAuthorizationError,
+  isBabylonError,
+  isDatabaseError,
+  isLLMError,
+  isNetworkError,
+  isOperationalError,
+  isValidationError,
   NotFoundError,
   RateLimitError,
   ServiceUnavailableError,
@@ -151,6 +164,13 @@ export {
 } from './messaging/decentralized-messaging';
 // Moderation - BanManager and ModerationMarketplace
 export * from './moderation';
+// Cron Metrics
+export {
+  type CronExecutionMetrics,
+  type CronJobStats,
+  cronMetrics,
+  recordCronExecution,
+} from './monitoring/cron-metrics';
 export * from './monitoring/monitored-cache';
 export * from './monitoring/monitored-storage';
 // Performance monitoring (moved from @babylon/shared)

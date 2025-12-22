@@ -18,7 +18,7 @@
  *     summary: Get trading feed
  *     description: Returns recent trades across all markets (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: limit
@@ -64,7 +64,7 @@
  *     summary: Create test trade
  *     description: Creates/forces a trade for testing (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       content:
  *         application/json:
@@ -99,15 +99,13 @@ import {
 } from '@babylon/api';
 import { Decimal, db } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  AdminTradesQuerySchema,
+  CreateTradeSchema,
+  generateSnowflakeId,
+  logger,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const QuerySchema = z.object({
-  limit: z.coerce.number().min(1).max(100).default(50),
-  offset: z.coerce.number().min(0).default(0),
-  type: z.enum(['all', 'balance', 'npc', 'position']).default('all'),
-});
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   // Require admin authentication
@@ -115,7 +113,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Parse query parameters
   const { searchParams } = new URL(request.url);
-  const params = QuerySchema.parse({
+  const params = AdminTradesQuerySchema.parse({
     limit: searchParams.get('limit') || '50',
     offset: searchParams.get('offset') || '0',
     type: searchParams.get('type') || undefined,
@@ -288,45 +286,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
   });
 });
-
-const CreateBalanceTradeSchema = z.object({
-  type: z.literal('balance'),
-  userId: z.string().min(1),
-  transactionType: z.enum([
-    'pred_buy',
-    'pred_sell',
-    'perp_open',
-    'perp_close',
-    'perp_liquidation',
-    'deposit',
-    'withdrawal',
-  ]),
-  amount: z.number(),
-  description: z.string().optional(),
-  relatedId: z.string().optional(),
-  updateBalance: z.boolean().default(true), // Whether to update user's balance
-});
-
-const CreateNPCTradeSchema = z.object({
-  type: z.literal('npc'),
-  npcActorId: z.string().min(1),
-  marketType: z.enum(['prediction', 'perp']),
-  ticker: z.string().optional(),
-  marketId: z.string().optional(),
-  action: z.string().min(1),
-  side: z.string().optional(),
-  amount: z.number().positive(),
-  price: z.number().positive(),
-  sentiment: z.number().optional(),
-  reason: z.string().optional(),
-  poolId: z.string().optional(),
-  postId: z.string().optional(),
-});
-
-const CreateTradeSchema = z.discriminatedUnion('type', [
-  CreateBalanceTradeSchema,
-  CreateNPCTradeSchema,
-]);
 
 /**
  * POST /api/admin/trades

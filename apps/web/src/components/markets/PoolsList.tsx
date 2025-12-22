@@ -1,5 +1,7 @@
 'use client';
 
+import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   DollarSign,
@@ -7,10 +9,9 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { BouncingLogo } from '@/components/shared/BouncingLogo';
 import { useAuth } from '@/hooks/useAuth';
-import { cn } from '@/lib/utils';
 
 interface Pool {
   id: string;
@@ -39,30 +40,33 @@ interface Pool {
   updatedAt: string;
 }
 
+interface PoolsApiResponse {
+  pools?: Pool[];
+}
+
 interface PoolsListProps {
   onPoolClick: (pool: Pool) => void;
 }
 
 export function PoolsList({ onPoolClick }: PoolsListProps) {
   const { authenticated } = useAuth();
-  const [pools, setPools] = useState<Pool[]>([]);
-  const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<
     'performance' | 'volume' | 'tvl' | 'newest' | 'oldest'
   >('performance');
 
-  useEffect(() => {
-    const fetchPools = async () => {
+  const { data: pools = [], isLoading: loading } = useQuery({
+    queryKey: ['pools'],
+    queryFn: async (): Promise<Pool[]> => {
       const res = await fetch('/api/pools');
-      const data = await res.json();
-      setPools(data.pools || []);
-      setLoading(false);
-    };
-
-    fetchPools();
-    const interval = setInterval(fetchPools, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, []);
+      if (!res.ok) {
+        throw new Error('Failed to fetch pools');
+      }
+      const data: PoolsApiResponse = await res.json();
+      return data.pools ?? [];
+    },
+    staleTime: 15000, // 15 seconds
+    refetchInterval: 30000, // Refresh every 30s
+  });
 
   const sortedPools = [...pools].sort((a, b) => {
     switch (sortBy) {

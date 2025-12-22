@@ -1,17 +1,17 @@
 /**
  * Distributed Lock Service
  *
- * @description Generic distributed lock implementation using Drizzle.
+ * @description Generic distributed lock implementation using CQL.
  * Prevents race conditions across multiple servers/processes.
  * Supports automatic stale lock recovery.
  */
 
-import { db, eq, generationLocks } from '@babylon/db';
+import { db } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { randomBytes } from 'crypto';
 
 /** Safely convert a CQL date field to a Date object */
-function toDate(value: unknown): Date | null {
+function toDate(value: string | number | Date | null | undefined): Date | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) return value;
   if (typeof value === 'string' || typeof value === 'number') {
@@ -53,33 +53,29 @@ export class DistributedLockService {
       processId || `serverless-${Date.now()}-${randomBytes(8).toString('hex')}`;
 
     // First, check if lock already exists (avoids unique constraint errors in most cases)
-    const [existingLock] = await db
-      .select()
-      .from(generationLocks)
-      .where(eq(generationLocks.id, lockId))
-      .limit(1);
+    const existingLock = await db.generationLock.findFirst({
+      where: { id: lockId },
+    });
 
     if (existingLock) {
       // Lock exists - check if it's expired
       const existingExpiresAt = toDate(existingLock.expiresAt);
       if (existingExpiresAt && existingExpiresAt <= now) {
         // Expired - try to recover atomically using conditional update
-        await db
-          .update(generationLocks)
-          .set({
+        await db.generationLock.update({
+          where: { id: lockId },
+          data: {
             lockedBy: lockHolder,
             lockedAt: now,
             expiresAt: expiry,
             operation,
-          })
-          .where(eq(generationLocks.id, lockId));
+          },
+        });
 
         // Check if we updated (need to verify the lock is still expired)
-        const [updatedLock] = await db
-          .select()
-          .from(generationLocks)
-          .where(eq(generationLocks.id, lockId))
-          .limit(1);
+        const updatedLock = await db.generationLock.findFirst({
+          where: { id: lockId },
+        });
 
         if (updatedLock && updatedLock.lockedBy === lockHolder) {
           logger.info(
@@ -117,12 +113,14 @@ export class DistributedLockService {
     }
 
     // No lock exists - try to create it
-    await db.insert(generationLocks).values({
-      id: lockId,
-      lockedBy: lockHolder,
-      lockedAt: now,
-      expiresAt: expiry,
-      operation,
+    await db.generationLock.create({
+      data: {
+        id: lockId,
+        lockedBy: lockHolder,
+        lockedAt: now,
+        expiresAt: expiry,
+        operation,
+      },
     });
 
     logger.info(
@@ -160,14 +158,14 @@ export class DistributedLockService {
     }
 
     // Only delete if we're the holder
-    const [existingLock] = await db
-      .select()
-      .from(generationLocks)
-      .where(eq(generationLocks.id, lockId))
-      .limit(1);
+    const existingLock = await db.generationLock.findFirst({
+      where: { id: lockId },
+    });
 
     if (existingLock && existingLock.lockedBy === processId) {
-      await db.delete(generationLocks).where(eq(generationLocks.id, lockId));
+      await db.generationLock.delete({
+        where: { id: lockId },
+      });
 
       logger.info(
         `Lock ${lockId} released`,
@@ -203,11 +201,9 @@ export class DistributedLockService {
    * @returns {Promise<object | null>} Lock information if held and valid, null otherwise
    */
   static async checkLock(lockId: string) {
-    const [lock] = await db
-      .select()
-      .from(generationLocks)
-      .where(eq(generationLocks.id, lockId))
-      .limit(1);
+    const lock = await db.generationLock.findFirst({
+      where: { id: lockId },
+    });
 
     if (!lock) return null;
 

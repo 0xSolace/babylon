@@ -16,7 +16,7 @@
  *     summary: Link social account
  *     description: Links social account and awards points if first time (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -282,7 +282,7 @@ export const POST = withErrorHandling(
       ...(username && { username }),
       ...(address && { address }),
       wasAlreadyLinked: alreadyLinked,
-      pointsAwarded: pointsResult?.pointsAwarded || 0,
+      pointsAwarded: pointsResult ? pointsResult.pointsAwarded : 0,
     }).catch((error) => {
       logger.warn('Failed to track social_account_linked event', { error });
     });

@@ -43,3 +43,6 @@ export const OnboardingProfileSchema = z.object({
   tosAccepted: z.boolean().optional(),
   privacyPolicyAccepted: z.boolean().optional(),
 });
+
+// Type exports
+export type OnboardingProfile = z.infer<typeof OnboardingProfileSchema>;

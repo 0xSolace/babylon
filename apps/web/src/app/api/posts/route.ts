@@ -97,7 +97,7 @@
  *     summary: Create new post
  *     description: Creates a new post with automatic mention notifications, rate limiting, and real-time SSE broadcasting.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -468,12 +468,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         : [],
     ]);
 
+    // Type assertions for grouped count query results
+    type CountResult = { postId: string | null; count: number };
+    const typedReactionCounts = reactionCounts as unknown as CountResult[];
+    const typedCommentCounts = commentCounts as unknown as CountResult[];
+
     // Create maps for quick lookup
     const reactionMap = new Map(
-      reactionCounts.map((r) => [r.postId, Number(r.count)])
+      typedReactionCounts.map((r) => [r.postId, Number(r.count)])
     );
     const commentMap = new Map(
-      commentCounts.map((c) => [c.postId, Number(c.count)])
+      typedCommentCounts.map((c) => [c.postId, Number(c.count)])
     );
 
     // Format following posts synchronously using lookup maps
@@ -773,14 +778,22 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       : [],
   ]);
 
+  // Type assertions for grouped count query results
+  type PostCountResult = { postId: string | null; count: number };
+  const typedReactionCounts = reactionCounts as unknown as PostCountResult[];
+  const typedCommentCounts = commentCounts as unknown as PostCountResult[];
+  const typedShareCounts = shareCounts as unknown as PostCountResult[];
+
   // Create maps for quick lookup
   const reactionMap = new Map(
-    reactionCounts.map((r) => [r.postId, Number(r.count)])
+    typedReactionCounts.map((r) => [r.postId, Number(r.count)])
   );
   const commentMap = new Map(
-    commentCounts.map((c) => [c.postId, Number(c.count)])
+    typedCommentCounts.map((c) => [c.postId, Number(c.count)])
   );
-  const shareMap = new Map(shareCounts.map((s) => [s.postId, Number(s.count)]));
+  const shareMap = new Map(
+    typedShareCounts.map((s) => [s.postId, Number(s.count)])
+  );
 
   // Format posts - simple transformation, no async queries needed!
   const formattedPosts = validPosts.map((post) => {
@@ -937,10 +950,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   );
 
   // Calculate next cursor (timestamp of last post)
-  const nextCursor =
-    formattedPosts.length > 0
-      ? formattedPosts[formattedPosts.length - 1].timestamp
-      : null;
+  const lastPost = formattedPosts[formattedPosts.length - 1];
+  const nextCursor = lastPost ? lastPost.timestamp : null;
 
   const response = NextResponse.json({
     success: true,

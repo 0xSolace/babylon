@@ -17,15 +17,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, SendMessageSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const SendMessageSchema = z.object({
-  to: z.string().min(1, 'Recipient address required'),
-  encryptedContent: z.string().min(1, 'Encrypted content required'),
-  timestamp: z.number().optional(),
-});
 
 // Relay node URL from environment
 const RELAY_URL = process.env.MESSAGING_RELAY_URL ?? 'http://localhost:3200';

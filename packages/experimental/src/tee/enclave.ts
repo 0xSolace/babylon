@@ -9,6 +9,7 @@
  * In a real Phala deployment, this runs inside Intel TDX + NVIDIA CC.
  */
 
+import { logger, ValidationError } from '@babylon/shared';
 import { type Address, type Hex, keccak256, toBytes } from 'viem';
 import {
   type AttestationQuote,
@@ -65,10 +66,10 @@ export class TEEEnclave {
    */
   static async create(config: EnclaveConfig): Promise<TEEEnclave> {
     if (!config.codeHash || !config.codeHash.startsWith('0x')) {
-      throw new Error('Invalid code hash');
+      throw new ValidationError('Invalid code hash');
     }
     if (!config.instanceId || config.instanceId.length === 0) {
-      throw new Error('Invalid instance ID');
+      throw new ValidationError('Invalid instance ID');
     }
 
     const enclave = new TEEEnclave(config);
@@ -81,7 +82,7 @@ export class TEEEnclave {
    */
   private async boot(): Promise<void> {
     if (this.config.verbose) {
-      console.log('\n[TEE Enclave] === BOOTING ENCLAVE ===');
+      logger.info('\n[TEE Enclave] === BOOTING ENCLAVE ===');
     }
 
     // Initialize keystore with enclave measurement
@@ -115,8 +116,8 @@ export class TEEEnclave {
     this.isRunning = true;
 
     if (this.config.verbose) {
-      console.log('[TEE Enclave] Boot complete. Attestation verified.');
-      console.log(formatQuoteForDisplay(this.attestationQuote));
+      logger.info('[TEE Enclave] Boot complete. Attestation verified.');
+      logger.info(formatQuoteForDisplay(this.attestationQuote));
     }
   }
 
@@ -156,7 +157,7 @@ export class TEEEnclave {
     };
 
     if (this.config.verbose) {
-      console.log(
+      logger.info(
         `[TEE Enclave] State encrypted (v${sealed.version}), CID: ${cid}`
       );
     }
@@ -190,7 +191,7 @@ export class TEEEnclave {
     }
 
     if (this.config.verbose) {
-      console.log('\n[TEE Enclave] === KEY ROTATION ===');
+      logger.info('\n[TEE Enclave] === KEY ROTATION ===');
     }
 
     // Decrypt with old key
@@ -206,7 +207,7 @@ export class TEEEnclave {
     const { cid: newCid } = await this.encryptState(plainState);
 
     if (this.config.verbose) {
-      console.log(
+      logger.info(
         `[TEE Enclave] Key rotated: v${oldVersion} -> v${newVersion}, new CID: ${newCid}`
       );
     }
@@ -293,7 +294,7 @@ export class TEEEnclave {
     this.state.lastUpdate = Date.now();
 
     if (this.config.verbose) {
-      console.log(`[TEE Enclave] Loaded sealed state (v${sealed.version})`);
+      logger.info(`[TEE Enclave] Loaded sealed state (v${sealed.version})`);
     }
   }
 
@@ -302,7 +303,7 @@ export class TEEEnclave {
    */
   async shutdown(): Promise<void> {
     if (this.config.verbose) {
-      console.log('[TEE Enclave] Shutting down...');
+      logger.info('[TEE Enclave] Shutting down...');
     }
 
     this.isRunning = false;

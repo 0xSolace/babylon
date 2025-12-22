@@ -17,7 +17,7 @@
  *     summary: Delete user account
  *     description: Permanently deletes user account and data (GDPR compliance)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -217,7 +217,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       'Your account and personal data have been deleted from our servers.',
       'Some anonymized data may be retained for analytics and AI training.',
       'Blockchain data (if any) remains permanently on the blockchain and cannot be deleted.',
-      'If you registered via email, you may need to contact our authentication provider (Privy) to delete your auth account separately.',
+      'Your OAuth3 authentication data is automatically removed when your account is deleted.',
     ],
   });
 });

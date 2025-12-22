@@ -1,3 +1,4 @@
+import { PredictionHistoryApiResponseSchema } from '@babylon/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -48,10 +49,6 @@ interface HistoryApiPoint {
   timestamp: string;
 }
 
-interface HistoryApiResponse {
-  history?: HistoryApiPoint[];
-}
-
 /**
  * Hook for fetching and managing prediction market price history.
  *
@@ -83,7 +80,7 @@ export function usePredictionHistory(
   marketId: string | null,
   options?: UsePredictionHistoryOptions
 ) {
-  const limit = options?.limit ?? 200;
+  const limit = options?.limit ?? 100;
   const seedRef = useRef<SeedSnapshot | undefined>(options?.seed);
   const queryClient = useQueryClient();
 
@@ -92,6 +89,7 @@ export function usePredictionHistory(
     []
   );
 
+  // Keep seed ref in sync with options
   useEffect(() => {
     seedRef.current = options?.seed;
   }, [
@@ -101,6 +99,38 @@ export function usePredictionHistory(
     options?.seed,
   ]);
 
+  // If seed arrives after an empty load, ensure we render a minimal chart.
+  useEffect(() => {
+    const seed = options?.seed;
+    if (!marketId || !seed) return;
+    if (localHistory.length > 0) return;
+    const yesShares = seed.yesShares ?? 0;
+    const noShares = seed.noShares ?? 0;
+    const totalShares = yesShares + noShares;
+    const yesPrice = totalShares === 0 ? 0.5 : yesShares / totalShares;
+    const now = Date.now();
+    setLocalHistory([
+      {
+        time: now - 60_000,
+        yesPrice,
+        noPrice: 1 - yesPrice,
+        volume: 0,
+        liquidity: seed.liquidity ?? 0,
+      },
+      {
+        time: now,
+        yesPrice,
+        noPrice: 1 - yesPrice,
+        volume: 0,
+        liquidity: seed.liquidity ?? 0,
+      },
+    ]);
+  }, [marketId, options?.seed, localHistory.length]);
+
+  /**
+   * Transform API response to history point format.
+   * Calculates volume from liquidity changes.
+   */
   const formatHistory = useCallback(
     (points: HistoryApiPoint[]): PredictionHistoryPoint[] => {
       let prevLiquidity: number | null = null;
@@ -130,9 +160,17 @@ export function usePredictionHistory(
     const noShares = seed.noShares ?? 0;
     const totalShares = yesShares + noShares;
     const yesPrice = totalShares === 0 ? 0.5 : yesShares / totalShares;
+    const now = Date.now();
     return [
       {
-        time: Date.now(),
+        time: now - 60_000,
+        yesPrice,
+        noPrice: 1 - yesPrice,
+        volume: 0,
+        liquidity: seed.liquidity ?? 0,
+      },
+      {
+        time: now,
         yesPrice,
         noPrice: 1 - yesPrice,
         volume: 0,
@@ -147,14 +185,15 @@ export function usePredictionHistory(
       const response = await fetch(
         `/api/markets/predictions/${marketId}/history?limit=${limit}`
       );
-      const responseData = (await response.json()) as HistoryApiResponse;
+      const json: unknown = await response.json();
+      const responseData = PredictionHistoryApiResponseSchema.parse(json);
 
       if (
         response.ok &&
         Array.isArray(responseData.history) &&
         responseData.history.length > 0
       ) {
-        return formatHistory(responseData.history);
+        return formatHistory(responseData.history as HistoryApiPoint[]);
       }
       return fallbackFromSeed();
     },
@@ -176,6 +215,10 @@ export function usePredictionHistory(
     }
   }, [marketId]);
 
+  /**
+   * Append a new price point to the history.
+   * Maintains the rolling window by removing oldest points when limit exceeded.
+   */
   const appendPoint = useCallback(
     (
       yesPrice: number,
@@ -210,6 +253,7 @@ export function usePredictionHistory(
     [limit]
   );
 
+  // Subscribe to real-time updates via SSE
   usePredictionMarketStream(marketId, {
     onTrade: (event) => {
       const timestamp = new Date(

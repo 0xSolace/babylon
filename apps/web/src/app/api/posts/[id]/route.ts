@@ -44,7 +44,7 @@
  *     summary: Delete post
  *     description: Soft deletes a post (author only). Post is marked as deleted but data is retained.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -172,7 +172,7 @@ export const GET = withErrorHandling(
       // If found in game store, return it directly
       if (gamePost) {
         // Get public data (counts and author info)
-        const [[likeCountResult], [commentCountResult], [shareCountResult]] =
+        const [likeCountResults, commentCountResults, shareCountResults] =
           await Promise.all([
             db
               .select({ count: count() })
@@ -189,6 +189,17 @@ export const GET = withErrorHandling(
               .from(shares)
               .where(eq(shares.postId, postId)),
           ]);
+
+        // Type assertions for aggregate query results
+        const likeCountResult = (
+          likeCountResults as unknown as Array<{ count: number }>
+        )[0];
+        const commentCountResult = (
+          commentCountResults as unknown as Array<{ count: number }>
+        )[0];
+        const shareCountResult = (
+          shareCountResults as unknown as Array<{ count: number }>
+        )[0];
 
         const likeCount = Number(likeCountResult?.count ?? 0);
         const commentCount = Number(commentCountResult?.count ?? 0);
@@ -332,6 +343,7 @@ export const GET = withErrorHandling(
             sentiment: null,
             slant: null,
             category: null,
+            imageUrl: null,
             authorId: gamePost.authorId,
             authorName,
             authorUsername,
@@ -423,7 +435,7 @@ export const GET = withErrorHandling(
       }
 
       // Get counts for the created/existing post
-      const [[likeCountResult], [commentCountResult], [shareCountResult]] =
+      const [likeCountResults, commentCountResults, shareCountResults] =
         await Promise.all([
           db
             .select({ count: count() })
@@ -440,6 +452,17 @@ export const GET = withErrorHandling(
             .from(shares)
             .where(eq(shares.postId, postId)),
         ]);
+
+      // Type assertions for aggregate query results
+      const likeCountResult = (
+        likeCountResults as unknown as Array<{ count: number }>
+      )[0];
+      const commentCountResult = (
+        commentCountResults as unknown as Array<{ count: number }>
+      )[0];
+      const shareCountResult = (
+        shareCountResults as unknown as Array<{ count: number }>
+      )[0];
 
       const likeCount = Number(likeCountResult?.count ?? 0);
       const commentCount = Number(commentCountResult?.count ?? 0);
@@ -516,6 +539,7 @@ export const GET = withErrorHandling(
           sentiment: createdPost.sentiment || null,
           slant: createdPost.slant || null,
           category: createdPost.category || null,
+          imageUrl: createdPost.imageUrl || null,
           authorId: createdPost.authorId,
           authorName,
           authorUsername,
@@ -549,7 +573,7 @@ export const GET = withErrorHandling(
     }
 
     // Get counts
-    const [[likeCountResult], [commentCountResult], [shareCountResult]] =
+    const [likeCountResults, commentCountResults, shareCountResults] =
       await Promise.all([
         db
           .select({ count: count() })
@@ -564,6 +588,17 @@ export const GET = withErrorHandling(
           .from(shares)
           .where(eq(shares.postId, postId)),
       ]);
+
+    // Type assertions for aggregate query results
+    const likeCountResult = (
+      likeCountResults as unknown as Array<{ count: number }>
+    )[0];
+    const commentCountResult = (
+      commentCountResults as unknown as Array<{ count: number }>
+    )[0];
+    const shareCountResult = (
+      shareCountResults as unknown as Array<{ count: number }>
+    )[0];
 
     const likeCount = Number(likeCountResult?.count ?? 0);
     const commentCount = Number(commentCountResult?.count ?? 0);
@@ -722,6 +757,7 @@ export const GET = withErrorHandling(
         sentiment: post.sentiment || null,
         slant: post.slant || null,
         category: post.category || null,
+        imageUrl: post.imageUrl || null,
         authorId: post.authorId,
         authorName: authorName,
         authorUsername: authorUsername,

@@ -16,7 +16,7 @@
  *     summary: Accept group invite
  *     description: Accepts a group invitation (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: inviteId

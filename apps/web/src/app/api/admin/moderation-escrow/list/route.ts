@@ -16,7 +16,7 @@
  *     summary: List moderation escrow payments
  *     description: Returns escrow payments with filtering and pagination (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: recipientId
@@ -76,17 +76,9 @@
 
 import { requireAdmin } from '@babylon/api';
 import { db } from '@babylon/db';
+import { ListEscrowQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const ListEscrowQuerySchema = z.object({
-  recipientId: z.string().optional(),
-  adminId: z.string().optional(),
-  status: z.enum(['pending', 'paid', 'refunded', 'expired']).optional(),
-  limit: z.coerce.number().min(1).max(100).optional().default(50),
-  offset: z.coerce.number().min(0).optional().default(0),
-});
 
 export async function GET(req: NextRequest) {
   await requireAdmin(req);

@@ -11,11 +11,16 @@
  *   const game = await bootstrap({ privateKey, contractAddress, ... });
  */
 
+import { logger } from '@babylon/shared';
 import type { Address, Hex } from 'viem';
 import { keccak256, toBytes, toHex } from 'viem';
 import { type AgentState, AIAgent } from '../game/agent.js';
 import { GameEnvironment } from '../game/environment.js';
 import { AITrainer } from '../game/trainer.js';
+import {
+  BootstrapConfigSchema,
+  SavedGameStateSchema,
+} from '../schemas/index.js';
 import { IPFSSimulator } from '../storage/ipfs-simulator.js';
 import { StateManager } from '../storage/state-manager.js';
 import { TEEEnclave } from '../tee/enclave.js';
@@ -100,48 +105,51 @@ interface SavedGameState {
 export async function bootstrap(
   config: BootstrapConfig
 ): Promise<BootstrappedGame> {
-  console.log('╔══════════════════════════════════════════════════════════╗');
-  console.log('║       BOOTSTRAPPING PERMISSIONLESS AI GAME               ║');
-  console.log('╚══════════════════════════════════════════════════════════╝\n');
+  // Validate configuration at runtime
+  const validatedConfig = BootstrapConfigSchema.parse(config);
+
+  logger.info('╔══════════════════════════════════════════════════════════╗');
+  logger.info('║       BOOTSTRAPPING PERMISSIONLESS AI GAME               ║');
+  logger.info('╚══════════════════════════════════════════════════════════╝\n');
 
   // =========================================================================
   // Step 1: Initialize blockchain client
   // =========================================================================
-  console.log('[1/6] Connecting to blockchain...');
+  logger.info('[1/6] Connecting to blockchain...');
 
   const blockchain = new BlockchainClient({
-    chainId: config.chainId ?? 'localhost',
-    rpcUrl: config.rpcUrl,
-    contractAddress: config.contractAddress,
-    privateKey: config.privateKey,
+    chainId: validatedConfig.chainId,
+    rpcUrl: validatedConfig.rpcUrl,
+    contractAddress: validatedConfig.contractAddress,
+    privateKey: validatedConfig.privateKey,
   });
 
   const balance = await blockchain.getBalance();
-  console.log(`  Contract balance: ${balance} wei`);
-  console.log(`  Operator wallet: ${blockchain.getAddress()}`);
+  logger.info(`  Contract balance: ${balance} wei`);
+  logger.info(`  Operator wallet: ${blockchain.getAddress()}`);
 
   // =========================================================================
   // Step 2: Initialize IPFS client
   // =========================================================================
-  console.log('\n[2/6] Connecting to IPFS...');
+  logger.info('\n[2/6] Connecting to IPFS...');
 
   let ipfs: IPFSClient | IPFSSimulator;
 
-  if (config.useSimulatedIPFS) {
-    console.log('  Using simulated IPFS');
+  if (validatedConfig.useSimulatedIPFS) {
+    logger.info('  Using simulated IPFS');
     ipfs = new IPFSSimulator();
   } else {
-    ipfs = createIPFSClient(config.ipfsProvider ?? 'local', {
-      projectId: config.ipfsProjectId,
-      projectSecret: config.ipfsProjectSecret,
+    ipfs = createIPFSClient(validatedConfig.ipfsProvider ?? 'local', {
+      projectId: validatedConfig.ipfsProjectId,
+      projectSecret: validatedConfig.ipfsProjectSecret,
     });
 
     // Test connection
     try {
       const testResult = await ipfs.upload('test');
-      console.log(`  IPFS connected (test CID: ${testResult.cid})`);
+      logger.info(`  IPFS connected (test CID: ${testResult.cid})`);
     } catch {
-      console.warn('  Warning: IPFS connection failed, using simulated IPFS');
+      logger.warn('  Warning: IPFS connection failed, using simulated IPFS');
       ipfs = new IPFSSimulator();
     }
   }
@@ -149,31 +157,32 @@ export async function bootstrap(
   // =========================================================================
   // Step 3: Boot TEE enclave
   // =========================================================================
-  console.log('\n[3/6] Booting TEE enclave...');
+  logger.info('\n[3/6] Booting TEE enclave...');
 
   const codeHash =
-    config.gameCodeHash ?? (keccak256(toBytes('babylon-ai-game-v1')) as Hex);
+    validatedConfig.gameCodeHash ??
+    (keccak256(toBytes('babylon-ai-game-v1')) as Hex);
 
   const enclave = await TEEEnclave.create({
     codeHash,
-    instanceId: config.instanceId ?? 'primary-game-enclave',
+    instanceId: validatedConfig.instanceId ?? 'primary-game-enclave',
   });
 
   const attestation = enclave.getAttestation();
-  console.log(`  Enclave address: ${enclave.getOperatorAddress()}`);
-  console.log(`  Code hash: ${attestation.mrEnclave.slice(0, 20)}...`);
+  logger.info(`  Enclave address: ${enclave.getOperatorAddress()}`);
+  logger.info(`  Code hash: ${attestation.mrEnclave.slice(0, 20)}...`);
 
   // =========================================================================
   // Step 4: Register operator on-chain (if not already)
   // =========================================================================
-  console.log('\n[4/6] Checking operator registration...');
+  logger.info('\n[4/6] Checking operator registration...');
 
   const operatorInfo = await blockchain.getOperatorInfo();
 
   if (operatorInfo.address === enclave.getOperatorAddress()) {
-    console.log('  Operator already registered ✓');
+    logger.info('  Operator already registered ✓');
   } else if (!operatorInfo.active) {
-    console.log('  Registering operator on-chain...');
+    logger.info('  Registering operator on-chain...');
     const attestationHex = toHex(
       new TextEncoder().encode(JSON.stringify(attestation))
     );
@@ -181,7 +190,7 @@ export async function bootstrap(
       enclave.getOperatorAddress(),
       attestationHex
     );
-    console.log('  Operator registered ✓');
+    logger.info('  Operator registered ✓');
   } else {
     throw new Error(
       `Another operator is active: ${operatorInfo.address}. Wait for timeout or manually deactivate.`
@@ -191,7 +200,7 @@ export async function bootstrap(
   // =========================================================================
   // Step 5: Initialize game components
   // =========================================================================
-  console.log('\n[5/6] Initializing game components...');
+  logger.info('\n[5/6] Initializing game components...');
 
   // Create state manager with IPFS simulator (works with both real and simulated)
   const ipfsSimulator =
@@ -213,40 +222,33 @@ export async function bootstrap(
 
   const trainer = new AITrainer(
     {
-      batchSize: config.trainingBatchSize ?? 50,
-      epochsPerCycle: config.trainingEpochs ?? 10,
+      batchSize: validatedConfig.trainingBatchSize ?? 50,
+      epochsPerCycle: validatedConfig.trainingEpochs ?? 10,
       targetLoss: 0.01,
     },
     agent,
     environment
   );
 
-  console.log('  AI Agent initialized ✓');
-  console.log('  Game Environment initialized ✓');
-  console.log('  Trainer initialized ✓');
+  logger.info('  AI Agent initialized ✓');
+  logger.info('  Game Environment initialized ✓');
+  logger.info('  Trainer initialized ✓');
 
   // =========================================================================
   // Step 6: Load or create initial state
   // =========================================================================
-  console.log('\n[6/6] Loading game state...');
+  logger.info('\n[6/6] Loading game state...');
 
   const gameState = await blockchain.getGameState();
 
   if (gameState.cid && gameState.cid.length > 0) {
-    console.log(`  Loading existing state: ${gameState.cid}`);
-    try {
-      const state = (await stateManager.loadState(
-        gameState.cid
-      )) as SavedGameState;
-      if (state?.agent) {
-        agent.loadState(state.agent);
-        console.log('  State loaded ✓');
-      }
-    } catch {
-      console.log('  Could not load state, starting fresh');
-    }
+    logger.info(`  Loading existing state: ${gameState.cid}`);
+    const rawState = await stateManager.loadState(gameState.cid);
+    const state = SavedGameStateSchema.parse(rawState);
+    agent.loadState(state.agent);
+    logger.info('  State loaded ✓');
   } else {
-    console.log('  No existing state, creating genesis...');
+    logger.info('  No existing state, creating genesis...');
     const initialState: SavedGameState = {
       agent: agent.serialize(),
       gameStats: environment.getStats(),
@@ -257,7 +259,7 @@ export async function bootstrap(
 
     const checkpoint = await stateManager.saveState(initialState);
     await blockchain.updateState(checkpoint.cid, checkpoint.hash);
-    console.log(`  Genesis state saved: ${checkpoint.cid}`);
+    logger.info(`  Genesis state saved: ${checkpoint.cid}`);
   }
 
   // =========================================================================
@@ -271,19 +273,19 @@ export async function bootstrap(
     if (running) return;
     running = true;
 
-    console.log('\n[Game] Starting heartbeat...');
+    logger.info('\n[Game] Starting heartbeat...');
 
     // Send initial heartbeat
     await blockchain.heartbeat();
 
     // Start heartbeat interval
-    const interval = config.heartbeatIntervalMs ?? 60000; // 1 minute default
+    const interval = validatedConfig.heartbeatIntervalMs ?? 60000; // 1 minute default
     heartbeatTimer = setInterval(async () => {
       await blockchain.heartbeat();
-      console.log(`[Heartbeat] ${new Date().toISOString()}`);
+      logger.info(`[Heartbeat] ${new Date().toISOString()}`);
     }, interval);
 
-    console.log(`[Game] Running (heartbeat every ${interval / 1000}s)`);
+    logger.info(`[Game] Running (heartbeat every ${interval / 1000}s)`);
   };
 
   const stop = async () => {
@@ -308,11 +310,11 @@ export async function bootstrap(
     await blockchain.updateState(checkpoint.cid, checkpoint.hash);
 
     await enclave.shutdown();
-    console.log('[Game] Stopped');
+    logger.info('[Game] Stopped');
   };
 
   const runTrainingCycle = async () => {
-    console.log('\n[Training] Starting cycle...');
+    logger.info('\n[Training] Starting cycle...');
 
     const result = trainer.runTrainingCycle();
 
@@ -338,8 +340,8 @@ export async function bootstrap(
     const checkpoint = await stateManager.saveState(newState);
     await blockchain.updateState(checkpoint.cid, checkpoint.hash);
 
-    console.log(`[Training] Complete. Loss: ${result.finalLoss.toFixed(4)}`);
-    console.log(`[Training] Dataset CID: ${dataset.cid}`);
+    logger.info(`[Training] Complete. Loss: ${result.finalLoss.toFixed(4)}`);
+    logger.info(`[Training] Dataset CID: ${dataset.cid}`);
   };
 
   const getStatus = async (): Promise<GameStatus> => {
@@ -362,9 +364,9 @@ export async function bootstrap(
   // Return bootstrapped game
   // =========================================================================
 
-  console.log('\n╔══════════════════════════════════════════════════════════╗');
-  console.log('║              BOOTSTRAP COMPLETE                          ║');
-  console.log('╚══════════════════════════════════════════════════════════╝\n');
+  logger.info('\n╔══════════════════════════════════════════════════════════╗');
+  logger.info('║              BOOTSTRAP COMPLETE                          ║');
+  logger.info('╚══════════════════════════════════════════════════════════╝\n');
 
   return {
     blockchain,
@@ -395,12 +397,12 @@ if (import.meta.main) {
     | 'localhost';
 
   if (!privateKey) {
-    console.error('Error: PRIVATE_KEY environment variable required');
+    logger.error('Error: PRIVATE_KEY environment variable required');
     process.exit(1);
   }
 
   if (!contractAddress) {
-    console.error('Error: CONTRACT_ADDRESS environment variable required');
+    logger.error('Error: CONTRACT_ADDRESS environment variable required');
     process.exit(1);
   }
 
@@ -419,19 +421,19 @@ if (import.meta.main) {
 
       // Print status
       const status = await game.getStatus();
-      console.log('\nGame Status:', status);
+      logger.info('\nGame Status:', status);
 
       // Keep running
-      console.log('\nGame is running. Press Ctrl+C to stop.');
+      logger.info('\nGame is running. Press Ctrl+C to stop.');
 
       process.on('SIGINT', async () => {
-        console.log('\nShutting down...');
+        logger.info('\nShutting down...');
         await game.stop();
         process.exit(0);
       });
     })
     .catch((e) => {
-      console.error('Bootstrap failed:', e);
+      logger.error('Bootstrap failed:', e);
       process.exit(1);
     });
 }

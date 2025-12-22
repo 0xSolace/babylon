@@ -16,7 +16,7 @@
  *     summary: Post tweet
  *     description: Posts a tweet to Twitter/X using OAuth 2.0
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -150,9 +150,13 @@ export async function POST(request: NextRequest) {
   );
 
   // Track the share if contentType provided
-  if (contentType && responseData.data?.id) {
-    const token = request.headers.get('authorization')!.replace('Bearer ', '');
-    const tweetUrl = `https://x.com/${user.twitterUsername}/status/${responseData.data.id}`;
+  if (contentType && responseData.data) {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader) {
+      throw new Error('Missing authorization header');
+    }
+    const token = authHeader.replace('Bearer ', '');
+    const tweetUrl = `https://x.com/${user.twitterUsername || 'i'}/status/${responseData.data.id}`;
 
     const shareResponse = await fetch(
       `${process.env.NEXT_PUBLIC_APP_URL}/api/users/${user.id}/share`,
@@ -180,9 +184,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (!responseData.data) {
+    throw new Error('Tweet creation failed: no data in response');
+  }
+
   return NextResponse.json({
     success: true,
     tweet: responseData,
-    tweetUrl: `https://x.com/${user.twitterUsername || 'i'}/status/${responseData.data?.id}`,
+    tweetUrl: `https://x.com/${user.twitterUsername || 'i'}/status/${responseData.data.id}`,
   });
 }

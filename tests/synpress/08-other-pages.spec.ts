@@ -13,14 +13,17 @@
  */
 
 import { expect, test } from '@playwright/test';
+import {
+  getOAuth3TestAccount,
+  loginWithOAuth3Email,
+} from './helpers/oauth3-auth';
 import { isVisible, navigateTo, waitForPageLoad } from './helpers/page-helpers';
-import { getPrivyTestAccount, loginWithPrivyEmail } from './helpers/privy-auth';
 import { ROUTES } from './helpers/test-data';
 
 test.describe('Leaderboard Page', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.LEADERBOARD);
     await waitForPageLoad(page);
   });
@@ -90,7 +93,7 @@ test.describe('Leaderboard Page', () => {
 test.describe('Referrals Page', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.REFERRALS);
     await waitForPageLoad(page);
   });
@@ -169,7 +172,7 @@ test.describe('Referrals Page', () => {
 test.describe('Rewards Page', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.REWARDS);
     await waitForPageLoad(page);
   });
@@ -224,7 +227,7 @@ test.describe('Rewards Page', () => {
 test.describe('Registry Page', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.REGISTRY);
     await waitForPageLoad(page);
   });
@@ -272,7 +275,7 @@ test.describe('Registry Page', () => {
 test.describe('API Documentation Page', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.API_DOCS);
     await waitForPageLoad(page);
   });
@@ -336,7 +339,7 @@ test.describe('API Documentation Page', () => {
 test.describe('Settings Page', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.SETTINGS);
     await waitForPageLoad(page);
   });
@@ -398,7 +401,7 @@ test.describe('Settings Page', () => {
 test.describe('Notifications Page', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.NOTIFICATIONS);
     await waitForPageLoad(page);
   });
@@ -456,7 +459,7 @@ test.describe('Notifications Page', () => {
 test.describe('Game Page', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.GAME);
     await waitForPageLoad(page);
   });

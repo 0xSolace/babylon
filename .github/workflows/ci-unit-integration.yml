@@ -17,27 +17,10 @@ env:
 jobs:
   test-unit-integration:
     name: Unit & Integration Tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 45
 
     services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
-          # Increase PostgreSQL limits for large migrations with 76 tables
-          # Using environment variable to pass server options
-          POSTGRES_INITDB_ARGS: "--encoding=UTF8"
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --shm-size=1gb
-        ports:
-          - 5432:5432
       redis:
         image: redis:7-alpine
         options: >-
@@ -61,10 +44,8 @@ jobs:
 
       - name: Setup test environment
         env:
-          # Use CI test database directly
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          # Pass secrets with correct names (not _VAR suffix)
+          CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
+          CQL_DATABASE_ID: test_babylon
           PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID || '' }}
           PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET || '' }}
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || '' }}
@@ -83,43 +64,44 @@ jobs:
           REDIS_URL: redis://localhost:6379
         run: bash scripts/ci/prepare-env.sh
 
-      - name: Setup Database
+      - name: Setup CQL Database
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
+          CQL_DATABASE_ID: test_babylon
         run: |
-          # Use the setup script for consistent database initialization
-          bash scripts/setup-test-db.sh 2>&1 | sed -E 's/(Datasource|ep-soft-wildflower|neondb|@[^[:space:]]*\.neon\.tech)/[REDACTED]/g'
+          set -euo pipefail
+          echo "🗄️ Setting up CQL database..."
+          bun run scripts/setup-test-cql.ts
 
       - name: Build for tests
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           SKIP_ENV_VALIDATION: true
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
         run: |
+          set -euo pipefail
           echo "🏗️ Building project for tests..."
-          bun run build 2>&1 | sed -E 's/(Datasource|ep-soft-wildflower|neondb|@[^[:space:]]*\.neon\.tech)/[REDACTED]/g'
+          bunx turbo build --filter=!babylon-docs
           echo "✅ Build complete"
 
       - name: Run Unit Tests
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
+          CQL_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
         run: |
-          echo "🧪 Running unit tests with database connection..."
-          echo "📊 Database URL configured: ${DATABASE_URL:0:30}..."
+          echo "🧪 Running unit tests with CQL..."
           bun test packages/testing/unit/ --preload ./packages/testing/unit/preload.ts --coverage
         continue-on-error: false
 
       - name: Start Next.js dev server
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
+          CQL_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           NEXT_PUBLIC_APP_URL: http://localhost:3000
           PORT: 3000
-          # Privy configuration for server
           PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID || '' }}
           PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET || '' }}
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || '' }}
@@ -127,7 +109,7 @@ jobs:
           PRIVY_TEST_PASSWORD: ${{ secrets.PRIVY_TEST_PASSWORD || '' }}
         run: |
           echo "🚀 Starting Next.js dev server for integration tests..."
-          SKIP_ENV_VALIDATION=1 bunx --bun next dev --dir apps/web > /tmp/next-server.log 2>&1 &
+          SKIP_ENV_VALIDATION=1 bunx --bun next dev apps/web -p 3000 > /tmp/next-server.log 2>&1 &
           echo $! > /tmp/next-server.pid
           echo "📝 Server PID: $(cat /tmp/next-server.pid)"
 
@@ -143,7 +125,8 @@ jobs:
 
       - name: Setup Playwright authentication for integration tests
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
+          CQL_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID || '' }}
@@ -153,11 +136,9 @@ jobs:
           PRIVY_TEST_PASSWORD: ${{ secrets.PRIVY_TEST_PASSWORD || '' }}
         run: |
           echo "🔐 Setting up Playwright authentication for integration tests..."
-          # First run E2E auth setup
           cd packages/testing && bunx playwright test --project=setup || {
             echo "⚠️  E2E auth setup failed, but continuing..."
           }
-          # Then run integration auth setup to extract tokens
           cd packages/testing && bunx playwright test --project=setup-integration-auth || {
             echo "⚠️  Integration auth setup failed, but continuing..."
           }
@@ -165,8 +146,8 @@ jobs:
 
       - name: Run Integration Tests
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
+          CQL_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           TEST_API_URL: http://localhost:3000
           NODE_ENV: test
@@ -174,28 +155,13 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || '' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '' }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY || '' }}
-          # Privy test credentials for authentication
           PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID || '' }}
           PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET || '' }}
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || '' }}
           PRIVY_TEST_EMAIL: ${{ secrets.PRIVY_TEST_EMAIL || '' }}
           PRIVY_TEST_PASSWORD: ${{ secrets.PRIVY_TEST_PASSWORD || '' }}
-          # Test user credentials for settings page tests
-          # NOTE: These need to be added as GitHub Secrets:
-          # - TEST_USER_ID: The Privy user ID (e.g., "privy:xxxxx" or internal user ID)
-          # - TEST_ACCESS_TOKEN: A valid Privy access token for that user
-          # To get these values:
-          # 1. Authenticate with PRIVY_TEST_EMAIL/PRIVY_TEST_PASSWORD in your app
-          # 2. Get the user ID from the authenticated user object
-          # 3. Get the access token from Privy (via getAccessToken() or from localStorage)
-          # 4. Add both as secrets in GitHub Settings > Secrets and variables > Actions
           TEST_USER_ID: ${{ secrets.TEST_USER_ID || vars.TEST_USER_ID || '' }}
           TEST_ACCESS_TOKEN: ${{ secrets.TEST_ACCESS_TOKEN || vars.TEST_ACCESS_TOKEN || '' }}
-          # Agent0 SDK Configuration for integration tests
-          # NOTE: Add these secrets in GitHub Settings > Secrets and variables > Actions
-          # Required for agent0-sdk.integration.test.ts to run (currently skipped without config)
-          # Get free Ethereum Sepolia RPC: https://www.alchemy.com/ or https://infura.io/
-          # Use a dedicated test wallet - NEVER use mainnet wallet with funds!
           AGENT0_ENABLED: ${{ secrets.AGENT0_ENABLED || 'false' }}
           AGENT0_NETWORK: ${{ secrets.AGENT0_NETWORK || 'sepolia' }}
           AGENT0_RPC_URL: ${{ secrets.AGENT0_RPC_URL || '' }}
@@ -216,10 +182,7 @@ jobs:
             kill $(cat /tmp/next-server.pid) || true
             rm /tmp/next-server.pid
           fi
-          # Show last 50 lines of server logs if they exist
           if [ -f /tmp/next-server.log ]; then
             echo "📝 Server logs (last 50 lines):"
             tail -50 /tmp/next-server.log
           fi
-
-

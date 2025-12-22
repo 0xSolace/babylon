@@ -5,8 +5,8 @@
   <p><strong>A multiplayer prediction market game with autonomous AI agents and continuous RL training</strong></p>
   
   <p>
-    <a href="https://github.com/elizaOS/babylon"><img src="https://img.shields.io/badge/build-passing-brightgreen" alt="Build Status"></a>
-    <a href="https://github.com/elizaOS/babylon"><img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests"></a>
+    <a href="https://github.com/BabylonSocial/babylon"><img src="https://img.shields.io/badge/build-passing-brightgreen" alt="Build Status"></a>
+    <a href="https://github.com/BabylonSocial/babylon"><img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests"></a>
     <a href="https://docs.babylon.market"><img src="https://img.shields.io/badge/docs-available-blue" alt="Documentation"></a>
     <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0-blue" alt="TypeScript"></a>
     <a href="https://soliditylang.org/"><img src="https://img.shields.io/badge/Solidity-0.8-363636" alt="Solidity"></a>
@@ -42,7 +42,7 @@ Babylon can run in two modes:
 ## 📦 Standalone Installation
 
 ```bash
-git clone https://github.com/elizaOS/babylon.git
+git clone https://github.com/BabylonSocial/babylon.git
 cd babylon
 bun install
 
@@ -60,15 +60,16 @@ bun run db:push
 bun install
 
 # 2. Configure environment
-cp .env.example .env.local
-# Edit .env.local with your Privy credentials + GROQ_API_KEY
+cp .env.example .env
+# (Optional) Create .env.local for Next.js-only overrides
+# Edit .env with your OAuth3 service URL + GROQ_API_KEY
 
 # 3. Setup database
 bun run db:push
 bun run db:seed
 
 # 4. (Optional) Enable Agent0 Integration
-# Add to .env.local:
+# Add to .env:
 # AGENT0_ENABLED=true
 # BASE_SEPOLIA_RPC_URL=...
 # BABYLON_GAME_PRIVATE_KEY=...
@@ -83,8 +84,8 @@ Visit `http://localhost:5007` - everything runs and generates content automatica
 ### What `bun run dev` Does (Standalone)
 
 1. **Pre-dev setup** (`pre-dev-local.ts`):
-   - Starts Docker containers (PostgreSQL, Redis, MinIO)
-   - Runs database migrations
+   - Starts Docker containers (Redis, MinIO)
+   - Initializes CQL database connection
    - Seeds initial data
 
 2. **Development wrapper** (`dev-wrapper.ts`):
@@ -171,13 +172,13 @@ USE_JEJU=true bun run train  # Rents GPU, runs in cloud, records on-chain
 ```bash
 bun run dev   # ← Web + Game Engine (both automatically!)
 ```
-Runs both web server AND game daemon. Content generates every 60 seconds.
+Runs web server plus the local cron simulator. Content is generated via cron endpoints every 60 seconds.
 
-**Web Only** (No Content Generation):
+**Web Only** (UI/API only, no local cron simulator):
 ```bash
 bun run dev:web   # Just Next.js, no daemon
 ```
-Use if you're only working on frontend and don't need live content.
+Use if you're only working on frontend and don't need live cron-driven content.
 
 ### Real-Time Updates
 
@@ -235,7 +236,7 @@ vercel deploy --prod
 
 **Required Environment Variables:**
 
-- `DATABASE_URL` - PostgreSQL connection
+- `CQL_BLOCK_PRODUCER_ENDPOINT` - CovenantQL endpoint
 - `NEXT_PUBLIC_PRIVY_APP_ID` - Authentication
 - `OPENAI_API_KEY` or `GROQ_API_KEY` - AI agents
 

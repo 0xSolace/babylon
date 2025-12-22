@@ -1,6 +1,11 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import {
+  type AdminRegistryData,
+  AdminRegistryDataSchema,
+  type AdminRegistryEntity,
+  cn,
+} from '@babylon/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -21,86 +26,10 @@ import {
 import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { z } from 'zod';
 import { FeedbackForm } from '@/components/feedback/FeedbackForm';
 import { Avatar } from '@/components/shared/Avatar';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { Skeleton } from '@/components/shared/Skeleton';
-
-/**
- * Registry entity schema for validation.
- */
-const RegistryEntitySchema = z.object({
-  type: z.enum(['user', 'actor', 'agent', 'app']),
-  id: z.string(),
-  name: z.string(),
-  username: z.string().optional(),
-  bio: z.string().optional(),
-  description: z.string().optional(),
-  imageUrl: z.string().optional(),
-  walletAddress: z.string().optional(),
-  isActor: z.boolean().optional(),
-  onChainRegistered: z.boolean().optional(),
-  nftTokenId: z.number().nullable().optional(),
-  agent0TokenId: z.number().nullable().optional(),
-  tokenId: z.number().optional(),
-  metadataCID: z.string().optional(),
-  mcpEndpoint: z.string().optional(),
-  a2aEndpoint: z.string().optional(),
-  balance: z.string().optional(),
-  reputationPoints: z.number().optional(),
-  reputationScore: z.number().optional(),
-  averageFeedbackScore: z.number().optional(),
-  totalFeedbackCount: z.number().optional(),
-  isBanned: z.boolean().optional(),
-  isScammer: z.boolean().optional(),
-  isCSAM: z.boolean().optional(),
-  tier: z.string().optional(),
-  role: z.string().optional(),
-  domain: z.array(z.string()).optional(),
-  capabilities: z.record(z.string(), z.unknown()).optional(),
-  reputation: z
-    .object({
-      trustScore: z.number(),
-      accuracyScore: z.number(),
-      totalBets: z.number(),
-      winningBets: z.number(),
-    })
-    .optional(),
-  stats: z
-    .object({
-      positions: z.number().optional(),
-      comments: z.number().optional(),
-      reactions: z.number().optional(),
-      followers: z.number().optional(),
-      following: z.number().optional(),
-      pools: z.number().optional(),
-      trades: z.number().optional(),
-    })
-    .optional(),
-  createdAt: z.string().optional(),
-  registrationTxHash: z.string().optional(),
-  registrationTimestamp: z.string().optional(),
-});
-type RegistryEntity = z.infer<typeof RegistryEntitySchema>;
-
-/**
- * Registry data schema for validation.
- */
-const RegistryDataSchema = z.object({
-  users: z.array(RegistryEntitySchema),
-  actors: z.array(RegistryEntitySchema),
-  agents: z.array(RegistryEntitySchema),
-  apps: z.array(RegistryEntitySchema),
-  totals: z.object({
-    users: z.number(),
-    actors: z.number(),
-    agents: z.number(),
-    apps: z.number(),
-    total: z.number(),
-  }),
-});
-type RegistryData = z.infer<typeof RegistryDataSchema>;
 
 /**
  * Registry tab component for viewing and managing registry entities.
@@ -130,16 +59,15 @@ export function RegistryTab() {
   const [activeTab, setActiveTab] = useState<
     'all' | 'users' | 'actors' | 'agents' | 'apps'
   >('all');
-  const [selectedEntity, setSelectedEntity] = useState<RegistryEntity | null>(
-    null
-  );
+  const [selectedEntity, setSelectedEntity] =
+    useState<AdminRegistryEntity | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showBanModal, setShowBanModal] = useState(false);
   const [banReason, setBanReason] = useState('');
   const [isScammer, setIsScammer] = useState(false);
   const [isCSAM, setIsCSAM] = useState(false);
 
-  const { data, isLoading, error, refetch } = useQuery<RegistryData>({
+  const { data, isLoading, error, refetch } = useQuery<AdminRegistryData>({
     queryKey: ['admin', 'registry', search, onChainOnly],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -150,11 +78,11 @@ export function RegistryTab() {
       const result = await response.json();
 
       if (result.success && result.data) {
-        const validation = RegistryDataSchema.safeParse(result.data);
-        if (validation.success) {
-          return validation.data;
+        const validation = AdminRegistryDataSchema.safeParse(result.data);
+        if (!validation.success) {
+          throw new Error('Invalid data structure for registry data');
         }
-        throw new Error('Invalid data structure for registry');
+        return validation.data;
       }
       const errorMessage =
         result.error &&
@@ -174,7 +102,7 @@ export function RegistryTab() {
       scammer,
       csam,
     }: {
-      entity: RegistryEntity;
+      entity: AdminRegistryEntity;
       action: 'ban' | 'unban';
       reason?: string;
       scammer?: boolean;
@@ -240,7 +168,7 @@ export function RegistryTab() {
     );
   };
 
-  const renderEntityCard = (entity: RegistryEntity) => {
+  const renderEntityCard = (entity: AdminRegistryEntity) => {
     const getBadgeColor = () => {
       switch (entity.type) {
         case 'user':
@@ -270,7 +198,7 @@ export function RegistryTab() {
         <div className="border-border border-b bg-muted/30 px-4 py-3">
           <div className="flex items-start gap-3">
             <Avatar
-              src={entity.imageUrl}
+              src={entity.imageUrl ?? undefined}
               name={entity.name}
               size="lg"
               className="shrink-0"
@@ -414,15 +342,19 @@ export function RegistryTab() {
                 className={cn(
                   'flex items-center gap-2 rounded-xl border px-3 py-2 text-sm',
                   entity.reputationScore !== undefined &&
+                    entity.reputationScore !== null &&
                     entity.reputationScore >= 80
                     ? 'border-green-500/20 bg-green-500/5'
                     : entity.reputationScore !== undefined &&
+                        entity.reputationScore !== null &&
                         entity.reputationScore >= 60
                       ? 'border-yellow-500/20 bg-yellow-500/5'
                       : entity.reputationScore !== undefined &&
+                          entity.reputationScore !== null &&
                           entity.reputationScore >= 40
                         ? 'border-orange-500/20 bg-orange-500/5'
                         : entity.reputationScore !== undefined &&
+                            entity.reputationScore !== null &&
                             entity.reputationScore < 40
                           ? 'border-red-500/20 bg-red-500/5'
                           : 'border-purple-500/20 bg-purple-500/5'
@@ -431,16 +363,16 @@ export function RegistryTab() {
                 <Star
                   className={cn(
                     'h-4 w-4 shrink-0',
-                    entity.reputationScore !== undefined &&
+                    entity.reputationScore != null &&
                       entity.reputationScore >= 80
                       ? 'text-green-500'
-                      : entity.reputationScore !== undefined &&
+                      : entity.reputationScore != null &&
                           entity.reputationScore >= 60
                         ? 'text-yellow-500'
-                        : entity.reputationScore !== undefined &&
+                        : entity.reputationScore != null &&
                             entity.reputationScore >= 40
                           ? 'text-orange-500'
-                          : entity.reputationScore !== undefined &&
+                          : entity.reputationScore != null &&
                               entity.reputationScore < 40
                             ? 'text-red-500'
                             : 'text-purple-500'
@@ -453,26 +385,28 @@ export function RegistryTab() {
                   <div
                     className={cn(
                       'truncate font-semibold',
-                      entity.reputationScore !== undefined &&
+                      entity.reputationScore != null &&
                         entity.reputationScore >= 80
                         ? 'text-green-500'
-                        : entity.reputationScore !== undefined &&
+                        : entity.reputationScore != null &&
                             entity.reputationScore >= 60
                           ? 'text-yellow-500'
-                          : entity.reputationScore !== undefined &&
+                          : entity.reputationScore != null &&
                               entity.reputationScore >= 40
                             ? 'text-orange-500'
-                            : entity.reputationScore !== undefined &&
+                            : entity.reputationScore != null &&
                                 entity.reputationScore < 40
                               ? 'text-red-500'
                               : 'text-foreground'
                     )}
                   >
-                    {entity.reputationScore !== undefined
+                    {entity.reputationScore !== undefined &&
+                    entity.reputationScore !== null
                       ? `${Math.round(entity.reputationScore)}/100`
                       : `${entity.reputationPoints ? entity.reputationPoints.toLocaleString() : 0} pts`}
                   </div>
                   {entity.totalFeedbackCount !== undefined &&
+                    entity.totalFeedbackCount !== null &&
                     entity.totalFeedbackCount > 0 && (
                       <div className="mt-0.5 text-muted-foreground text-xs">
                         {entity.totalFeedbackCount} reviews
@@ -673,7 +607,10 @@ export function RegistryTab() {
     );
   };
 
-  const handleBanUser = (entity: RegistryEntity, action: 'ban' | 'unban') => {
+  const handleBanUser = (
+    entity: AdminRegistryEntity,
+    action: 'ban' | 'unban'
+  ) => {
     if (action === 'ban' && !banReason.trim()) {
       toast.error('Please provide a reason for banning');
       return;
@@ -890,7 +827,9 @@ export function RegistryTab() {
 
           {activeEntities.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {activeEntities.map((entity) => renderEntityCard(entity))}
+              {activeEntities.map((entity: AdminRegistryEntity) =>
+                renderEntityCard(entity)
+              )}
             </div>
           ) : (
             <div className="py-20 text-center">

@@ -16,7 +16,7 @@
  *     summary: Expire old escrow payments
  *     description: Marks expired payments as expired (admin only, can be cron)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Expired payments processed successfully

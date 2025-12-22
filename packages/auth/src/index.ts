@@ -88,7 +88,7 @@ export {
   verifySIWE,
   verifySIWF,
 } from './oauth/index';
-// OAuth3 (Decentralized Auth - replaces Privy)
+// OAuth3 (Jeju Decentralized Auth)
 export {
   AuthProvider,
   type AuthResult,
@@ -111,5 +111,29 @@ export {
   RecoveryManager,
   SocialRecovery,
 } from './recovery/index';
+export type {
+  DiscordUserResponseInput,
+  KeyBackupInput,
+  OAuthTokenResponseInput,
+  PKCEParamsInput,
+  SessionClaimsInput,
+  SessionDataInput,
+  SessionTokenDataInput,
+  TwitterUserResponseInput,
+} from './schemas/index';
+// Validation schemas
+export {
+  AddressSchema,
+  DIDSchema,
+  DiscordUserResponseSchema,
+  HexSchema,
+  KeyBackupSchema,
+  OAuthTokenResponseSchema,
+  PKCEParamsSchema,
+  SessionClaimsSchema,
+  SessionDataSchema,
+  SessionTokenDataSchema,
+  TwitterUserResponseSchema,
+} from './schemas/index';
 // Core types
 export * from './types/index';

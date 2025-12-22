@@ -5,7 +5,7 @@
  * vs external wallets. Provides error message helpers for wallet-related operations.
  *
  * Note: These functions work with any wallet provider that uses the ConnectedWallet interface.
- * Originally designed for Privy, now compatible with OAuth3/Jeju decentralized auth.
+ * Designed for OAuth3/Jeju decentralized auth.
  */
 
 /**
@@ -25,7 +25,6 @@ export interface ConnectedWallet {
  * as opposed to an external wallet like MetaMask or Coinbase Wallet.
  *
  * Detects:
- * - Privy embedded wallets (legacy)
  * - OAuth3/Jeju smart wallets
  * - Any wallet with 'embedded' or 'smart' in the client type
  *
@@ -36,8 +35,6 @@ export function isEmbeddedWallet(wallet?: ConnectedWallet | null): boolean {
   if (!wallet) return false;
   const clientType = wallet.walletClientType.toLowerCase();
   return (
-    clientType === 'privy' ||
-    clientType === 'privy-v2' ||
     clientType === 'oauth3' ||
     clientType === 'jeju' ||
     clientType.includes('embedded') ||
@@ -46,7 +43,8 @@ export function isEmbeddedWallet(wallet?: ConnectedWallet | null): boolean {
 }
 
 /**
- * @deprecated Use isEmbeddedWallet instead
+ * @deprecated Legacy function from Privy migration - use isEmbeddedWallet instead.
+ * This wrapper exists for backward compatibility during OAuth3/MPC wallet migration.
  */
 export function isEmbeddedPrivyWallet(
   wallet?: ConnectedWallet | null

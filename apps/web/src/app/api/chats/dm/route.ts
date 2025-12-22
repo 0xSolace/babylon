@@ -17,7 +17,7 @@
  *     summary: Create or get DM chat
  *     description: Creates or retrieves a direct message chat between two users. Idempotent - same chat returned for same participants.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

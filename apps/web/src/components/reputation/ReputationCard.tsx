@@ -7,15 +7,14 @@
  * - Performance metrics
  * - Trade and game statistics
  *
- * Pattern based on: ProfileWidget.tsx
+ * Uses react-query for proper caching and automatic refetching.
  */
 
 'use client';
 
+import { cn } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Shield, Star, TrendingDown, TrendingUp, Trophy } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
-import { useWidgetCacheStore } from '@/stores/widgetCacheStore';
 import { ReputationBadge, ReputationScore } from './ReputationBadge';
 import { TrustLevelBadge } from './TrustLevelBadge';
 
@@ -33,84 +32,87 @@ interface ReputationData {
   totalUsers: number;
 }
 
+interface ReputationApiResponse {
+  success: boolean;
+  reputationPoints?: number;
+  averageFeedbackScore?: number;
+  totalFeedbackReceived?: number;
+  performance?: {
+    gamesPlayed?: number;
+    gamesWon?: number;
+    averageGameScore?: number;
+    winRate?: number;
+  };
+  recentTrend?: number;
+  trustLevel?: 'newcomer' | 'trusted' | 'veteran' | 'elite';
+  rank?: number | null;
+  totalUsers?: number;
+}
+
 interface ReputationCardProps {
   userId: string;
   className?: string;
+}
+
+/**
+ * Fetches and transforms reputation data from the API.
+ */
+async function fetchReputationData(userId: string): Promise<ReputationData> {
+  const response = await fetch(`/api/reputation/${encodeURIComponent(userId)}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch reputation: ${response.status}`);
+  }
+
+  const data: ReputationApiResponse = await response.json();
+
+  if (!data.success) {
+    throw new Error('Reputation API returned unsuccessful response');
+  }
+
+  return {
+    reputationPoints: data.reputationPoints ?? 1000,
+    averageFeedbackScore: data.averageFeedbackScore ?? 0,
+    totalFeedbackReceived: data.totalFeedbackReceived ?? 0,
+    gamesPlayed: data.performance?.gamesPlayed ?? 0,
+    gamesWon: data.performance?.gamesWon ?? 0,
+    averageGameScore: data.performance?.averageGameScore ?? 0,
+    winRate: data.performance?.winRate ?? 0,
+    recentTrend: data.recentTrend ?? 0,
+    trustLevel: data.trustLevel ?? 'newcomer',
+    rank: data.rank ?? null,
+    totalUsers: data.totalUsers ?? 0,
+  };
 }
 
 export function ReputationCard({
   userId,
   className = '',
 }: ReputationCardProps) {
-  const [reputation, setReputation] = useState<ReputationData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const widgetCache = useWidgetCacheStore();
+  const {
+    data: reputation,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['reputation', userId],
+    queryFn: () => fetchReputationData(userId),
+    enabled: !!userId,
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // Poll every 60 seconds
+  });
 
-  useEffect(() => {
-    if (!userId) return;
+  // Show error state
+  if (error) {
+    return (
+      <div className={cn('rounded-lg bg-sidebar p-4', className)}>
+        <div className="text-muted-foreground text-sm">
+          Failed to load reputation
+        </div>
+      </div>
+    );
+  }
 
-    const fetchReputationData = async (skipCache = false) => {
-      // Check cache first
-      if (!skipCache) {
-        const cached = widgetCache.getReputationWidget(
-          userId
-        ) as ReputationData | null;
-        if (cached) {
-          setReputation(cached);
-          setLoading(false);
-          return;
-        }
-      }
-
-      setLoading(true);
-
-      try {
-        // Fetch reputation data from API
-        const response = await fetch(
-          `/api/reputation/${encodeURIComponent(userId)}`
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (data.success) {
-          const reputationData: ReputationData = {
-            reputationPoints: data.reputationPoints || 1000,
-            averageFeedbackScore: data.averageFeedbackScore || 0,
-            totalFeedbackReceived: data.totalFeedbackReceived || 0,
-            gamesPlayed: data.performance?.gamesPlayed || 0,
-            gamesWon: data.performance?.gamesWon || 0,
-            averageGameScore: data.performance?.averageGameScore || 0,
-            winRate: data.performance?.winRate || 0,
-            recentTrend: data.recentTrend || 0,
-            trustLevel: data.trustLevel || 'newcomer',
-            rank: data.rank || null,
-            totalUsers: data.totalUsers || 0,
-          };
-
-          setReputation(reputationData);
-
-          // Cache the result
-          widgetCache.setReputationWidget(userId, reputationData);
-        }
-      } catch (error) {
-        console.error('Failed to fetch reputation data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchReputationData();
-
-    // Refresh every 60 seconds
-    const interval = setInterval(() => fetchReputationData(true), 60000);
-    return () => clearInterval(interval);
-  }, [userId, widgetCache]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={cn('rounded-lg bg-sidebar p-4', className)}>
         <div className="text-muted-foreground text-sm">
@@ -261,7 +263,8 @@ export function ReputationCard({
 /**
  * ReputationCardMini Component
  *
- * Compact version for inline display
+ * Compact version for inline display.
+ * Uses the same query key as ReputationCard for shared caching.
  */
 interface ReputationCardMiniProps {
   userId: string;
@@ -272,41 +275,24 @@ export function ReputationCardMini({
   userId,
   className = '',
 }: ReputationCardMiniProps) {
-  const [reputationPoints, setReputationPoints] = useState<number>(1000);
-  const [loading, setLoading] = useState(true);
+  const { data: reputation, isLoading } = useQuery({
+    queryKey: ['reputation', userId],
+    queryFn: () => fetchReputationData(userId),
+    enabled: !!userId,
+    staleTime: 30000, // 30 seconds
+  });
 
-  useEffect(() => {
-    const fetchReputation = async () => {
-      try {
-        const response = await fetch(
-          `/api/reputation/${encodeURIComponent(userId)}`
-        );
-        const data = await response.json();
-
-        if (data.success) {
-          setReputationPoints(data.reputationPoints || 1000);
-        }
-      } catch (error) {
-        console.error('Failed to fetch reputation:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchReputation();
-  }, [userId]);
-
-  if (loading) return null;
+  if (isLoading || !reputation) return null;
 
   return (
     <div className={cn('inline-flex items-center gap-2', className)}>
       <ReputationBadge
-        reputationPoints={reputationPoints}
+        reputationPoints={reputation.reputationPoints}
         size="sm"
         showLabel={false}
       />
       <span className="font-medium text-foreground text-sm">
-        {reputationPoints.toLocaleString()}
+        {reputation.reputationPoints.toLocaleString()}
       </span>
     </div>
   );

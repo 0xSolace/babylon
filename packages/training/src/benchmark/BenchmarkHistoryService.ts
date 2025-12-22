@@ -5,8 +5,7 @@
  */
 
 import { type BenchmarkResult, db, type JsonValue } from '@babylon/db';
-import { logger } from '../utils/logger';
-import { generateSnowflakeId } from '../utils/snowflake';
+import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { SimulationMetrics } from './SimulationEngine';
 
 export interface BenchmarkResultInput {

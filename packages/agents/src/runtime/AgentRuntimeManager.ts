@@ -18,6 +18,7 @@ import {
   loadActorById,
   StaticDataRegistry,
 } from '@babylon/engine';
+import type { JsonValue } from '@babylon/shared';
 import {
   AgentRuntime,
   type Character,
@@ -39,7 +40,6 @@ import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
 import { type AgentRegistration, AgentType } from '../types/agent-registry';
-import type { JsonValue } from '../types/common';
 
 /**
  * Extended AgentRuntime with Babylon-specific properties
@@ -257,7 +257,8 @@ export class AgentRuntimeManager {
 
     runtime.currentModel = 'jeju-compute';
 
-    // Override adapter.log to prevent undefined logger errors
+    // Override adapter methods to prevent undefined errors
+    // Babylon doesn't use ElizaOS's memory system, so we stub these out
     runtime.adapter = {
       ...runtime.adapter,
       log: async (_params: {
@@ -266,7 +267,20 @@ export class AgentRuntimeManager {
         roomId: string;
         type: string;
       }): Promise<void> => {
-        // No-op to prevent errors
+        // No-op - Babylon uses its own logging
+      },
+      createMemory: async (
+        memory: unknown,
+        _tableName?: string
+      ): Promise<UUID> => {
+        // No-op - Babylon uses its own DB for message storage
+        // Return the memory ID or generate one
+        const memoryObj = memory as { id?: string } | null;
+        return (memoryObj?.id || crypto.randomUUID()) as UUID;
+      },
+      getMemories: async (_params: unknown): Promise<unknown[]> => {
+        // Return empty array - Babylon uses its own DB
+        return [];
       },
     } as typeof runtime.adapter;
 
@@ -415,7 +429,12 @@ export class AgentRuntimeManager {
     };
 
     // Create runtime with standard plugins
-    return this.createRuntimeWithPlugins(registration.agentId, character);
+    // Pass userId for Babylon integration (User table lookup)
+    return this.createRuntimeWithPlugins(
+      registration.agentId,
+      character,
+      registration.userId
+    );
   }
 
   /**
@@ -492,10 +511,15 @@ export class AgentRuntimeManager {
   /**
    * Create AgentRuntime with standard plugin configuration
    * Shared logic for all agent types
+   *
+   * @param agentId - The agent's unique identifier (used for Eliza runtime)
+   * @param character - Character configuration
+   * @param userId - Optional User table ID for USER_CONTROLLED agents (used for Babylon integration)
    */
   private async createRuntimeWithPlugins(
     agentId: string,
-    character: Character
+    character: Character,
+    userId?: string
   ): Promise<AgentRuntime> {
     // Database configuration
     const dbPort = process.env.POSTGRES_DEV_PORT || 5432;
@@ -533,7 +557,8 @@ export class AgentRuntimeManager {
     }
     runtime.currentModel = 'jeju-compute';
 
-    // Override adapter.log to prevent undefined logger errors
+    // Override adapter methods to prevent undefined errors
+    // Babylon doesn't use ElizaOS's memory system, so we stub these out
     runtime.adapter = {
       ...runtime.adapter,
       log: async (_params: {
@@ -542,7 +567,20 @@ export class AgentRuntimeManager {
         roomId: string;
         type: string;
       }): Promise<void> => {
-        // No-op to prevent errors
+        // No-op - Babylon uses its own logging
+      },
+      createMemory: async (
+        memory: unknown,
+        _tableName?: string
+      ): Promise<UUID> => {
+        // No-op - Babylon uses its own DB for message storage
+        // Return the memory ID or generate one
+        const memoryObj = memory as { id?: string } | null;
+        return (memoryObj?.id || crypto.randomUUID()) as UUID;
+      },
+      getMemories: async (_params: unknown): Promise<unknown[]> => {
+        // Return empty array - Babylon uses its own DB
+        return [];
       },
     } as typeof runtime.adapter;
 
@@ -561,7 +599,9 @@ export class AgentRuntimeManager {
     await Promise.all(pluginRegistrationPromises);
 
     // Wrap and enhance with Babylon plugin
-    await this.enhanceWithBabylon(runtime, agentId, trajectoryLogger);
+    // Use userId for USER_CONTROLLED agents (User table lookup), agentId for NPCs
+    const babylonAgentId = userId || agentId;
+    await this.enhanceWithBabylon(runtime, babylonAgentId, trajectoryLogger);
 
     // Store trajectory logger reference on runtime
     runtime.trajectoryLogger = trajectoryLogger;

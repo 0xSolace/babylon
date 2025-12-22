@@ -3,31 +3,18 @@
  * @module @babylon/moderation/types
  */
 
+import { BanStatus, MarketOutcome, VotePosition } from '@babylon/shared';
 import type { Address } from 'viem';
 
 // ============================================================================
-// Enums
+// Re-export enums from @babylon/shared (canonical source)
 // ============================================================================
 
-export enum BanStatus {
-  NONE = 0,
-  ON_NOTICE = 1,
-  CHALLENGED = 2,
-  BANNED = 3,
-  CLEARED = 4,
-  APPEALING = 5,
-}
+export { BanStatus, MarketOutcome, VotePosition };
 
-export enum VotePosition {
-  YES = 0,
-  NO = 1,
-}
-
-export enum MarketOutcome {
-  PENDING = 0,
-  BAN_UPHELD = 1,
-  BAN_REJECTED = 2,
-}
+// ============================================================================
+// Local enums (moderation-package specific)
+// ============================================================================
 
 export enum ReportCategory {
   SPAM = 'spam',

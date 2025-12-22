@@ -118,7 +118,7 @@ export class OnChainPredictionMarketService {
    * @param marketId - Market identifier (bytes32)
    * @param outcome - 0 for NO, 1 for YES
    * @param numShares - Number of shares to buy
-   * @param userWalletClient - User's wallet client from Privy
+   * @param userWalletClient - User's wallet client from OAuth3
    * @returns Transaction hash
    */
   async buyShares(

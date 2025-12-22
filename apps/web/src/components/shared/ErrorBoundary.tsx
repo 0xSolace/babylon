@@ -87,7 +87,7 @@ export class ErrorBoundary extends Component<
             <AlertTriangle className="mx-auto mb-4 h-16 w-16 text-destructive" />
             <h2 className="mb-2 font-bold text-2xl">Something went wrong</h2>
             <p className="mb-6 text-muted-foreground">
-              {this.state.error?.message || 'An unexpected error occurred'}
+              {this.state.error?.message ?? 'An unexpected error occurred'}
             </p>
             <button
               onClick={() => {

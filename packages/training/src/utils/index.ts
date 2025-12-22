@@ -2,8 +2,9 @@
  * Training Package Utilities
  */
 
-export { logger } from './logger';
-export { generateSnowflakeId } from './snowflake';
+// Re-export logger from shared for convenience
+export { type LogData, Logger, type LogLevel, logger } from '@babylon/shared';
+
 export { assertHasLLMCalls, validateLLMCalls } from './synthetic-detector';
 
 /**

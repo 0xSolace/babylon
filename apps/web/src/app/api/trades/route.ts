@@ -150,13 +150,11 @@
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, OffsetPaginationSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-const QuerySchema = z.object({
-  limit: z.coerce.number().min(1).max(100).default(50),
-  offset: z.coerce.number().min(0).default(0),
+const QuerySchema = OffsetPaginationSchema.extend({
   userId: z.string().optional(),
 });
 
@@ -395,7 +393,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         type: 'balance' as const,
         id: tx.id,
         timestamp: tx.createdAt,
-        user: balanceUsersMap.get(tx.userId) || null,
+        user: balanceUsersMap.get(tx.userId) ?? null,
         amount: tx.amount.toString(),
         balanceBefore: tx.balanceBefore.toString(),
         balanceAfter: tx.balanceAfter.toString(),
@@ -473,7 +471,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         type: 'perp' as const,
         id: pos.id,
         timestamp: pos.openedAt,
-        user: perpUsersMap.get(pos.userId) || null,
+        user: perpUsersMap.get(pos.userId) ?? null,
         ticker: pos.ticker,
         organization: organization
           ? {

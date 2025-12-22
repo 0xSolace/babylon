@@ -3,10 +3,69 @@
  * Routes A2A methods to appropriate handlers
  */
 
+import { ErrorCode, type JsonRpcError } from '@babylon/a2a';
+import { z } from 'zod';
 import type { AgentRegistry } from '../services/agent-registry';
 import type { MarketHandler } from './market-handler';
 import type { PortfolioHandler } from './portfolio-handler';
 import type { SocialHandler } from './social-handler';
+
+// ============================================================================
+// Validation Schemas
+// ============================================================================
+
+const BuySharesParamsSchema = z.object({
+  marketId: z.string().min(1),
+  outcome: z.enum(['YES', 'NO']),
+  amount: z.number().positive(),
+});
+
+const SellSharesParamsSchema = z.object({
+  marketId: z.string().min(1),
+  outcome: z.enum(['YES', 'NO']),
+  shares: z.number().positive(),
+});
+
+const CreatePostParamsSchema = z.object({
+  content: z.string().min(1).max(5000),
+  mediaUrls: z.array(z.string()).optional(),
+});
+
+const CommentPostParamsSchema = z.object({
+  postId: z.string().min(1),
+  content: z.string().min(1).max(2000),
+});
+
+const DiscoverParamsSchema = z.object({
+  verified: z.boolean().optional(),
+  search: z.string().optional(),
+  limit: z.number().positive().optional(),
+});
+
+const RegisterAgentParamsSchema = z.object({
+  walletAddress: z.string().optional(),
+  tokenId: z.number().optional(),
+  chainId: z.number().optional(),
+  displayName: z.string().optional(),
+  description: z.string().optional(),
+  avatarUrl: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const PaymentRequestParamsSchema = z.object({
+  amount: z.number().positive(),
+  currency: z.string().optional(),
+});
+
+const PaymentReceiptParamsSchema = z.object({
+  paymentId: z.string().min(1),
+  amount: z.number().positive(),
+  transactionHash: z.string().min(1),
+});
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface AgentContext {
   agentId?: string;
@@ -15,15 +74,38 @@ interface AgentContext {
 }
 
 interface A2AError extends Error {
-  code: number;
-  data?: unknown;
+  code: ErrorCode;
+  data?: JsonRpcError['data'];
 }
 
-function createError(code: number, message: string, data?: unknown): A2AError {
+function createError(
+  code: ErrorCode,
+  message: string,
+  data?: JsonRpcError['data']
+): A2AError {
   const error = new Error(message) as A2AError;
   error.code = code;
   error.data = data;
   return error;
+}
+
+/**
+ * Parse params with schema, throw A2A error on failure
+ */
+function parseParams<T>(
+  schema: z.ZodType<T>,
+  params: Record<string, unknown>,
+  paramName: string
+): T {
+  const result = schema.safeParse(params);
+  if (!result.success) {
+    throw createError(
+      ErrorCode.INVALID_PARAMS,
+      `Invalid params for ${paramName}`,
+      result.error.format()
+    );
+  }
+  return result.data;
 }
 
 export class A2AHandler {
@@ -57,8 +139,10 @@ export class A2AHandler {
         return this.discover(params);
 
       case 'a2a.getInfo':
-      case 'getInfo':
-        return this.getAgentInfo(params.agentId as string);
+      case 'getInfo': {
+        const agentId = z.string().min(1).parse(params.agentId);
+        return this.getAgentInfo(agentId);
+      }
 
       case 'a2a.register':
       case 'register':
@@ -95,30 +179,46 @@ export class A2AHandler {
         return this.marketHandler.getMarkets(params);
 
       case 'a2a.getMarketData':
-      case 'getMarketData':
-        return this.marketHandler.getMarketData(params.marketId as string);
+      case 'getMarketData': {
+        const marketId = z.string().min(1).parse(params.marketId);
+        return this.marketHandler.getMarketData(marketId);
+      }
 
       case 'a2a.getMarketPrices':
-      case 'getMarketPrices':
-        return this.marketHandler.getMarketPrices(params.marketIds as string[]);
+      case 'getMarketPrices': {
+        const marketIds = z.array(z.string().min(1)).parse(params.marketIds);
+        return this.marketHandler.getMarketPrices(marketIds);
+      }
 
       case 'a2a.buyShares':
-      case 'buyShares':
+      case 'buyShares': {
+        const buyParams = parseParams(
+          BuySharesParamsSchema,
+          params,
+          'buyShares'
+        );
         return this.marketHandler.buyShares(
           context.agentId || context.address!,
-          params.marketId as string,
-          params.outcome as 'YES' | 'NO',
-          params.amount as number
+          buyParams.marketId,
+          buyParams.outcome,
+          buyParams.amount
         );
+      }
 
       case 'a2a.sellShares':
-      case 'sellShares':
+      case 'sellShares': {
+        const sellParams = parseParams(
+          SellSharesParamsSchema,
+          params,
+          'sellShares'
+        );
         return this.marketHandler.sellShares(
           context.agentId || context.address!,
-          params.marketId as string,
-          params.outcome as 'YES' | 'NO',
-          params.shares as number
+          sellParams.marketId,
+          sellParams.outcome,
+          sellParams.shares
         );
+      }
 
       // ==================== Social ====================
       case 'a2a.getFeed':
@@ -126,35 +226,53 @@ export class A2AHandler {
         return this.socialHandler.getFeed(params);
 
       case 'a2a.createPost':
-      case 'createPost':
+      case 'createPost': {
+        const postParams = parseParams(
+          CreatePostParamsSchema,
+          params,
+          'createPost'
+        );
         return this.socialHandler.createPost(
           context.agentId || context.address!,
-          params.content as string,
-          params.mediaUrls as string[] | undefined
+          postParams.content,
+          postParams.mediaUrls
         );
+      }
 
       case 'a2a.getPost':
-      case 'getPost':
-        return this.socialHandler.getPost(params.postId as string);
+      case 'getPost': {
+        const postId = z.string().min(1).parse(params.postId);
+        return this.socialHandler.getPost(postId);
+      }
 
       case 'a2a.likePost':
-      case 'likePost':
+      case 'likePost': {
+        const postId = z.string().min(1).parse(params.postId);
         return this.socialHandler.likePost(
           context.agentId || context.address!,
-          params.postId as string
+          postId
         );
+      }
 
       case 'a2a.commentPost':
-      case 'commentPost':
+      case 'commentPost': {
+        const commentParams = parseParams(
+          CommentPostParamsSchema,
+          params,
+          'commentPost'
+        );
         return this.socialHandler.commentPost(
           context.agentId || context.address!,
-          params.postId as string,
-          params.content as string
+          commentParams.postId,
+          commentParams.content
         );
+      }
 
       case 'a2a.searchUsers':
-      case 'searchUsers':
-        return this.socialHandler.searchUsers(params.query as string);
+      case 'searchUsers': {
+        const query = z.string().min(1).parse(params.query);
+        return this.socialHandler.searchUsers(query);
+      }
 
       // ==================== Notifications ====================
       case 'a2a.getNotifications':
@@ -165,11 +283,13 @@ export class A2AHandler {
         );
 
       case 'a2a.markNotificationRead':
-      case 'markNotificationRead':
+      case 'markNotificationRead': {
+        const notificationId = z.string().min(1).parse(params.notificationId);
         return this.socialHandler.markNotificationRead(
           context.agentId || context.address!,
-          params.notificationId as string
+          notificationId
         );
+      }
 
       // ==================== Stats ====================
       case 'a2a.getStats':
@@ -190,15 +310,23 @@ export class A2AHandler {
         return this.submitPaymentReceipt(params, context);
 
       default:
-        throw createError(-32601, `Method not found: ${method}`);
+        throw createError(
+          ErrorCode.METHOD_NOT_FOUND,
+          `Method not found: ${method}`
+        );
     }
   }
 
   private async discover(params: Record<string, unknown>): Promise<unknown> {
+    const discoverParams = parseParams(
+      DiscoverParamsSchema,
+      params,
+      'discover'
+    );
     const agents = this.agentRegistry.discoverAgents({
-      verified: params.verified as boolean | undefined,
-      search: params.search as string | undefined,
-      limit: params.limit as number | undefined,
+      verified: discoverParams.verified,
+      search: discoverParams.search,
+      limit: discoverParams.limit,
     });
 
     return {
@@ -215,7 +343,10 @@ export class A2AHandler {
   private getAgentInfo(agentId: string): unknown {
     const agent = this.agentRegistry.getAgent(agentId);
     if (!agent) {
-      throw createError(-32602, `Agent not found: ${agentId}`);
+      throw createError(
+        ErrorCode.AGENT_NOT_FOUND,
+        `Agent not found: ${agentId}`
+      );
     }
 
     return {
@@ -234,14 +365,19 @@ export class A2AHandler {
     params: Record<string, unknown>,
     context: AgentContext
   ): Promise<unknown> {
+    const registerParams = parseParams(
+      RegisterAgentParamsSchema,
+      params,
+      'register'
+    );
     const agent = await this.agentRegistry.registerAgent({
-      walletAddress: (params.walletAddress as string) || context.address!,
-      tokenId: (params.tokenId as number) || context.tokenId!,
-      chainId: (params.chainId as number) || 31337,
-      displayName: params.displayName as string | undefined,
-      description: params.description as string | undefined,
-      avatarUrl: params.avatarUrl as string | undefined,
-      metadata: params.metadata as Record<string, unknown> | undefined,
+      walletAddress: registerParams.walletAddress ?? context.address!,
+      tokenId: registerParams.tokenId ?? context.tokenId!,
+      chainId: registerParams.chainId ?? 31337,
+      displayName: registerParams.displayName,
+      description: registerParams.description,
+      avatarUrl: registerParams.avatarUrl,
+      metadata: registerParams.metadata,
     });
 
     return {
@@ -274,11 +410,16 @@ export class A2AHandler {
     params: Record<string, unknown>,
     context: AgentContext
   ): Promise<unknown> {
+    const paymentParams = parseParams(
+      PaymentRequestParamsSchema,
+      params,
+      'paymentRequest'
+    );
     // x402 payment request
     return {
       paymentId: `pay-${Date.now()}`,
-      amount: params.amount,
-      currency: params.currency || 'ETH',
+      amount: paymentParams.amount,
+      currency: paymentParams.currency ?? 'ETH',
       recipient: context.address,
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
       status: 'pending',
@@ -287,14 +428,19 @@ export class A2AHandler {
 
   private async submitPaymentReceipt(
     params: Record<string, unknown>,
-    context: AgentContext
+    _context: AgentContext
   ): Promise<unknown> {
+    const receiptParams = parseParams(
+      PaymentReceiptParamsSchema,
+      params,
+      'paymentReceipt'
+    );
     // x402 payment receipt verification
     return {
-      paymentId: params.paymentId,
+      paymentId: receiptParams.paymentId,
       verified: true,
-      amount: params.amount,
-      transactionHash: params.transactionHash,
+      amount: receiptParams.amount,
+      transactionHash: receiptParams.transactionHash,
       timestamp: new Date().toISOString(),
     };
   }

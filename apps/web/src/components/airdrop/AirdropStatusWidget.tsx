@@ -215,6 +215,10 @@ export function AirdropStatusWidget() {
     );
   }
 
+  if (!status) {
+    throw new Error('Status is required');
+  }
+
   const { allocation, drip, claim, action, engagement } = status;
 
   // Check if engagement is required for drip

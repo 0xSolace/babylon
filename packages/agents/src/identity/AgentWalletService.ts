@@ -3,7 +3,7 @@
  *
  * Handles agent wallet creation and on-chain registration with zero user interaction.
  * Uses Jeju KMS for key management (MPC/TEE-backed) and OAuth3 for identity.
- * NO FALLBACKS to Privy or centralized key management.
+ * NO FALLBACKS to centralized key management.
  *
  * @packageDocumentation
  */
@@ -98,8 +98,8 @@ export class AgentWalletService {
       data: {
         walletAddress,
         kmsKeyId,
-        // Legacy field for compatibility
-        privyId: `kms:${kmsKeyId}`,
+        // OAuth3 identity reference for KMS-backed wallets
+        oauth3Id: `kms:${kmsKeyId}`,
       },
     });
 

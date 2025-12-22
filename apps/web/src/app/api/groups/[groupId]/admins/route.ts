@@ -17,7 +17,7 @@
  *     summary: Promote member to admin
  *     description: Promotes a group member to admin (group admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: groupId
@@ -51,7 +51,7 @@
  *     summary: Remove admin
  *     description: Removes admin status from a member (group admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: groupId
@@ -93,14 +93,9 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { asUser } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, PromoteAdminSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { z } from 'zod';
-
-const PromoteAdminSchema = z.object({
-  userId: z.string(),
-});
 
 /**
  * POST /api/groups/[groupId]/admins

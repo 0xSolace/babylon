@@ -14,20 +14,15 @@
  * @see BenchmarkService - For training pipeline evaluation
  */
 
+import { db } from '@babylon/db';
 import {
-  benchmarkResults,
-  db,
-  trainedModels,
-  userAgentConfigs,
-  users,
-} from '@babylon/db';
-import { generateRandomWallet } from '@babylon/shared';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+  generateRandomWallet,
+  generateSnowflakeId,
+  logger,
+} from '@babylon/shared';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { getAgentRuntimeManager } from '../dependencies';
-import { logger } from '../utils/logger';
-import { generateSnowflakeId } from '../utils/snowflake';
 import { BenchmarkRunner } from './BenchmarkRunner';
 import {
   type JsonValue,
@@ -94,12 +89,9 @@ export class ModelBenchmarkService {
     logger.info('Starting model benchmark', { modelId: options.modelId });
 
     // Load model from database
-    const modelResult = await db
-      .select()
-      .from(trainedModels)
-      .where(eq(trainedModels.modelId, options.modelId))
-      .limit(1);
-    const model = modelResult[0];
+    const model = await db.trainedModel.findFirst({
+      where: { modelId: options.modelId },
+    });
 
     if (!model) {
       throw new Error(`Model not found: ${options.modelId}`);
@@ -153,7 +145,7 @@ export class ModelBenchmarkService {
         const benchmarkResult: ModelBenchmarkResult = {
           modelId: options.modelId,
           modelVersion: model.version,
-          benchmarkId: simulationResult.benchmarkId,
+          benchmarkId: simulationResult.benchmarkId || 'unknown',
           benchmarkPath,
           runAt: new Date(),
           metrics: simulationResult.metrics,
@@ -201,16 +193,23 @@ export class ModelBenchmarkService {
         results.reduce((sum, r) => sum + r.metrics.totalPnl, 0) /
         results.length;
 
-      await db
-        .update(trainedModels)
-        .set({
-          benchmarkScore: avgOptimality,
-          avgReward: avgPnl,
-          lastBenchmarked: new Date(),
-          benchmarkCount: sql`${trainedModels.benchmarkCount} + ${results.length}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(trainedModels.modelId, options.modelId));
+      await db.exec(
+        `UPDATE "trained_models" SET
+          "benchmarkScore" = $1,
+          "avgReward" = $2,
+          "lastBenchmarked" = $3,
+          "benchmarkCount" = "benchmarkCount" + $4,
+          "updatedAt" = $5
+        WHERE "modelId" = $6`,
+        [
+          avgOptimality,
+          avgPnl,
+          new Date().toISOString(),
+          results.length,
+          new Date().toISOString(),
+          options.modelId,
+        ]
+      );
     }
 
     logger.info('Model benchmark complete', {
@@ -289,15 +288,11 @@ export class ModelBenchmarkService {
    * Get all unbenchmarked models
    */
   static async getUnbenchmarkedModels(): Promise<string[]> {
-    const models = await db
-      .select({ modelId: trainedModels.modelId })
-      .from(trainedModels)
-      .where(
-        and(
-          eq(trainedModels.status, 'ready'),
-          isNull(trainedModels.benchmarkScore)
-        )
-      );
+    const models = await db.query<{ modelId: string }>(
+      `SELECT "modelId" FROM "trained_models"
+       WHERE "status" = $1 AND "benchmarkScore" IS NULL`,
+      ['ready']
+    );
 
     return models.map((m) => m.modelId);
   }
@@ -318,12 +313,7 @@ export class ModelBenchmarkService {
     );
     const results: ModelBenchmarkResult[] = [];
 
-    const modelResult = await db
-      .select({ version: trainedModels.version })
-      .from(trainedModels)
-      .where(eq(trainedModels.modelId, modelId))
-      .limit(1);
-    const model = modelResult[0];
+    const model = await db.trainedModel.findFirst({ where: { modelId } });
 
     if (!model) return results;
 
@@ -350,21 +340,24 @@ export class ModelBenchmarkService {
   private static async saveBenchmarkResultToDatabase(
     result: ModelBenchmarkResult
   ): Promise<void> {
-    await db.insert(benchmarkResults).values({
-      id: await generateSnowflakeId(),
-      modelId: result.modelId,
-      benchmarkId: result.benchmarkId,
-      benchmarkPath: result.benchmarkPath,
-      runAt: result.runAt,
-      totalPnl: result.metrics.totalPnl,
-      predictionAccuracy: result.metrics.predictionMetrics.accuracy,
-      perpWinRate: result.metrics.perpMetrics.winRate,
-      optimalityScore: result.metrics.optimalityScore,
-      detailedMetrics: JSON.parse(JSON.stringify(result.metrics)),
-      baselinePnlDelta: result.comparisonToBaseline?.pnlDelta,
-      baselineAccuracyDelta: result.comparisonToBaseline?.accuracyDelta,
-      improved: result.comparisonToBaseline?.improved,
-      duration: result.metrics.timing.totalDuration,
+    await db.benchmarkResult.create({
+      data: {
+        id: await generateSnowflakeId(),
+        modelId: result.modelId,
+        benchmarkId: result.benchmarkId,
+        benchmarkPath: result.benchmarkPath,
+        runAt: result.runAt,
+        totalPnl: result.metrics.totalPnl,
+        predictionAccuracy: result.metrics.predictionMetrics.accuracy,
+        perpWinRate: result.metrics.perpMetrics.winRate,
+        optimalityScore: result.metrics.optimalityScore,
+        detailedMetrics: JSON.parse(JSON.stringify(result.metrics)),
+        baselinePnlDelta: result.comparisonToBaseline?.pnlDelta ?? null,
+        baselineAccuracyDelta:
+          result.comparisonToBaseline?.accuracyDelta ?? null,
+        improved: result.comparisonToBaseline?.improved ?? null,
+        duration: result.metrics.timing.totalDuration,
+      },
     });
 
     logger.info('Benchmark result saved to database', {
@@ -401,11 +394,23 @@ export class ModelBenchmarkService {
   static async getBenchmarkResultsFromDatabase(
     modelId: string
   ): Promise<ModelBenchmarkResult[]> {
-    const results = await db
-      .select()
-      .from(benchmarkResults)
-      .where(eq(benchmarkResults.modelId, modelId))
-      .orderBy(desc(benchmarkResults.runAt));
+    const results = await db.query<{
+      modelId: string;
+      benchmarkId: string;
+      benchmarkPath: string;
+      runAt: Date;
+      detailedMetrics: JsonValue;
+      baselinePnlDelta: number | null;
+      baselineAccuracyDelta: number | null;
+      improved: boolean | null;
+    }>(
+      `SELECT "modelId", "benchmarkId", "benchmarkPath", "runAt",
+              "detailedMetrics", "baselinePnlDelta", "baselineAccuracyDelta", "improved"
+       FROM "benchmark_results"
+       WHERE "modelId" = $1
+       ORDER BY "runAt" DESC`,
+      [modelId]
+    );
 
     return results.map((r) => ({
       modelId: r.modelId,
@@ -413,7 +418,7 @@ export class ModelBenchmarkService {
       benchmarkId: r.benchmarkId,
       benchmarkPath: r.benchmarkPath,
       runAt: r.runAt,
-      metrics: parseSimulationMetrics(r.detailedMetrics as JsonValue),
+      metrics: parseSimulationMetrics(r.detailedMetrics),
       comparisonToBaseline:
         r.baselinePnlDelta !== null
           ? {
@@ -519,12 +524,9 @@ export class ModelBenchmarkService {
   private static async getOrCreateTestAgent(): Promise<string> {
     const testAgentUsername = 'model-benchmark-agent';
 
-    const agentResult = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, testAgentUsername))
-      .limit(1);
-    let agent = agentResult[0];
+    const agent = await db.user.findFirst({
+      where: { username: testAgentUsername },
+    });
 
     if (agent) {
       return agent.id;
@@ -532,11 +534,10 @@ export class ModelBenchmarkService {
 
     // Create new test agent
     const agentId = await generateSnowflakeId();
-    const newAgentResult = await db
-      .insert(users)
-      .values({
+    const newAgent = await db.user.create({
+      data: {
         id: agentId,
-        privyId: `did:privy:model-benchmark-${agentId}`,
+        oauth3Id: `did:jeju:testnet:model-benchmark-${agentId}`,
         username: testAgentUsername,
         displayName: 'Model Benchmark Agent',
         walletAddress: generateRandomWallet().address,
@@ -545,33 +546,34 @@ export class ModelBenchmarkService {
         reputationPoints: 1000,
         isTest: true,
         updatedAt: new Date(),
-      })
-      .returning();
-    agent = newAgentResult[0];
+      },
+    });
 
     // Create agent config in separate table
-    if (agent) {
-      await db.insert(userAgentConfigs).values({
-        id: await generateSnowflakeId(),
-        userId: agentId,
-        autonomousTrading: true,
-        autonomousPosting: false,
-        autonomousCommenting: false,
-        systemPrompt:
-          'You are a test agent for benchmarking model performance.',
-        modelTier: 'pro',
-        pointsBalance: 10000,
-        updatedAt: new Date(),
+    if (newAgent) {
+      await db.userAgentConfig.create({
+        data: {
+          id: await generateSnowflakeId(),
+          userId: agentId,
+          autonomousTrading: true,
+          autonomousPosting: false,
+          autonomousCommenting: false,
+          systemPrompt:
+            'You are a test agent for benchmarking model performance.',
+          modelTier: 'pro',
+          pointsBalance: 10000,
+          updatedAt: new Date(),
+        },
       });
     }
 
-    if (!agent) {
+    if (!newAgent) {
       throw new Error('Failed to create model benchmark test agent');
     }
 
-    logger.info('Created model benchmark test agent', { agentId: agent.id });
+    logger.info('Created model benchmark test agent', { agentId: newAgent.id });
 
-    return agent.id;
+    return newAgent.id;
   }
 
   /**

@@ -94,10 +94,11 @@ export class WaitlistService {
     const user = userResult[0];
 
     if (!user) {
-      throw new NotFoundError('User', undefined, {
+      throw new NotFoundError(
+        'User',
         userId,
-        message: 'User must complete onboarding before joining waitlist',
-      });
+        'User must complete onboarding before joining waitlist'
+      );
     }
 
     // If user already marked as waitlisted, still check for referral code validation

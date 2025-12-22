@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const authUser = await authenticate(request);
   const userId = authUser.userId;
 
-  // Use | as separator instead of : to avoid conflicts with Privy DIDs (did:privy:...)
+  // Use | as separator instead of : to avoid conflicts with OAuth3 IDs (which may contain colons)
   const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`;
 
   // Store state temporarily (expires in 10 minutes)

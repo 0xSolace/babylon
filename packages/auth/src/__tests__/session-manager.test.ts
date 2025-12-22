@@ -106,9 +106,8 @@ describe('SessionManager (Permissionless)', () => {
       expect(decoded?.linkedTypes).toContain('wallet');
     });
 
-    it('should return null for invalid token', () => {
-      const decoded = sessionManager.decodeToken('invalid');
-      expect(decoded).toBeNull();
+    it('should throw for invalid token', () => {
+      expect(() => sessionManager.decodeToken('invalid')).toThrow();
     });
   });
 
@@ -125,8 +124,8 @@ describe('SessionManager (Permissionless)', () => {
       expect(sessionManager.isExpired(token)).toBe(false);
     });
 
-    it('should return true for invalid token', () => {
-      expect(sessionManager.isExpired('invalid')).toBe(true);
+    it('should throw for invalid token', () => {
+      expect(() => sessionManager.isExpired('invalid')).toThrow();
     });
   });
 

@@ -16,7 +16,7 @@
  *     summary: Verify payment and credit points
  *     description: Verifies on-chain payment and credits points to account
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

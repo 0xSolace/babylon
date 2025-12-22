@@ -1,113 +1,43 @@
 /**
  * Market Context Types
  *
- * Types for providing market information to NPCs for trading decisions
+ * Types for providing market information to NPCs for trading decisions.
+ * Uses z.infer<> from @babylon/shared to avoid duplicate type definitions.
  */
 
-import type { MarketType } from './market-decisions';
+import type {
+  EventContextSchema,
+  FeedPostContextSchema,
+  GroupChatContextSchema,
+  MarketSignalContextSchema,
+  NPCMarketContextSchema,
+  NPCPositionSchema,
+  PerpMarketSnapshotSchema,
+  PredictionMarketSnapshotSchema,
+  RelationshipContextSchema,
+} from '@babylon/shared';
+import type { z } from 'zod';
 
-export interface PerpMarketSnapshot {
-  ticker: string;
-  organizationId: string;
-  name: string;
-  currentPrice: number;
-  change24h: number;
-  changePercent24h: number;
-  high24h: number;
-  low24h: number;
-  volume24h: number;
-  openInterest: number;
-}
+// Re-export types derived from Zod schemas
+export type PerpMarketSnapshot = z.infer<typeof PerpMarketSnapshotSchema>;
+export type PredictionMarketSnapshot = z.infer<
+  typeof PredictionMarketSnapshotSchema
+>;
+export type NPCPosition = z.infer<typeof NPCPositionSchema>;
+export type FeedPostContext = z.infer<typeof FeedPostContextSchema>;
+export type GroupChatContext = z.infer<typeof GroupChatContextSchema>;
+export type EventContext = z.infer<typeof EventContextSchema>;
+export type RelationshipContext = z.infer<typeof RelationshipContextSchema>;
+export type MarketSignalContext = z.infer<typeof MarketSignalContextSchema>;
+export type NPCMarketContext = z.infer<typeof NPCMarketContextSchema>;
 
-export interface PredictionMarketSnapshot {
-  id: number;
-  text: string;
-  yesPrice: number;
-  noPrice: number;
-  totalVolume: number;
-  resolutionDate: string;
-  daysUntilResolution: number;
-}
-
-export interface NPCPosition {
-  id: string;
-  marketType: MarketType;
-  ticker?: string;
-  marketId?: number;
-  side: string;
-  entryPrice: number;
-  currentPrice: number;
-  size: number;
-  shares?: number;
-  unrealizedPnL: number;
-  openedAt: string;
-}
-
-export interface FeedPostContext {
-  author: string;
-  authorName: string;
-  content: string;
-  timestamp: string;
-  articleTitle?: string;
-}
-
-export interface GroupChatContext {
-  chatId: string;
-  chatName: string;
-  from: string;
-  fromName: string;
-  message: string;
-  timestamp: string;
-}
-
-export interface EventContext {
-  type: string;
-  description: string;
-  timestamp: string;
-  relatedQuestion?: number;
-  pointsToward?: string;
-  actors?: string[];
-}
-
+// Additional types not in shared schemas
 export interface NewsArticleContext {
   author: string;
   authorName: string;
   title: string;
   summary: string;
   timestamp: string;
-}
-
-export interface RelationshipContext {
-  actorId: string;
-  actorName: string;
-  relationshipType: string;
-  strength: number;
-  sentiment: number;
-  history?: string;
-}
-
-export interface NPCMarketContext {
-  // NPC identity
-  npcId: string;
-  npcName: string;
-  personality: string;
-  tier: string;
-  availableBalance: number;
-
-  // Information sources
-  recentPosts: FeedPostContext[];
-  groupChatMessages: GroupChatContext[];
-  recentEvents: EventContext[];
-
-  // Relationships with other actors
-  relationships?: RelationshipContext[];
-
-  // Market data
-  perpMarkets: PerpMarketSnapshot[];
-  predictionMarkets: PredictionMarketSnapshot[];
-
-  // Current positions
-  currentPositions: NPCPosition[];
 }
 
 export interface MarketSnapshots {

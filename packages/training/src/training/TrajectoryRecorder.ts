@@ -9,8 +9,7 @@
 
 import { db } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import { logger } from '../utils/logger';
-import { generateSnowflakeId } from '../utils/snowflake';
+import { generateSnowflakeId, logger } from '@babylon/shared';
 import type {
   Action,
   EnvironmentState,
@@ -152,7 +151,15 @@ export class TrajectoryRecorder {
     }
 
     traj.currentStep.providerAccesses = traj.currentStep.providerAccesses || [];
-    traj.currentStep.providerAccesses.push(access);
+    // Create full ProviderAccess with required fields
+    traj.currentStep.providerAccesses.push({
+      providerId: `${trajectoryId}-provider-${Date.now()}`,
+      providerName: access.providerName,
+      timestamp: Date.now(),
+      query: access.data,
+      data: access.data,
+      purpose: access.purpose,
+    });
   }
 
   /**
@@ -215,21 +222,27 @@ export class TrajectoryRecorder {
 
     const endTime = Date.now();
     const durationMs = endTime - traj.startTime;
-    const totalReward = traj.steps.reduce((sum, step) => sum + step.reward, 0);
+    const totalReward = traj.steps.reduce(
+      (sum, step) => sum + (step.reward ?? 0),
+      0
+    );
     const windowId = options.windowId || getCurrentWindowId();
 
     // Calculate metrics
     const tradesExecuted = traj.steps.filter(
       (s) =>
-        s.action.actionType.includes('BUY') ||
-        s.action.actionType.includes('SELL')
+        s.action &&
+        (s.action.actionType.includes('BUY') ||
+          s.action.actionType.includes('SELL'))
     ).length;
 
-    const postsCreated = traj.steps.filter((s) =>
-      s.action.actionType.includes('POST')
+    const postsCreated = traj.steps.filter(
+      (s) => s.action && s.action.actionType.includes('POST')
     ).length;
 
-    const errorCount = traj.steps.filter((s) => !s.action.success).length;
+    const errorCount = traj.steps.filter(
+      (s) => s.action && !s.action.success
+    ).length;
     const finalStatus = errorCount > 0 ? 'completed_with_errors' : 'completed';
 
     // Save trajectory
@@ -299,8 +312,9 @@ export class TrajectoryRecorder {
     }> = [];
 
     for (const step of traj.steps) {
-      for (let i = 0; i < step.llmCalls.length; i++) {
-        const llmCall = step.llmCalls[i];
+      const llmCalls = step.llmCalls ?? [];
+      for (let i = 0; i < llmCalls.length; i++) {
+        const llmCall = llmCalls[i];
         if (!llmCall) continue;
 
         llmLogRows.push({
@@ -343,6 +357,8 @@ export class TrajectoryRecorder {
       reward: totalReward,
       duration: durationMs,
     });
+
+    this.activeTrajectories.delete(trajectoryId);
   }
 
   /**

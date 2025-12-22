@@ -9,12 +9,12 @@
 
 import { db } from '@babylon/db';
 import { shuffleArray } from '@babylon/engine';
-import type { JsonValue } from '../../../types/common';
+import type { JsonValue } from '@babylon/shared';
 import type { Trajectory } from './types';
 
 export interface ExportOptions {
   // Dataset configuration
-  datasetName: string; // e.g., 'elizaos/babylon-agent-trajectories'
+  datasetName: string; // e.g., 'BabylonSocial/babylon-agent-trajectories'
   huggingFaceToken?: string;
 
   // Data filtering
@@ -643,22 +643,22 @@ export async function exportGroupedForGRPO(
 
     const groups = groupTrajectories(trajObjects as Trajectory[]);
 
-    for (const group of groups) {
+    for (const [groupId, trajectoryGroup] of groups) {
       // Skip if we've hit the global limit
       if (remainingQuota <= 0) break;
 
       const artFormat = {
-        groupId: group.groupId,
-        scenarioId: group.scenarioId,
-        sharedPrefix: group.sharedPrefix || [],
-        trajectories: group.trajectories.map((t) => toARTTrajectory(t)),
-        createdAt: group.createdAt,
+        groupId: groupId,
+        scenarioId: scenarioId,
+        sharedPrefix: [] as Trajectory[],
+        trajectories: trajectoryGroup.map((t) => toARTTrajectory(t)),
+        createdAt: new Date().toISOString(),
       };
 
       const filePath = path.join(exportDir, `group-${scenarioId}.jsonl`);
       await fs.writeFile(filePath, JSON.stringify(artFormat) + '\n', 'utf-8');
 
-      const exported = group.trajectories.length;
+      const exported = trajectoryGroup.length;
       totalExported += exported;
       remainingQuota -= exported;
     }

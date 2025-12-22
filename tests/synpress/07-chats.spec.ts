@@ -10,14 +10,17 @@
  */
 
 import { expect, test } from '@playwright/test';
+import {
+  getOAuth3TestAccount,
+  loginWithOAuth3Email,
+} from './helpers/oauth3-auth';
 import { navigateTo, waitForPageLoad } from './helpers/page-helpers';
-import { getPrivyTestAccount, loginWithPrivyEmail } from './helpers/privy-auth';
 import { ROUTES } from './helpers/test-data';
 
 test.describe('Chats Page - Updated Design', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.CHATS);
     await waitForPageLoad(page);
   });
@@ -113,7 +116,7 @@ test.describe('Chats Page - Updated Design', () => {
 test.describe('Chat Messaging - New Implementation', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
     await navigateTo(page, ROUTES.CHATS);
     await waitForPageLoad(page);
   });
@@ -179,7 +182,7 @@ test.describe('Chat Messaging - New Implementation', () => {
 test.describe('Profile Message Button', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
   });
 
   test('should show message button on user profiles', async ({ page }) => {
@@ -225,7 +228,7 @@ test.describe('Profile Message Button', () => {
 test.describe('Real-time Updates', () => {
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, ROUTES.HOME);
-    await loginWithPrivyEmail(page, getPrivyTestAccount());
+    await loginWithOAuth3Email(page, getOAuth3TestAccount());
   });
 
   test('should connect to SSE for real-time messages', async ({ page }) => {

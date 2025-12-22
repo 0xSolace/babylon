@@ -11,6 +11,7 @@
  * @packageDocumentation
  */
 
+import type { JsonValue } from '@babylon/shared';
 import { logger } from '@babylon/shared';
 import type {
   AgentSummary,
@@ -23,7 +24,6 @@ import type {
 // Import SDK and types from agent0-sdk
 import { SDK } from 'agent0-sdk';
 import { privateKeyToAccount } from 'viem/accounts';
-import type { JsonValue } from '../types/common';
 
 /**
  * Contract addresses for Agent0 integration
@@ -67,7 +67,7 @@ function getContractAddresses(): ContractAddresses {
   };
 }
 
-import { parseCapabilities } from './capabilities-schema';
+import { parseCapabilities } from '../shared/capabilities';
 import type {
   Agent0AgentProfile,
   Agent0AgentUpdateParams,

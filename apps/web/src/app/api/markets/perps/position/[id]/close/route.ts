@@ -16,15 +16,10 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
-import { ClosePerpPositionSchema } from '@babylon/shared';
+import { FEE_CONFIG, FeeService, WalletService } from '@babylon/engine';
+import { ClosePerpPositionSchema, IdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
 import { trackServerEvent } from '@/lib/posthog/server';
-import { createWalletAdapter, perpFeeConfig } from '../../../_adapters';
-
-const IdParamSchema = z.object({
-  id: z.string(),
-});
 
 /**
  * POST /api/markets/perps/position/[id]/close
@@ -38,23 +33,62 @@ export const POST = withErrorHandling(
     const user = await authenticate(request);
     const { id: positionId } = IdParamSchema.parse(await context.params);
 
-    const text = await request.text();
-    const parsed =
-      text.length > 0
-        ? ClosePerpPositionSchema.parse(JSON.parse(text))
-        : { percentage: undefined, slippage: undefined };
+    // Parse and validate request body (optional for partial close)
+    let body: Record<string, unknown> = {};
+    try {
+      body = await request.json();
+    } catch {
+      // Body is optional for this endpoint
+    }
+    if (Object.keys(body).length > 0) {
+      ClosePerpPositionSchema.parse(body);
+    }
 
     const service = new PerpMarketService({
       db: new PerpDbAdapter(),
-      wallet: createWalletAdapter(),
-      fees: perpFeeConfig,
+      wallet: {
+        debit: ({ userId, amount, reason, description, relatedId }) =>
+          WalletService.debit(
+            userId,
+            amount,
+            reason,
+            description ?? '',
+            relatedId
+          ),
+        credit: ({ userId, amount, reason, description, relatedId }) =>
+          WalletService.credit(
+            userId,
+            amount,
+            reason,
+            description ?? '',
+            relatedId
+          ),
+        recordPnL: async ({ userId, pnl, reason, relatedId }) => {
+          await WalletService.recordPnL(userId, pnl, reason, relatedId);
+        },
+        getBalance: (userId: string) => WalletService.getBalance(userId),
+      },
+      fees: {
+        tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
+        platformShare: FEE_CONFIG.PLATFORM_SHARE,
+        referrerShare: FEE_CONFIG.REFERRER_SHARE,
+        minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
+      },
+      feeProcessor: {
+        processTradingFee: ({ userId, amount, type, relatedId, positionId }) =>
+          FeeService.processTradingFee(
+            userId,
+            type as (typeof FEE_CONFIG.FEE_TYPES)[keyof typeof FEE_CONFIG.FEE_TYPES],
+            amount,
+            positionId,
+            relatedId
+          ),
+      },
     });
 
     const result = await service.closePosition({
       userId: user.userId,
       positionId,
-      percentage: parsed.percentage,
-      maxSlippage: parsed.slippage,
     });
 
     // Validate required fields exist after close operation
@@ -95,6 +129,8 @@ export const POST = withErrorHandling(
       feeCharged: result.feePaid,
       wasLiquidated: false,
       positionId,
+    }).catch((error) => {
+      console.warn('Failed to track trade_closed event', { error });
     });
 
     // Record engagement for airdrop qualification
@@ -112,8 +148,6 @@ export const POST = withErrorHandling(
       },
       wasLiquidated: false,
       newBalance: result.balance,
-      remainingSize: result.remainingSize,
-      fullyClosed: result.fullyClosed,
     });
   }
 );

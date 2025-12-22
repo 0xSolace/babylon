@@ -17,7 +17,7 @@
  *     summary: Get system statistics
  *     description: Returns comprehensive system-wide statistics (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Statistics retrieved successfully

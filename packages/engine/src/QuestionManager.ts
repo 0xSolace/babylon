@@ -32,7 +32,7 @@
  * - Shorter timespans for urgent developments (announcements, scandals)
  * - Resolution event generated to prove outcome definitively
  *
- * @see {@link GameEngine} - Uses QuestionManager to generate daily questions
+ * @see {@link executeGameTick} - Production tick uses QuestionManager to generate questions and resolution proofs
  * @see {@link FeedGenerator} - Creates posts and discussions about active questions
  *
  * @example
@@ -59,13 +59,15 @@
  */
 
 import {
+  PredictionDbAdapter as CorePredictionDbAdapter,
+  PredictionMarketService as CorePredictionMarketService,
+} from '@babylon/core/markets/prediction';
+import {
   and,
-  Decimal,
   db,
   desc,
   eq,
   gte,
-  markets,
   questions,
   tags,
   trendingTags,
@@ -77,7 +79,6 @@ import { type Article, ArticleGenerator } from './ArticleGenerator';
 import type { BabylonLLMClient } from './llm/openai-client';
 import { BabylonLLMClient as BabylonLLMClientValue } from './llm/openai-client';
 import { MarketDecisionEngine } from './MarketDecisionEngine';
-import { PredictionPricing } from './prediction-pricing';
 import {
   generateWorldContext,
   questionGeneration,
@@ -1061,6 +1062,18 @@ RULES:
 - Resolution: 1-7 days (1-2d=fast, 3-5d=medium, 6-7d=slow)
 - Don't duplicate active questions
 
+TOPIC DIVERSITY (CRITICAL):
+- Each question MUST be about a DIFFERENT topic/person/company
+- Spread across: tech, crypto, politics, entertainment, business
+- Use DIFFERENT actors for each question (not all about same person)
+- Mix question types: product launches, price targets, announcements, partnerships
+- NO two questions about the same actor or company in this batch
+
+OUTCOME BALANCE:
+- Aim for 40-60% yes/no split in expectedOutcome
+- Not all questions should resolve the same way
+- Include some questions likely to resolve NO
+
 BAD: "Will X be happy?" (vague), "Will X secretly..." (unverifiable)
 
 XML: <response><questions><question><text>...</text><resolutionCriteria>...</resolutionCriteria><daysUntilResolution>3</daysUntilResolution><expectedOutcome>yes</expectedOutcome></question></questions></response>`;
@@ -1187,6 +1200,24 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
     // Using default scenario ID until dynamic scenario selection is implemented
     const scenarioId = 1;
     const now = new Date();
+    const initialLiquidity = 20000;
+
+    const marketService = new CorePredictionMarketService({
+      db: new CorePredictionDbAdapter(),
+      // Not used for market creation, but required by the service deps type
+      wallet: {
+        debit: async () => {},
+        credit: async () => {},
+        recordPnL: async () => {},
+        getBalance: async () => ({ balance: 0 }),
+      },
+      fees: {
+        tradingFeeRate: 0,
+        platformShare: 0,
+        referrerShare: 0,
+        minFeeAmount: 0,
+      },
+    });
 
     // Create each question
     for (const questionData of questionsData.slice(0, count)) {
@@ -1207,6 +1238,19 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         );
         continue;
       }
+
+      // Sanitize question text to remove any template variables that leaked through
+      const sanitizedText = questionData.text
+        .replace(/\{resolutionDate\}/gi, '')
+        .replace(/\{resolution_date\}/gi, '')
+        .replace(/\{date\}/gi, '')
+        .replace(/\{[a-zA-Z_]+\}/g, '') // Remove any other template variables
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .replace(/by\s*\?$/i, '?') // Clean up "by ?" at end
+        .trim();
+
+      // Update the question text with sanitized version
+      questionData.text = sanitizedText;
 
       // Convert "yes"/"no" to boolean
       const expectedOutcomeStr = String(questionData.expectedOutcome || '')
@@ -1256,26 +1300,12 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         .returning();
       const question = questionResults[0]!;
 
-      // Initialize market with sufficient liquidity for trading
-      const initialLiquidity = 20000;
-      const { yesShares, noShares } =
-        PredictionPricing.initializeMarket(initialLiquidity);
-
-      const marketResults = await db
-        .insert(markets)
-        .values({
-          id: question.id,
-          question: questionData.text,
-          description: questionData.resolutionCriteria,
-          yesShares: new Decimal(yesShares).toString(),
-          noShares: new Decimal(noShares).toString(),
-          liquidity: new Decimal(initialLiquidity).toString(),
-          endDate: resolutionDate, // Same resolutionDate as question (1-7 days from now)
-          gameId: 'continuous',
-          updatedAt: now,
-        })
-        .returning();
-      const market = marketResults[0]!;
+      // Ensure market exists via core service (keeps creation logic portable)
+      const market = await marketService.ensureMarketExists({
+        marketId: question.id,
+        initialLiquidity,
+        description: questionData.resolutionCriteria,
+      });
 
       const marketEndDate =
         market.endDate instanceof Date

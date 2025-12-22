@@ -1,13 +1,26 @@
 /**
  * Drizzle Database Client
  *
- * Provides table repositories with findUnique, findFirst, findMany, create, update, delete methods.
- * 100% Drizzle ORM under the hood.
+ * @deprecated LEGACY FILE - Use cql-client.ts for all new code.
  *
- * Usage:
- *   import { db } from '@babylon/db';
- *   const user = await db.user.findUnique({ where: { id: '123' } });
- *   const users = await db.user.findMany({ where: { isActive: true } });
+ * This file provides the legacy Drizzle ORM PostgreSQL interface.
+ * The project has migrated to CQL (CovenantSQL) as the PRIMARY database.
+ *
+ * For new code, use:
+ *   import { db } from '@babylon/db';  // This is now CQL
+ *   // or
+ *   import { getCQLClient } from '@babylon/db';
+ *
+ * This file is kept for:
+ * - Reference during migration
+ * - Type definitions that are still used
+ * - TableRepository class which is used by json-client.ts
+ *
+ * DO NOT use this file for new database operations.
+ * All operations should go through cql-client.ts.
+ *
+ * @see cql-client.ts - The new PRIMARY database interface
+ * @see cql-repository.ts - CQL repository implementation
  */
 
 import type { Param } from 'drizzle-orm';
@@ -79,17 +92,11 @@ export type Transaction = {
   query: SchemaDatabase['query'];
 };
 
-// JSON value type for nested structures (avoids circular reference)
-// This matches the JSON specification: all valid JSON value types
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonObject
-  | JsonArray;
-export type JsonObject = { [key: string]: JsonValue };
-export type JsonArray = JsonValue[];
+// JSON value types - imported from types.ts which re-exports from @babylon/shared
+import type { JsonArray, JsonObject, JsonValue } from './types';
+
+// Re-export for external consumers
+export type { JsonValue, JsonObject, JsonArray };
 
 // SQL value types - all valid types that can be used in SQL template strings and database columns
 // Includes primitives, arrays, objects (JSON/JSONB), and SQL expressions

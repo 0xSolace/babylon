@@ -73,6 +73,14 @@ export {
 } from './messaging-bridge';
 // Migration
 export { createMigrationService, MigrationService } from './migration';
+// Validation schemas
+export {
+  AddressSchema,
+  EncryptedMessageSchema,
+  MessageEnvelopeSchema,
+  SendMessageRequestSchema,
+  WebSocketMessageSchema,
+} from './schemas';
 // Decentralized Storage (CovenantSQL)
 export {
   type ConsistencyLevel,

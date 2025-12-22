@@ -14,6 +14,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -29,7 +30,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   type Address,
   createPublicClient,
@@ -226,20 +227,163 @@ function getChainConfig() {
   }
 }
 
+// Helper to get ethereum provider
+function getEthereumProvider(): EIP1193Provider | null {
+  return (window as unknown as { ethereum?: EIP1193Provider }).ethereum ?? null;
+}
+
+// Fetch ICO data from blockchain
+interface ICOData {
+  status: ICOStatus;
+  config: ICOConfig;
+  contributors: Contributor[];
+  isPaused: boolean;
+}
+
+async function fetchICODataFromChain(
+  presaleAddress: Address,
+  chain: ReturnType<typeof getChainConfig>
+): Promise<ICOData> {
+  const ethereum = getEthereumProvider();
+  if (!ethereum) {
+    throw new Error('No ethereum provider found');
+  }
+
+  const client = createPublicClient({
+    chain,
+    transport: custom(ethereum),
+  });
+
+  // Fetch status
+  const statusResult = (await client.readContract({
+    address: presaleAddress,
+    abi: PRESALE_ABI,
+    functionName: 'getStatus',
+  })) as [bigint, bigint, bigint, bigint, boolean, boolean, boolean];
+
+  const status: ICOStatus = {
+    raised: statusResult[0],
+    participants: statusResult[1],
+    progress: statusResult[2],
+    timeRemaining: statusResult[3],
+    isActive: statusResult[4],
+    isFinalized: statusResult[5],
+    isFailed: statusResult[6],
+  };
+
+  // Fetch config
+  const [
+    softCap,
+    hardCap,
+    minContribution,
+    maxContribution,
+    startPrice,
+    currentPrice,
+    lpFundingBps,
+    elizaBonusBps,
+    paused,
+  ] = (await Promise.all([
+    client.readContract({
+      address: presaleAddress,
+      abi: PRESALE_ABI,
+      functionName: 'softCap',
+    }),
+    client.readContract({
+      address: presaleAddress,
+      abi: PRESALE_ABI,
+      functionName: 'hardCap',
+    }),
+    client.readContract({
+      address: presaleAddress,
+      abi: PRESALE_ABI,
+      functionName: 'minContribution',
+    }),
+    client.readContract({
+      address: presaleAddress,
+      abi: PRESALE_ABI,
+      functionName: 'maxContribution',
+    }),
+    client.readContract({
+      address: presaleAddress,
+      abi: PRESALE_ABI,
+      functionName: 'startPrice',
+    }),
+    client.readContract({
+      address: presaleAddress,
+      abi: PRESALE_ABI,
+      functionName: 'getCurrentPrice',
+    }),
+    client.readContract({
+      address: presaleAddress,
+      abi: PRESALE_ABI,
+      functionName: 'lpFundingBps',
+    }),
+    client.readContract({
+      address: presaleAddress,
+      abi: PRESALE_ABI,
+      functionName: 'elizaBonusBps',
+    }),
+    client.readContract({
+      address: presaleAddress,
+      abi: PRESALE_ABI,
+      functionName: 'paused',
+    }),
+  ])) as [
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    boolean,
+  ];
+
+  const config: ICOConfig = {
+    softCap,
+    hardCap,
+    minContribution,
+    maxContribution,
+    startPrice,
+    currentPrice,
+    lpFundingBps: Number(lpFundingBps),
+    elizaBonusBps: Number(elizaBonusBps),
+  };
+
+  // Fetch contributors
+  const contributorAddresses = (await client.readContract({
+    address: presaleAddress,
+    abi: PRESALE_ABI,
+    functionName: 'getContributors',
+  })) as readonly Address[];
+
+  const contributors = await Promise.all(
+    contributorAddresses.slice(0, 100).map(async (addr) => {
+      const contribution = (await client.readContract({
+        address: presaleAddress,
+        abi: PRESALE_ABI,
+        functionName: 'contributions',
+        args: [addr],
+      })) as [bigint, bigint, bigint, bigint, boolean, boolean];
+
+      return {
+        address: addr,
+        ethAmount: contribution[0],
+        tokenAllocation: contribution[1] + contribution[2], // base + bonus
+        isElizaHolder: contribution[4],
+      };
+    })
+  );
+
+  return { status, config, contributors, isPaused: paused };
+}
+
 export default function ICOAdminPage() {
   const { authenticated, ready } = useAuth();
-  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
 
-  // ICO State
-  const [status, setStatus] = useState<ICOStatus | null>(null);
-  const [config, setConfig] = useState<ICOConfig | null>(null);
-  const [contributors, setContributors] = useState<Contributor[]>([]);
-  const [isPaused, setIsPaused] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  // Settings
+  // Settings (local form state only)
   const [presaleDuration, setPresaleDuration] = useState(7);
   const [claimDelay, setClaimDelay] = useState(1);
 
@@ -248,251 +392,138 @@ export default function ICOAdminPage() {
     | undefined;
   const chain = getChainConfig();
 
-  const checkAdminAccess = useCallback(async () => {
-    if (!ready) return;
+  // Query: Admin access check
+  const { data: isAuthorized, isLoading: isCheckingAuth } = useQuery({
+    queryKey: ['admin', 'ico', 'access'],
+    queryFn: async () => {
+      if (!authenticated) return false;
+      const response = await fetch('/api/admin/stats');
+      return response.ok;
+    },
+    enabled: ready,
+  });
 
-    if (!authenticated) {
-      setIsAuthorized(false);
-      setLoading(false);
-      return;
-    }
+  // Query: ICO data with polling
+  const {
+    data: icoData,
+    isLoading: isLoadingICO,
+    isFetching: isRefreshing,
+    refetch: refetchICOData,
+  } = useQuery({
+    queryKey: ['admin', 'ico', 'data', presaleAddress],
+    queryFn: () => {
+      if (!presaleAddress) throw new Error('No presale address');
+      return fetchICODataFromChain(presaleAddress, chain);
+    },
+    enabled: isAuthorized === true && !!presaleAddress,
+    refetchInterval: 30000, // Poll every 30s
+  });
 
-    const response = await fetch('/api/admin/stats');
-    setIsAuthorized(response.ok);
-    setLoading(false);
-  }, [authenticated, ready]);
+  const status = icoData?.status ?? null;
+  const config = icoData?.config ?? null;
+  const contributors = icoData?.contributors ?? [];
+  const isPaused = icoData?.isPaused ?? false;
 
-  const fetchICOData = useCallback(async () => {
-    if (!presaleAddress) return;
+  // Mutation: Start presale
+  const startPresaleMutation = useMutation({
+    mutationFn: async () => {
+      const ethereum = getEthereumProvider();
+      if (!presaleAddress || !ethereum) {
+        throw new Error('No presale address or ethereum provider');
+      }
 
-    const ethereum = (window as unknown as { ethereum?: EIP1193Provider })
-      .ethereum;
-    if (!ethereum) return;
+      const walletClient = createWalletClient({
+        chain,
+        transport: custom(ethereum),
+      });
 
-    setRefreshing(true);
+      const [account] = await walletClient.getAddresses();
+      if (!account) throw new Error('No account found');
 
-    const client = createPublicClient({
-      chain,
-      transport: custom(ethereum),
-    });
+      const duration = BigInt(presaleDuration * 24 * 60 * 60);
+      const delay = BigInt(claimDelay * 24 * 60 * 60);
 
-    // Fetch status
-    const statusResult = (await client.readContract({
-      address: presaleAddress,
-      abi: PRESALE_ABI,
-      functionName: 'getStatus',
-    })) as [bigint, bigint, bigint, bigint, boolean, boolean, boolean];
-
-    setStatus({
-      raised: statusResult[0],
-      participants: statusResult[1],
-      progress: statusResult[2],
-      timeRemaining: statusResult[3],
-      isActive: statusResult[4],
-      isFinalized: statusResult[5],
-      isFailed: statusResult[6],
-    });
-
-    // Fetch config
-    const [
-      softCap,
-      hardCap,
-      minContribution,
-      maxContribution,
-      startPrice,
-      currentPrice,
-      lpFundingBps,
-      elizaBonusBps,
-      paused,
-    ] = (await Promise.all([
-      client.readContract({
+      await walletClient.writeContract({
+        account,
         address: presaleAddress,
         abi: PRESALE_ABI,
-        functionName: 'softCap',
-      }),
-      client.readContract({
+        functionName: 'startPresale',
+        args: [duration, delay],
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['admin', 'ico', 'data'],
+      });
+    },
+  });
+
+  // Mutation: Pause/Unpause presale
+  const pausePresaleMutation = useMutation({
+    mutationFn: async () => {
+      const ethereum = getEthereumProvider();
+      if (!presaleAddress || !ethereum) {
+        throw new Error('No presale address or ethereum provider');
+      }
+
+      const walletClient = createWalletClient({
+        chain,
+        transport: custom(ethereum),
+      });
+
+      const [account] = await walletClient.getAddresses();
+      if (!account) throw new Error('No account found');
+
+      await walletClient.writeContract({
+        account,
         address: presaleAddress,
         abi: PRESALE_ABI,
-        functionName: 'hardCap',
-      }),
-      client.readContract({
+        functionName: isPaused ? 'unpause' : 'pause',
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['admin', 'ico', 'data'],
+      });
+    },
+  });
+
+  // Mutation: Finalize presale
+  const finalizePresaleMutation = useMutation({
+    mutationFn: async () => {
+      const ethereum = getEthereumProvider();
+      if (!presaleAddress || !ethereum) {
+        throw new Error('No presale address or ethereum provider');
+      }
+
+      const walletClient = createWalletClient({
+        chain,
+        transport: custom(ethereum),
+      });
+
+      const [account] = await walletClient.getAddresses();
+      if (!account) throw new Error('No account found');
+
+      await walletClient.writeContract({
+        account,
         address: presaleAddress,
         abi: PRESALE_ABI,
-        functionName: 'minContribution',
-      }),
-      client.readContract({
-        address: presaleAddress,
-        abi: PRESALE_ABI,
-        functionName: 'maxContribution',
-      }),
-      client.readContract({
-        address: presaleAddress,
-        abi: PRESALE_ABI,
-        functionName: 'startPrice',
-      }),
-      client.readContract({
-        address: presaleAddress,
-        abi: PRESALE_ABI,
-        functionName: 'getCurrentPrice',
-      }),
-      client.readContract({
-        address: presaleAddress,
-        abi: PRESALE_ABI,
-        functionName: 'lpFundingBps',
-      }),
-      client.readContract({
-        address: presaleAddress,
-        abi: PRESALE_ABI,
-        functionName: 'elizaBonusBps',
-      }),
-      client.readContract({
-        address: presaleAddress,
-        abi: PRESALE_ABI,
-        functionName: 'paused',
-      }),
-    ])) as [
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      boolean,
-    ];
+        functionName: 'finalize',
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['admin', 'ico', 'data'],
+      });
+    },
+  });
 
-    setConfig({
-      softCap,
-      hardCap,
-      minContribution,
-      maxContribution,
-      startPrice,
-      currentPrice,
-      lpFundingBps: Number(lpFundingBps),
-      elizaBonusBps: Number(elizaBonusBps),
-    });
+  const isActionPending =
+    startPresaleMutation.isPending ||
+    pausePresaleMutation.isPending ||
+    finalizePresaleMutation.isPending;
 
-    setIsPaused(paused);
-
-    // Fetch contributors
-    const contributorAddresses = (await client.readContract({
-      address: presaleAddress,
-      abi: PRESALE_ABI,
-      functionName: 'getContributors',
-    })) as readonly Address[];
-
-    const contributorData = await Promise.all(
-      contributorAddresses.slice(0, 100).map(async (addr) => {
-        const contribution = (await client.readContract({
-          address: presaleAddress,
-          abi: PRESALE_ABI,
-          functionName: 'contributions',
-          args: [addr],
-        })) as [bigint, bigint, bigint, bigint, boolean, boolean];
-
-        return {
-          address: addr,
-          ethAmount: contribution[0],
-          tokenAllocation: contribution[1] + contribution[2], // base + bonus
-          isElizaHolder: contribution[4],
-        };
-      })
-    );
-
-    setContributors(contributorData);
-    setRefreshing(false);
-  }, [presaleAddress, chain]);
-
-  useEffect(() => {
-    checkAdminAccess();
-  }, [checkAdminAccess]);
-
-  useEffect(() => {
-    if (isAuthorized && presaleAddress) {
-      fetchICOData();
-      const interval = setInterval(fetchICOData, 30000); // Refresh every 30s
-      return () => clearInterval(interval);
-    }
-    return undefined;
-  }, [isAuthorized, presaleAddress, fetchICOData]);
-
-  const executeAction = (action: string, fn: () => Promise<unknown>) => {
-    setActionLoading(action);
-    void fn().finally(() => {
-      setActionLoading(null);
-      void fetchICOData();
-    });
-  };
-
-  const startPresale = async () => {
-    const ethereum = (window as unknown as { ethereum?: EIP1193Provider })
-      .ethereum;
-    if (!presaleAddress || !ethereum) return;
-
-    const walletClient = createWalletClient({
-      chain,
-      transport: custom(ethereum),
-    });
-
-    const [account] = await walletClient.getAddresses();
-    if (!account) return;
-
-    const duration = BigInt(presaleDuration * 24 * 60 * 60);
-    const delay = BigInt(claimDelay * 24 * 60 * 60);
-
-    await walletClient.writeContract({
-      account,
-      address: presaleAddress,
-      abi: PRESALE_ABI,
-      functionName: 'startPresale',
-      args: [duration, delay],
-    });
-  };
-
-  const pausePresale = async () => {
-    const ethereum = (window as unknown as { ethereum?: EIP1193Provider })
-      .ethereum;
-    if (!presaleAddress || !ethereum) return;
-
-    const walletClient = createWalletClient({
-      chain,
-      transport: custom(ethereum),
-    });
-
-    const [account] = await walletClient.getAddresses();
-    if (!account) return;
-
-    await walletClient.writeContract({
-      account,
-      address: presaleAddress,
-      abi: PRESALE_ABI,
-      functionName: isPaused ? 'unpause' : 'pause',
-    });
-  };
-
-  const finalizePresale = async () => {
-    const ethereum = (window as unknown as { ethereum?: EIP1193Provider })
-      .ethereum;
-    if (!presaleAddress || !ethereum) return;
-
-    const walletClient = createWalletClient({
-      chain,
-      transport: custom(ethereum),
-    });
-
-    const [account] = await walletClient.getAddresses();
-    if (!account) return;
-
-    await walletClient.writeContract({
-      account,
-      address: presaleAddress,
-      abi: PRESALE_ABI,
-      functionName: 'finalize',
-    });
-  };
-
-  if (loading) {
+  if (isCheckingAuth || (isAuthorized && isLoadingICO)) {
     return (
       <PageContainer>
         <div className="flex h-full items-center justify-center">
@@ -570,11 +601,13 @@ export default function ICOAdminPage() {
           </p>
         </div>
         <button
-          onClick={() => fetchICOData()}
-          disabled={refreshing}
+          onClick={() => refetchICOData()}
+          disabled={isRefreshing}
           className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
         >
-          <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+          <RefreshCw
+            className={cn('h-4 w-4', isRefreshing && 'animate-spin')}
+          />
           Refresh
         </button>
       </div>
@@ -676,19 +709,21 @@ export default function ICOAdminPage() {
           <div className="flex flex-wrap gap-3">
             {!status?.isActive && !status?.isFinalized && (
               <button
-                onClick={() => executeAction('start', startPresale)}
-                disabled={actionLoading !== null}
+                onClick={() => startPresaleMutation.mutate()}
+                disabled={isActionPending}
                 className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
               >
                 <Play className="h-4 w-4" />
-                {actionLoading === 'start' ? 'Starting...' : 'Start Presale'}
+                {startPresaleMutation.isPending
+                  ? 'Starting...'
+                  : 'Start Presale'}
               </button>
             )}
 
             {status?.isActive && !status?.isFinalized && (
               <button
-                onClick={() => executeAction('pause', pausePresale)}
-                disabled={actionLoading !== null}
+                onClick={() => pausePresaleMutation.mutate()}
+                disabled={isActionPending}
                 className={cn(
                   'flex items-center gap-2 rounded-lg px-4 py-2 transition-colors disabled:opacity-50',
                   isPaused
@@ -701,7 +736,7 @@ export default function ICOAdminPage() {
                 ) : (
                   <Pause className="h-4 w-4" />
                 )}
-                {actionLoading === 'pause'
+                {pausePresaleMutation.isPending
                   ? 'Processing...'
                   : isPaused
                     ? 'Unpause'
@@ -713,12 +748,12 @@ export default function ICOAdminPage() {
               !status?.isFinalized &&
               status.timeRemaining === 0n && (
                 <button
-                  onClick={() => executeAction('finalize', finalizePresale)}
-                  disabled={actionLoading !== null}
+                  onClick={() => finalizePresaleMutation.mutate()}
+                  disabled={isActionPending}
                   className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
                 >
                   <Crown className="h-4 w-4" />
-                  {actionLoading === 'finalize'
+                  {finalizePresaleMutation.isPending
                     ? 'Finalizing...'
                     : 'Finalize Presale'}
                 </button>

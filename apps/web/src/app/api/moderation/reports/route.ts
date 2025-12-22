@@ -17,7 +17,7 @@
  *     summary: Get user's reports
  *     description: Returns reports created by current user
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: limit
@@ -51,7 +51,7 @@
  *     summary: Create report
  *     description: Creates a new report with AI evaluation
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -224,7 +224,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       reportedPostId: data.reportedPostId || null,
       reportType: data.reportType,
       category: data.category,
-      reason: data.reason,
+      reason: data.reason || 'No reason provided',
       evidence: data.evidence || null,
       priority,
       status: 'pending',

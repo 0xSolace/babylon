@@ -16,7 +16,7 @@
  *     summary: Get report statistics
  *     description: Returns comprehensive report statistics (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Statistics retrieved successfully
@@ -76,39 +76,48 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   ]);
 
   // Get counts by category
-  const reportsByCategoryRaw = await db
+  const reportsByCategoryRaw = (await db
     .select({
       category: reports.category,
-      _count: count(),
+      reportCount: count(),
     })
     .from(reports)
-    .groupBy(reports.category);
+    .groupBy(reports.category)) as unknown as Array<{
+    category: string;
+    reportCount: number;
+  }>;
 
   const reportsByCategory = reportsByCategoryRaw.sort(
-    (a, b) => Number(b._count) - Number(a._count)
+    (a, b) => b.reportCount - a.reportCount
   );
 
   // Get counts by priority
-  const reportsByPriority = await db
+  const reportsByPriority = (await db
     .select({
       priority: reports.priority,
-      _count: count(),
+      reportCount: count(),
     })
     .from(reports)
-    .groupBy(reports.priority);
+    .groupBy(reports.priority)) as unknown as Array<{
+    priority: string;
+    reportCount: number;
+  }>;
 
   // Get top reported users
-  const topReportedUsersRaw = await db
+  const topReportedUsersRaw = (await db
     .select({
       reportedUserId: reports.reportedUserId,
-      _count: count(),
+      reportCount: count(),
     })
     .from(reports)
     .where(isNotNull(reports.reportedUserId))
-    .groupBy(reports.reportedUserId);
+    .groupBy(reports.reportedUserId)) as unknown as Array<{
+    reportedUserId: string | null;
+    reportCount: number;
+  }>;
 
   const topReportedUsers = topReportedUsersRaw
-    .sort((a, b) => Number(b._count) - Number(a._count))
+    .sort((a, b) => b.reportCount - a.reportCount)
     .slice(0, 10);
 
   // Get user details for top reported users
@@ -126,22 +135,25 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       });
       return {
         user,
-        reportCount: Number(item._count),
+        reportCount: item.reportCount,
       };
     })
   );
 
   // Get top reporters
-  const topReportersRaw = await db
+  const topReportersRaw = (await db
     .select({
       reporterId: reports.reporterId,
-      _count: count(),
+      reportCount: count(),
     })
     .from(reports)
-    .groupBy(reports.reporterId);
+    .groupBy(reports.reporterId)) as unknown as Array<{
+    reporterId: string;
+    reportCount: number;
+  }>;
 
   const topReporters = topReportersRaw
-    .sort((a, b) => Number(b._count) - Number(a._count))
+    .sort((a, b) => b.reportCount - a.reportCount)
     .slice(0, 10);
 
   // Get user details for top reporters
@@ -158,7 +170,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       });
       return {
         user,
-        reportCount: Number(item._count),
+        reportCount: item.reportCount,
       };
     })
   );
@@ -191,11 +203,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
     byCategory: reportsByCategory.map((item) => ({
       category: item.category,
-      count: Number(item._count),
+      count: item.reportCount,
     })),
     byPriority: reportsByPriority.map((item) => ({
       priority: item.priority,
-      count: Number(item._count),
+      count: item.reportCount,
     })),
     topReportedUsers: topReportedUsersWithDetails,
     topReporters: topReportersWithDetails,

@@ -6,27 +6,27 @@
  * the Jeju moderation marketplace.
  */
 
-import type { Address } from 'viem';
+import type { JsonRpcRequest, JsonRpcResponse } from '@babylon/a2a';
+import type { JsonRpcResult } from '@babylon/shared';
+import { zeroHash } from 'viem';
 import { ModerationClient } from './client';
+import {
+  CanReportParamsSchema,
+  ChallengeBanParamsSchema,
+  ClaimRewardsParamsSchema,
+  GetActiveCasesParamsSchema,
+  GetBanStatusParamsSchema,
+  GetCaseParamsSchema,
+  GetStakeParamsSchema,
+  ProposeBanParamsSchema,
+  ReReviewParamsSchema,
+  ResolveCaseParamsSchema,
+  StakeParamsSchema,
+  UnstakeParamsSchema,
+  VoteParamsSchema,
+} from './schemas';
 import type { BanCase, JejuModerationConfig, VotePosition } from './types';
-
-interface A2ARequest {
-  jsonrpc: '2.0';
-  method: string;
-  params: Record<string, unknown>;
-  id: string | number;
-}
-
-interface A2AResponse {
-  jsonrpc: '2.0';
-  result?: unknown;
-  error?: {
-    code: number;
-    message: string;
-    data?: unknown;
-  };
-  id: string | number;
-}
+import { BanStatus, VotePosition as VP } from './types';
 
 type ModerationHandler = (
   client: ModerationClient,
@@ -35,8 +35,7 @@ type ModerationHandler = (
 
 const handlers: Record<string, ModerationHandler> = {
   'moderation.getBanStatus': async (client, params) => {
-    const address = params.address as Address;
-    const appId = params.appId as `0x${string}` | undefined;
+    const { address, appId } = GetBanStatusParamsSchema.parse(params);
 
     const isBanned = await client.isBanned(address, appId);
     const activeCase = await client.getActiveCase(address);
@@ -47,21 +46,20 @@ const handlers: Record<string, ModerationHandler> = {
     }
 
     return {
-      status: banCase?.status ?? (isBanned ? 3 : 0), // BANNED = 3, NONE = 0
+      status: banCase?.status ?? (isBanned ? BanStatus.BANNED : BanStatus.NONE),
       reason: banCase?.reason,
       caseId: activeCase,
     };
   },
 
   'moderation.proposeBan': async (client, params) => {
-    const targetAddress = params.targetAddress as Address;
-    const reason = params.reason as string;
-    const evidence = params.evidence as string | undefined;
+    const { targetAddress, reason, evidence } =
+      ProposeBanParamsSchema.parse(params);
 
     // Convert evidence to bytes32 hash if provided
     const evidenceHash = evidence
       ? (`0x${Buffer.from(evidence).toString('hex').padEnd(64, '0').slice(0, 64)}` as `0x${string}`)
-      : ('0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`);
+      : zeroHash;
 
     // Return transaction request for the caller to submit
     const txRequest = client.buildOpenCaseRequest(
@@ -78,10 +76,12 @@ const handlers: Record<string, ModerationHandler> = {
   },
 
   'moderation.challengeBan': async (client, params) => {
-    const caseId = params.caseId as `0x${string}`;
-    const stakeAmount = BigInt(params.stakeAmount as string);
+    const { caseId, stakeAmount } = ChallengeBanParamsSchema.parse(params);
 
-    const txRequest = client.buildChallengeCaseRequest(caseId, stakeAmount);
+    const txRequest = client.buildChallengeCaseRequest(
+      caseId,
+      BigInt(stakeAmount)
+    );
 
     return {
       type: 'transaction_request',
@@ -91,10 +91,13 @@ const handlers: Record<string, ModerationHandler> = {
   },
 
   'moderation.vote': async (client, params) => {
-    const caseId = params.caseId as `0x${string}`;
-    const position = params.position === 'yes' ? 0 : 1; // YES = 0, NO = 1
+    const { caseId, position } = VoteParamsSchema.parse(params);
+    const positionNum = position === 'yes' ? VP.YES : VP.NO;
 
-    const txRequest = client.buildVoteRequest(caseId, position as VotePosition);
+    const txRequest = client.buildVoteRequest(
+      caseId,
+      positionNum as VotePosition
+    );
 
     return {
       type: 'transaction_request',
@@ -104,8 +107,7 @@ const handlers: Record<string, ModerationHandler> = {
   },
 
   'moderation.getActiveCases': async (client, params) => {
-    const limit = (params.limit as number) ?? 10;
-    const offset = (params.offset as number) ?? 0;
+    const { limit = 10, offset = 0 } = GetActiveCasesParamsSchema.parse(params);
 
     const allCaseIds = await client.getAllCaseIds();
     const paginatedIds = allCaseIds.slice(offset, offset + limit);
@@ -124,47 +126,46 @@ const handlers: Record<string, ModerationHandler> = {
   },
 
   'moderation.getCase': async (client, params) => {
-    const caseId = params.caseId as `0x${string}`;
+    const { caseId } = GetCaseParamsSchema.parse(params);
     return client.getCase(caseId);
   },
 
   'moderation.getStake': async (client, params) => {
-    const address = params.address as Address;
+    const { address } = GetStakeParamsSchema.parse(params);
     return client.getStake(address);
   },
 
   'moderation.canReport': async (client, params) => {
-    const address = params.address as Address;
+    const { address } = CanReportParamsSchema.parse(params);
     return { canReport: await client.canReport(address) };
   },
 
   'moderation.stake': async (client, params) => {
-    const amount = BigInt(params.amount as string);
-    const txRequest = client.buildStakeRequest(amount);
+    const { amount } = StakeParamsSchema.parse(params);
+    const txRequest = client.buildStakeRequest(BigInt(amount));
     return { type: 'transaction_request', txRequest };
   },
 
   'moderation.unstake': async (client, params) => {
-    const amount = BigInt(params.amount as string);
-    const txRequest = client.buildUnstakeRequest(amount);
+    const { amount } = UnstakeParamsSchema.parse(params);
+    const txRequest = client.buildUnstakeRequest(BigInt(amount));
     return { type: 'transaction_request', txRequest };
   },
 
   'moderation.resolveCase': async (client, params) => {
-    const caseId = params.caseId as `0x${string}`;
+    const { caseId } = ResolveCaseParamsSchema.parse(params);
     const txRequest = client.buildResolveCaseRequest(caseId);
     return { type: 'transaction_request', txRequest };
   },
 
   'moderation.requestReReview': async (client, params) => {
-    const caseId = params.caseId as `0x${string}`;
-    const stakeAmount = BigInt(params.stakeAmount as string);
-    const txRequest = client.buildReReviewRequest(caseId, stakeAmount);
+    const { caseId, stakeAmount } = ReReviewParamsSchema.parse(params);
+    const txRequest = client.buildReReviewRequest(caseId, BigInt(stakeAmount));
     return { type: 'transaction_request', txRequest };
   },
 
   'moderation.claimRewards': async (client, params) => {
-    const caseId = params.caseId as `0x${string}`;
+    const { caseId } = ClaimRewardsParamsSchema.parse(params);
     const txRequest = client.buildClaimRewardsRequest(caseId);
     return { type: 'transaction_request', txRequest };
   },
@@ -176,8 +177,8 @@ const handlers: Record<string, ModerationHandler> = {
 export function createModerationA2AHandler(config: JejuModerationConfig) {
   const client = new ModerationClient(config);
 
-  return async (request: A2ARequest): Promise<A2AResponse> => {
-    const { method, params, id } = request;
+  return async (request: JsonRpcRequest): Promise<JsonRpcResponse> => {
+    const { method, params = {}, id } = request;
 
     // Check if this is a moderation method
     if (!method.startsWith('moderation.')) {
@@ -203,26 +204,16 @@ export function createModerationA2AHandler(config: JejuModerationConfig) {
       };
     }
 
-    try {
-      const result = await handler(client, params);
-      return {
-        jsonrpc: '2.0',
-        result,
-        id,
-      };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      return {
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: errorMessage,
-          data: error,
-        },
-        id,
-      };
-    }
+    // Ensure params is a record (not an array)
+    const paramsRecord = Array.isArray(params)
+      ? {}
+      : (params as Record<string, unknown>);
+    const result = await handler(client, paramsRecord);
+    return {
+      jsonrpc: '2.0',
+      result: result as JsonRpcResult,
+      id,
+    };
   };
 }
 

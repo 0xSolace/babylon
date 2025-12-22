@@ -9,6 +9,7 @@
  * This simulation demonstrates the concept.
  */
 
+import { logger } from '@babylon/shared';
 import { type Address, type Hex, keccak256, toBytes } from 'viem';
 
 export interface AttestationQuote {
@@ -52,7 +53,7 @@ let EXPECTED_MEASUREMENT: Hex | null = null;
  */
 export function setExpectedMeasurement(measurement: Hex): void {
   EXPECTED_MEASUREMENT = measurement;
-  console.log(
+  logger.info(
     `[Attestation] Expected measurement set: ${measurement.slice(0, 16)}...`
   );
 }
@@ -97,7 +98,7 @@ export function generateQuote(
     operatorAddress,
   };
 
-  console.log(`[Attestation] Generated quote for ${operatorAddress}`);
+  logger.info(`[Attestation] Generated quote for ${operatorAddress}`);
   return quote;
 }
 

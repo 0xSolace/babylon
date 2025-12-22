@@ -7,6 +7,7 @@ import { gcm } from '@noble/ciphers/aes';
 import { x25519 } from '@noble/curves/ed25519';
 import { sha256 } from '@noble/hashes/sha256';
 import { randomBytes } from '@noble/hashes/utils';
+import { EncryptedMessageSchema } from './schemas';
 import type { EncryptionKeys } from './types';
 
 const NONCE_LENGTH = 12;
@@ -106,9 +107,10 @@ export function decryptMessage(
  * Convert hex string to Uint8Array
  */
 export function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
+  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const bytes = new Uint8Array(cleanHex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    bytes[i] = parseInt(cleanHex.slice(i * 2, i * 2 + 2), 16);
   }
   return bytes;
 }
@@ -159,11 +161,7 @@ export function deserializeEncryptedMessage(serialized: string): {
   nonce: Uint8Array;
   ephemeralPublicKey: Uint8Array;
 } {
-  const parsed = JSON.parse(serialized) as {
-    ciphertext: string;
-    nonce: string;
-    ephemeralPublicKey: string;
-  };
+  const parsed = EncryptedMessageSchema.parse(JSON.parse(serialized));
   return {
     ciphertext: hexToBytes(parsed.ciphertext),
     nonce: hexToBytes(parsed.nonce),

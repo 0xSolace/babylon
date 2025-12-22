@@ -1,10 +1,8 @@
 /**
- * Prediction Markets Store - Centralized state management for prediction markets data
+ * Prediction Markets Hooks - React Query based data fetching for prediction markets
  *
- * This store prevents duplicate API calls by:
- * 1. Caching data with a TTL (10 seconds)
- * 2. Deduplicating concurrent requests via a fetchPromise
- * 3. Providing a single polling mechanism that all components share
+ * This module provides hooks for fetching and caching prediction markets data using react-query.
+ * The hooks prevent duplicate API calls via react-query's built-in caching and deduplication.
  *
  * Usage:
  * ```tsx
@@ -18,178 +16,79 @@
  * ```
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { create } from 'zustand';
-import { useShallow } from 'zustand/react/shallow';
+import { PredictionMarketsResponseSchema } from '@babylon/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo, useRef } from 'react';
+import type { PredictionMarket } from '@/types/markets';
+import { MARKETS_CONFIG } from '@/types/markets';
+
+// Re-export for backwards compatibility
+export type { PredictionMarket } from '@/types/markets';
+
+/** Query key for prediction markets */
+export const PREDICTION_MARKETS_QUERY_KEY = ['markets', 'predictions'] as const;
+
+/** Build query key with optional userId */
+function buildQueryKey(userId?: string) {
+  return userId
+    ? ([...PREDICTION_MARKETS_QUERY_KEY, userId] as const)
+    : PREDICTION_MARKETS_QUERY_KEY;
+}
+
+/** Fetch prediction markets from API */
+async function fetchPredictionMarkets(
+  userId?: string
+): Promise<PredictionMarket[]> {
+  const url = userId
+    ? `/api/markets/predictions?userId=${encodeURIComponent(userId)}`
+    : '/api/markets/predictions';
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch prediction markets: ${response.status}`);
+  }
+
+  const rawData: unknown = await response.json();
+  const validated = PredictionMarketsResponseSchema.parse(rawData);
+  return validated.questions as PredictionMarket[];
+}
 
 /**
- * Prediction market data structure from API
+ * Hook for consuming prediction markets data.
+ * Automatically fetches data on mount and caches results.
+ *
+ * @param userId - Optional user ID for fetching with positions
+ * @param options - Optional configuration
  */
-export interface PredictionMarket {
-  id: number | string;
-  text: string;
-  status: 'active' | 'resolved' | 'cancelled';
-  createdDate?: string;
-  resolutionDate?: string;
-  resolvedOutcome?: boolean;
-  scenario: number;
-  yesShares?: number;
-  noShares?: number;
-  oracleCommitTxHash?: string | null;
-  oracleRevealTxHash?: string | null;
-  oraclePublishedAt?: string | null;
-}
+export function usePredictionMarkets(
+  userId?: string,
+  options?: { pollingInterval?: number }
+) {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: buildQueryKey(userId),
+    queryFn: () => fetchPredictionMarkets(userId),
+    staleTime: MARKETS_CONFIG.CACHE_TTL_MS,
+    refetchInterval: options?.pollingInterval,
+    // Don't show loading spinner on background refetches
+    placeholderData: (previousData) => previousData,
+  });
 
-interface PredictionMarketsState {
-  // Data
-  markets: PredictionMarket[];
-  loading: boolean;
-  error: string | null;
-  lastFetchedAt: number | null;
+  const markets = data ?? [];
 
-  // Internal state for request deduplication
-  fetchPromise: Promise<void> | null;
-  pollingInterval: ReturnType<typeof setInterval> | null;
-  subscriberCount: number;
-
-  // Actions
-  fetchMarkets: (force?: boolean, userId?: string) => Promise<void>;
-  subscribe: (intervalMs: number, userId?: string) => () => void;
-}
-
-// Cache TTL in milliseconds (10 seconds)
-const CACHE_TTL = 10000;
-
-export const usePredictionMarketsStore = create<PredictionMarketsState>(
-  (set, get) => ({
-    markets: [],
-    loading: false,
-    error: null,
-    lastFetchedAt: null,
-    fetchPromise: null,
-    pollingInterval: null,
-    subscriberCount: 0,
-
-    fetchMarkets: async (force = false, userId?: string) => {
-      const state = get();
-
-      // Return existing promise if already fetching (deduplication)
-      if (state.fetchPromise) {
-        return state.fetchPromise;
-      }
-
-      // Return cached data if fresh and not forced
-      if (
-        !force &&
-        state.lastFetchedAt &&
-        Date.now() - state.lastFetchedAt < CACHE_TTL &&
-        state.markets.length > 0
-      ) {
-        return;
-      }
-
-      // Create and store the fetch promise
-      const fetchPromise = (async () => {
-        // Only show loading on initial fetch (not background refreshes)
-        if (state.markets.length === 0) {
-          set({ loading: true });
-        }
-        set({ error: null });
-
-        const url = userId
-          ? `/api/markets/predictions?userId=${encodeURIComponent(userId)}`
-          : '/api/markets/predictions';
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(
-            `Failed to fetch prediction markets: ${response.status}`
-          );
-        }
-
-        const data = await response.json();
-        if (data.questions && Array.isArray(data.questions)) {
-          set({
-            markets: data.questions,
-            lastFetchedAt: Date.now(),
-            error: null,
-          });
-        }
-        set({ loading: false, fetchPromise: null });
-      })();
-
-      set({ fetchPromise });
-      return fetchPromise;
-    },
-
-    // Combined subscribe/unsubscribe that handles polling lifecycle
-    subscribe: (intervalMs: number, userId?: string) => {
-      const state = get();
-      const newCount = state.subscriberCount + 1;
-      set({ subscriberCount: newCount });
-
-      // Start polling on first subscriber
-      if (newCount === 1) {
-        // Initial fetch
-        get().fetchMarkets(false, userId);
-
-        // Set up interval
-        const interval = setInterval(() => {
-          get().fetchMarkets(true, userId);
-        }, intervalMs);
-
-        set({ pollingInterval: interval });
-      }
-
-      // Return unsubscribe function
-      return () => {
-        const currentState = get();
-        const updatedCount = currentState.subscriberCount - 1;
-        set({ subscriberCount: updatedCount });
-
-        // Stop polling when last subscriber leaves
-        if (updatedCount === 0 && currentState.pollingInterval) {
-          clearInterval(currentState.pollingInterval);
-          set({ pollingInterval: null });
-        }
-      };
-    },
-  })
-);
-
-// Selector for data (memoized by zustand)
-const dataSelector = (state: PredictionMarketsState) => ({
-  markets: state.markets,
-  loading: state.loading,
-  error: state.error,
-});
-
-/**
- * Hook for consuming prediction markets data
- * Automatically fetches data on mount if not cached
- */
-export function usePredictionMarkets(userId?: string) {
-  // Single subscription with shallow comparison for the object
-  const { markets, loading, error } = usePredictionMarketsStore(
-    useShallow(dataSelector)
-  );
-  const fetchMarkets = usePredictionMarketsStore((state) => state.fetchMarkets);
-
-  // Fetch on mount if needed
-  useEffect(() => {
-    fetchMarkets(false, userId);
-  }, [fetchMarkets, userId]);
-
-  const refetch = useCallback(() => {
-    return fetchMarkets(true, userId);
-  }, [fetchMarkets, userId]);
-
-  return { markets, loading, error, refetch };
+  return {
+    markets,
+    loading: isLoading,
+    error: error?.message ?? null,
+    refetch: useCallback(() => refetch(), [refetch]),
+  };
 }
 
 /**
- * Hook for enabling polling on prediction markets
- * Uses reference counting so multiple components can request polling
- * and it only stops when all components unmount
+ * Hook for enabling polling on prediction markets.
+ * Uses react-query's refetchInterval for automatic background updates.
+ *
+ * This hook triggers a query that will be deduplicated with other usePredictionMarkets calls.
  *
  * @param intervalMs - Polling interval in milliseconds (default: 30000)
  * @param userId - Optional user ID for fetching with positions
@@ -198,17 +97,18 @@ export function usePredictionMarketsPolling(
   intervalMs = 30000,
   userId?: string
 ) {
-  const subscribe = usePredictionMarketsStore((state) => state.subscribe);
-
-  // Store params in refs so they don't cause re-subscriptions
+  // Store params in refs so they don't cause re-renders
   const intervalRef = useRef(intervalMs);
   const userIdRef = useRef(userId);
 
-  useEffect(() => {
-    // Subscribe returns the unsubscribe function
-    const unsubscribe = subscribe(intervalRef.current, userIdRef.current);
-    return unsubscribe;
-  }, [subscribe]);
+  // This query will be deduplicated with the main usePredictionMarkets query
+  // The refetchInterval will be used if it's the shortest interval among all subscribers
+  useQuery({
+    queryKey: buildQueryKey(userIdRef.current),
+    queryFn: () => fetchPredictionMarkets(userIdRef.current),
+    staleTime: MARKETS_CONFIG.CACHE_TTL_MS,
+    refetchInterval: intervalRef.current,
+  });
 }
 
 /**
@@ -251,7 +151,7 @@ export function usePredictionMarketsStats() {
       active: markets.filter((m) => m.status === 'active').length,
       resolved: markets.filter((m) => m.status === 'resolved').length,
       totalVolume: markets.reduce(
-        (sum, m) => sum + (m.yesShares || 0) + (m.noShares || 0),
+        (sum, m) => sum + (m.yesShares ?? 0) + (m.noShares ?? 0),
         0
       ),
     }),
@@ -259,4 +159,18 @@ export function usePredictionMarketsStats() {
   );
 
   return { stats, loading };
+}
+
+/**
+ * Hook to invalidate prediction markets cache.
+ * Useful after mutations (buy/sell shares).
+ */
+export function useInvalidatePredictionMarkets() {
+  const queryClient = useQueryClient();
+
+  return useCallback(() => {
+    return queryClient.invalidateQueries({
+      queryKey: PREDICTION_MARKETS_QUERY_KEY,
+    });
+  }, [queryClient]);
 }

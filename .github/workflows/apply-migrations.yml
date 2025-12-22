@@ -20,16 +20,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Apply migrations (staging)
+      - name: Apply CQL migrations (staging)
         if: github.ref == 'refs/heads/staging'
         env:
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-          DIRECT_DATABASE_URL: ${{ secrets.STAGING_DIRECT_DATABASE_URL }}
-        run: bunx --bun drizzle-kit push --force --config=packages/db/drizzle.config.ts
+          CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.STAGING_CQL_ENDPOINT }}
+          CQL_DATABASE_ID: ${{ secrets.STAGING_CQL_DATABASE_ID }}
+          CQL_PRIVATE_KEY: ${{ secrets.STAGING_CQL_PRIVATE_KEY }}
+        run: bun run scripts/apply-cql-migrations.ts
 
-      - name: Apply migrations (production)
+      - name: Apply CQL migrations (production)
         if: github.ref == 'refs/heads/production'
         env:
-          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-          DIRECT_DATABASE_URL: ${{ secrets.PROD_DIRECT_DATABASE_URL }}
-        run: bunx --bun drizzle-kit push --force --config=packages/db/drizzle.config.ts
+          CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.PROD_CQL_ENDPOINT }}
+          CQL_DATABASE_ID: ${{ secrets.PROD_CQL_DATABASE_ID }}
+          CQL_PRIVATE_KEY: ${{ secrets.PROD_CQL_PRIVATE_KEY }}
+        run: bun run scripts/apply-cql-migrations.ts

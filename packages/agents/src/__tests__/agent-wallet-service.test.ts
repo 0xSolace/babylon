@@ -1,6 +1,6 @@
 /**
  * Unit Tests for Agent Wallet Service
- * Verifies Privy integration and on-chain registration with mocked dependencies
+ * Verifies OAuth3 integration and on-chain registration with mocked dependencies
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -15,7 +15,7 @@ const mockDb = {
         {
           id: 'test-agent-id',
           walletAddress: '0x1234567890123456789012345678901234567890',
-          privyId: 'did:privy:test-wallet',
+          oauth3Id: 'did:oauth3:test-wallet',
         },
       ]),
     })),
@@ -114,12 +114,12 @@ describe('Agent Wallet Service', () => {
     const result = {
       walletAddress: mockAccount.address,
       onChainRegistered: false,
-      privyUserId: 'did:privy:test-123',
-      privyWalletId: 'wallet-123',
+      oauth3UserId: 'did:oauth3:test-123',
+      oauth3WalletId: 'wallet-123',
     };
 
     expect(result.walletAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
     expect(typeof result.onChainRegistered).toBe('boolean');
-    expect(result.privyUserId).toBeTruthy();
+    expect(result.oauth3UserId).toBeTruthy();
   });
 });

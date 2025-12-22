@@ -62,4 +62,4 @@ export type {
 // Common Types (used across client and server)
 // =============================================================================
 
-export type { JsonValue } from './types/common';
+export type { JsonValue } from '@babylon/shared';

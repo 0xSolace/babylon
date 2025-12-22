@@ -5,6 +5,12 @@
  * No OAuth needed - uses Farcaster custody address signatures.
  */
 
+import {
+  AuthenticationError,
+  ExternalServiceError,
+  NotFoundError,
+  retryIfRetryable,
+} from '@babylon/shared';
 import { type Address, type Hex, verifyMessage } from 'viem';
 import type { OAuthUserInfo } from './types';
 
@@ -111,7 +117,7 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
   ): Promise<FarcasterSignInResult> {
     // Check expiration
     if (Date.now() > request.expiresAt) {
-      throw new Error('Sign-in request expired');
+      throw new AuthenticationError('Sign-in request expired', 'EXPIRED_TOKEN');
     }
 
     // Get the FID's custody address
@@ -125,7 +131,10 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
     });
 
     if (!isValid) {
-      throw new Error('Invalid signature');
+      throw new AuthenticationError(
+        'Invalid Farcaster signature',
+        'INVALID_CREDENTIALS'
+      );
     }
 
     // Get user profile
@@ -145,13 +154,31 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
    * Get custody address for an FID
    */
   async getCustodyAddress(fid: number): Promise<Address> {
-    // In production, query the Farcaster Hub or use Neynar API
-    const response = await fetch(
-      `${this.config.hubUrl}/v1/custodyAddressByFid?fid=${fid}`
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(
+          `${this.config.hubUrl}/v1/custodyAddressByFid?fid=${fid}`
+        );
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `Farcaster Hub custody address failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to get custody address for FID ${fid}`);
+      throw new ExternalServiceError(
+        'Farcaster Hub',
+        `Failed to get custody address for FID ${fid}`,
+        response.status
+      );
     }
 
     const data = (await response.json()) as { custodyAddress: string };
@@ -174,8 +201,16 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
    * Get user profile from Farcaster Hub
    */
   private async getUserProfileFromHub(fid: number): Promise<OAuthUserInfo> {
-    const response = await fetch(
-      `${this.config.hubUrl}/v1/userDataByFid?fid=${fid}`
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(
+          `${this.config.hubUrl}/v1/userDataByFid?fid=${fid}`
+        );
+
+        // For this endpoint, non-2xx is not retryable - just return minimal info
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
     );
 
     if (!response.ok) {
@@ -214,16 +249,31 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
    * Get user profile from Neynar API
    */
   private async getUserProfileFromNeynar(fid: number): Promise<OAuthUserInfo> {
-    const response = await fetch(
-      `${NEYNAR_API_URL}/farcaster/user/bulk?fids=${fid}`,
-      {
-        headers: {
-          api_key: this.config.neynarApiKey!,
-        },
-      }
-    );
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(
+          `${NEYNAR_API_URL}/farcaster/user/bulk?fids=${fid}`,
+          {
+            headers: {
+              api_key: this.config.neynarApiKey!,
+            },
+          }
+        );
 
-    if (!response.ok) {
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `Neynar API failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    ).catch(() => null);
+
+    if (!response) {
       return this.getUserProfileFromHub(fid);
     }
 
@@ -241,7 +291,7 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
 
     const user = data.users[0];
     if (!user) {
-      throw new Error(`User not found: FID ${fid}`);
+      throw new NotFoundError('Farcaster User', fid);
     }
 
     return {
@@ -258,16 +308,24 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
    */
   async getFidByUsername(username: string): Promise<number | null> {
     if (this.config.neynarApiKey) {
-      const response = await fetch(
-        `${NEYNAR_API_URL}/farcaster/user/by_username?username=${encodeURIComponent(username)}`,
-        {
-          headers: {
-            api_key: this.config.neynarApiKey,
-          },
-        }
-      );
+      const response = await retryIfRetryable(
+        async () => {
+          const res = await fetch(
+            `${NEYNAR_API_URL}/farcaster/user/by_username?username=${encodeURIComponent(username)}`,
+            {
+              headers: {
+                api_key: this.config.neynarApiKey!,
+              },
+            }
+          );
 
-      if (!response.ok) {
+          // Non-2xx is not retryable for username lookup
+          return res;
+        },
+        { maxAttempts: 3, initialDelayMs: 100 }
+      ).catch(() => null);
+
+      if (!response || !response.ok) {
         return null;
       }
 

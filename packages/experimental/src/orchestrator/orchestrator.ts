@@ -10,6 +10,7 @@
  * This simulates the complete permissionless AI game infrastructure.
  */
 
+import { logger, ValidationError } from '@babylon/shared';
 import type { Address, Hex } from 'viem';
 import { MockBlockchain } from '../contracts/mock-blockchain.js';
 import { type AgentConfig, type AgentState, AIAgent } from '../game/agent.js';
@@ -37,7 +38,7 @@ export interface OrchestratorConfig {
   initialFunding: bigint;
 }
 
-export interface GameState {
+export interface OrchestratorGameState {
   agent: AgentState;
   gameStats: {
     totalSessions: number;
@@ -89,9 +90,9 @@ export class GameOrchestrator {
     this.blockchain = new MockBlockchain();
     this.ipfs = new IPFSSimulator();
 
-    console.log('\n[Orchestrator] Initialized with config:');
-    console.log(`  - Council members: ${config.councilMembers.length}`);
-    console.log(`  - Initial funding: ${config.initialFunding} tokens`);
+    logger.info('\n[Orchestrator] Initialized with config:');
+    logger.info(`  - Council members: ${config.councilMembers.length}`);
+    logger.info(`  - Initial funding: ${config.initialFunding} tokens`);
   }
 
   /**
@@ -101,19 +102,19 @@ export class GameOrchestrator {
     operatorAddress: Address;
     attestation: AttestationQuote;
   }> {
-    console.log(
+    logger.info(
       '\n╔══════════════════════════════════════════════════════════╗'
     );
-    console.log(
+    logger.info(
       '║        INITIALIZING PERMISSIONLESS AI GAME                ║'
     );
-    console.log(
+    logger.info(
       '╚══════════════════════════════════════════════════════════╝\n'
     );
 
     // Phase 1: Setup contracts
     this.phase = 'deploying_contracts';
-    console.log('\n[Phase 1] Deploying smart contracts...');
+    logger.info('\n[Phase 1] Deploying smart contracts...');
 
     // Add council members
     for (const member of this.config.councilMembers) {
@@ -121,13 +122,13 @@ export class GameOrchestrator {
     }
 
     // Treasury is pre-funded in MockBlockchain constructor
-    console.log(
+    logger.info(
       `  Treasury funded: ${this.blockchain.getTreasuryBalance()} tokens`
     );
 
     // Phase 2: Boot TEE enclave
     this.phase = 'booting_enclave';
-    console.log('\n[Phase 2] Booting TEE enclave...');
+    logger.info('\n[Phase 2] Booting TEE enclave...');
 
     this.enclave = await TEEEnclave.create(this.config.enclave);
     const attestation = this.enclave.getAttestation();
@@ -139,11 +140,11 @@ export class GameOrchestrator {
         `Attestation verification failed: ${verification.errors.join(', ')}`
       );
     }
-    console.log('  Attestation verified ✓');
+    logger.info('  Attestation verified ✓');
 
     // Phase 3: Register operator on-chain
     this.phase = 'registering_operator';
-    console.log('\n[Phase 3] Registering TEE operator on-chain...');
+    logger.info('\n[Phase 3] Registering TEE operator on-chain...');
 
     const operatorAddress = this.enclave.getOperatorAddress();
     const registrationResult = this.blockchain.registerOperator(
@@ -152,14 +153,14 @@ export class GameOrchestrator {
     );
 
     if (!registrationResult.success) {
-      throw new Error(
+      throw new ValidationError(
         `Operator registration failed: ${registrationResult.error}`
       );
     }
-    console.log(`  Operator registered: ${operatorAddress}`);
+    logger.info(`  Operator registered: ${operatorAddress}`);
 
     // Phase 4: Initialize game components inside enclave
-    console.log('\n[Phase 4] Initializing game components in TEE...');
+    logger.info('\n[Phase 4] Initializing game components in TEE...');
 
     this.stateManager = new StateManager(this.enclave, this.ipfs);
     this.agent = new AIAgent(this.config.agent);
@@ -171,7 +172,7 @@ export class GameOrchestrator {
     );
 
     // Phase 5: Save initial state
-    console.log('\n[Phase 5] Saving initial encrypted state...');
+    logger.info('\n[Phase 5] Saving initial encrypted state...');
 
     const initialState = this.buildGameState();
     const checkpoint = await this.stateManager.saveState(initialState);
@@ -185,19 +186,19 @@ export class GameOrchestrator {
     if (!updateResult.success) {
       throw new Error(`State update failed: ${updateResult.error}`);
     }
-    console.log(`  Initial state saved: ${checkpoint.cid}`);
+    logger.info(`  Initial state saved: ${checkpoint.cid}`);
 
     // Phase 6: Start heartbeat
     this.phase = 'running';
     this.startHeartbeat();
 
-    console.log(
+    logger.info(
       '\n╔══════════════════════════════════════════════════════════╗'
     );
-    console.log(
+    logger.info(
       '║             SYSTEM INITIALIZATION COMPLETE                ║'
     );
-    console.log(
+    logger.info(
       '╚══════════════════════════════════════════════════════════╝\n'
     );
 
@@ -207,7 +208,7 @@ export class GameOrchestrator {
   /**
    * Build the complete game state object
    */
-  private buildGameState(): GameState {
+  private buildGameState(): OrchestratorGameState {
     return {
       agent: this.agent!.serialize(),
       gameStats: this.environment!.getStats(),
@@ -234,11 +235,11 @@ export class GameOrchestrator {
       );
 
       if (!result.success) {
-        console.warn(`[Orchestrator] Heartbeat failed: ${result.error}`);
+        logger.warn(`[Orchestrator] Heartbeat failed: ${result.error}`);
       }
     }, interval);
 
-    console.log(`[Orchestrator] Heartbeat started (${interval}ms interval)`);
+    logger.info(`[Orchestrator] Heartbeat started (${interval}ms interval)`);
   }
 
   /**
@@ -300,7 +301,7 @@ export class GameOrchestrator {
     }
 
     this.phase = 'training';
-    console.log('\n[Orchestrator] === STARTING TRAINING CYCLE ===');
+    logger.info('\n[Orchestrator] === STARTING TRAINING CYCLE ===');
 
     // Run training
     const cycleResult = this.trainer!.runTrainingCycle();
@@ -335,7 +336,7 @@ export class GameOrchestrator {
 
     const lossImprovement = cycleResult.initialLoss - cycleResult.finalLoss;
 
-    console.log(
+    logger.info(
       `[Orchestrator] Training complete. Loss improved by ${lossImprovement.toFixed(4)}`
     );
 
@@ -353,7 +354,7 @@ export class GameOrchestrator {
     newKeyVersion: number;
     newStateCID: string;
   }> {
-    console.log('\n[Orchestrator] === KEY ROTATION INITIATED ===');
+    logger.info('\n[Orchestrator] === KEY ROTATION INITIATED ===');
 
     // First council member requests rotation
     const firstApprover = councilApprovers[0];
@@ -379,7 +380,7 @@ export class GameOrchestrator {
         throw new Error(`Approval failed: ${approvalResult.error}`);
       }
       if (approvalResult.executed) {
-        console.log(`[Orchestrator] Key rotation approved and executed`);
+        logger.info(`[Orchestrator] Key rotation approved and executed`);
         break;
       }
     }
@@ -488,7 +489,7 @@ export class GameOrchestrator {
    * Shutdown the system
    */
   async shutdown(): Promise<void> {
-    console.log('\n[Orchestrator] Shutting down...');
+    logger.info('\n[Orchestrator] Shutting down...');
 
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -499,6 +500,6 @@ export class GameOrchestrator {
     }
 
     this.phase = 'shutdown';
-    console.log('[Orchestrator] Shutdown complete');
+    logger.info('[Orchestrator] Shutdown complete');
   }
 }

@@ -1,6 +1,14 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import {
+  cn,
+  type FeeStatsResponse,
+  FeeStatsResponseSchema,
+  type SystemStatsResponse,
+  SystemStatsResponseSchema,
+  type TokenStatsResponse,
+  TokenStatsResponseSchema,
+} from '@babylon/shared';
 import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
@@ -14,156 +22,8 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import { z } from 'zod';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
-
-/**
- * User stats schema for validation.
- */
-const UserStatsSchema = z.object({
-  id: z.string(),
-  username: z.string().nullable(),
-  displayName: z.string().nullable(),
-  profileImageUrl: z.string().nullable(),
-});
-
-/**
- * System stats schema for validation.
- */
-const SystemStatsSchema = z.object({
-  users: z.object({
-    total: z.number(),
-    actors: z.number(),
-    realUsers: z.number(),
-    banned: z.number(),
-    admins: z.number(),
-    signups: z.object({
-      today: z.number(),
-      thisWeek: z.number(),
-      thisMonth: z.number(),
-    }),
-  }),
-  markets: z.object({
-    total: z.number(),
-    active: z.number(),
-    resolved: z.number(),
-    positions: z.number(),
-  }),
-  trading: z.object({
-    balanceTransactions: z.number(),
-    npcTrades: z.number(),
-  }),
-  social: z.object({
-    posts: z.number(),
-    postsToday: z.number(),
-    comments: z.number(),
-    reactions: z.number(),
-  }),
-  financial: z.object({
-    totalVirtualBalance: z.string(),
-    totalDeposited: z.string(),
-    totalWithdrawn: z.string(),
-    totalLifetimePnL: z.string(),
-  }),
-  pools: z.object({
-    total: z.number(),
-    active: z.number(),
-    deposits: z.number(),
-  }),
-  engagement: z.object({
-    referrals: z.number(),
-    pointsTransactions: z.number(),
-  }),
-  topUsers: z.object({
-    byBalance: z.array(
-      UserStatsSchema.extend({
-        virtualBalance: z.string(),
-        lifetimePnL: z.string(),
-      })
-    ),
-    byReputation: z.array(
-      UserStatsSchema.extend({
-        reputationPoints: z.number(),
-      })
-    ),
-  }),
-  recentSignups: z.array(
-    UserStatsSchema.extend({
-      walletAddress: z.string().nullable(),
-      createdAt: z.string(),
-      onChainRegistered: z.boolean(),
-      hasFarcaster: z.boolean(),
-      hasTwitter: z.boolean(),
-    })
-  ),
-});
-type SystemStats = z.infer<typeof SystemStatsSchema>;
-
-/**
- * Fee stats schema for validation.
- */
-const FeeStatsSchema = z.object({
-  totalFeesCollected: z.number(),
-  totalUserFees: z.number(),
-  totalNPCFees: z.number(),
-  totalPlatformFees: z.number(),
-  totalReferrerFees: z.number(),
-  totalTrades: z.number(),
-});
-type FeeStats = z.infer<typeof FeeStatsSchema>;
-
-/**
- * Token stats schema for validation.
- */
-const TokenStatsSchema = z.object({
-  success: z.boolean(),
-  summary: z.object({
-    periodStart: z.string(),
-    periodEnd: z.string(),
-    tickCount: z.number(),
-    totalCalls: z.number(),
-    totalInputTokens: z.number(),
-    totalOutputTokens: z.number(),
-    totalTokens: z.number(),
-    avgCallsPerTick: z.number(),
-    avgInputTokensPerTick: z.number(),
-    avgOutputTokensPerTick: z.number(),
-    avgTotalTokensPerTick: z.number(),
-    estimatedTotalCostUSD: z.number(),
-  }),
-  byPromptType: z.array(
-    z.object({
-      promptType: z.string(),
-      callCount: z.number(),
-      totalInputTokens: z.number(),
-      totalOutputTokens: z.number(),
-      totalTokens: z.number(),
-      avgTokensPerCall: z.number(),
-    })
-  ),
-  byModel: z.array(
-    z.object({
-      model: z.string(),
-      provider: z.string(),
-      callCount: z.number(),
-      totalInputTokens: z.number(),
-      totalOutputTokens: z.number(),
-      totalTokens: z.number(),
-      avgTokensPerCall: z.number(),
-    })
-  ),
-  recentTicks: z.array(
-    z.object({
-      tickId: z.string(),
-      tickStartedAt: z.string(),
-      tickCompletedAt: z.string(),
-      totalCalls: z.number(),
-      totalTokens: z.number(),
-    })
-  ),
-});
-type TokenStats = z.infer<typeof TokenStatsSchema>;
 
 /**
  * Stats tab component for displaying comprehensive system statistics.
@@ -191,13 +51,13 @@ export function StatsTab() {
     data: stats,
     isLoading,
     error,
-  } = useQuery<SystemStats>({
+  } = useQuery<SystemStatsResponse>({
     queryKey: ['admin', 'stats'],
     queryFn: async () => {
       const response = await fetch('/api/admin/stats');
       if (!response.ok) throw new Error('Failed to fetch stats');
       const data = await response.json();
-      const validation = SystemStatsSchema.safeParse(data);
+      const validation = SystemStatsResponseSchema.safeParse(data);
       if (!validation.success) {
         throw new Error('Invalid system stats data structure');
       }
@@ -206,13 +66,13 @@ export function StatsTab() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const { data: feeStats } = useQuery<FeeStats | null>({
+  const { data: feeStats } = useQuery<FeeStatsResponse | null>({
     queryKey: ['admin', 'fees', 'platform'],
     queryFn: async () => {
       const response = await fetch('/api/admin/fees');
       if (!response.ok) return null;
       const data = await response.json();
-      const validation = FeeStatsSchema.safeParse(data.platformStats);
+      const validation = FeeStatsResponseSchema.safeParse(data);
       if (validation.success) {
         return validation.data;
       }
@@ -221,13 +81,13 @@ export function StatsTab() {
     refetchInterval: 30000,
   });
 
-  const { data: tokenStats } = useQuery<TokenStats | null>({
+  const { data: tokenStats } = useQuery<TokenStatsResponse | null>({
     queryKey: ['admin', 'stats', 'tokens'],
     queryFn: async () => {
       const response = await fetch('/api/stats/tokens?period=day&limit=50');
       if (!response.ok) return null;
       const data = await response.json();
-      const validation = TokenStatsSchema.safeParse(data);
+      const validation = TokenStatsResponseSchema.safeParse(data);
       if (validation.success) {
         return validation.data;
       }
@@ -417,7 +277,9 @@ export function StatsTab() {
                 Total Collected
               </div>
               <div className="font-bold text-2xl text-green-500">
-                {formatCurrency(feeStats.totalFeesCollected.toString())}
+                {formatCurrency(
+                  feeStats.platformStats.totalFeesCollected.toString()
+                )}
               </div>
             </div>
             <div>
@@ -425,7 +287,9 @@ export function StatsTab() {
                 Platform Revenue
               </div>
               <div className="font-bold text-xl">
-                {formatCurrency(feeStats.totalPlatformFees.toString())}
+                {formatCurrency(
+                  feeStats.platformStats.totalPlatformFees.toString()
+                )}
               </div>
             </div>
             <div>
@@ -433,7 +297,9 @@ export function StatsTab() {
                 Referral Payouts
               </div>
               <div className="font-bold text-xl">
-                {formatCurrency(feeStats.totalReferrerFees.toString())}
+                {formatCurrency(
+                  feeStats.platformStats.totalReferrerFees.toString()
+                )}
               </div>
             </div>
             <div>
@@ -441,7 +307,7 @@ export function StatsTab() {
                 Trades with Fees
               </div>
               <div className="font-bold text-xl">
-                {formatNumber(feeStats.totalTrades)}
+                {formatNumber(feeStats.platformStats.totalTrades)}
               </div>
             </div>
           </div>

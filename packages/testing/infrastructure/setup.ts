@@ -46,8 +46,13 @@ const DEFAULT_OPTIONS: SetupOptions = {
   timeout: 120000, // 2 minutes
 };
 
-function parseEnvFile(): Record<string, string> {
-  const envPath = join(process.cwd(), '.env');
+/**
+ * Parse environment file and return key-value pairs
+ * @param envPath - Path to env file (defaults to .env in cwd)
+ */
+export function parseEnvFile(
+  envPath = join(process.cwd(), '.env')
+): Record<string, string> {
   if (!existsSync(envPath)) return {};
 
   const content = readFileSync(envPath, 'utf-8');

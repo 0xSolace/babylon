@@ -9,32 +9,22 @@ import { isContractDeployed } from '@babylon/contracts';
 import { LOCAL_CONTRACT_ADDRESSES } from '@babylon/shared';
 import { $ } from 'bun';
 import { execSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createPublicClient, http } from 'viem';
 import { localhost } from 'viem/chains';
+import { parseEnvFile } from '../infrastructure/setup';
 
 const HARDHAT_RPC_URL = process.env.HARDHAT_RPC_URL || 'http://localhost:8545';
 
 /**
- * Load environment variables from .env.local file
+ * Load environment variables from a file into process.env
+ * Only sets variables that are not already defined
  */
 function loadEnvFile(filePath: string): void {
-  if (!existsSync(filePath)) return;
-
-  const content = readFileSync(filePath, 'utf-8');
-  const lines = content.split('\n');
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith('#')) {
-      const [key, ...valueParts] = trimmed.split('=');
-      if (key && valueParts.length > 0) {
-        const value = valueParts.join('=').replace(/^["']|["']$/g, '');
-        if (!process.env[key]) {
-          process.env[key] = value;
-        }
-      }
+  const env = parseEnvFile(filePath);
+  for (const [key, value] of Object.entries(env)) {
+    if (!process.env[key]) {
+      process.env[key] = value;
     }
   }
 }
@@ -92,22 +82,18 @@ export async function areContractsDeployed(): Promise<boolean> {
     return false;
   }
 
-  try {
-    // Verify on-chain if addresses are configured
-    if (oracleAddress) {
-      const deployed = await checkContractDeployed(oracleAddress);
-      if (!deployed) return false;
-    }
-
-    if (diamondAddress) {
-      const deployed = await checkContractDeployed(diamondAddress);
-      if (!deployed) return false;
-    }
-
-    return true;
-  } catch {
-    return false;
+  // Verify on-chain if addresses are configured
+  if (oracleAddress) {
+    const deployed = await checkContractDeployed(oracleAddress);
+    if (!deployed) return false;
   }
+
+  if (diamondAddress) {
+    const deployed = await checkContractDeployed(diamondAddress);
+    if (!deployed) return false;
+  }
+
+  return true;
 }
 
 /**

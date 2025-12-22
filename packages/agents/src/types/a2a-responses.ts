@@ -2,9 +2,155 @@
  * A2A API Response Types for @babylon/agents
  *
  * Strongly typed responses for A2A protocol methods
+ * Includes Zod schemas for runtime validation
  */
 
-import type { JsonValue } from './common';
+import type { JsonValue } from '@babylon/shared';
+import { z } from 'zod';
+
+// =============================================================================
+// Zod Schemas for A2A Responses
+// =============================================================================
+
+/**
+ * Balance response schema
+ */
+export const A2ABalanceResponseSchema = z.object({
+  balance: z.number(),
+  reputationPoints: z.number().optional(),
+  lifetimePnL: z.number().optional(),
+  totalDeposited: z.number().optional(),
+  totalWithdrawn: z.number().optional(),
+});
+
+/**
+ * Prediction market position schema
+ */
+export const A2AMarketPositionSchema = z.object({
+  id: z.string(),
+  marketId: z.string(),
+  question: z.string(),
+  side: z.enum(['YES', 'NO']),
+  shares: z.number(),
+  avgPrice: z.number(),
+  currentPrice: z.number(),
+  unrealizedPnL: z.number(),
+});
+
+/**
+ * Perpetual position schema
+ */
+export const A2APerpPositionSchema = z.object({
+  id: z.string(),
+  ticker: z.string(),
+  side: z.enum(['long', 'short']),
+  size: z.number(),
+  amount: z.number().optional(),
+  entryPrice: z.number(),
+  currentPrice: z.number(),
+  leverage: z.number(),
+  unrealizedPnL: z.number(),
+  liquidationPrice: z.number().optional(),
+});
+
+/**
+ * Positions response schema
+ */
+export const A2APositionsResponseSchema = z.object({
+  marketPositions: z.array(A2AMarketPositionSchema),
+  perpPositions: z.array(A2APerpPositionSchema),
+});
+
+/**
+ * Prediction market schema
+ */
+export const A2APredictionMarketSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  yesShares: z.number(),
+  noShares: z.number(),
+  liquidity: z.number(),
+  totalVolume: z.number().optional(),
+  resolved: z.boolean().optional(),
+  endDate: z.union([z.string(), z.number()]).optional(),
+});
+
+/**
+ * Predictions response schema
+ */
+export const A2APredictionsResponseSchema = z.object({
+  predictions: z.array(A2APredictionMarketSchema),
+});
+
+/**
+ * Perpetual market schema
+ */
+export const A2APerpetualMarketSchema = z.object({
+  name: z.string(),
+  ticker: z.string(),
+  currentPrice: z.number(),
+  priceChange24h: z.number().optional(),
+  volume24h: z.number().optional(),
+  openInterest: z.number().optional(),
+  fundingRate: z.number().optional(),
+});
+
+/**
+ * Perpetuals response schema
+ */
+export const A2APerpetualsResponseSchema = z.object({
+  tickers: z.array(A2APerpetualMarketSchema).optional(),
+  perpetuals: z.array(A2APerpetualMarketSchema).optional(),
+});
+
+/**
+ * Post author schema
+ */
+export const A2APostAuthorSchema = z.object({
+  id: z.string().optional(),
+  username: z.string().optional(),
+  displayName: z.string().optional(),
+});
+
+/**
+ * Feed post schema
+ */
+export const A2AFeedPostSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  author: A2APostAuthorSchema,
+  commentsCount: z.number().optional(),
+  reactionsCount: z.number().optional(),
+  timestamp: z.union([z.string(), z.number()]).optional(),
+  createdAt: z.union([z.string(), z.number()]).optional(),
+});
+
+/**
+ * Feed response schema
+ */
+export const A2AFeedResponseSchema = z.object({
+  posts: z.array(A2AFeedPostSchema),
+});
+
+/**
+ * User profile response schema
+ */
+export const A2AUserProfileResponseSchema = z.object({
+  id: z.string(),
+  username: z.string().nullable(),
+  displayName: z.string().nullable(),
+  bio: z.string().nullable(),
+  profileImageUrl: z.string().nullable(),
+  reputationPoints: z.number(),
+  virtualBalance: z.number(),
+  walletAddress: z.string().nullable().optional(),
+  isAgent: z.boolean().optional(),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+});
+
+// =============================================================================
+// Type Interfaces (for backward compatibility)
+// =============================================================================
 
 /**
  * Balance response from a2a.getBalance

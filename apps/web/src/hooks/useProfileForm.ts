@@ -1,6 +1,11 @@
 'use client';
 
-import { logger } from '@babylon/shared';
+import {
+  FileUploadApiResponseSchema,
+  logger,
+  UsernameCheckApiResponseSchema,
+} from '@babylon/shared';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type {
@@ -40,6 +45,14 @@ interface UseProfileFormReturn {
   setUploadedBanner: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
+interface ProfileUpdatePayload {
+  username: string;
+  displayName: string;
+  bio: string;
+  profileImageUrl: string;
+  coverImageUrl: string;
+}
+
 const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 
@@ -69,12 +82,7 @@ export function useProfileForm({
     string | null
   >(null);
   const [uploadedBanner, setUploadedBanner] = useState<string | null>(null);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
-  const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>(null);
-  const [usernameSuggestion, setUsernameSuggestion] = useState<string | null>(
-    null
-  );
+  const [debouncedUsername, setDebouncedUsername] = useState('');
 
   const prevShowProfileModalRef = useRef(false);
 
@@ -92,8 +100,7 @@ export function useProfileForm({
         });
         setUploadedProfileImage(null);
         setUploadedBanner(null);
-        setUsernameStatus(null);
-        setUsernameSuggestion(null);
+        setDebouncedUsername('');
       }
       prevShowProfileModalRef.current = true;
     } else {
@@ -108,63 +115,164 @@ export function useProfileForm({
     coverImageUrl,
   ]);
 
-  // Real-time username validation
+  // Debounce username changes
   useEffect(() => {
-    if (!showProfileModal) return;
-
     const trimmedUsername = profileForm.username.trim();
-
-    if (!trimmedUsername || trimmedUsername.length < 3) {
-      setUsernameStatus(null);
-      setUsernameSuggestion(null);
-      return;
-    }
-
-    if (trimmedUsername === username) {
-      setUsernameStatus('available');
-      setUsernameSuggestion(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    const checkUsername = async () => {
-      setIsCheckingUsername(true);
-
-      try {
-        const response = await fetch(
-          `/api/onboarding/check-username?username=${encodeURIComponent(trimmedUsername)}`
-        );
-
-        if (!cancelled && response.ok) {
-          const result = await response.json();
-          setUsernameStatus(result.available ? 'available' : 'taken');
-          setUsernameSuggestion(
-            result.available ? null : result.suggestion || null
-          );
-        }
-      } catch (error) {
-        logger.warn(
-          'Username availability check error',
-          { error: error instanceof Error ? error.message : String(error) },
-          'useProfileForm'
-        );
-      } finally {
-        if (!cancelled) {
-          setIsCheckingUsername(false);
-        }
-      }
-    };
-
     const timeoutId = setTimeout(() => {
-      void checkUsername();
+      setDebouncedUsername(trimmedUsername);
     }, 500);
 
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [profileForm.username, showProfileModal, username]);
+    return () => clearTimeout(timeoutId);
+  }, [profileForm.username]);
+
+  // Username availability check query
+  const usernameCheckQuery = useQuery({
+    queryKey: ['usernameCheck', debouncedUsername],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/onboarding/check-username?username=${encodeURIComponent(debouncedUsername)}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to check username availability');
+      }
+
+      const json: unknown = await response.json();
+      return UsernameCheckApiResponseSchema.parse(json);
+    },
+    enabled:
+      showProfileModal &&
+      debouncedUsername.length >= 3 &&
+      debouncedUsername !== username,
+    staleTime: 30000,
+    retry: false,
+  });
+
+  // Derive username status from query state
+  const isCheckingUsername =
+    usernameCheckQuery.isFetching && debouncedUsername !== username;
+
+  const usernameStatus: UsernameStatus = (() => {
+    const trimmedUsername = profileForm.username.trim();
+    if (trimmedUsername.length < 3) return null;
+    if (trimmedUsername === username) return 'available';
+    if (usernameCheckQuery.data) {
+      return usernameCheckQuery.data.available ? 'available' : 'taken';
+    }
+    return null;
+  })();
+
+  const usernameSuggestion =
+    usernameCheckQuery.data?.suggestion && !usernameCheckQuery.data.available
+      ? usernameCheckQuery.data.suggestion
+      : null;
+
+  // Profile image upload mutation
+  const profileImageMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'profile');
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const json: unknown = await response.json();
+      return FileUploadApiResponseSchema.parse(json);
+    },
+    onSuccess: (data) => {
+      setUploadedProfileImage(data.url);
+      toast.success('Profile image uploaded!');
+    },
+    onError: (error: Error) => {
+      logger.error(
+        'Profile image upload failed',
+        { error: error.message },
+        'useProfileForm'
+      );
+      toast.error('Failed to upload image');
+    },
+  });
+
+  // Banner upload mutation
+  const bannerMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'banner');
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const json: unknown = await response.json();
+      return FileUploadApiResponseSchema.parse(json);
+    },
+    onSuccess: (data) => {
+      setUploadedBanner(data.url);
+      toast.success('Banner uploaded!');
+    },
+    onError: (error: Error) => {
+      logger.error(
+        'Banner upload failed',
+        { error: error.message },
+        'useProfileForm'
+      );
+      toast.error('Failed to upload banner');
+    },
+  });
+
+  // Save profile mutation
+  const saveProfileMutation = useMutation({
+    mutationFn: async (payload: ProfileUpdatePayload): Promise<void> => {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(userId!)}/update-profile`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage =
+          (errorData as { error?: { message?: string }; message?: string })
+            .error?.message ||
+          (errorData as { message?: string }).message ||
+          'Failed to update profile';
+        throw new Error(errorMessage);
+      }
+    },
+    onSuccess: async () => {
+      await refresh();
+      await onProfileSaved();
+      toast.success('Profile updated successfully!');
+    },
+    onError: (error: Error) => {
+      logger.error(
+        'Error saving profile',
+        { error: error.message },
+        'useProfileForm'
+      );
+      toast.error(error.message);
+    },
+  });
 
   const cycleProfilePicture = useCallback((direction: 'next' | 'prev') => {
     setUploadedProfileImage(null);
@@ -186,81 +294,39 @@ export function useProfileForm({
     });
   }, []);
 
-  const handleProfileImageUpload = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please upload an image file');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be less than 5MB');
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', 'profile');
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Upload failed');
+  const handleProfileImageUpload = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please upload an image file');
+        return;
       }
 
-      const data = await response.json();
-      setUploadedProfileImage(data.url);
-      toast.success('Profile image uploaded!');
-    } catch (error) {
-      logger.error(
-        'Profile image upload failed',
-        { error: error instanceof Error ? error.message : String(error) },
-        'useProfileForm'
-      );
-      toast.error('Failed to upload image');
-    }
-  }, []);
-
-  const handleBannerUpload = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please upload an image file');
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('Banner must be less than 10MB');
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', 'banner');
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Upload failed');
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image must be less than 5MB');
+        return;
       }
 
-      const data = await response.json();
-      setUploadedBanner(data.url);
-      toast.success('Banner uploaded!');
-    } catch (error) {
-      logger.error(
-        'Banner upload failed',
-        { error: error instanceof Error ? error.message : String(error) },
-        'useProfileForm'
-      );
-      toast.error('Failed to upload banner');
-    }
-  }, []);
+      await profileImageMutation.mutateAsync(file);
+    },
+    [profileImageMutation]
+  );
+
+  const handleBannerUpload = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please upload an image file');
+        return;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('Banner must be less than 10MB');
+        return;
+      }
+
+      await bannerMutation.mutateAsync(file);
+    },
+    [bannerMutation]
+  );
 
   const handleSaveProfile = useCallback(async () => {
     if (!userId) return;
@@ -288,52 +354,13 @@ export function useProfileForm({
       return;
     }
 
-    setIsSavingProfile(true);
-    try {
-      const token = await getAccessToken();
-      const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/update-profile`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            username: trimmedUsername,
-            displayName: trimmedDisplayName,
-            bio: trimmedBio,
-            profileImageUrl: finalProfileImageUrl,
-            coverImageUrl: finalCoverImageUrl,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage =
-          (errorData as { error?: { message?: string }; message?: string })
-            .error?.message ||
-          (errorData as { message?: string }).message ||
-          'Failed to update profile';
-        throw new Error(errorMessage);
-      }
-
-      await refresh();
-      await onProfileSaved();
-      toast.success('Profile updated successfully!');
-    } catch (error) {
-      logger.error(
-        'Error saving profile',
-        { error: error instanceof Error ? error.message : String(error) },
-        'useProfileForm'
-      );
-      toast.error(
-        error instanceof Error ? error.message : 'Failed to save profile'
-      );
-    } finally {
-      setIsSavingProfile(false);
-    }
+    await saveProfileMutation.mutateAsync({
+      username: trimmedUsername,
+      displayName: trimmedDisplayName,
+      bio: trimmedBio,
+      profileImageUrl: finalProfileImageUrl,
+      coverImageUrl: finalCoverImageUrl,
+    });
   }, [
     userId,
     profileForm,
@@ -342,9 +369,7 @@ export function useProfileForm({
     profilePictureIndex,
     bannerIndex,
     usernameStatus,
-    getAccessToken,
-    refresh,
-    onProfileSaved,
+    saveProfileMutation,
   ]);
 
   return {
@@ -354,7 +379,7 @@ export function useProfileForm({
     bannerIndex,
     uploadedProfileImage,
     uploadedBanner,
-    isSavingProfile,
+    isSavingProfile: saveProfileMutation.isPending,
     isCheckingUsername,
     usernameStatus,
     usernameSuggestion,

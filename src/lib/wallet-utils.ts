@@ -1,44 +1,46 @@
 /**
- * Wallet utility functions for embedded wallet detection and validation
+ * Wallet utility functions for smart wallet detection and validation
+ *
+ * Migrated from Privy to OAuth3/MPC wallets.
  */
-import type { ConnectedWallet } from '@privy-io/react-auth';
 
 /**
- * Check if a wallet is a Privy embedded wallet
+ * Wallet info type for OAuth3/MPC wallets
  */
-export function isEmbeddedPrivyWallet(
-  wallet?: ConnectedWallet | null
-): boolean {
-  if (!wallet) return false;
-  return (
-    wallet.walletClientType === 'privy' ||
-    wallet.walletClientType === 'privy-v2'
-  );
+export interface WalletInfo {
+  address: string;
+  walletType: 'smart' | 'external';
 }
 
 /**
- * Check if a wallet is an external wallet (not Privy embedded)
+ * Check if a wallet is an MPC smart wallet
  */
-export function isExternalWallet(wallet?: ConnectedWallet | null): boolean {
+export function isSmartWallet(wallet?: WalletInfo | null): boolean {
   if (!wallet) return false;
-  return !isEmbeddedPrivyWallet(wallet);
+  return wallet.walletType === 'smart';
 }
 
 /**
- * Find the embedded wallet from a list of wallets
+ * Check if a wallet is an external wallet (not MPC-backed)
  */
-export function findEmbeddedWallet(
-  wallets: ConnectedWallet[]
-): ConnectedWallet | undefined {
-  return wallets.find(isEmbeddedPrivyWallet);
+export function isExternalWallet(wallet?: WalletInfo | null): boolean {
+  if (!wallet) return false;
+  return wallet.walletType === 'external';
+}
+
+/**
+ * Find the smart wallet from a list of wallets
+ */
+export function findSmartWallet(wallets: WalletInfo[]): WalletInfo | undefined {
+  return wallets.find(isSmartWallet);
 }
 
 /**
  * Find an external wallet from a list of wallets
  */
 export function findExternalWallet(
-  wallets: ConnectedWallet[]
-): ConnectedWallet | undefined {
+  wallets: WalletInfo[]
+): WalletInfo | undefined {
   return wallets.find(isExternalWallet);
 }
 
@@ -47,15 +49,15 @@ export function findExternalWallet(
  */
 export const WALLET_ERROR_MESSAGES = {
   NO_EMBEDDED_WALLET:
-    'Your Babylon smart wallet is required for this action. Please wait for it to finish preparing.',
+    'Your smart wallet is required for this action. Please wait for it to finish preparing.',
   EXTERNAL_WALLET_ONLY:
-    'You are connected with an external wallet. Please switch to your Babylon smart wallet to continue.',
+    'You are connected with an external wallet. Please switch to your smart wallet to continue.',
   NO_WALLET: 'Please connect a wallet to continue.',
   SPONSOR_FAILED:
-    'Unable to sponsor this transaction. Make sure your Babylon smart wallet is active.',
+    'Unable to sponsor this transaction. Make sure your smart wallet is active.',
   USER_REJECTED: 'Transaction was cancelled in your wallet.',
   INSUFFICIENT_FUNDS:
-    'Insufficient funds to cover gas. Use your Babylon smart wallet for sponsored transactions.',
+    'Insufficient funds to cover gas. Use your smart wallet for sponsored transactions.',
 } as const;
 
 /**

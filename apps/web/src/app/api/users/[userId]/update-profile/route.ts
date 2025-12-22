@@ -17,7 +17,7 @@
  *     summary: Update user profile
  *     description: Updates user profile with rate limiting and on-chain support
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -221,16 +221,16 @@ export const POST = withErrorHandling(
 
     const isUsernameChanging =
       normalizedUsername !== undefined &&
-      normalizedUsername !== (currentUser!.username ?? '');
+      normalizedUsername !== (currentUser!.username || '');
 
     await checkProfileUpdateRateLimit(canonicalUserId, isUsernameChanging);
 
     const hasOnchainProfileChanges = [
       normalizedUsername !== undefined &&
-        normalizedUsername !== (currentUser!.username ?? ''),
+        normalizedUsername !== (currentUser!.username || ''),
       normalizedDisplayName !== undefined &&
-        normalizedDisplayName !== (currentUser!.displayName ?? ''),
-      normalizedBio !== undefined && normalizedBio !== (currentUser!.bio ?? ''),
+        normalizedDisplayName !== (currentUser!.displayName || ''),
+      normalizedBio !== undefined && normalizedBio !== (currentUser!.bio || ''),
     ].some(Boolean);
 
     const requiresOnchainUpdate =
@@ -363,28 +363,29 @@ export const POST = withErrorHandling(
           : undefined,
     };
 
-    const [updatedUser] = await db
+    // Type assertion needed due to incorrect type definition for .returning()
+    const [updatedUser] = (await db
       .update(users)
       .set(updateData)
       .where(eq(users.id, canonicalUserId))
-      .returning({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        bio: users.bio,
-        profileImageUrl: users.profileImageUrl,
-        coverImageUrl: users.coverImageUrl,
-        profileComplete: users.profileComplete,
-        hasUsername: users.hasUsername,
-        hasBio: users.hasBio,
-        hasProfileImage: users.hasProfileImage,
-        reputationPoints: users.reputationPoints,
-        referralCount: users.referralCount,
-        referralCode: users.referralCode,
-        usernameChangedAt: users.usernameChangedAt,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
-      });
+      .returning()) as Array<{
+      id: string;
+      username: string | null;
+      displayName: string | null;
+      bio: string | null;
+      profileImageUrl: string | null;
+      coverImageUrl: string | null;
+      profileComplete: boolean;
+      hasUsername: boolean;
+      hasBio: boolean;
+      hasProfileImage: boolean;
+      reputationPoints: number;
+      referralCount: number;
+      referralCode: string | null;
+      usernameChangedAt: Date | null;
+      onChainRegistered: boolean;
+      nftTokenId: number | null;
+    }>;
 
     if (!updatedUser) {
       throw new Error('Failed to update user profile');
@@ -494,7 +495,7 @@ export const POST = withErrorHandling(
       hasNewBio:
         normalizedBio !== undefined && normalizedBio !== currentUser!.bio,
       usernameChanged: isUsernameChanging,
-      profileComplete: updatedUser.profileComplete ?? false,
+      profileComplete: updatedUser.profileComplete || false,
       pointsAwarded: pointsAwarded.reduce((sum, p) => sum + p.amount, 0),
       onchainUpdate: requiresOnchainUpdate,
       backendSigned: Boolean(backendSignedTxHash),

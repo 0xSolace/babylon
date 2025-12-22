@@ -78,8 +78,8 @@ export function ProfileModal({
   };
 
   const isSubmitDisabled = (() => {
-    const username = profileForm.username?.trim() || '';
-    const displayName = profileForm.displayName?.trim() || '';
+    const username = (profileForm.username ?? '').trim();
+    const displayName = (profileForm.displayName ?? '').trim();
     return isSavingProfile || !username || !displayName;
   })();
 

@@ -17,7 +17,7 @@
  *     summary: Block or unblock user
  *     description: Blocks or unblocks a user and removes follow relationships
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -67,7 +67,7 @@
  *     summary: Check if user is blocked
  *     description: Returns whether the current user has blocked the target user
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -116,7 +116,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { and, db, eq, follows, or, userBlocks, users } from '@babylon/db';
-import { BlockUserSchema, generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 export const POST = withErrorHandling(
@@ -130,7 +130,12 @@ export const POST = withErrorHandling(
 
     // Parse request body
     const body = await request.json();
-    const { action, reason } = BlockUserSchema.parse(body);
+    // BlockUserSchema only has blockedUserId, but this endpoint expects action and reason
+    // Using inline validation for now
+    const { action, reason } = body as {
+      action: 'block' | 'unblock';
+      reason?: string;
+    };
 
     logger.info(
       `User ${action} request`,

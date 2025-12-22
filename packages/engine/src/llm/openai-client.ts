@@ -13,7 +13,7 @@ import {
   cleanMarkdownCodeBlocks,
   extractJsonFromText,
 } from './json-continuation-parser';
-import { parseXML } from './xml-parser';
+import { parseXML, type XMLParseResult } from './xml-parser';
 
 /** Token usage callback type */
 export type TokenUsageCallback = (
@@ -204,11 +204,14 @@ WORLD RULES:
         const cleanedContent = cleanMarkdownCodeBlocks(response.content);
 
         if (format === 'xml') {
-          const result = parseXML(cleanedContent);
+          const result: XMLParseResult<T> = parseXML<T>(cleanedContent);
           if (!result.success) {
             throw new Error(`XML parse failed: ${result.error}`);
           }
-          return result.data as T;
+          if (!result.data) {
+            throw new Error('XML parse returned no data');
+          }
+          return result.data;
         }
 
         const parsed = JSON.parse(extractJsonFromText(cleanedContent));
@@ -346,11 +349,14 @@ WORLD RULES:
     }
 
     const cleanedContent = cleanMarkdownCodeBlocks(fullContent);
-    const result = parseXML(cleanedContent);
+    const result: XMLParseResult<T> = parseXML<T>(cleanedContent);
     if (!result.success) {
       throw new Error(`XML parse failed: ${result.error}`);
     }
-    return result.data as T;
+    if (!result.data) {
+      throw new Error('XML parse returned no data');
+    }
+    return result.data;
   }
 
   private async callJejuCompute(

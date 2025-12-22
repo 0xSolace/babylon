@@ -314,11 +314,12 @@ export async function GET(request: NextRequest) {
         // Using average cost of ~$0.50 per 1M tokens for mixed usage
         const estimatedTotalCostUSD = (totalTokens / 1_000_000) * 0.5;
 
+        const lastTick = dbStats[dbStats.length - 1];
+        const firstTick = dbStats[0];
         return {
           summary: {
-            periodStart:
-              dbStats[dbStats.length - 1]?.tickStartedAt ?? periodStart,
-            periodEnd: dbStats[0]?.tickCompletedAt ?? now,
+            periodStart: lastTick ? lastTick.tickStartedAt : periodStart,
+            periodEnd: firstTick ? firstTick.tickCompletedAt : now,
             tickCount: dbStats.length,
             totalCalls,
             totalInputTokens,

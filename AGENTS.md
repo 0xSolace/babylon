@@ -8,7 +8,7 @@
 ## Structure & Boundaries
 - Apps (current): `apps/web` (Next 16 UI + API routes/SSE/A2A), `apps/cli` (deploy/seed/game/agent ops), `apps/docs` (Nextra docs). Apps should stay wiring-only.
 - Apps (target/planned): `apps/server` (Elysia host, thin routes), `apps/daemon` (loops/workers), `apps/agents` (runners/integrations) — keep portability in mind when adding API endpoints.
-- Packages (current): `packages/engine` (game/perps generation & loop), `packages/agents` (agent runtime + Agent0/A2A/MCP), `packages/a2a`, `packages/mcp`, `packages/api` (auth/rate-limit/redis/sse/token counting), `packages/shared` (client-safe types/utils/config), `packages/db` (Drizzle schema/client), `packages/contracts`, `packages/testing`, `packages/training`, `packages/examples`.
+- Packages (current): `packages/engine` (game/perps generation & loop), `packages/agents` (agent runtime + Agent0/A2A/MCP), `packages/a2a`, `packages/mcp`, `packages/api` (auth/rate-limit/redis/sse/token counting), `packages/shared` (client-safe types/utils/config), `packages/db` (CQL client/schema), `packages/contracts`, `packages/testing`, `packages/training`, `packages/examples`.
 - Packages (target/planned): `packages/core/*` for domain logic, `packages/shared/infra` for infra wiring; keep new domain code framework-free so it can move there cleanly.
 - Docs: `apps/docs` is the docs site; `docs/vendors/*` is generated vendor docs.
 
@@ -19,7 +19,7 @@
 - Types: `bun run typecheck`
 - Lint/format: `bun run lint` (Turbo) or `bun run check` (Biome write)
 - Tests: `bun run test` (unit+integration), `bun run test:e2e`; suite lives under `packages/testing`
-- DB (Drizzle via `packages/db`): `bun run db:generate` / `db:migrate` / `db:push` / `db:pull` / `db:studio`
+- DB (CQL via `packages/db`): `bun run babylon db status` / `bun run babylon db connect` / `bun run db:seed`
 - Docs vendors: `bun run docs:generate` (fills `docs/vendors/*`)
 - Runtime is Bun; prefer Bun tooling/commands (and Bun APIs like `Bun.file` when appropriate).
 
@@ -29,7 +29,7 @@
 - Domain logic lives in packages (`engine`/`agents` now; `core-*` later). Avoid putting domain rules in React components or API handlers.
 - Keep core/package code free of Next/React/Elysia dependencies so migration is easy.
 - Env: single root `.env` (see `.env.example`). `scripts/pre-dev/pre-dev-local.ts` will generate/update `.env` for localnet defaults; `.env.local` can override for Next when needed. Keep `.env.example` accurate (defaults, optional vs required).
-- When using a library (Elysia, Drizzle, Bun, Privy, etc.), prefer local docs in `docs/vendors/{vendor}`; if missing, suggest `bun run docs:generate` before guessing APIs.
+- When using a library (Elysia, CQL/Jeju, Bun, OAuth3, etc.), prefer local docs in `docs/vendors/{vendor}`; if missing, suggest `bun run docs:generate` before guessing APIs.
 
 ## Testing
 - Tests live under `packages/testing` (unit/integration/e2e); use preload files there. API integration is currently in `apps/web`; keep them portable to Elysia when it lands.

@@ -75,6 +75,10 @@ import {
   organizationLogo,
   renderPrompt,
 } from '@babylon/engine';
+import {
+  ActorSchema as BaseActorSchema,
+  OrganizationSchema as BaseOrganizationSchema,
+} from '@babylon/shared';
 import { fal } from '@fal-ai/client';
 import { config } from 'dotenv';
 import { access, mkdir, writeFile } from 'fs/promises';
@@ -85,49 +89,49 @@ import { logger } from './lib/logger.js';
 // Load environment variables
 config();
 
-const ActorSchema = z.object({
-  id: z.string(),
-  name: z.string(),
+// Extend shared schemas with image generation specific fields
+const ImageGenActorSchema = BaseActorSchema.extend({
   realName: z.string().optional(),
-  description: z.string(),
-  domain: z.array(z.string()).optional(),
-  personality: z.string().optional(),
   physicalDescription: z.string().optional(),
   profileBanner: z.string().optional(),
 });
-type Actor = z.infer<typeof ActorSchema>;
+type ImageGenActor = z.infer<typeof ImageGenActorSchema>;
 
-const OrganizationSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  type: z.string(),
-  pfpDescription: z.string().optional(),
-  bannerDescription: z.string().optional(),
+const ImageGenOrganizationSchema = BaseOrganizationSchema.pick({
+  id: true,
+  name: true,
+  description: true,
+  type: true,
+  pfpDescription: true,
+  bannerDescription: true,
 });
-type Organization = z.infer<typeof OrganizationSchema>;
+type ImageGenOrganization = z.infer<typeof ImageGenOrganizationSchema>;
 
+// Local schema for actors database - specific to image generation
 const ActorsDatabaseSchema = z.object({
   version: z.string().optional(),
   description: z.string().optional(),
-  actors: z.array(ActorSchema),
-  organizations: z.array(OrganizationSchema),
+  actors: z.array(ImageGenActorSchema),
+  organizations: z.array(ImageGenOrganizationSchema),
 });
 
-interface FalImageResult {
-  url: string;
-  width: number;
-  height: number;
-  content_type: string;
-}
+// Zod schemas for fal.ai API responses
+const FalImageResultSchema = z.object({
+  url: z.string().url(),
+  width: z.number(),
+  height: z.number(),
+  content_type: z.string(),
+});
 
-interface FalResponse {
-  data: {
-    images: FalImageResult[];
-    seed?: number;
-    has_nsfw_concepts?: boolean[];
-  };
-}
+const FalResponseDataSchema = z.object({
+  images: z.array(FalImageResultSchema),
+  seed: z.number().optional(),
+  has_nsfw_concepts: z.array(z.boolean()).optional(),
+});
+
+const FalResponseSchema = z.object({
+  data: FalResponseDataSchema,
+});
 
 /**
  * Checks if a file exists at the given path
@@ -209,7 +213,7 @@ function getOriginalCompanyName(satiricalName: string, orgId: string): string {
 /**
  * Generates a profile picture for an actor using fal.ai's Flux Krea model
  */
-async function generateActorImage(actor: Actor): Promise<string> {
+async function generateActorImage(actor: ImageGenActor): Promise<string> {
   logger.info(`Generating profile picture for ${actor.name}...`);
 
   if (!actor.physicalDescription) {
@@ -228,7 +232,7 @@ async function generateActorImage(actor: Actor): Promise<string> {
     personality: actor.personality || 'satirical',
   });
 
-  const result = (await fal.subscribe('fal-ai/flux/krea', {
+  const rawResult = await fal.subscribe('fal-ai/flux/krea', {
     input: {
       prompt,
       image_size: 'square',
@@ -242,7 +246,8 @@ async function generateActorImage(actor: Actor): Promise<string> {
           .forEach((msg) => logger.debug(msg));
       }
     },
-  })) as FalResponse;
+  });
+  const result = FalResponseSchema.parse(rawResult);
 
   // Validate response has images array with at least one image
   if (!result.data.images || result.data.images.length === 0) {
@@ -252,7 +257,12 @@ async function generateActorImage(actor: Actor): Promise<string> {
   }
 
   const firstImage = result.data.images[0];
-  if (!firstImage?.url) {
+  if (!firstImage) {
+    throw new Error(
+      `No images returned for ${actor.name}. Response: ${JSON.stringify(result.data)}`
+    );
+  }
+  if (!firstImage.url) {
     throw new Error(
       `First image missing URL for ${actor.name}. Image data: ${JSON.stringify(firstImage)}`
     );
@@ -262,7 +272,7 @@ async function generateActorImage(actor: Actor): Promise<string> {
   return firstImage.url;
 }
 
-async function generateActorBanner(actor: Actor): Promise<string> {
+async function generateActorBanner(actor: ImageGenActor): Promise<string> {
   logger.info(`Generating banner for ${actor.name}...`);
 
   if (!actor.profileBanner) {
@@ -276,7 +286,7 @@ async function generateActorBanner(actor: Actor): Promise<string> {
     profileBanner: actor.profileBanner,
   });
 
-  const result = (await fal.subscribe('fal-ai/flux/schnell', {
+  const rawResult = await fal.subscribe('fal-ai/flux/schnell', {
     input: {
       prompt,
       image_size: 'landscape_16_9',
@@ -291,7 +301,8 @@ async function generateActorBanner(actor: Actor): Promise<string> {
           .forEach((msg) => logger.debug(msg));
       }
     },
-  })) as FalResponse;
+  });
+  const result = FalResponseSchema.parse(rawResult);
 
   // Validate response has images array with at least one image
   if (!result.data.images || result.data.images.length === 0) {
@@ -300,8 +311,8 @@ async function generateActorBanner(actor: Actor): Promise<string> {
     );
   }
 
-  const firstImage = result.data.images[0];
-  if (!firstImage?.url) {
+  const firstImage = result.data.images[0]!;
+  if (!firstImage.url) {
     throw new Error(
       `First image missing URL for ${actor.name} banner. Image data: ${JSON.stringify(firstImage)}`
     );
@@ -311,7 +322,9 @@ async function generateActorBanner(actor: Actor): Promise<string> {
   return firstImage.url;
 }
 
-async function generateOrganizationImage(org: Organization): Promise<string> {
+async function generateOrganizationImage(
+  org: ImageGenOrganization
+): Promise<string> {
   logger.info(`Generating logo for ${org.name}...`);
 
   if (!org.pfpDescription) {
@@ -330,7 +343,7 @@ async function generateOrganizationImage(org: Organization): Promise<string> {
     organizationDescription: org.description,
   });
 
-  const result = (await fal.subscribe('fal-ai/flux/schnell', {
+  const rawResult = await fal.subscribe('fal-ai/flux/schnell', {
     input: {
       prompt,
       image_size: 'square',
@@ -345,7 +358,8 @@ async function generateOrganizationImage(org: Organization): Promise<string> {
           .forEach((msg) => logger.debug(msg));
       }
     },
-  })) as FalResponse;
+  });
+  const result = FalResponseSchema.parse(rawResult);
 
   // Validate response has images array with at least one image
   if (!result.data.images || result.data.images.length === 0) {
@@ -355,7 +369,12 @@ async function generateOrganizationImage(org: Organization): Promise<string> {
   }
 
   const firstImage = result.data.images[0];
-  if (!firstImage?.url) {
+  if (!firstImage) {
+    throw new Error(
+      `No images returned for ${org.name}. Response: ${JSON.stringify(result.data)}`
+    );
+  }
+  if (!firstImage.url) {
     throw new Error(
       `First image missing URL for ${org.name}. Image data: ${JSON.stringify(firstImage)}`
     );
@@ -365,7 +384,9 @@ async function generateOrganizationImage(org: Organization): Promise<string> {
   return firstImage.url;
 }
 
-async function generateOrganizationBanner(org: Organization): Promise<string> {
+async function generateOrganizationBanner(
+  org: ImageGenOrganization
+): Promise<string> {
   logger.info(`Generating banner for ${org.name}...`);
 
   if (!org.bannerDescription) {
@@ -384,7 +405,7 @@ async function generateOrganizationBanner(org: Organization): Promise<string> {
     bannerDescription: org.bannerDescription,
   });
 
-  const result = (await fal.subscribe('fal-ai/flux/schnell', {
+  const rawResult = await fal.subscribe('fal-ai/flux/schnell', {
     input: {
       prompt,
       image_size: 'landscape_16_9',
@@ -399,7 +420,8 @@ async function generateOrganizationBanner(org: Organization): Promise<string> {
           .forEach((msg) => logger.debug(msg));
       }
     },
-  })) as FalResponse;
+  });
+  const result = FalResponseSchema.parse(rawResult);
 
   // Validate response has images array with at least one image
   if (!result.data.images || result.data.images.length === 0) {
@@ -408,8 +430,8 @@ async function generateOrganizationBanner(org: Organization): Promise<string> {
     );
   }
 
-  const firstImage = result.data.images[0];
-  if (!firstImage?.url) {
+  const firstImage = result.data.images[0]!;
+  if (!firstImage.url) {
     throw new Error(
       `First image missing URL for ${org.name} banner. Image data: ${JSON.stringify(firstImage)}`
     );

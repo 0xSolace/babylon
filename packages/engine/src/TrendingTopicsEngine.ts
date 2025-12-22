@@ -37,7 +37,8 @@
  * ```
  */
 
-import { logger } from '@babylon/shared';
+import { logger, TrendingTopicSchema } from '@babylon/shared';
+import { z } from 'zod';
 import type { BabylonLLMClient } from './llm/openai-client';
 import { getPromptParams, renderPrompt, trendingTopics } from './prompts';
 import type { FeedPost } from './types/shared';
@@ -544,26 +545,42 @@ export class TrendingTopicsEngine {
 
   /**
    * Extract trend descriptions from LLM response (handles XML structure variations)
+   * Uses Zod validation to ensure type safety
    */
   private extractTrendDescriptions(
     rawResponse: Record<string, unknown>
   ): Array<{ trendName: string; description: string }> {
+    // Type for nested XML trend structures
+    type TrendItem = z.infer<typeof TrendingTopicSchema>;
+    type NestedTrendsData = TrendItem[] | { trend: TrendItem | TrendItem[] };
+
     // Direct trends array
     if ('trends' in rawResponse && Array.isArray(rawResponse.trends)) {
-      return rawResponse.trends as Array<{
-        trendName: string;
-        description: string;
-      }>;
+      const parseResult = z
+        .array(TrendingTopicSchema)
+        .safeParse(rawResponse.trends);
+      if (parseResult.success) {
+        return parseResult.data;
+      }
+      logger.warn(
+        'Trend descriptions failed validation, using raw data',
+        { error: parseResult.error.message },
+        'TrendingTopicsEngine'
+      );
+      return rawResponse.trends as TrendItem[];
     }
 
     // Wrapped in response object
     if ('response' in rawResponse && rawResponse.response) {
       const response = rawResponse.response as Record<string, unknown>;
       if ('trends' in response && Array.isArray(response.trends)) {
-        return response.trends as Array<{
-          trendName: string;
-          description: string;
-        }>;
+        const parseResult = z
+          .array(TrendingTopicSchema)
+          .safeParse(response.trends);
+        if (parseResult.success) {
+          return parseResult.data;
+        }
+        return response.trends as TrendItem[];
       }
       // Single trend wrapped in object
       if (
@@ -571,12 +588,20 @@ export class TrendingTopicsEngine {
         response.trends &&
         typeof response.trends === 'object'
       ) {
-        const trendsObj = response.trends as Record<string, unknown>;
+        const trendsObj = response.trends as NestedTrendsData;
         if ('trend' in trendsObj) {
-          const trendData = trendsObj.trend;
-          return Array.isArray(trendData)
+          const nestedData = trendsObj as { trend: TrendItem | TrendItem[] };
+          const trendData = nestedData.trend;
+          const trendsArray = Array.isArray(trendData)
             ? trendData
-            : [trendData as { trendName: string; description: string }];
+            : [trendData];
+          const parseResult = z
+            .array(TrendingTopicSchema)
+            .safeParse(trendsArray);
+          if (parseResult.success) {
+            return parseResult.data;
+          }
+          return trendsArray;
         }
       }
     }

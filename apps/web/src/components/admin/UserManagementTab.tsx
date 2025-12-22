@@ -1,6 +1,19 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import { type AdminUser, AdminUserSchema, cn } from '@babylon/shared';
+
+// Extended AdminUser type with moderation metrics
+type AdminUserWithModeration = AdminUser & {
+  _moderation?: {
+    reportsReceived: number;
+    blocksReceived: number;
+    mutesReceived: number;
+    badUserScore: number;
+    reportRatio: number;
+    blockRatio: number;
+  };
+};
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Ban,
@@ -17,64 +30,10 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { AdminSendMoneyModal } from '@/components/admin/AdminSendMoneyModal';
 import { BlockUserModal } from '@/components/moderation/BlockUserModal';
-import { MuteUserModal } from '@/components/moderation/MuteUserModal';
+// TODO: MuteUserModal component needs to be created
+// import { MuteUserModal } from '@/components/moderation/MuteUserModal';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
-
-/**
- * User schema for validation.
- */
-const UserSchema = z.object({
-  id: z.string(),
-  username: z.string().nullable(),
-  displayName: z.string().nullable(),
-  walletAddress: z.string().nullable(),
-  profileImageUrl: z.string().nullable(),
-  isActor: z.boolean(),
-  isAdmin: z.boolean(),
-  isBanned: z.boolean(),
-  bannedAt: z.string().nullable(),
-  bannedReason: z.string().nullable(),
-  bannedBy: z.string().nullable(),
-  virtualBalance: z.string(),
-  totalDeposited: z.string(),
-  totalWithdrawn: z.string(),
-  lifetimePnL: z.string(),
-  reputationPoints: z.number(),
-  referralCount: z.number(),
-  onChainRegistered: z.boolean(),
-  nftTokenId: z.number().nullable(),
-  hasFarcaster: z.boolean(),
-  hasTwitter: z.boolean(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  _count: z
-    .object({
-      comments: z.number(),
-      reactions: z.number(),
-      positions: z.number(),
-      following: z.number(),
-      followedBy: z.number(),
-      reportsReceived: z.number().optional(),
-      blocksReceived: z.number().optional(),
-      mutesReceived: z.number().optional(),
-      reportsSent: z.number().optional(),
-    })
-    .optional(),
-  _moderation: z
-    .object({
-      reportsReceived: z.number(),
-      blocksReceived: z.number(),
-      mutesReceived: z.number(),
-      reportsSent: z.number(),
-      reportRatio: z.number(),
-      blockRatio: z.number(),
-      muteRatio: z.number(),
-      badUserScore: z.number(),
-    })
-    .optional(),
-});
-type User = z.infer<typeof UserSchema>;
 
 /**
  * Filter type for user management tab.
@@ -122,7 +81,8 @@ export function UserManagementTab() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortByType>('created');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] =
+    useState<AdminUserWithModeration | null>(null);
   const [showBanModal, setShowBanModal] = useState(false);
   const [showSendMoneyModal, setShowSendMoneyModal] = useState(false);
   const [showMuteModal, setShowMuteModal] = useState(false);
@@ -136,7 +96,7 @@ export function UserManagementTab() {
     isLoading,
     refetch,
     isFetching,
-  } = useQuery<User[]>({
+  } = useQuery<AdminUserWithModeration[]>({
     queryKey: ['admin', 'users', filter, sortBy, searchQuery],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -150,11 +110,11 @@ export function UserManagementTab() {
       const response = await fetch(`/api/admin/users?${params}`);
       if (!response.ok) throw new Error('Failed to fetch users');
       const data = await response.json();
-      const validation = z.array(UserSchema).safeParse(data.users);
+      const validation = z.array(AdminUserSchema).safeParse(data.users);
       if (!validation.success) {
         throw new Error('Invalid user data structure');
       }
-      return validation.data;
+      return validation.data as AdminUserWithModeration[];
     },
   });
 
@@ -210,7 +170,10 @@ export function UserManagementTab() {
     },
   });
 
-  const handleBanUser = (user: User, action: 'ban' | 'unban') => {
+  const handleBanUser = (
+    user: AdminUserWithModeration,
+    action: 'ban' | 'unban'
+  ) => {
     if (action === 'ban' && !banReason.trim()) {
       toast.error('Please provide a reason for banning');
       return;
@@ -240,7 +203,7 @@ export function UserManagementTab() {
     });
   };
 
-  const UserRow = ({ user }: { user: User }) => {
+  const UserRow = ({ user }: { user: AdminUserWithModeration }) => {
     const displayName = user.displayName || user.username || 'Anonymous';
 
     return (
@@ -611,22 +574,22 @@ export function UserManagementTab() {
         />
       )}
 
-      {/* Mute Modal */}
+      {/* TODO: Mute Modal - component needs to be created */}
       {showMuteModal && selectedUser && (
-        <MuteUserModal
-          isOpen={showMuteModal}
-          onClose={() => {
-            setShowMuteModal(false);
-            setSelectedUser(null);
-          }}
-          targetUserId={selectedUser.id}
-          targetDisplayName={
-            selectedUser.displayName || selectedUser.username || 'User'
-          }
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-          }}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="rounded-lg bg-card p-6">
+            <p className="mb-4">Mute functionality coming soon</p>
+            <button
+              onClick={() => {
+                setShowMuteModal(false);
+                setSelectedUser(null);
+              }}
+              className="rounded bg-primary px-4 py-2 text-primary-foreground"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Ban Modal */}

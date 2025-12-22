@@ -2,7 +2,7 @@
  * Storage Provider Interface
  *
  * The main interface that combines all storage ports.
- * Implementations can be PostgreSQL, JSON files, or in-memory.
+ * Implementations can be CQL (decentralized), JSON files, or in-memory.
  */
 
 import type { ActorPort, OrganizationPort } from './actors';
@@ -14,7 +14,7 @@ import type { QuestionPort } from './questions';
 import type { TradingPort } from './trading';
 import type { UserPort } from './users';
 
-export type StorageMode = 'cql' | 'json' | 'memory' | 'postgres';
+export type StorageMode = 'cql' | 'json' | 'memory';
 
 export interface StorageProviderConfig {
   mode: StorageMode;

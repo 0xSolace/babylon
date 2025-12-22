@@ -4,23 +4,25 @@
  * Enable autonomous trading for all agents
  */
 
-import { db } from '@babylon/db';
-import { users } from '@babylon/db/schema';
-import { eq } from 'drizzle-orm';
+import { db, initializeDB } from '@babylon/db';
+
+interface Agent {
+  id: string;
+  username: string | null;
+  autonomousTrading: boolean;
+  agentPointsBalance: number;
+}
 
 async function enableAllAgentTrading() {
+  await initializeDB();
   console.log('🤖 Enabling autonomous trading for all agents...\n');
 
   // 1. Get all agents
-  const allAgents = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      autonomousTrading: users.autonomousTrading,
-      agentPointsBalance: users.agentPointsBalance,
-    })
-    .from(users)
-    .where(eq(users.isAgent, true));
+  const allAgents = await db.query<Agent>(
+    `SELECT id, username, "autonomousTrading", "agentPointsBalance"
+     FROM "User"
+     WHERE "isAgent" = true`
+  );
 
   console.log(`Found ${allAgents.length} total agents\n`);
 
@@ -52,24 +54,25 @@ async function enableAllAgentTrading() {
   const errors: Array<{ agent: string; error: string }> = [];
 
   for (const agent of agentsToEnable) {
-    try {
-      await db
-        .update(users)
-        .set({
-          autonomousTrading: true,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, agent.id));
+    const result = await db.exec(
+      `UPDATE "User"
+       SET "autonomousTrading" = true, "updatedAt" = NOW()
+       WHERE id = $1`,
+      [agent.id]
+    );
 
+    if (result.rowsAffected > 0) {
       successCount++;
       console.log(
         `✅ ${successCount}/${agentsToEnable.length} - Enabled: ${agent.username}`
       );
-    } catch (error) {
+    } else {
       errorCount++;
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      errors.push({ agent: agent.username || agent.id, error: errorMsg });
-      console.error(`❌ Failed for ${agent.username}:`, errorMsg);
+      errors.push({
+        agent: agent.username || agent.id,
+        error: 'No rows updated',
+      });
+      console.error(`❌ Failed for ${agent.username}: No rows updated`);
     }
   }
 
@@ -107,7 +110,7 @@ enableAllAgentTrading()
     console.log('\n✅ Script complete');
     process.exit(0);
   })
-  .catch((error) => {
+  .catch((error: Error) => {
     console.error('\n❌ Script failed:', error);
     process.exit(1);
   });

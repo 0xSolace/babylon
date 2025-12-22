@@ -12,10 +12,17 @@ import {
   handleRefundEscrowPayment,
   handleVerifyEscrowPayment,
 } from '@babylon/a2a';
-import { db, eq, users } from '@babylon/db';
+import { db, eq, perpMarketSnapshots, users } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { JsonValue, StringRecord } from '@babylon/shared';
-import { generateSnowflakeId, getAPIBaseUrl, logger } from '@babylon/shared';
+import {
+  AuthorizationError,
+  generateSnowflakeId,
+  getAPIBaseUrl,
+  logger,
+  NotFoundError,
+  ValidationError,
+} from '@babylon/shared';
 import type {
   AcceptGroupInviteArgs,
   AcceptGroupInviteResult,
@@ -338,7 +345,7 @@ export async function executeGetBalance(
     .limit(1);
 
   if (!user) {
-    throw new Error('User not found');
+    throw new NotFoundError('User', agent.userId);
   }
 
   return {
@@ -443,7 +450,7 @@ export async function executeGetMarketData(
   });
 
   if (!market) {
-    throw new Error('Market not found');
+    throw new NotFoundError('Market', args.marketId);
   }
 
   return {
@@ -534,7 +541,7 @@ export async function executeSellShares(
     where: { id: args.positionId },
   });
   if (!position || position.userId !== agent.userId) {
-    throw new Error('Position not found or access denied');
+    throw new NotFoundError('Position', args.positionId);
   }
   const response = await fetch(
     `${apiBaseUrl}/api/markets/predictions/${position.marketId}/sell`,
@@ -583,7 +590,7 @@ export async function executeGetMarketPrices(
     where: { id: args.marketId },
   });
   if (!market) {
-    throw new Error('Market not found');
+    throw new NotFoundError('Market', args.marketId);
   }
   const totalShares = Number(market.yesShares) + Number(market.noShares);
   const yesPrice =
@@ -599,13 +606,23 @@ export async function executeGetMarketPrices(
 
 /**
  * Execute get_perpetuals tool
+ *
+ * Returns all available perpetual markets with current prices and 24h metrics.
  */
 export async function executeGetPerpetuals(
   _agent: AuthenticatedAgent,
   _args: GetPerpetualsArgs
 ): Promise<GetPerpetualsResult> {
-  // Perpetuals not fully implemented yet
-  return { markets: [] };
+  const snapshots = await db.select().from(perpMarketSnapshots);
+
+  return {
+    markets: snapshots.map((snapshot) => ({
+      ticker: snapshot.ticker,
+      currentPrice: snapshot.currentPrice,
+      priceChange24h: snapshot.changePercent24h,
+      volume24h: snapshot.volume24h,
+    })),
+  };
 }
 
 /**
@@ -722,10 +739,14 @@ export async function executeDeletePost(
 ): Promise<DeletePostResult> {
   const post = await db.post.findUnique({ where: { id: args.postId } });
   if (!post) {
-    throw new Error('Post not found');
+    throw new NotFoundError('Post', args.postId);
   }
   if (post.authorId !== agent.userId) {
-    throw new Error('Unauthorized: You can only delete your own posts');
+    throw new AuthorizationError(
+      'You can only delete your own posts',
+      'Post',
+      'delete'
+    );
   }
   await db.post.update({
     where: { id: args.postId },
@@ -876,10 +897,14 @@ export async function executeDeleteComment(
     where: { id: args.commentId },
   });
   if (!comment) {
-    throw new Error('Comment not found');
+    throw new NotFoundError('Comment', args.commentId);
   }
   if (comment.authorId !== agent.userId) {
-    throw new Error('Unauthorized: You can only delete your own comments');
+    throw new AuthorizationError(
+      'You can only delete your own comments',
+      'Comment',
+      'delete'
+    );
   }
   await db.comment.update({
     where: { id: args.commentId },
@@ -976,7 +1001,7 @@ export async function executeGetUserProfile(
     },
   });
   if (!user) {
-    throw new Error('User not found');
+    throw new NotFoundError('User', args.userId);
   }
   return {
     id: user.id,
@@ -1042,7 +1067,7 @@ export async function executeFollowUser(
   args: FollowUserArgs
 ): Promise<FollowUserResult> {
   if (args.userId === agent.userId) {
-    throw new Error('Cannot follow yourself');
+    throw new ValidationError('Cannot follow yourself', ['userId']);
   }
   const existing = await db.follow.findFirst({
     where: {
@@ -1200,7 +1225,7 @@ export async function executeGetUserWallet(
     },
   });
   if (!user) {
-    throw new Error('User not found');
+    throw new NotFoundError('User', args.userId);
   }
   return {
     walletAddress: user.walletAddress,
@@ -1237,7 +1262,7 @@ export async function executeGetUserStats(
     }),
   ]);
   if (!user) {
-    throw new Error('User not found');
+    throw new NotFoundError('User', args.userId);
   }
   return {
     totalPosts: postsCount,
@@ -1576,7 +1601,7 @@ export async function executeAcceptGroupInvite(
     return { success: true, chatId: npcInvite.groupId };
   }
 
-  throw new Error('Invite not found or access denied');
+  throw new NotFoundError('Invite', args.inviteId);
 }
 
 /**
@@ -1608,7 +1633,7 @@ export async function executeDeclineGroupInvite(
     return { success: true };
   }
 
-  throw new Error('Invite not found or access denied');
+  throw new NotFoundError('Invite', args.inviteId);
 }
 
 // ============================================================================
@@ -1681,7 +1706,7 @@ export async function executeGetReferralCode(
     select: { referralCode: true },
   });
   if (!user || !user.referralCode) {
-    throw new Error('Referral code not found');
+    throw new NotFoundError('Referral code', agent.userId);
   }
   return { referralCode: user.referralCode };
 }
@@ -1896,7 +1921,7 @@ export async function executeBlockUser(
   args: BlockUserArgs
 ): Promise<BlockUserResult> {
   if (args.userId === agent.userId) {
-    throw new Error('Cannot block yourself');
+    throw new ValidationError('Cannot block yourself', ['userId']);
   }
   const existing = await db.userBlock.findFirst({
     where: {
@@ -1941,7 +1966,7 @@ export async function executeMuteUser(
   args: MuteUserArgs
 ): Promise<MuteUserResult> {
   if (args.userId === agent.userId) {
-    throw new Error('Cannot mute yourself');
+    throw new ValidationError('Cannot mute yourself', ['userId']);
   }
   const existing = await db.userMute.findFirst({
     where: {
@@ -2306,7 +2331,7 @@ export async function executeFavoriteProfile(
   args: FavoriteProfileArgs
 ): Promise<FavoriteProfileResult> {
   if (args.userId === agent.userId) {
-    throw new Error('Cannot favorite yourself');
+    throw new ValidationError('Cannot favorite yourself', ['userId']);
   }
   const existing = await db.favorite.findFirst({
     where: {

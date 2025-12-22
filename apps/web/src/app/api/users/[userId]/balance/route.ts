@@ -17,7 +17,7 @@
  *     summary: Get user balance
  *     description: Returns user's balance information (own balance only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -130,7 +130,7 @@ export const GET = withErrorHandling(
         .insert(users)
         .values({
           id: userId,
-          privyId: userId,
+          privyId: userId, // @deprecated - kept for migration compatibility with existing did:privy: user data
           isActor: false,
           updatedAt: new Date(),
         })

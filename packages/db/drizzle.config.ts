@@ -1,11 +1,26 @@
+/**
+ * Drizzle Kit Configuration
+ *
+ * @deprecated LEGACY FILE - Used for PostgreSQL migrations.
+ *
+ * The project has migrated to CQL (CovenantSQL) as the PRIMARY database.
+ * This file is kept for:
+ * - Reference during migration
+ * - Potential future use for schema generation/introspection
+ * - Backward compatibility with existing PostgreSQL tooling
+ *
+ * For new migrations, CQL handles schema through its own migration system.
+ * Schema definitions in src/schema/ are still used by both systems.
+ *
+ * @see cql-client.ts - The new PRIMARY database interface
+ * @see src/schema/ - Shared schema definitions
+ */
+
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import dotenv from 'dotenv';
 import { defineConfig } from 'drizzle-kit';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-dotenv.config({ path: resolve(__dirname, '../../.env') });
 
 // Determine if we're in local development mode
 const isLocalDev =

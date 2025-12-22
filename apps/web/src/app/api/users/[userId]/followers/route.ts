@@ -184,7 +184,8 @@ export const GET = withErrorHandling(
         })
         .filter((f): f is NonNullable<typeof f> => f !== null);
 
-      const userActorFollowersList = await db
+      // CQL join doesn't preserve select fields in types, so we type assert
+      const userActorFollowersList = (await db
         .select({
           id: userActorFollows.id,
           userId: userActorFollows.userId,
@@ -198,7 +199,15 @@ export const GET = withErrorHandling(
         .innerJoin(users, eq(userActorFollows.userId, users.id))
         .where(eq(userActorFollows.actorId, targetId))
         .orderBy(desc(userActorFollows.createdAt))
-        .limit(200);
+        .limit(200)) as unknown as Array<{
+        id: string;
+        userId: string;
+        createdAt: Date;
+        userDisplayName: string | null;
+        userUsername: string | null;
+        userProfileImageUrl: string | null;
+        userBio: string | null;
+      }>;
 
       followersList = [
         ...actorFollowersList.map((f) => ({
@@ -211,22 +220,34 @@ export const GET = withErrorHandling(
           isActor: true,
           tier: f.followerTier ?? undefined,
         })),
-        ...userActorFollowersList.map((f) => ({
-          id: f.userId,
-          displayName: f.userDisplayName ?? '',
-          username: f.userUsername ?? null,
-          profileImageUrl: f.userProfileImageUrl ?? null,
-          bio: f.userBio ?? '',
-          followedAt: f.createdAt.toISOString(),
-          isActor: false,
-        })),
+        ...userActorFollowersList.map((f) => {
+          const typedF = f as {
+            id: string;
+            userId: string;
+            createdAt: Date;
+            userDisplayName: string | null;
+            userUsername: string | null;
+            userProfileImageUrl: string | null;
+            userBio: string | null;
+          };
+          return {
+            id: typedF.userId,
+            displayName: typedF.userDisplayName ?? '',
+            username: typedF.userUsername ?? null,
+            profileImageUrl: typedF.userProfileImageUrl ?? null,
+            bio: typedF.userBio ?? '',
+            followedAt: typedF.createdAt.toISOString(),
+            isActor: false,
+          };
+        }),
       ].sort(
         (a, b) =>
           new Date(b.followedAt).getTime() - new Date(a.followedAt).getTime()
       );
     } else {
       // Target is a regular user
-      const userFollows = await db
+      // CQL join doesn't preserve select fields in types, so we type assert
+      const userFollows = (await db
         .select({
           id: follows.id,
           followerId: follows.followerId,
@@ -239,7 +260,15 @@ export const GET = withErrorHandling(
         .from(follows)
         .innerJoin(users, eq(follows.followerId, users.id))
         .where(eq(follows.followingId, targetId))
-        .orderBy(desc(follows.createdAt));
+        .orderBy(desc(follows.createdAt))) as unknown as Array<{
+        id: string;
+        followerId: string;
+        createdAt: Date;
+        followerDisplayName: string | null;
+        followerUsername: string | null;
+        followerProfileImageUrl: string | null;
+        followerBio: string | null;
+      }>;
 
       const npcFollowersList = await db
         .select()
@@ -262,26 +291,37 @@ export const GET = withErrorHandling(
       );
 
       followersList = [
-        ...userFollows.map((f) => ({
-          id: f.followerId,
-          displayName: f.followerDisplayName ?? '',
-          username: f.followerUsername ?? null,
-          profileImageUrl: f.followerProfileImageUrl ?? null,
-          bio: f.followerBio ?? '',
-          followedAt: f.createdAt.toISOString(),
-          isActor: false,
-        })),
-        ...npcFollowersList.map((f) => {
+        ...userFollows.map((f) => {
+          const typedF = f as {
+            id: string;
+            followerId: string;
+            createdAt: Date;
+            followerDisplayName: string | null;
+            followerUsername: string | null;
+            followerProfileImageUrl: string | null;
+            followerBio: string | null;
+          };
+          return {
+            id: typedF.followerId,
+            displayName: typedF.followerDisplayName ?? '',
+            username: typedF.followerUsername ?? null,
+            profileImageUrl: typedF.followerProfileImageUrl ?? null,
+            bio: typedF.followerBio ?? '',
+            followedAt: typedF.createdAt.toISOString(),
+            isActor: false,
+          };
+        }),
+        ...npcFollowersList.map((f): FollowerResponse => {
           const actor = actorMap.get(f.npcId);
           return {
             id: f.npcId,
-            displayName: actor ? actor.name : f.npcId,
-            username: actor ? actor.id : null,
-            profileImageUrl: actor ? actor.profileImageUrl : null,
-            bio: actor ? actor.description : '',
+            displayName: actor?.name ?? f.npcId,
+            username: actor?.id ?? null,
+            profileImageUrl: actor?.profileImageUrl ?? null,
+            bio: actor?.description ?? '',
             followedAt: f.followedAt.toISOString(),
             isActor: true,
-            tier: actor ? actor.tier : undefined,
+            tier: actor?.tier ?? undefined,
           };
         }),
       ].sort(

@@ -16,7 +16,7 @@
  *     summary: Update visibility preferences
  *     description: Updates social media visibility settings (own profile only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -132,17 +132,17 @@ export const POST = withErrorHandling(
         break;
     }
 
-    // Update user visibility preference
-    const [updatedUser] = await db
+    // Type assertion needed due to incorrect type definition for .returning()
+    const [updatedUser] = (await db
       .update(users)
       .set(updateData)
       .where(eq(users.id, canonicalUserId))
-      .returning({
-        id: users.id,
-        showTwitterPublic: users.showTwitterPublic,
-        showFarcasterPublic: users.showFarcasterPublic,
-        showWalletPublic: users.showWalletPublic,
-      });
+      .returning()) as Array<{
+      id: string;
+      showTwitterPublic: boolean;
+      showFarcasterPublic: boolean;
+      showWalletPublic: boolean;
+    }>;
 
     if (!updatedUser) {
       throw new Error('Failed to update user visibility preferences');

@@ -17,7 +17,7 @@
  *     summary: Generate agent profile
  *     description: Generates complete agent profile from archetype using AI
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

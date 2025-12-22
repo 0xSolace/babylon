@@ -2,8 +2,7 @@
  * Autonomous Batch Response Service
  *
  * Handles batch evaluation and response to pending interactions:
- * - Comments to agent's posts
- * - Replies to agent's comments
+ * - Comment replies (unified: comments on agent's posts + replies to agent's comments)
  * - New messages in chats
  *
  * Instead of responding to everything, this service:
@@ -19,18 +18,42 @@ import type { IAgentRuntime } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
+import { executeDirectComment, executeDirectMessage } from './DirectExecutors';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+interface ThreadMessage {
+  authorName: string;
+  content: string;
+  isYou: boolean;
+  depth: number;
+}
+
+interface PostInfo {
+  id: string;
+  content: string;
+  authorName: string;
+  isYourPost: boolean;
+}
 
 interface PendingInteraction {
   type: 'comment_on_post' | 'comment_on_comment' | 'chat_message';
   id: string;
-  chatId?: string;
+  // Comment reply fields
   postId?: string;
   commentId?: string;
   parentCommentId?: string;
+  targetCommentId?: string;
+  post?: PostInfo;
+  thread?: ThreadMessage[];
+  // Chat message fields
+  chatId?: string;
+  // Common fields
   author: string;
   content: string;
-  context: string;
+  context: string; // Formatted context string for prompt
   timestamp: Date;
 }
 
@@ -40,11 +63,98 @@ interface ResponseDecision {
   reasoning?: string;
 }
 
+// =============================================================================
+// Service
+// =============================================================================
+
 export class AutonomousBatchResponseService {
-  /**
-   * Gather all pending interactions that might need responses
-   */
-  async gatherPendingInteractions(
+  // ===========================================================================
+  // Helper: Format interactions grouped by post for evaluation prompt
+  // ===========================================================================
+  private formatInteractionsGroupedByPost(
+    interactions: PendingInteraction[]
+  ): string {
+    // Group interactions by postId
+    const byPost = new Map<string, PendingInteraction[]>();
+    const chatMessages: PendingInteraction[] = [];
+
+    for (const interaction of interactions) {
+      if (interaction.type === 'chat_message' || !interaction.postId) {
+        chatMessages.push(interaction);
+      } else {
+        const postInteractions = byPost.get(interaction.postId) || [];
+        postInteractions.push(interaction);
+        byPost.set(interaction.postId, postInteractions);
+      }
+    }
+
+    const sections: string[] = [];
+
+    // Format each post group
+    for (const [_postId, postInteractions] of byPost) {
+      const firstInteraction = postInteractions[0];
+      const post = firstInteraction?.post;
+      const postAuthor = post?.isYourPost
+        ? 'You'
+        : post?.authorName || 'Unknown';
+      const postContent = post?.content || '[Post content unavailable]';
+
+      // Count interactions per author on this post
+      const authorCounts = new Map<string, number>();
+      for (const i of postInteractions) {
+        authorCounts.set(i.author, (authorCounts.get(i.author) || 0) + 1);
+      }
+
+      const interactionLines = postInteractions.map((interaction) => {
+        const authorCount = authorCounts.get(interaction.author) || 1;
+        const authorNote =
+          authorCount > 1 ? ` (${authorCount} interactions on this post)` : '';
+
+        // Format thread without post info (since we're showing it at post level)
+        const threadLines =
+          interaction.thread?.map((msg, idx) => {
+            const isLast = idx === (interaction.thread?.length || 0) - 1;
+            const replyIndicator = isLast ? ' [REPLY TO THIS]' : '';
+            const depthLabel =
+              idx === 0 ? 'Comment' : `Reply (depth ${msg.depth})`;
+            return `    - ${depthLabel} by @${msg.authorName}: "${msg.content}"${replyIndicator}`;
+          }) || [];
+
+        return `  [ID: ${interaction.id}] @${interaction.author}${authorNote}
+  Time: ${new Date(interaction.timestamp).toLocaleString()}
+  Thread:
+${threadLines.join('\n')}`;
+      });
+
+      sections.push(`═══════════════════════════════════════════════════════════════
+POST by @${postAuthor}: "${postContent.substring(0, 200)}${postContent.length > 200 ? '...' : ''}"
+═══════════════════════════════════════════════════════════════
+
+${interactionLines.join('\n\n')}`);
+    }
+
+    // Format chat messages separately
+    if (chatMessages.length > 0) {
+      const chatLines = chatMessages.map(
+        (interaction) => `  [ID: ${interaction.id}] @${interaction.author}
+  Time: ${new Date(interaction.timestamp).toLocaleString()}
+  Message: "${interaction.content}"`
+      );
+
+      sections.push(`═══════════════════════════════════════════════════════════════
+DIRECT MESSAGES
+═══════════════════════════════════════════════════════════════
+
+${chatLines.join('\n\n')}`);
+    }
+
+    return sections.join('\n\n');
+  }
+
+  // ===========================================================================
+  // Gather all pending comment replies (UNIFIED)
+  // ===========================================================================
+  private async gatherPendingCommentReplies(
     agentUserId: string
   ): Promise<PendingInteraction[]> {
     const interactions: PendingInteraction[] = [];
@@ -186,7 +296,19 @@ export class AutonomousBatchResponseService {
       }
     }
 
-    // Get unread chat messages
+    return interactions;
+  }
+
+  // ===========================================================================
+  // Gather pending chat messages
+  // ===========================================================================
+  private async gatherPendingChatMessages(
+    agentUserId: string
+  ): Promise<PendingInteraction[]> {
+    const interactions: PendingInteraction[] = [];
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Get chats the agent is part of
     const agentChats = await db.chatParticipant.findMany({
       where: { userId: agentUserId },
       select: { chatId: true },
@@ -210,6 +332,46 @@ export class AutonomousBatchResponseService {
       });
 
       if (chatMessages.length === 0) continue;
+
+      // Check if agent already responded to the latest message
+      const latestFromOther = chatMessages[0];
+      if (!latestFromOther) continue;
+
+      // Get the agent's most recent message in this chat
+      const agentLastMessage = await db.message.findFirst({
+        where: {
+          chatId: String(chat.id),
+          senderId: agentUserId,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, createdAt: true },
+      });
+
+      // If agent's last message ID is greater than user's last message ID,
+      // the agent has already responded
+      if (
+        agentLastMessage &&
+        BigInt(agentLastMessage.id) > BigInt(latestFromOther.id)
+      ) {
+        logger.info(
+          `Agent already responded to message in chat ${chat.id} - skipping`,
+          {
+            chatId: chat.id,
+            lastUserMessageId: latestFromOther.id,
+            lastUserMessageAt:
+              latestFromOther.createdAt instanceof Date
+                ? latestFromOther.createdAt.toISOString()
+                : String(latestFromOther.createdAt),
+            agentLastMessageId: agentLastMessage.id,
+            agentLastMessageAt:
+              agentLastMessage.createdAt instanceof Date
+                ? agentLastMessage.createdAt.toISOString()
+                : String(agentLastMessage.createdAt),
+          },
+          'AutonomousBatchResponse'
+        );
+        continue; // Agent already responded
+      }
 
       // Get recent conversation context
       const recentMessages = await db.message.findMany({
@@ -246,7 +408,23 @@ export class AutonomousBatchResponseService {
       }
     }
 
-    // Sort by timestamp (oldest first for fairness)
+    return interactions;
+  }
+
+  // ===========================================================================
+  // Main gather method (combines all interaction types)
+  // ===========================================================================
+  async gatherPendingInteractions(
+    agentUserId: string
+  ): Promise<PendingInteraction[]> {
+    // Gather all types in parallel
+    const [commentReplies, chatMessages] = await Promise.all([
+      this.gatherPendingCommentReplies(agentUserId),
+      this.gatherPendingChatMessages(agentUserId),
+    ]);
+
+    // Combine and sort by timestamp (oldest first for fairness)
+    const interactions = [...commentReplies, ...chatMessages];
     interactions.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
     return interactions;
@@ -273,7 +451,6 @@ export class AutonomousBatchResponseService {
         'AutonomousBatchResponse'
       );
     }
-    const evaluateInteractions = cappedInteractions;
 
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
@@ -287,38 +464,49 @@ export class AutonomousBatchResponseService {
     const config = await getAgentConfig(agentUserId);
     const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
 
-    // Build evaluation prompt
+    // Build evaluation prompt - ask for IDs instead of positional true/false
+    // This is more robust as it doesn't rely on counting/ordering
     const prompt = `${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
 You are ${displayName}, an AI agent on Babylon. You need to decide which interactions warrant a response.
 
-Guidelines:
-- Respond to direct questions or mentions
-- Respond to substantive comments that add value
-- Skip spam, simple acknowledgments, or low-value interactions
-- Consider your energy and focus - be selective
-- Prioritize meaningful conversations
+CRITICAL: Be VERY selective. Silence is often the best response.
 
-Pending Interactions (${evaluateInteractions.length}):
+RESPOND ONLY TO:
+- Direct questions asking for YOUR opinion or analysis
+- Requests for clarification on something YOU said
+- Comments where you have a genuinely DIFFERENT perspective to offer
 
-${evaluateInteractions
-  .map(
-    (interaction, idx) => `
-[${idx}] Type: ${interaction.type}
-Author: ${interaction.author}
-Content: "${interaction.content}"
-Context: ${interaction.context}
-Time: ${new Date(interaction.timestamp).toLocaleString()}
----`
-  )
-  .join('\n')}
+DO NOT RESPOND TO:
+- Agreement spirals - when everyone is making the same point, don't pile on
+- Threads that have reached consensus - let them conclude naturally
+- Comments adding more evidence to an already-established point
+- Back-and-forth going in circles with no new insights
+- Simple acknowledgments
+- Conversations where no one is asking questions
+- Threads that have drifted off-topic from the original post
+- Discussions no longer relevant to the post's core topic
 
-Task: For each interaction above, decide if you should respond.
+KEY QUESTION: Would my response add a NEW perspective, or just more of the same?
+If more of the same, SKIP.
 
-Output ONLY a JSON array of booleans, one per interaction in order.
-Example: [true, false, true, false, false, true, ...]
+IMPORTANT: If same author has multiple interactions on the same post, respond to AT MOST ONE.
 
-Array:`;
+Pending Interactions (grouped by post):
+
+${this.formatInteractionsGroupedByPost(cappedInteractions)}
+
+Task: Decide which interactions you want to respond to.
+
+# Required Output Format
+Return ONLY the IDs of interactions you want to respond to, comma-separated.
+Leave empty if you don't want to respond to any.
+
+<response>
+<respond_to>ID1, ID2, ID3 (or leave empty)</respond_to>
+</response>
+
+Do NOT include any explanations, only the XML format above.`;
 
     // Ensure prompt fits within 32K context limit
     const estimatedTokens = countTokensSync(prompt);
@@ -356,8 +544,10 @@ Array:`;
       new Promise<string>((resolve) => {
         setTimeout(() => {
           logger.warn(
-            `Interaction evaluation timeout for agent ${agentUserId}, defaulting to no responses`,
-            undefined,
+            'No <response> block found in batch evaluation',
+            {
+              agentUserId,
+            },
             'AutonomousBatchResponse'
           );
           resolve('[]');
@@ -365,45 +555,52 @@ Array:`;
       }),
     ]);
 
-    // Parse the boolean array
-    const jsonMatch = decisionText.match(/\[[\s\S]*?\]/);
-    if (!jsonMatch) {
-      throw new Error(
-        `Failed to parse decision array from LLM response: ${decisionText.substring(0, 200)}`
-      );
-    }
+    // Parse the IDs - empty string means no responses
+    const responseMatch = decisionText.match(
+      /<respond_to>([\s\S]*?)<\/respond_to>/i
+    );
+    const responseValue = responseMatch ? responseMatch[1]?.trim() || '' : '';
 
-    const decisionsRaw = JSON.parse(jsonMatch[0]) as boolean[];
+    let respondToIds: Set<string>;
 
-    // Ensure we have the right number of decisions
-    let decisions = decisionsRaw;
-    if (decisionsRaw.length !== evaluateInteractions.length) {
-      logger.warn(
-        `Decision count mismatch: ${decisionsRaw.length} vs ${evaluateInteractions.length}. Adjusting to match.`,
-        undefined,
-        'AutonomousBatchResponse'
-      );
+    if (responseValue === '') {
+      respondToIds = new Set();
+    } else {
+      // Parse comma-separated IDs
+      const ids = responseValue
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
 
-      if (decisionsRaw.length < evaluateInteractions.length) {
-        const paddingNeeded = evaluateInteractions.length - decisionsRaw.length;
-        decisions = [...decisionsRaw, ...Array(paddingNeeded).fill(false)];
-        logger.info(
-          `Padded ${paddingNeeded} missing decisions with false`,
-          undefined,
-          'AutonomousBatchResponse'
-        );
-      } else {
-        const excessCount = decisionsRaw.length - evaluateInteractions.length;
-        decisions = decisionsRaw.slice(0, evaluateInteractions.length);
-        logger.info(
-          `Truncated ${excessCount} excess decisions`,
-          undefined,
-          'AutonomousBatchResponse'
-        );
+      // Validate that IDs exist in our interactions
+      const validIds = new Set(cappedInteractions.map((i) => i.id));
+      const parsedIds = new Set<string>();
+
+      for (const id of ids) {
+        if (validIds.has(id)) {
+          parsedIds.add(id);
+        } else {
+          logger.warn(
+            `LLM returned unknown interaction ID: ${id}`,
+            undefined,
+            'AutonomousBatchResponse'
+          );
+        }
       }
+
+      respondToIds = parsedIds;
     }
 
-    return decisions.map((shouldRespond) => ({ shouldRespond }));
+    logger.info(
+      `Agent selected ${respondToIds.size}/${cappedInteractions.length} interactions to respond to`,
+      undefined,
+      'AutonomousBatchResponse'
+    );
+
+    // Convert to ResponseDecision array (maintaining order of original interactions)
+    return cappedInteractions.map((interaction) => ({
+      shouldRespond: respondToIds.has(interaction.id),
+    }));
   }
 
   /**
@@ -435,20 +632,43 @@ Array:`;
 
       if (!interaction || !decision || !decision.shouldRespond) continue;
 
-      // Generate response
+      // Generate response with retry loop
       const responsePrompt = `${respConfig?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
 You are ${displayName}, responding to an interaction.
 
-Context: ${interaction.context}
+${interaction.context}
 
-${interaction.author} said: "${interaction.content}"
+Task: Write a response (1-2 sentences, under 200 characters) OR leave empty to skip.
 
-Task: Write a thoughtful, engaging response (1-2 sentences, under 200 characters).
-Be authentic to your personality.
-Add value to the conversation.
+CRITICAL QUESTION: Does this add a NEW perspective, or just more of the same?
 
-Generate ONLY the response text, nothing else.`;
+QUALITY REQUIREMENTS:
+- Offer a DIFFERENT viewpoint - don't just agree or add supporting evidence
+- Be specific and substantive - avoid generic responses
+- Challenge assumptions if you see a flaw
+- Match the energy/tone of the conversation
+- Be authentic to your personality
+- If mentioning markets, use SHORT SUMMARIES (e.g., "the TeslAI bet") not full questions
+
+DO NOT WRITE:
+- Empty acknowledgments (agreeing without adding value)
+- More evidence for an already-established conclusion
+- Generic advice without specifics
+- Questions just to keep conversation going
+
+LEAVE EMPTY IF:
+- You would just be agreeing or adding more evidence to same point
+- The thread has reached consensus - let it conclude
+- Conversation is going in circles
+- You have nothing genuinely different to contribute
+- The thread has drifted off-topic from the original post
+- Your response would not relate back to the post's core topic
+
+# Required Output Format
+<response>
+<text>your response here (or leave empty to skip)</text>
+</response>`;
 
       // Truncate if needed
       const respTokens = countTokensSync(responsePrompt);
@@ -475,8 +695,10 @@ Generate ONLY the response text, nothing else.`;
         new Promise<string>((resolve) => {
           setTimeout(() => {
             logger.warn(
-              `Response generation timeout for interaction ${interaction.id}, skipping`,
-              undefined,
+              'No <response> block found in response generation',
+              {
+                interactionId: interaction.id,
+              },
               'AutonomousBatchResponse'
             );
             resolve('');
@@ -484,11 +706,15 @@ Generate ONLY the response text, nothing else.`;
         }),
       ]);
 
-      const cleanContent = responseContent.trim().replace(/^["']|["']$/g, '');
+      // Parse the response
+      const textMatch = responseContent.match(/<text>([\s\S]*?)<\/text>/i);
+      const cleanContent = textMatch
+        ? textMatch[1]?.trim().replace(/^["']|["']$/g, '') || ''
+        : '';
 
       if (!cleanContent || cleanContent.length < 5) {
         logger.warn(
-          `Generated response too short for interaction ${interaction.id}`,
+          `Failed to generate valid response for interaction ${interaction.id}`,
           undefined,
           'AutonomousBatchResponse'
         );
@@ -497,22 +723,26 @@ Generate ONLY the response text, nothing else.`;
 
       // Post the response based on type
       if (interaction.type === 'comment_on_post' && interaction.postId) {
-        await db.comment.create({
-          data: {
-            id: await generateSnowflakeId(),
-            content: cleanContent,
-            postId: interaction.postId,
-            authorId: agentUserId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
+        const result = await executeDirectComment({
+          agentUserId,
+          postId: interaction.postId,
+          content: cleanContent,
         });
-        responsesCreated++;
-        logger.info(
-          `Agent responded to comment on post ${interaction.postId}`,
-          undefined,
-          'AutonomousBatchResponse'
-        );
+
+        if (result.success) {
+          responsesCreated++;
+          logger.info(
+            `Agent responded to comment on post ${interaction.postId}`,
+            undefined,
+            'AutonomousBatchResponse'
+          );
+        } else {
+          logger.warn(
+            `Failed to create comment: ${result.error}`,
+            { interactionId: interaction.id },
+            'AutonomousBatchResponse'
+          );
+        }
       } else if (
         interaction.type === 'comment_on_comment' &&
         interaction.commentId
@@ -523,40 +753,49 @@ Generate ONLY the response text, nothing else.`;
         });
 
         if (parentComment) {
-          await db.comment.create({
-            data: {
-              id: await generateSnowflakeId(),
-              content: cleanContent,
-              postId: String(parentComment.postId),
-              authorId: agentUserId,
-              parentCommentId: interaction.commentId,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
+          const result = await executeDirectComment({
+            agentUserId,
+            postId: String(parentComment.postId),
+            content: cleanContent,
+            parentCommentId: interaction.commentId,
           });
+
+          if (result.success) {
+            responsesCreated++;
+            logger.info(
+              `Agent replied to comment ${interaction.commentId}`,
+              undefined,
+              'AutonomousBatchResponse'
+            );
+          } else {
+            logger.warn(
+              `Failed to create comment reply: ${result.error}`,
+              { interactionId: interaction.id },
+              'AutonomousBatchResponse'
+            );
+          }
+        }
+      } else if (interaction.type === 'chat_message' && interaction.chatId) {
+        const result = await executeDirectMessage({
+          agentUserId,
+          chatId: interaction.chatId,
+          content: cleanContent,
+        });
+
+        if (result.success) {
           responsesCreated++;
           logger.info(
-            `Agent responded to comment reply ${interaction.commentId}`,
+            `Agent responded in chat ${interaction.chatId}`,
             undefined,
             'AutonomousBatchResponse'
           );
+        } else {
+          logger.warn(
+            `Failed to create chat message: ${result.error}`,
+            { interactionId: interaction.id },
+            'AutonomousBatchResponse'
+          );
         }
-      } else if (interaction.type === 'chat_message' && interaction.chatId) {
-        await db.message.create({
-          data: {
-            id: await generateSnowflakeId(),
-            chatId: interaction.chatId,
-            senderId: agentUserId,
-            content: cleanContent,
-            createdAt: new Date(),
-          },
-        });
-        responsesCreated++;
-        logger.info(
-          `Agent responded in chat ${interaction.chatId}`,
-          undefined,
-          'AutonomousBatchResponse'
-        );
       }
 
       // Small delay to avoid spam

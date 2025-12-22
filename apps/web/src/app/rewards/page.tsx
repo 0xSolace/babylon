@@ -261,7 +261,7 @@ export default function RewardsPage() {
     } else if (action === 'profile-settings') {
       window.location.href = '/settings';
     } else if (action === 'wallet-connect') {
-      // Trigger Privy login modal for wallet connection
+      // Trigger login modal for wallet connection
       if (authenticated) {
         // If already authenticated, redirect to settings to connect wallet
         window.location.href = '/settings';

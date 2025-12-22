@@ -16,7 +16,7 @@
  *     summary: Upload trained model
  *     description: Uploads trained model to blob storage (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

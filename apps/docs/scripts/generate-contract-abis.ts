@@ -6,6 +6,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { byExtension, walkDirectory } from './utils';
 
 interface ABIInput {
   name: string;
@@ -34,27 +35,12 @@ interface ContractABI {
   bytecode?: string;
 }
 
-async function* walkDirectory(
-  dir: string,
-  ext: string
-): AsyncGenerator<string> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      yield* walkDirectory(fullPath, ext);
-    } else if (entry.isFile() && entry.name.endsWith(ext)) {
-      yield fullPath;
-    }
-  }
-}
-
 async function loadCompiledContracts(): Promise<ContractABI[]> {
   const contracts: ContractABI[] = [];
   const outDir = path.join(process.cwd(), '../out');
 
   // Foundry puts compiled contracts in out/ContractName.sol/ContractName.json
-  for await (const filePath of walkDirectory(outDir, '.json')) {
+  for await (const filePath of walkDirectory(outDir, byExtension('.json'))) {
     const content = await fs.readFile(filePath, 'utf-8');
     const data = JSON.parse(content);
 
@@ -94,9 +80,12 @@ function generateAbiMarkdown(contract: ContractABI): string {
 
     for (const func of functions) {
       const inputs =
-        func.inputs?.map((i) => `${i.type} ${i.name}`).join(', ') || '';
+        func.inputs?.map((i) => `${i.type} ${i.name}`).join(', ') ?? '';
       const outputs = func.outputs?.map((o) => o.type).join(', ') || 'void';
-      const mutability = func.stateMutability || 'nonpayable';
+      if (!func.stateMutability) {
+        throw new Error(`Function ${func.name} is missing stateMutability`);
+      }
+      const mutability = func.stateMutability;
 
       md += `### ${func.name}\n\n`;
       md += '```solidity\n';
@@ -169,7 +158,7 @@ function generateAbiMarkdown(contract: ContractABI): string {
 
     for (const error of errors) {
       const inputs =
-        error.inputs?.map((i) => `${i.type} ${i.name}`).join(', ') || '';
+        error.inputs?.map((i) => `${i.type} ${i.name}`).join(', ') ?? '';
 
       md += `### ${error.name}\n\n`;
       md += '```solidity\n';

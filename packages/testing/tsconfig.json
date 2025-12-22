@@ -55,6 +55,7 @@
     "load-test/**/*",
     "simulation/**/*",
     "helpers/**/*",
+    "infrastructure/**/*",
     "types/**/*",
     "shared/**/*",
     "src/**/*"

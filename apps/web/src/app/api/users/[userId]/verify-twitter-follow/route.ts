@@ -16,7 +16,7 @@
  *     summary: Award points for Twitter follow
  *     description: Awards points for following @PlayBabylon (trusted system, authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId

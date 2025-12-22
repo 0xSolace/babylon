@@ -9,6 +9,7 @@
 
 import { getContractAddresses } from '@babylon/contracts';
 import { cn } from '@babylon/shared';
+import { useMutation } from '@tanstack/react-query';
 import {
   Clock,
   ExternalLink,
@@ -23,12 +24,23 @@ import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useOnChainBetting } from '@/hooks/useOnChainBetting';
+import { usePerpMarkets } from '@/hooks/usePerpMarkets';
 import { useSmartWallet } from '@/hooks/useSmartWallet';
-import { usePerpMarkets } from '@/stores/perpMarketsStore';
 import {
   type PredictionMarket,
   usePredictionMarkets,
 } from '@/stores/predictionMarketsStore';
+
+/**
+ * Payload for verifying an on-chain bet with the backend.
+ */
+interface VerifyOnChainBetPayload {
+  marketId: string;
+  side: 'yes' | 'no';
+  numShares: number;
+  txHash: string;
+  walletAddress: string;
+}
 
 export default function OnChainBettingPage() {
   const router = useRouter();
@@ -46,6 +58,34 @@ export default function OnChainBettingPage() {
   );
   const [betAmount, setBetAmount] = useState('');
   const [betSide, setBetSide] = useState<'YES' | 'NO'>('YES');
+
+  // Mutation for verifying on-chain bets with backend
+  const verifyBetMutation = useMutation({
+    mutationFn: async ({
+      marketId,
+      side,
+      numShares,
+      txHash,
+      walletAddress,
+    }: VerifyOnChainBetPayload): Promise<void> => {
+      const response = await fetch(
+        `/api/markets/predictions/${marketId}/buy-onchain`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            side,
+            numShares,
+            txHash,
+            walletAddress,
+          }),
+        }
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to verify bet: ${response.status}`);
+      }
+    },
+  });
 
   // Show loading only on initial fetch
   const loading =
@@ -68,7 +108,7 @@ export default function OnChainBettingPage() {
       : 'https://basescan.org';
 
   const handleBet = async () => {
-    if (!selectedMarket || !betAmount) return;
+    if (!selectedMarket || !betAmount || !smartWalletAddress) return;
 
     const shares = Number.parseFloat(betAmount);
     if (isNaN(shares) || shares <= 0) {
@@ -95,16 +135,13 @@ export default function OnChainBettingPage() {
         : undefined,
     });
 
-    // Verify with backend
-    await fetch(`/api/markets/predictions/${selectedMarket.id}/buy-onchain`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        side: betSide.toLowerCase(),
-        numShares: shares,
-        txHash: result.txHash,
-        walletAddress: smartWalletAddress,
-      }),
+    // Verify with backend using mutation
+    verifyBetMutation.mutate({
+      marketId: selectedMarket.id.toString(),
+      side: betSide.toLowerCase() as 'yes' | 'no',
+      numShares: shares,
+      txHash: result.txHash,
+      walletAddress: smartWalletAddress,
     });
 
     setSelectedMarket(null);

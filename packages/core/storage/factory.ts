@@ -4,8 +4,8 @@
  * Creates and configures storage providers based on the specified mode.
  */
 
+import { CQLStorageProvider } from './adapters/cql';
 import { JsonStorageProvider } from './adapters/json';
-import { PostgresStorageProvider } from './adapters/postgres/postgres-storage-provider';
 import type {
   IStorageProvider,
   StorageProviderConfig,
@@ -44,11 +44,7 @@ export async function createStorageProvider(
       });
       break;
     case 'cql':
-      // CQL not yet implemented - use Postgres as fallback
-      provider = new PostgresStorageProvider();
-      break;
-    case 'postgres':
-      provider = new PostgresStorageProvider();
+      provider = new CQLStorageProvider();
       break;
     default:
       throw new Error(`Unknown storage mode: ${config.mode as string}`);

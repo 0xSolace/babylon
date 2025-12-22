@@ -26,6 +26,7 @@ import {
   db,
   desc,
   eq,
+  games,
   gte,
   isNull,
   lt,
@@ -34,6 +35,7 @@ import {
 } from '@babylon/db';
 import type { BabylonLLMClient } from '@babylon/engine';
 import { logger } from '@babylon/shared';
+import { getGameDayNumber, toSafeDayNumber } from '../utils/date-utils';
 import {
   biasedRandomCount,
   secureRandom,
@@ -50,9 +52,14 @@ import {
   loadSharedPostContext,
 } from './post-generation-helpers';
 import { StaticDataRegistry } from './static-data-registry';
+import {
+  type DiverseTopicSuggestion,
+  getTopicDiversityService,
+} from './topic-diversity-service';
 
 const LOOKAHEAD_MINUTES = 15; // Generate 15 minutes ahead
 const GENERATION_BATCH_MINUTES = 5; // Generate in 5-minute batches
+const DIVERSITY_QUOTA = 0.2; // 20% of posts should cover diverse topics
 
 /**
  * Check how far ahead content is generated
@@ -165,38 +172,32 @@ export async function generateAheadIfNeeded(
     Math.ceil(minutesNeeded / GENERATION_BATCH_MINUTES)
   );
 
-  // Start from latest timestamp or now
-  let currentTimestamp = status.latestTimestamp || new Date();
+  // Start from whichever is later: now or last content timestamp
   const now = new Date();
-
-  // If latest is in the past, start from now
-  if (currentTimestamp < now) {
-    currentTimestamp = now;
-  }
+  const baseTimestamp =
+    status.latestTimestamp && status.latestTimestamp > now
+      ? status.latestTimestamp
+      : now;
 
   let windowsGenerated = 0;
 
   for (let i = 0; i < windowsToGenerate; i++) {
-    // Calculate window boundaries
-    // If starting from latest timestamp, first window starts immediately after it
-    // Otherwise, start from current timestamp
-    const windowStart =
-      i === 0 && currentTimestamp > now
-        ? currentTimestamp
-        : new Date(
-            currentTimestamp.getTime() +
-              i * GENERATION_BATCH_MINUTES * 60 * 1000
-          );
+    // Calculate window boundaries consistently from baseTimestamp
+    // Each window is exactly GENERATION_BATCH_MINUTES long with no overlaps
+    const windowStart = new Date(
+      baseTimestamp.getTime() + i * GENERATION_BATCH_MINUTES * 60 * 1000
+    );
     const windowEnd = new Date(
       windowStart.getTime() + GENERATION_BATCH_MINUTES * 60 * 1000
     );
 
-    // Skip if window is in the past (shouldn't happen, but safety check)
-    if (windowStart < now) {
+    // Safety: skip if window end is somehow in the past
+    if (windowEnd < now) {
       logger.warn(
         'Skipping window in the past',
         {
           windowStart: windowStart.toISOString(),
+          windowEnd: windowEnd.toISOString(),
           now: now.toISOString(),
         },
         'LookaheadGeneration'
@@ -291,6 +292,22 @@ async function generateContentWindow(
     return;
   }
 
+  // Get the continuous game to calculate current day for arc plan phase detection
+  const game = await db
+    .select({ startedAt: games.startedAt })
+    .from(games)
+    .where(eq(games.isContinuous, true))
+    .limit(1);
+
+  const gameStartedAt = game[0]?.startedAt ?? null;
+  const dayNumberForTimestamp = (t: Date): number | undefined => {
+    if (!gameStartedAt) return undefined;
+    return toSafeDayNumber(getGameDayNumber(gameStartedAt, t));
+  };
+
+  // Game-relative day for this window (0-indexed since game start)
+  const currentDay = dayNumberForTimestamp(windowStart);
+
   // Get active questions
   const activeQuestions = await db
     .select()
@@ -318,29 +335,38 @@ async function generateContentWindow(
     const randomOffset = secureRandom() * windowDuration;
     const eventTimestamp = new Date(windowStart.getTime() + randomOffset);
 
-    const eventsCreated = await generateEvents(activeQuestions, eventTimestamp);
+    // Pass currentDay for arc plan phase detection and signal direction
+    const eventsCreated = await generateEvents(
+      activeQuestions,
+      eventTimestamp,
+      dayNumberForTimestamp(eventTimestamp)
+    );
     if (eventsCreated > 0) {
       logger.info(
         `Generated ${eventsCreated} events in lookahead window`,
         {
           timestamp: eventTimestamp.toISOString(),
+          currentDay: dayNumberForTimestamp(eventTimestamp),
         },
         'LookaheadGeneration'
       );
     }
   }
 
-  // Get actors, organizations, world facts, AND shared post context in parallel
+  // Get actors, organizations, world facts, shared post context, AND diverse topic suggestions in parallel
   // Loading shared context ONCE eliminates N+1 queries during parallel post generation
-  const [actorStates, worldFactsContext, sharedContext] = await Promise.all([
-    db
-      .select()
-      .from(actorState)
-      .orderBy(desc(actorState.reputationPoints))
-      .limit(15),
-    worldFactsService.generatePromptContext(),
-    loadSharedPostContext(), // Load ONCE for all NPC posts
-  ]);
+  const diversityService = getTopicDiversityService();
+  const [actorStates, worldFactsContext, sharedContext, diverseTopics] =
+    await Promise.all([
+      db
+        .select()
+        .from(actorState)
+        .orderBy(desc(actorState.reputationPoints))
+        .limit(15),
+      worldFactsService.generatePromptContext(),
+      loadSharedPostContext(windowStart), // Load ONCE for all NPC posts
+      diversityService.suggestDiverseTopics(3), // Get diverse topic suggestions
+    ]);
 
   // Combine static actor data with dynamic state
   const actorsList = actorStates
@@ -376,12 +402,28 @@ async function generateContentWindow(
   const shuffledActors = secureShuffle(actorsList);
   const shuffledOrgs = secureShuffle(orgsList);
   const shuffledQuestions = secureShuffle([...activeQuestions]);
+  const shuffledDiverseTopics = secureShuffle([...diverseTopics]);
+
+  // Calculate how many diverse topic posts to generate (enforce diversity quota)
+  const diversePostCount = Math.max(1, Math.floor(numPosts * DIVERSITY_QUOTA));
+  const diversePostIndices = new Set<number>();
+  for (let d = 0; d < diversePostCount && d < numPosts; d++) {
+    diversePostIndices.add(Math.floor(secureRandom() * numPosts));
+  }
 
   // Generate posts in parallel for better performance
   const postPromises = Array.from({ length: numPosts }, async (_, i) => {
     // Distribute timestamps naturally across window using secure random
     const randomOffset = secureRandom() * windowDuration;
     const postTimestamp = new Date(windowStart.getTime() + randomOffset);
+    const postDayNumber = dayNumberForTimestamp(postTimestamp);
+
+    // Check if this post should cover a diverse topic (off-trend)
+    const shouldBeDiverse =
+      diversePostIndices.has(i) && shuffledDiverseTopics.length > 0;
+    const diverseTopic: DiverseTopicSuggestion | undefined = shouldBeDiverse
+      ? shuffledDiverseTopics[i % shuffledDiverseTopics.length]
+      : undefined;
 
     // Weighted random choice between actor and org (70% actor, 30% org if both available)
     const useActor =
@@ -398,6 +440,7 @@ async function generateContentWindow(
     }
 
     // Weight question selection toward those with sooner resolution dates using urgency scoring
+    // For diverse posts, still pick a question but the diverse topic context will be injected
     const question =
       shuffledQuestions.length > 0
         ? weightedPick(shuffledQuestions, urgencyWeight(5))
@@ -407,6 +450,28 @@ async function generateContentWindow(
       return 0;
     }
 
+    // Check if the question topic is oversaturated (apply diversity penalty)
+    const topicPenalty = await diversityService.getTopicPenalty(question.text);
+    if (topicPenalty > 0.7 && !shouldBeDiverse) {
+      // High saturation - skip with 70% probability
+      if (secureRandom() < 0.7) {
+        logger.debug(
+          'Skipping oversaturated topic',
+          {
+            questionId: question.id,
+            penalty: topicPenalty.toFixed(2),
+          },
+          'LookaheadGeneration'
+        );
+        return 0;
+      }
+    }
+
+    // Enhance world facts context with diverse topic if applicable
+    const enhancedWorldFacts = diverseTopic
+      ? `${worldFactsContext}\n\nDIVERSE TOPIC FOCUS: ${diverseTopic.topic} (${diverseTopic.beat})`
+      : worldFactsContext;
+
     // Generate post content using LLM
     if (useActor) {
       const actor = creator as (typeof actorsList)[number];
@@ -414,9 +479,10 @@ async function generateContentWindow(
         llmClient,
         actor,
         question,
-        worldFactsContext,
+        enhancedWorldFacts,
         postTimestamp,
-        sharedContext // Pass pre-loaded context to avoid N+1 queries
+        sharedContext, // Pass pre-loaded context to avoid N+1 queries
+        postDayNumber // Pass currentDay for arc plan phase detection, signal guidance, and dayNumber storage
       );
       if (success) {
         logger.debug(
@@ -425,6 +491,8 @@ async function generateContentWindow(
             actor: actor.name,
             timestamp: postTimestamp.toISOString(),
             questionId: question.id,
+            currentDay,
+            diverseTopic: diverseTopic?.topic,
           },
           'LookaheadGeneration'
         );
@@ -432,6 +500,18 @@ async function generateContentWindow(
       return success ? 1 : 0;
     }
     const org = creator as (typeof orgsList)[number];
+
+    // Check if org is on-beat for diverse topic (if applicable)
+    if (diverseTopic) {
+      const isOnBeat = diversityService.isTopicOnBeat(
+        org.id,
+        diverseTopic.topic
+      );
+      if (!isOnBeat && secureRandom() < 0.5) {
+        // 50% chance to skip if org is off-beat for this diverse topic
+        return 0;
+      }
+    }
 
     // 10% chance to generate a full article instead of a short post
     const shouldCreateArticle = secureRandom() < 0.1;
@@ -442,8 +522,9 @@ async function generateContentWindow(
         llmClient,
         org,
         question,
-        worldFactsContext,
-        postTimestamp
+        enhancedWorldFacts,
+        postTimestamp,
+        postDayNumber
       );
       if (success) {
         logger.debug(
@@ -452,6 +533,7 @@ async function generateContentWindow(
             org: org.name,
             timestamp: postTimestamp.toISOString(),
             questionId: question.id,
+            diverseTopic: diverseTopic?.topic,
           },
           'LookaheadGeneration'
         );
@@ -461,8 +543,9 @@ async function generateContentWindow(
         llmClient,
         org,
         question,
-        worldFactsContext,
-        postTimestamp
+        enhancedWorldFacts,
+        postTimestamp,
+        postDayNumber
       );
       if (success) {
         logger.debug(
@@ -471,6 +554,7 @@ async function generateContentWindow(
             org: org.name,
             timestamp: postTimestamp.toISOString(),
             questionId: question.id,
+            diverseTopic: diverseTopic?.topic,
           },
           'LookaheadGeneration'
         );

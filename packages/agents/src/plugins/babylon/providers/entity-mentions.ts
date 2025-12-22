@@ -4,6 +4,7 @@
  * Uses regex to find mentions and provides context via A2A protocol
  */
 
+import type { JsonValue } from '@babylon/shared';
 import type {
   IAgentRuntime,
   Memory,
@@ -12,7 +13,6 @@ import type {
   State,
 } from '@elizaos/core';
 import { logger } from '../../../shared/logger';
-import type { JsonValue } from '../../../types/common';
 import type { EntityMention } from '../../../types/entities';
 import {
   isActorEntity,

@@ -17,8 +17,9 @@
  */
 
 import { logger, POINTS } from '@babylon/shared';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, Lock, Twitter, X as XIcon } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { ShareVerificationModal } from './ShareVerificationModal';
 
@@ -49,14 +50,47 @@ interface ShareStatus {
   twitter: {
     shared: boolean;
     earned: boolean;
-    loading: boolean;
     shareId?: string;
   };
   farcaster: {
     shared: boolean;
     earned: boolean;
-    loading: boolean;
     shareId?: string;
+  };
+}
+
+/**
+ * Credentials status response from API.
+ */
+interface CredentialsStatusResponse {
+  twitter?: boolean;
+  farcaster?: boolean;
+}
+
+/**
+ * Share record from API.
+ */
+interface ShareRecord {
+  id: string;
+  platform: 'twitter' | 'farcaster';
+  contentType: string;
+  verified: boolean;
+  pointsAwarded: number;
+}
+
+/**
+ * Existing shares response from API.
+ */
+interface ExistingSharesResponse {
+  shares: ShareRecord[];
+}
+
+/**
+ * Track share response from API.
+ */
+interface TrackShareResponse {
+  shareAction?: {
+    id: string;
   };
 }
 
@@ -76,137 +110,140 @@ export function ShareEarnModal({
 }: ShareEarnModalProps) {
   const { authenticated, user } = useAuth();
   const [shareStatus, setShareStatus] = useState<ShareStatus>({
-    twitter: { shared: false, earned: false, loading: false },
-    farcaster: { shared: false, earned: false, loading: false },
+    twitter: { shared: false, earned: false },
+    farcaster: { shared: false, earned: false },
   });
-  const [isTwitterConfigured, setIsTwitterConfigured] = useState(true); // Default to true, check on mount
   const [showVerification, setShowVerification] = useState(false);
   const [pendingVerification, setPendingVerification] = useState<{
     shareId: string;
     platform: 'twitter' | 'farcaster';
   } | null>(null);
-  const [checkingExistingShares, setCheckingExistingShares] = useState(false);
 
   const shareUrl =
-    url || (typeof window !== 'undefined' ? window.location.origin : '');
-  const shareText = text || 'Check this out!';
+    url ?? (typeof window !== 'undefined' ? window.location.origin : '');
+  const shareText = text ?? 'Check this out!';
 
-  const checkConfiguration = useCallback(async () => {
-    const response = await fetch('/api/auth/credentials/status');
-    if (response.ok) {
-      const data = (await response.json()) as {
-        twitter?: boolean;
-        farcaster?: boolean;
-      };
-      setIsTwitterConfigured(data.twitter || false);
-    } else {
-      logger.warn(
-        'Failed to check credentials status',
-        { status: response.status },
-        'ShareEarnModal'
-      );
-      // Default to true to not block users if check fails
-      setIsTwitterConfigured(true);
-    }
-  }, []);
-
-  const checkExistingShares = useCallback(async () => {
-    if (!user) return;
-
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) return;
-
-    setCheckingExistingShares(true);
-
-    // Check for existing verified and earned shares for this content type
-    const response = await fetch(
-      `/api/users/${encodeURIComponent(user.id)}/share?contentType=${contentType}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+  // Query: Check platform configuration
+  const { data: credentialsData } = useQuery<CredentialsStatusResponse>({
+    queryKey: ['credentials-status'],
+    queryFn: async () => {
+      const response = await fetch('/api/auth/credentials/status');
+      if (!response.ok) {
+        logger.warn(
+          'Failed to check credentials status',
+          { status: response.status },
+          'ShareEarnModal'
+        );
+        // Return default to not block users if check fails
+        return { twitter: true, farcaster: true };
       }
-    );
+      return response.json();
+    },
+    enabled: isOpen,
+    staleTime: 60_000, // Cache for 1 minute
+  });
 
-    if (response.ok) {
-      const data = await response.json();
-      const shares = data.shares || [];
+  const isTwitterConfigured = credentialsData?.twitter ?? true;
 
-      // Update state for each platform that has been verified and earned
-      const twitterShare = shares.find(
-        (s: { platform: string }) => s.platform === 'twitter'
-      );
-      const farcasterShare = shares.find(
-        (s: { platform: string }) => s.platform === 'farcaster'
-      );
+  // Query: Check existing shares
+  const { isLoading: checkingExistingShares } =
+    useQuery<ExistingSharesResponse>({
+      queryKey: ['existing-shares', user?.id, contentType],
+      queryFn: async () => {
+        const token =
+          typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        if (!token || !user) {
+          throw new Error('Not authenticated');
+        }
 
-      setShareStatus((prev) => ({
-        twitter: twitterShare
-          ? { shared: true, earned: true, loading: false }
-          : prev.twitter,
-        farcaster: farcasterShare
-          ? { shared: true, earned: true, loading: false }
-          : prev.farcaster,
-      }));
+        const response = await fetch(
+          `/api/users/${encodeURIComponent(user.id)}/share?contentType=${contentType}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
-      logger.info(
-        `Found ${shares.length} existing verified shares for ${contentType}`,
-        { contentType, twitter: !!twitterShare, farcaster: !!farcasterShare },
-        'ShareEarnModal'
-      );
-    }
-    setCheckingExistingShares(false);
-  }, [user, contentType]);
+        if (!response.ok) {
+          throw new Error('Failed to fetch existing shares');
+        }
 
-  // Check configuration and existing shares on mount
-  useEffect(() => {
-    if (isOpen) {
-      checkConfiguration();
-      if (authenticated && user) {
-        checkExistingShares();
+        const data: ExistingSharesResponse = await response.json();
+        const shares = data.shares ?? [];
+
+        // Update share status for platforms that have been verified and earned
+        const twitterShare = shares.find((s) => s.platform === 'twitter');
+        const farcasterShare = shares.find((s) => s.platform === 'farcaster');
+
+        if (twitterShare || farcasterShare) {
+          setShareStatus((prev) => ({
+            twitter: twitterShare
+              ? { shared: true, earned: true }
+              : prev.twitter,
+            farcaster: farcasterShare
+              ? { shared: true, earned: true }
+              : prev.farcaster,
+          }));
+
+          logger.info(
+            `Found ${shares.length} existing verified shares for ${contentType}`,
+            {
+              contentType,
+              twitter: !!twitterShare,
+              farcaster: !!farcasterShare,
+            },
+            'ShareEarnModal'
+          );
+        }
+
+        return data;
+      },
+      enabled: isOpen && authenticated && !!user,
+      staleTime: 30_000, // Cache for 30 seconds
+    });
+
+  // Mutation: Track share action
+  const trackShareMutation = useMutation<
+    TrackShareResponse,
+    Error,
+    { platform: 'twitter' | 'farcaster' }
+  >({
+    mutationFn: async ({ platform }) => {
+      if (!authenticated || !user) {
+        throw new Error('User not authenticated');
       }
-    }
-  }, [isOpen, authenticated, user, checkConfiguration, checkExistingShares]);
 
-  const trackShare = async (
-    platform: 'twitter' | 'farcaster'
-  ): Promise<{ success: boolean; shareId?: string }> => {
-    if (!authenticated || !user) {
-      logger.warn(
-        'User not authenticated, cannot track share',
-        undefined,
-        'ShareEarnModal'
-      );
-      return { success: false };
-    }
-
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      logger.warn('No access token available', undefined, 'ShareEarnModal');
-      return { success: false };
-    }
-
-    const response = await fetch(
-      `/api/users/${encodeURIComponent(user.id)}/share`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          platform,
-          contentType,
-          contentId,
-          url: shareUrl,
-        }),
+      const token =
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      if (!token) {
+        throw new Error('No access token available');
       }
-    );
 
-    if (response.ok) {
-      const data = await response.json();
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(user.id)}/share`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            platform,
+            contentType,
+            contentId,
+            url: shareUrl,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to track share');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data, { platform }) => {
       const shareId = data.shareAction?.id;
 
       logger.info(
@@ -215,14 +252,31 @@ export function ShareEarnModal({
         'ShareEarnModal'
       );
 
-      return { success: true, shareId };
-    }
+      // Update share status with shareId
+      setShareStatus((prev) => ({
+        ...prev,
+        [platform]: { ...prev[platform], shareId },
+      }));
 
-    return { success: false };
-  };
+      // Show verification modal after a short delay (gives user time to post)
+      if (shareId && user) {
+        setTimeout(() => {
+          setPendingVerification({ shareId, platform });
+          setShowVerification(true);
+        }, 3000); // 3 second delay
+      }
+    },
+    onError: (error, { platform }) => {
+      logger.warn(
+        `Failed to track share for ${platform}`,
+        { error: error.message },
+        'ShareEarnModal'
+      );
+    },
+  });
 
-  const handleShareToTwitter = async () => {
-    if (shareStatus.twitter.loading) return;
+  const handleShareToTwitter = () => {
+    if (trackShareMutation.isPending) return;
 
     // If already earned, just open share window without verification
     if (shareStatus.twitter.earned) {
@@ -234,11 +288,6 @@ export function ShareEarnModal({
       return;
     }
 
-    setShareStatus((prev) => ({
-      ...prev,
-      twitter: { ...prev.twitter, loading: true },
-    }));
-
     // Check if shareText already contains the URL to avoid duplication
     const textContainsUrl = shareText.includes(shareUrl);
     const twitterUrl = textContainsUrl
@@ -246,28 +295,11 @@ export function ShareEarnModal({
       : `https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
     window.open(twitterUrl, '_blank', 'width=550,height=420');
 
-    const result = await trackShare('twitter');
-
-    // Don't mark as shared yet - only after verification
-    setShareStatus((prev) => ({
-      ...prev,
-      twitter: { ...prev.twitter, loading: false, shareId: result.shareId },
-    }));
-
-    // Show verification modal after a short delay (gives user time to post)
-    if (result.success && result.shareId && user) {
-      setTimeout(() => {
-        setPendingVerification({
-          shareId: result.shareId!,
-          platform: 'twitter',
-        });
-        setShowVerification(true);
-      }, 3000); // 3 second delay
-    }
+    trackShareMutation.mutate({ platform: 'twitter' });
   };
 
-  const handleShareToFarcaster = async () => {
-    if (shareStatus.farcaster.loading) return;
+  const handleShareToFarcaster = () => {
+    if (trackShareMutation.isPending) return;
 
     // If already earned, just open share window without verification
     if (shareStatus.farcaster.earned) {
@@ -278,35 +310,21 @@ export function ShareEarnModal({
       return;
     }
 
-    setShareStatus((prev) => ({
-      ...prev,
-      farcaster: { ...prev.farcaster, loading: true },
-    }));
-
     const castText = `${shareText}\n\n${shareUrl}`;
     // Farcaster compose URL - uses official protocol endpoint (farcaster.xyz)
     const farcasterComposeUrl = `https://farcaster.xyz/~/compose?text=${encodeURIComponent(castText)}`;
     window.open(farcasterComposeUrl, '_blank', 'width=550,height=600');
 
-    const result = await trackShare('farcaster');
-
-    // Don't mark as shared yet - only after verification
-    setShareStatus((prev) => ({
-      ...prev,
-      farcaster: { ...prev.farcaster, loading: false, shareId: result.shareId },
-    }));
-
-    // Show verification modal after a short delay (gives user time to post)
-    if (result.success && result.shareId && user) {
-      setTimeout(() => {
-        setPendingVerification({
-          shareId: result.shareId!,
-          platform: 'farcaster',
-        });
-        setShowVerification(true);
-      }, 3000); // 3 second delay
-    }
+    trackShareMutation.mutate({ platform: 'farcaster' });
   };
+
+  // Track which platform is currently being shared (for loading state)
+  const twitterLoading =
+    trackShareMutation.isPending &&
+    trackShareMutation.variables?.platform === 'twitter';
+  const farcasterLoading =
+    trackShareMutation.isPending &&
+    trackShareMutation.variables?.platform === 'farcaster';
 
   if (!isOpen) return null;
 
@@ -353,13 +371,13 @@ export function ShareEarnModal({
                 {/* Twitter Share */}
                 <button
                   onClick={handleShareToTwitter}
-                  disabled={!isTwitterConfigured || shareStatus.twitter.loading}
+                  disabled={!isTwitterConfigured || twitterLoading}
                   className={`flex w-full items-center gap-4 rounded-lg border p-4 transition-all ${
                     !isTwitterConfigured
                       ? 'cursor-not-allowed border-border bg-muted/50 opacity-60'
                       : shareStatus.twitter.earned
                         ? 'cursor-pointer border-green-500/30 bg-green-500/10 hover:bg-green-500/20'
-                        : shareStatus.twitter.loading
+                        : twitterLoading
                           ? 'cursor-wait border-border bg-card'
                           : 'cursor-pointer border-border bg-card hover:bg-muted'
                   }`}
@@ -389,7 +407,7 @@ export function ShareEarnModal({
                     <p className="text-muted-foreground text-xs">
                       {!isTwitterConfigured
                         ? 'Twitter integration coming soon'
-                        : shareStatus.twitter.loading
+                        : twitterLoading
                           ? 'Processing...'
                           : shareStatus.twitter.earned
                             ? `Earned +${POINTS.SHARE_TO_TWITTER} points`
@@ -411,11 +429,11 @@ export function ShareEarnModal({
                 {/* Farcaster Share */}
                 <button
                   onClick={handleShareToFarcaster}
-                  disabled={shareStatus.farcaster.loading}
+                  disabled={farcasterLoading}
                   className={`flex w-full items-center gap-4 rounded-lg border p-4 transition-all ${
                     shareStatus.farcaster.earned
                       ? 'cursor-pointer border-green-500/30 bg-green-500/10 hover:bg-green-500/20'
-                      : shareStatus.farcaster.loading
+                      : farcasterLoading
                         ? 'cursor-wait border-border bg-card'
                         : 'cursor-pointer border-border bg-card hover:bg-muted'
                   }`}
@@ -428,7 +446,7 @@ export function ShareEarnModal({
                       Share to Farcaster
                     </h3>
                     <p className="text-muted-foreground text-xs">
-                      {shareStatus.farcaster.loading
+                      {farcasterLoading
                         ? 'Processing...'
                         : shareStatus.farcaster.earned
                           ? `Earned +${POINTS.SHARE_ACTION} points`

@@ -16,7 +16,7 @@
  *     summary: Revoke admin privileges
  *     description: Revokes admin privileges from a group member (admin only, cannot revoke from creator)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id

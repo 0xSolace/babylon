@@ -873,7 +873,7 @@ export default function ProfileDetailClient() {
             {/* Posts/Replies/Trades */}
             <div className="px-4">
               {tab === 'trades' ? (
-                <TradesFeed userId={actorInfo?.id} />
+                <TradesFeed userId={actorInfo.id} />
               ) : loadingPosts ? (
                 <div className="w-full">
                   <FeedSkeleton count={5} />
@@ -917,7 +917,8 @@ export default function ProfileDetailClient() {
                       originalPost: item.post.originalPost || null,
                     };
 
-                    return postData.type && postData.type === 'article' ? (
+                    return postData.type === 'article' ||
+                      postData.articleTitle ? (
                       <ArticleCard
                         key={`${item.post.id}-${i}`}
                         post={postData}

@@ -4,18 +4,26 @@
  * Core types for database operations including JSON values, decimals, errors, and query inputs.
  */
 
+import type { JsonValue } from '@babylon/shared';
+
 /**
- * JSON value type representing all valid JSON values.
+ * Re-export JsonValue from shared for convenience.
  */
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonObject
-  | JsonArray;
+export type { JsonValue };
+
+/**
+ * JSON object type for database fields.
+ */
 export type JsonObject = { [key: string]: JsonValue };
+
+/**
+ * JSON array type for database fields.
+ */
 export type JsonArray = JsonValue[];
+
+/**
+ * Input JSON value type (alias for JsonValue).
+ */
 export type InputJsonValue = JsonValue;
 
 /**

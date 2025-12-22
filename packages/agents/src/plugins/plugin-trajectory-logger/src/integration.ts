@@ -4,8 +4,8 @@
  * Advanced manual control for trajectory logging
  */
 
+import type { JsonValue } from '@babylon/shared';
 import { logger } from '../../../shared/logger';
-import type { JsonValue } from '../../../types/common';
 import type { TrajectoryLoggerService } from './TrajectoryLoggerService';
 import type { EnvironmentState } from './types';
 
@@ -173,7 +173,12 @@ export function logProviderAccess(
     query?: ProviderAccessData;
   }
 ): void {
-  trajectoryLogger.logProviderAccessByTrajectoryId(trajectoryId, access);
+  trajectoryLogger.logProviderAccessByTrajectoryId(trajectoryId, {
+    providerName: access.providerName,
+    data: access.data,
+    purpose: access.purpose,
+    query: access.query || {},
+  });
 }
 
 /**

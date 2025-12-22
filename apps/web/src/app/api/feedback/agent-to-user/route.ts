@@ -98,27 +98,14 @@ import {
 } from '@babylon/api';
 import type { JsonValue } from '@babylon/db';
 import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  AgentToUserFeedbackQuerySchema,
+  AgentToUserFeedbackSchema,
+  generateSnowflakeId,
+  logger,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const AgentToUserFeedbackSchema = z.object({
-  agentId: z.string().min(1, 'agentId is required'),
-  toUserId: z.string().min(1, 'toUserId is required'),
-  score: z.number().min(0).max(100),
-  rating: z.number().int().min(1).max(5).optional(),
-  comment: z.string().max(5000).optional(),
-  category: z.string().min(1).optional(),
-  interactionType: z.string().min(1).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
-
-const AgentToUserFeedbackQuerySchema = z.object({
-  userId: z.string().min(1, 'userId is required'),
-  limit: z.number().int().min(1).max(100).default(20),
-  offset: z.number().int().min(0).default(0),
-});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   requireCronAuth(request, { jobName: 'AgentFeedback' });

@@ -1,8 +1,8 @@
 'use client';
 
+import { logger } from '@babylon/shared';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { logger } from '@/lib/logger';
 
 interface ShareToFarcasterProps {
   text: string;
@@ -21,39 +21,29 @@ export function ShareToFarcaster({
 }: ShareToFarcasterProps) {
   const [isSharing, setIsSharing] = useState(false);
 
-  const handleShare = async () => {
-    try {
-      setIsSharing(true);
+  const handleShare = () => {
+    setIsSharing(true);
 
-      // Build Warpcast intent URL
-      const shareUrl = url || window.location.href;
-      const shareText = `${text}\n\n${shareUrl}`;
+    // Build Warpcast intent URL
+    const shareUrl = url || window.location.href;
+    const shareText = `${text}\n\n${shareUrl}`;
 
-      // Encode for URL
-      const encodedText = encodeURIComponent(shareText);
+    // Encode for URL
+    const encodedText = encodeURIComponent(shareText);
 
-      // Open Warpcast composer
-      const warpcastUrl = `https://warpcast.com/~/compose?text=${encodedText}`;
+    // Open Warpcast composer
+    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodedText}`;
 
-      logger.info(
-        'Sharing to Farcaster',
-        { text, url: shareUrl },
-        'ShareToFarcaster'
-      );
+    logger.info(
+      'Sharing to Farcaster',
+      { text, url: shareUrl },
+      'ShareToFarcaster'
+    );
 
-      window.open(warpcastUrl, '_blank', 'width=600,height=800');
+    window.open(warpcastUrl, '_blank', 'width=600,height=800');
 
-      toast.success('Opening Warpcast...');
-    } catch (error) {
-      logger.error(
-        'Failed to share to Farcaster',
-        { error },
-        'ShareToFarcaster'
-      );
-      toast.error('Failed to share to Farcaster');
-    } finally {
-      setIsSharing(false);
-    }
+    toast.success('Opening Warpcast...');
+    setIsSharing(false);
   };
 
   return (

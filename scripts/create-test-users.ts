@@ -29,7 +29,7 @@ async function createTestUsers() {
     // Create test users
     const user1 = await prisma.user.create({
       data: {
-        privyId: `did:privy:test-user-1-${Date.now()}`,
+        oauth3Id: `oauth3:test-user-1-${Date.now()}`,
         username: 'testuser1',
         displayName: 'Test User 1',
         bio: 'Test account for DM testing',
@@ -41,7 +41,7 @@ async function createTestUsers() {
 
     const user2 = await prisma.user.create({
       data: {
-        privyId: `did:privy:test-user-2-${Date.now()}`,
+        oauth3Id: `oauth3:test-user-2-${Date.now()}`,
         username: 'testuser2',
         displayName: 'Test User 2',
         bio: 'Test account for DM testing',

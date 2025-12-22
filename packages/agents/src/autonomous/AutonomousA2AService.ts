@@ -10,9 +10,9 @@
 import { db, eq, users } from '@babylon/db';
 import type { IAgentRuntime } from '@elizaos/core';
 import type { BabylonRuntime } from '../plugins/babylon/types';
+import { agentPnLService } from '../services/AgentPnLService';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
 
 /**
  * Type guard to check if runtime has A2A client
@@ -273,9 +273,13 @@ Your JSON response:`;
       purpose: 'action', // RLAIF: This is a trading action decision
     });
 
-    // Parse decision
-    const jsonMatch = decision.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    // Parse decision with Zod validation
+    const { parseLLMResponse, A2ATradeDecisionSchema } = await import(
+      './schemas/llm-response-schemas'
+    );
+
+    const tradeDecision = parseLLMResponse(decision, A2ATradeDecisionSchema);
+    if (!tradeDecision) {
       logger.debug('No valid JSON in LLM response', {
         agentUserId,
         responseLength: decision.length,
@@ -288,21 +292,6 @@ Your JSON response:`;
         marketType: undefined,
       };
     }
-
-    const tradeDecision = JSON.parse(jsonMatch[0]) as {
-      action: 'trade' | 'hold';
-      trade?: {
-        type?: 'prediction' | 'perp';
-        marketId?: string;
-        outcome?: 'YES' | 'NO';
-        amount?: number;
-        ticker?: string;
-        side?: 'LONG' | 'SHORT';
-        size?: number;
-        leverage?: number;
-        reasoning: string;
-      };
-    };
 
     if (tradeDecision.action !== 'trade' || !tradeDecision.trade) {
       logger.debug('Agent decided to hold', { agentUserId });
@@ -356,18 +345,17 @@ Your JSON response:`;
         reasoning,
       });
 
-      await db.agentTrade.create({
-        data: {
-          id: await generateSnowflakeId(),
-          agentUserId,
-          marketType: 'perp',
-          ticker,
-          action: 'open',
-          side: side.toLowerCase() as 'long' | 'short',
-          amount: size,
-          price: tradeResult.entryPrice || 0,
-          reasoning: `LLM decision (${perpLeverage}x leverage): ${reasoning}`,
-        },
+      // Record trade via shared service (DRY - same as DirectExecutors)
+      await agentPnLService.recordTrade({
+        agentId: agentUserId,
+        userId: agentUserId, // A2A trades are self-managed
+        marketType: 'perp',
+        ticker,
+        action: 'open',
+        side: side.toLowerCase() as 'long' | 'short',
+        amount: size,
+        price: tradeResult.entryPrice || 0,
+        reasoning: `LLM decision (${perpLeverage}x leverage): ${reasoning}`,
       });
 
       return {
@@ -419,18 +407,17 @@ Your JSON response:`;
       reasoning,
     });
 
-    await db.agentTrade.create({
-      data: {
-        id: await generateSnowflakeId(),
-        agentUserId,
-        marketType: 'prediction',
-        marketId,
-        action: 'open',
-        side: outcome.toLowerCase() as 'yes' | 'no',
-        amount,
-        price: tradeResult.avgPrice || 0,
-        reasoning: `LLM decision: ${reasoning}`,
-      },
+    // Record trade via shared service (DRY - same as DirectExecutors)
+    await agentPnLService.recordTrade({
+      agentId: agentUserId,
+      userId: agentUserId, // A2A trades are self-managed
+      marketType: 'prediction',
+      marketId,
+      action: 'open',
+      side: outcome.toLowerCase() as 'yes' | 'no',
+      amount,
+      price: tradeResult.avgPrice || 0,
+      reasoning: `LLM decision: ${reasoning}`,
     });
 
     return {

@@ -5,7 +5,9 @@
  * Coordinates between the TEE enclave and IPFS storage.
  */
 
+import { logger } from '@babylon/shared';
 import type { Hex } from 'viem';
+import { SealedDataSchema } from '../schemas/index.js';
 import type { TEEEnclave } from '../tee/enclave.js';
 import type { SealedData } from '../tee/keystore.js';
 import type { IPFSSimulator } from './ipfs-simulator.js';
@@ -53,7 +55,7 @@ export class StateManager {
     this.config = config;
 
     if (config.verbose) {
-      console.log('[StateManager] Initialized');
+      logger.info('[StateManager] Initialized');
     }
   }
 
@@ -92,7 +94,7 @@ export class StateManager {
     this.checkpoints.push(checkpoint);
 
     if (this.config.verbose) {
-      console.log(
+      logger.info(
         `[StateManager] Saved checkpoint v${checkpoint.version}: ${cid}`
       );
     }
@@ -116,14 +118,15 @@ export class StateManager {
       throw new Error(`State integrity check failed: ${verification.error}`);
     }
 
-    // Parse sealed data
-    const sealed: SealedData = JSON.parse(obj.content);
+    // Parse and validate sealed data structure
+    const parsedContent: unknown = JSON.parse(obj.content);
+    const sealed = SealedDataSchema.parse(parsedContent) as SealedData;
 
     // Decrypt inside TEE
     const state = await this.enclave.decryptState<T>(sealed, keyVersion);
 
     if (this.config.verbose) {
-      console.log(`[StateManager] Loaded state from ${cid}`);
+      logger.info(`[StateManager] Loaded state from ${cid}`);
     }
 
     return state;
@@ -134,7 +137,7 @@ export class StateManager {
    */
   async rotateKey(): Promise<StateCheckpoint> {
     if (this.config.verbose) {
-      console.log('\n[StateManager] === INITIATING KEY ROTATION ===');
+      logger.info('\n[StateManager] === INITIATING KEY ROTATION ===');
     }
 
     // Tell enclave to rotate its key and re-encrypt state
@@ -168,7 +171,7 @@ export class StateManager {
     this.checkpoints.push(checkpoint);
 
     if (this.config.verbose) {
-      console.log(
+      logger.info(
         `[StateManager] Key rotated to v${newVersion}, new checkpoint: ${newCid}`
       );
     }
@@ -216,7 +219,7 @@ export class StateManager {
     this.trainingDatasets.push(dataset);
 
     if (this.config.verbose) {
-      console.log(
+      logger.info(
         `[StateManager] Saved training data epoch ${this.currentEpoch}: ${obj.cid} (${data.length} samples)`
       );
     }

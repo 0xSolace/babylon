@@ -17,7 +17,7 @@
  *     summary: Get wallet balance
  *     description: Returns wallet balance and transaction history (owner only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: agentId
@@ -58,7 +58,7 @@
  *     summary: Deposit/withdraw points
  *     description: Deposits or withdraws points from agent wallet (owner only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: agentId
@@ -143,7 +143,7 @@
 
 import { agentService, getAgentConfig } from '@babylon/agents';
 import { authenticateUser } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db, eq, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -164,6 +164,15 @@ export async function GET(
     throw new Error(`Agent config not found for agent ${agentId}`);
   }
 
+  // Get user's trading balance (source for ops budget)
+  const userResult = await db
+    .select({ virtualBalance: users.virtualBalance })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .limit(1);
+
+  const userBalance = Number(userResult[0]?.virtualBalance ?? 0);
+
   const transactions = await db.agentPointsTransaction.findMany({
     where: { agentUserId: agentId },
     orderBy: { createdAt: 'desc' },
@@ -178,6 +187,7 @@ export async function GET(
       totalWithdrawn: config.totalWithdrawn,
       totalSpent: config.totalPointsSpent,
     },
+    userBalance: userBalance,
     transactions: transactions.map((tx) => ({
       id: tx.id,
       type: tx.type,
@@ -204,14 +214,14 @@ export async function POST(
   if (action === 'deposit') {
     await agentService.depositPoints(agentId, user.id, amount);
     logger.info(
-      `Deposited ${amount} points to agent ${agentId}`,
+      `Deposited $${amount} ops budget to agent ${agentId}`,
       undefined,
       'AgentsAPI'
     );
   } else {
     await agentService.withdrawPoints(agentId, user.id, amount);
     logger.info(
-      `Withdrew ${amount} points from agent ${agentId}`,
+      `Withdrew $${amount} ops budget from agent ${agentId}`,
       undefined,
       'AgentsAPI'
     );
@@ -225,6 +235,15 @@ export async function POST(
     );
   }
 
+  // Get user's updated trading balance
+  const userResult = await db
+    .select({ virtualBalance: users.virtualBalance })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .limit(1);
+
+  const userBalance = Number(userResult[0]?.virtualBalance ?? 0);
+
   return NextResponse.json({
     success: true,
     balance: {
@@ -232,6 +251,7 @@ export async function POST(
       totalDeposited: updatedConfig.totalDeposited,
       totalWithdrawn: updatedConfig.totalWithdrawn,
     },
-    message: `${action === 'deposit' ? 'Deposited' : 'Withdrew'} ${amount} points successfully`,
+    userBalance: userBalance,
+    message: `${action === 'deposit' ? 'Deposited' : 'Withdrew'} $${amount.toFixed(2)} successfully`,
   });
 }

@@ -47,6 +47,28 @@ export {
 export { createModerationBridge, ModerationBridge } from './bridge';
 // Core client
 export { createModerationClient, ModerationClient } from './client';
+// Zod schemas for validation
+export {
+  AddressSchema,
+  BanStatusSchema,
+  Bytes32Schema,
+  CanReportParamsSchema,
+  ChallengeBanParamsSchema,
+  ClaimRewardsParamsSchema,
+  GetActiveCasesParamsSchema,
+  GetBanStatusParamsSchema,
+  GetCaseParamsSchema,
+  GetStakeParamsSchema,
+  JejuModerationConfigSchema,
+  ProposeBanParamsSchema,
+  ReportCategorySchema,
+  ReReviewParamsSchema,
+  ResolveCaseParamsSchema,
+  StakeParamsSchema,
+  UnstakeParamsSchema,
+  VoteParamsSchema,
+  VotePositionSchema,
+} from './schemas';
 // Types
 export {
   type BabylonModerationConfig,

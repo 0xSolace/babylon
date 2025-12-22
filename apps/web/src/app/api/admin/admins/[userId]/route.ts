@@ -16,7 +16,7 @@
  *     summary: Promote/demote admin
  *     description: Promotes user to admin or demotes admin to user (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -66,13 +66,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { AdminActionSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const AdminActionSchema = z.object({
-  action: z.enum(['promote', 'demote']),
-});
 
 export const POST = withErrorHandling(
   async (

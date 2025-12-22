@@ -10,6 +10,7 @@
 export {
   babylonPlugin,
   default as defaultBabylonPlugin,
+  initializeAgentA2AClient,
   initializeBabylonPlugin,
 } from './babylon';
 export type { BabylonRuntime } from './babylon/types';

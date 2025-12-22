@@ -28,6 +28,9 @@ export function PostHogIdentifier() {
 
     // Identify user when authenticated
     if (authenticated && user?.id && user.id !== identifiedUserId.current) {
+      if (!user) {
+        throw new Error('User is required when authenticated');
+      }
       const properties: Record<string, string | number | boolean | null> = {
         hasProfileImage: Boolean(user.profileImageUrl),
         hasBio: Boolean(user.bio),

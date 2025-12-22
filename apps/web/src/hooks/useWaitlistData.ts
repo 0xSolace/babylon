@@ -1,6 +1,10 @@
 'use client';
 
-import { logger } from '@babylon/shared';
+import {
+  logger,
+  WaitlistLeaderboardResponseSchema,
+  WaitlistPositionResponseSchema,
+} from '@babylon/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 import type {
@@ -35,35 +39,6 @@ interface UseWaitlistDataReturn {
     tab?: LeaderboardTab
   ) => Promise<boolean>;
   refreshWaitlistData: () => Promise<void>;
-}
-
-interface WaitlistPositionResponse {
-  position: number | null;
-  leaderboardRank: number;
-  waitlistPosition: number;
-  totalAhead: number;
-  totalCount: number;
-  percentile: number;
-  inviteCode: string;
-  points: number;
-  pointsBreakdown: {
-    total: number;
-    invite: number;
-    earned: number;
-    bonus: number;
-    base: number;
-  };
-  referralCount: number;
-  weeklyReferralCount?: number;
-  weeklyLimit?: number;
-  invitedCount?: number;
-  qualifiedCount?: number;
-  totalReferralPoints?: number;
-}
-
-interface LeaderboardResponse {
-  leaderboard?: TopUser[];
-  totalPages?: number;
 }
 
 export function useWaitlistData({
@@ -106,30 +81,42 @@ export function useWaitlistData({
         return null;
       }
 
-      const data = (await response.json()) as WaitlistPositionResponse;
+      const json: unknown = await response.json();
+      const data = WaitlistPositionResponseSchema.parse(json);
 
       if (data.position === null) {
         return null;
       }
 
       // Check if rank improved
-      if (previousRank !== null && data.leaderboardRank < previousRank) {
+      if (
+        previousRank !== null &&
+        data.leaderboardRank !== null &&
+        data.leaderboardRank !== undefined &&
+        data.leaderboardRank < previousRank
+      ) {
         setShowRankImprovement(true);
         setTimeout(() => setShowRankImprovement(false), 5000);
       }
-      setPreviousRank(data.leaderboardRank);
+      setPreviousRank(data.leaderboardRank ?? null);
 
       return {
         position: data.position,
-        leaderboardRank: data.leaderboardRank,
-        waitlistPosition: data.waitlistPosition,
-        totalAhead: data.totalAhead,
-        totalCount: data.totalCount,
-        percentile: data.percentile,
-        inviteCode: data.inviteCode,
-        points: data.points,
-        pointsBreakdown: data.pointsBreakdown,
-        referralCount: data.referralCount,
+        leaderboardRank: data.leaderboardRank ?? 0,
+        waitlistPosition: data.waitlistPosition ?? 0,
+        totalAhead: data.totalAhead ?? 0,
+        totalCount: data.totalCount ?? 0,
+        percentile: data.percentile ?? 0,
+        inviteCode: data.inviteCode ?? '',
+        points: data.points ?? 0,
+        pointsBreakdown: data.pointsBreakdown ?? {
+          total: 0,
+          invite: 0,
+          earned: 0,
+          bonus: 0,
+          base: 0,
+        },
+        referralCount: data.referralCount ?? 0,
         weeklyReferralCount: data.weeklyReferralCount,
         weeklyLimit: data.weeklyLimit,
         invitedCount: data.invitedCount,
@@ -160,10 +147,11 @@ export function useWaitlistData({
         return { topUsers: [], totalPages: 10 };
       }
 
-      const data = (await response.json()) as LeaderboardResponse;
+      const json: unknown = await response.json();
+      const data = WaitlistLeaderboardResponseSchema.parse(json);
       return {
-        topUsers: data.leaderboard ?? [],
-        totalPages: data.totalPages ?? 10,
+        topUsers: data.leaderboard as TopUser[],
+        totalPages: data.totalPages,
       };
     },
     enabled: authenticated && !!userId && profileComplete && !!username,

@@ -18,7 +18,7 @@
  *     summary: Get user groups
  *     description: Returns all groups the authenticated user is a member or admin of
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Groups retrieved successfully
@@ -50,7 +50,7 @@
  *     summary: Create user group
  *     description: Creates a new user group with optional initial members
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -108,16 +108,9 @@
 
 import { authenticate, PointsService, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+import { CreateGroupSchema, generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const createGroupSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().max(500).optional(),
-  memberIds: z.array(z.string()).optional().default([]),
-});
 
 /**
  * GET /api/user-groups
@@ -203,7 +196,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   const body = await request.json();
-  const validatedData = createGroupSchema.parse(body);
+  const validatedData = CreateGroupSchema.parse(body);
 
   // Validate that all memberIds are real users (not NPCs)
   if (validatedData.memberIds.length > 0) {

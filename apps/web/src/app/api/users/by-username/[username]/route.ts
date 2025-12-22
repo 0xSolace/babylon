@@ -142,11 +142,11 @@ export const GET = withErrorHandling(
 
     // Get counts for stats
     const [
-      [positionCount],
-      [commentCount],
-      [reactionCount],
-      [followerCount],
-      [followingCount],
+      positionCountResults,
+      commentCountResults,
+      reactionCountResults,
+      followerCountResults,
+      followingCountResults,
     ] = await Promise.all([
       db
         .select({ count: count() })
@@ -169,6 +169,20 @@ export const GET = withErrorHandling(
         .from(follows)
         .where(eq(follows.followerId, dbUser.id)),
     ]);
+
+    // Type assertions for aggregate query results with fallback for empty results
+    type CountResult = { count: number };
+    const defaultCount: CountResult = { count: 0 };
+    const positionCount =
+      (positionCountResults as unknown as CountResult[])[0] ?? defaultCount;
+    const commentCount =
+      (commentCountResults as unknown as CountResult[])[0] ?? defaultCount;
+    const reactionCount =
+      (reactionCountResults as unknown as CountResult[])[0] ?? defaultCount;
+    const followerCount =
+      (followerCountResults as unknown as CountResult[])[0] ?? defaultCount;
+    const followingCount =
+      (followingCountResults as unknown as CountResult[])[0] ?? defaultCount;
 
     logger.info(
       'User profile fetched by username',
@@ -203,11 +217,11 @@ export const GET = withErrorHandling(
         twitterUsername: dbUser.twitterUsername,
         createdAt: dbUser.createdAt.toISOString(),
         stats: {
-          positions: Number(positionCount.count),
-          comments: Number(commentCount.count),
-          reactions: Number(reactionCount.count),
-          followers: Number(followerCount.count),
-          following: Number(followingCount.count),
+          positions: Number(positionCount?.count ?? 0),
+          comments: Number(commentCount?.count ?? 0),
+          reactions: Number(reactionCount?.count ?? 0),
+          followers: Number(followerCount?.count ?? 0),
+          following: Number(followingCount?.count ?? 0),
         },
       },
     });

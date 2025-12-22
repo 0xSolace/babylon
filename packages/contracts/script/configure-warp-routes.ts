@@ -8,14 +8,7 @@
 
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import {
-  type Address,
-  createPublicClient,
-  createWalletClient,
-  getAddress,
-  type Hex,
-  http,
-} from 'viem';
+import { createPublicClient, createWalletClient, type Hex, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 
@@ -34,25 +27,15 @@ if (existsSync(envPath)) {
   }
 }
 
+import { DEPLOYED_NETWORKS } from '../src/config/networks';
+
 // =============================================================================
-// DEPLOYED CONTRACTS
+// DEPLOYED CONTRACTS (using consolidated config)
 // =============================================================================
 
 const DEPLOYED = {
-  baseSepolia: {
-    token: '0x3586d05d61523c81d2d79c4e1132ffa1b3bcad5f' as Address,
-    warpRoute: '0x2071a7d3b7e72ed0ee7a60da6d98edaeebdb3d2d' as Address,
-    igp: getAddress('0x28B02B97a850872C4D33C3E024fab6499ad96564'),
-    rpc: process.env.BASE_SEPOLIA_RPC_URL ?? 'https://sepolia.base.org',
-  },
-  sepolia: {
-    token: '0xa8f3b42dfb4cb9c583b487beec75c2d90e9cecab' as Address,
-    warpRoute: '0x5ea72ab480fa99f9bc8a00786faaf0d01fe88eb1' as Address,
-    igp: getAddress('0x6f2756380FD49228ae25Aa7F2817993cB74Ecc56'),
-    rpc:
-      process.env.SEPOLIA_RPC_URL ??
-      'https://ethereum-sepolia-rpc.publicnode.com',
-  },
+  baseSepolia: DEPLOYED_NETWORKS.baseSepolia,
+  sepolia: DEPLOYED_NETWORKS.sepolia,
 };
 
 const WARP_ABI = [

@@ -18,7 +18,7 @@
  *     summary: Get group details
  *     description: Returns group details with members and admins (members only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -46,7 +46,7 @@
  *     summary: Update group
  *     description: Updates group name and description (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -77,7 +77,7 @@
  *     summary: Delete group
  *     description: Deletes a group (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -115,9 +115,9 @@ import {
   userGroups,
   users,
 } from '@babylon/db';
+import { UpdateGroupSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 
 /**
  * GET /api/user-groups/[id]
@@ -256,13 +256,7 @@ export const PUT = withErrorHandling(
     const { id: groupId } = await context.params;
     const body = await request.json();
 
-    // Validate input
-    const updateSchema = z.object({
-      name: z.string().min(1).max(100).optional(),
-      description: z.string().max(500).optional().nullable(),
-    });
-
-    const validatedData = updateSchema.parse(body);
+    const validatedData = UpdateGroupSchema.parse(body);
 
     // Check if user is admin
     const [isAdmin] = await db

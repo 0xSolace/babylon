@@ -3,10 +3,10 @@
 import {
   calculateExpectedPayout,
   PredictionPricing,
-} from '@babylon/engine/client';
+} from '@babylon/core/markets/prediction/client';
 import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
 import { cn, type JsonValue } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   BarChart3,
@@ -18,11 +18,13 @@ import {
   XCircle,
   Zap,
 } from 'lucide-react';
+
 import { useEffect, useState } from 'react';
+
 import { toast } from 'sonner';
 import { FollowButton } from '@/components/interactions';
 import { useAuth } from '@/hooks/useAuth';
-import { usePerpMarketsStore } from '@/stores/perpMarketsStore';
+import { useFetchPerpMarkets } from '@/hooks/usePerpMarkets';
 
 /**
  * Format error message from API response payload.
@@ -143,7 +145,7 @@ export function PositionDetailModal({
   userId,
   onSuccess,
 }: PositionDetailModalProps) {
-  const { user, authenticated, login } = useAuth();
+  const { user, authenticated, login, getAccessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<'details' | 'trade'>('details');
 
   // Trading state
@@ -151,12 +153,9 @@ export function PositionDetailModal({
   const [size, setSize] = useState('100');
   const [leverage, setLeverage] = useState(10);
   const [amount, setAmount] = useState('10');
-  const [loading, setLoading] = useState(false);
 
-  // Market data - use shared store for perps
-  const fetchPerpMarketsFromStore = usePerpMarketsStore(
-    (state) => state.fetchMarkets
-  );
+  // Market data - use react-query for perps
+  const fetchPerpMarkets = useFetchPerpMarkets();
 
   // Query for perp market data
   const { data: perpMarket } = useQuery({
@@ -168,10 +167,8 @@ export function PositionDetailModal({
     queryFn: async (): Promise<PerpMarket | null> => {
       if (type !== 'perp' || !data || !('ticker' in data)) return null;
 
-      // Ensure store is populated
-      await fetchPerpMarketsFromStore();
-      // Get fresh markets from store
-      const markets = usePerpMarketsStore.getState().markets;
+      // Fetch markets via react-query (uses cache if fresh)
+      const markets = await fetchPerpMarkets();
       const market = markets.find(
         (m) =>
           m.ticker.toLowerCase() ===
@@ -215,7 +212,108 @@ export function PositionDetailModal({
     }
   }, [isOpen, type, data]);
 
-  const handlePerpTrade = async () => {
+  // Perp trade mutation
+  interface PerpTradeParams {
+    ticker: string;
+    side: 'long' | 'short';
+    size: number;
+    leverage: number;
+  }
+
+  interface PerpTradeResponse {
+    success: boolean;
+    positionId?: string;
+  }
+
+  const perpTradeMutation = useMutation({
+    mutationFn: async (params: PerpTradeParams): Promise<PerpTradeResponse> => {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in.');
+      }
+
+      const response = await fetch('/api/markets/perps/open', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(params),
+      });
+
+      const responseData = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          formatErrorMessage(responseData, 'Failed to open position')
+        );
+      }
+
+      return responseData as PerpTradeResponse;
+    },
+    onSuccess: () => {
+      toast.success('Position opened!');
+      onClose();
+      onSuccess?.();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // Prediction trade mutation
+  interface PredictionTradeParams {
+    marketId: string | number;
+    side: 'yes' | 'no';
+    amount: number;
+  }
+
+  interface PredictionTradeResponse {
+    success: boolean;
+    shares?: number;
+  }
+
+  const predictionTradeMutation = useMutation({
+    mutationFn: async (
+      params: PredictionTradeParams
+    ): Promise<PredictionTradeResponse> => {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in.');
+      }
+
+      const response = await fetch(
+        `/api/markets/predictions/${params.marketId}/buy`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            side: params.side,
+            amount: params.amount,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(formatErrorMessage(errorData, 'Failed to buy shares'));
+      }
+
+      return response.json() as Promise<PredictionTradeResponse>;
+    },
+    onSuccess: () => {
+      toast.success(`Bought ${side.toUpperCase()} shares!`);
+      onClose();
+      onSuccess?.();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handlePerpTrade = () => {
     if (!user || !perpMarket) return;
 
     const sizeNum = parseFloat(size) || 0;
@@ -224,35 +322,15 @@ export function PositionDetailModal({
       return;
     }
 
-    setLoading(true);
-    const response = await fetch('/api/markets/perps/open', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${window.__oauth3AccessToken || ''}`,
-      },
-      body: JSON.stringify({
-        ticker: perpMarket.ticker,
-        side,
-        size: sizeNum,
-        leverage,
-      }),
+    perpTradeMutation.mutate({
+      ticker: perpMarket.ticker,
+      side: side as 'long' | 'short',
+      size: sizeNum,
+      leverage,
     });
-
-    const responseData = await response.json();
-    if (!response.ok) {
-      toast.error(formatErrorMessage(responseData, 'Failed to open position'));
-      setLoading(false);
-      return;
-    }
-
-    toast.success('Position opened!');
-    onClose();
-    if (onSuccess) onSuccess();
-    setLoading(false);
   };
 
-  const handlePredictionTrade = async () => {
+  const handlePredictionTrade = () => {
     if (!user || !predictionMarket) return;
 
     const amountNum = parseFloat(amount) || 0;
@@ -261,42 +339,16 @@ export function PositionDetailModal({
       return;
     }
 
-    setLoading(true);
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (!token) {
-      toast.error('Authentication required');
-      setLoading(false);
-      return;
-    }
-
-    const response = await fetch(
-      `/api/markets/predictions/${predictionMarket.id}/buy`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          side,
-          amount: amountNum,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      toast.error(formatErrorMessage(errorData, 'Failed to buy shares'));
-      setLoading(false);
-      return;
-    }
-
-    toast.success(`Bought ${side.toUpperCase()} shares!`);
-    onClose();
-    if (onSuccess) onSuccess();
-    setLoading(false);
+    predictionTradeMutation.mutate({
+      marketId: predictionMarket.id,
+      side: side as 'yes' | 'no',
+      amount: amountNum,
+    });
   };
+
+  // Combined loading state from mutations
+  const loading =
+    perpTradeMutation.isPending || predictionTradeMutation.isPending;
 
   if (!isOpen || !data) return null;
 

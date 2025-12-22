@@ -16,9 +16,9 @@
  * GET /api/airdrop/drip - Get current status
  */
 
-import { EngagementService, TokenService } from '@babylon/api';
-import { getServerSession } from '@babylon/auth';
+import { authenticate, EngagementService, TokenService } from '@babylon/api';
 import { logger } from '@babylon/shared';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 // Airdrop vesting constants
@@ -56,17 +56,18 @@ interface DripResponse {
  * POST /api/airdrop/drip
  * Claim drip if user has completed engagement requirements
  */
-export async function POST(): Promise<NextResponse> {
-  const session = await getServerSession();
-
-  if (!session?.user?.id) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  let authUser;
+  try {
+    authUser = await authenticate(request);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Unauthorized' },
       { status: 401 }
     );
   }
 
-  const userId = session.user.id;
+  const userId = authUser.userId;
 
   // Check engagement qualification first
   const { canClaim, reason, engagement } =
@@ -185,17 +186,18 @@ export async function POST(): Promise<NextResponse> {
  * GET /api/airdrop/drip
  * Returns user's current drip status and engagement progress
  */
-export async function GET(): Promise<NextResponse> {
-  const session = await getServerSession();
-
-  if (!session?.user?.id) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  let authUser;
+  try {
+    authUser = await authenticate(request);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Unauthorized' },
       { status: 401 }
     );
   }
 
-  const userId = session.user.id;
+  const userId = authUser.userId;
 
   // Get airdrop allocation status
   const status = await TokenService.getAirdropStatus(userId);

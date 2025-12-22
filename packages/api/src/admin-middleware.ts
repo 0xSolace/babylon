@@ -3,13 +3,13 @@
  *
  * @description Middleware for verifying admin privileges. Authenticates the user
  * and checks if they have admin access. In development mode, supports dev admin
- * token authentication for easier testing. In production, requires full Privy
+ * token authentication for easier testing. In production, requires full OAuth3
  * authentication and database admin flag verification.
  *
  * @security
  * - NEVER bypasses authentication based on localhost/host header
  * - Dev mode requires explicit dev admin token
- * - Production requires Privy auth + database admin flag
+ * - Production requires OAuth3 auth + database admin flag
  */
 
 import { db, eq, users } from '@babylon/db';
@@ -27,10 +27,10 @@ const isDevelopment = process.env.NODE_ENV !== 'production';
  *
  * In development mode:
  * - Accepts x-dev-admin-token header with valid dev token
- * - Falls back to standard Privy auth + admin check
+ * - Falls back to standard OAuth3 auth + admin check
  *
  * In production:
- * - Requires valid Privy authentication
+ * - Requires valid OAuth3 authentication
  * - Requires isAdmin flag in database
  */
 export async function requireAdmin(

@@ -16,7 +16,7 @@
  *     summary: Add reply to comment
  *     description: Creates a nested reply to an existing comment. Automatically ensures parent post exists.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id

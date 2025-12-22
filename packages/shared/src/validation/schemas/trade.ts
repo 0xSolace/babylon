@@ -297,3 +297,23 @@ export const PerpOpenPositionSchema = z.object({
   /** Max slippage tolerance (0-1, e.g., 0.01 = 1%). Rejects if spot/mark deviation exceeds this. */
   maxSlippage: z.number().min(0).max(1).optional(),
 });
+
+// Type exports
+export type CreateTradeOrder = z.infer<typeof CreateTradeOrderSchema>;
+export type UpdateTradeOrder = z.infer<typeof UpdateTradeOrderSchema>;
+export type CancelTradeOrder = z.infer<typeof CancelTradeOrderSchema>;
+export type ClosePosition = z.infer<typeof ClosePositionSchema>;
+export type TradeSignal = z.infer<typeof TradeSignalSchema>;
+export type MarketDataQuery = z.infer<typeof MarketDataQuerySchema>;
+export type PositionQuery = z.infer<typeof PositionQuerySchema>;
+export type TradeHistoryQuery = z.infer<typeof TradeHistoryQuerySchema>;
+export type RiskParameters = z.infer<typeof RiskParametersSchema>;
+export type TradeExecutionResponse = z.infer<
+  typeof TradeExecutionResponseSchema
+>;
+export type PositionResponse = z.infer<typeof PositionResponseSchema>;
+export type OrderBook = z.infer<typeof OrderBookSchema>;
+export type MarketStats = z.infer<typeof MarketStatsSchema>;
+export type PredictionMarketTrade = z.infer<typeof PredictionMarketTradeSchema>;
+export type PredictionMarketSell = z.infer<typeof PredictionMarketSellSchema>;
+export type PerpOpenPosition = z.infer<typeof PerpOpenPositionSchema>;

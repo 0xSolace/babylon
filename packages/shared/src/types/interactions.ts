@@ -236,67 +236,6 @@ export interface InteractionError {
 }
 
 // ============================================================================
-// Zustand Store State Types
-// ============================================================================
-
-export interface InteractionStoreState {
-  // State maps
-  postInteractions: Map<string, PostInteraction>;
-  commentInteractions: Map<string, CommentInteraction>;
-  favoritedProfiles: Set<string>;
-  pendingInteractions: Map<string, PendingInteraction>;
-
-  // Polling state
-  pollingConfig: PollingConfig;
-  isPolling: boolean;
-
-  // Loading states
-  loadingStates: Map<string, boolean>;
-
-  // Error states
-  errors: Map<string, InteractionError>;
-}
-
-export interface InteractionStoreActions {
-  // Like actions
-  toggleLike: (postId: string) => Promise<void>;
-  toggleCommentLike: (commentId: string) => Promise<void>;
-
-  // Comment actions
-  addComment: (
-    postId: string,
-    content: string,
-    parentId?: string
-  ) => Promise<CommentData | null>;
-  editComment: (commentId: string, content: string) => Promise<void>;
-  deleteComment: (commentId: string, postId?: string) => Promise<void>;
-  loadComments: (postId: string) => Promise<CommentWithReplies[]>;
-
-  // Share actions
-  toggleShare: (postId: string) => Promise<void>;
-
-  // Favorite actions
-  toggleFavorite: (profileId: string) => Promise<void>;
-  loadFavorites: () => Promise<FavoriteProfile[]>;
-
-  // Polling actions
-  startPolling: (postIds: string[]) => void;
-  stopPolling: () => void;
-  syncInteractions: (postIds: string[]) => Promise<void>;
-
-  // Utility actions
-  clearError: (id: string) => void;
-  resetStore: () => void;
-
-  // Get interaction data
-  getPostInteraction: (postId: string) => PostInteraction | null;
-  getCommentInteraction: (commentId: string) => CommentInteraction | null;
-  isFavorited: (profileId: string) => boolean;
-}
-
-export type InteractionStore = InteractionStoreState & InteractionStoreActions;
-
-// ============================================================================
 // Component Props Types
 // ============================================================================
 

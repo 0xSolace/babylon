@@ -24,6 +24,7 @@ import { generatePKCE } from '../oauth/pkce';
 import { SIWE } from '../oauth/siwe';
 import { TwitterOAuth } from '../oauth/twitter';
 import { KeyBackupManager } from '../recovery/backup';
+import { SessionDataSchema } from '../schemas/index';
 import {
   createSessionMessage,
   SessionManager,
@@ -127,7 +128,7 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
         return;
       }
 
-      const session = JSON.parse(stored) as SessionData;
+      const session = SessionDataSchema.parse(JSON.parse(stored));
 
       // Check if expired
       if (Date.now() > session.expiresAt) {
@@ -457,7 +458,7 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
       // For wallet/farcaster, get the actual session from storage
       const stored = sessionStorage.getItem(SESSION_KEY);
       if (stored) {
-        const session = JSON.parse(stored) as SessionData;
+        const session = SessionDataSchema.parse(JSON.parse(stored));
         return {
           token: session.token,
           expiresAt: session.expiresAt,
@@ -531,7 +532,7 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
       throw new Error('No session to refresh');
     }
 
-    const session = JSON.parse(stored) as SessionData;
+    const session = SessionDataSchema.parse(JSON.parse(stored));
 
     // Create new permissionless session token
     const { message, claims } = createSessionMessage(
@@ -559,7 +560,13 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
       return null;
     }
 
-    const session = JSON.parse(stored) as SessionData;
+    const parseResult = SessionDataSchema.safeParse(JSON.parse(stored));
+    if (!parseResult.success) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+
+    const session = parseResult.data;
     if (Date.now() > session.expiresAt) {
       return null;
     }
@@ -656,7 +663,12 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
   const getSession = useCallback((): SessionData | null => {
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (!stored) return null;
-    return JSON.parse(stored) as SessionData;
+    const parseResult = SessionDataSchema.safeParse(JSON.parse(stored));
+    if (!parseResult.success) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return parseResult.data;
   }, []);
 
   const hasGas = useCallback(async (): Promise<boolean> => {

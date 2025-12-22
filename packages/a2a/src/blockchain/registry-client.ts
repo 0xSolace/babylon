@@ -3,7 +3,11 @@
  * Blockchain integration for agent identity and reputation
  */
 
-import { type JsonValue, Logger } from '@babylon/shared';
+import {
+  AgentCapabilitiesSchema,
+  type JsonValue,
+  logger,
+} from '@babylon/shared';
 import {
   createPublicClient,
   type GetContractReturnType,
@@ -11,17 +15,7 @@ import {
   http,
   type PublicClient,
 } from 'viem';
-import { z } from 'zod';
 import type { AgentProfile, AgentReputation } from '../types/a2a';
-
-const CapabilitiesSchema = z.object({
-  strategies: z.array(z.string()).optional(),
-  markets: z.array(z.string()).optional(),
-  actions: z.array(z.string()).optional(),
-  version: z.string().optional(),
-  skills: z.array(z.string()).optional(),
-  domains: z.array(z.string()).optional(),
-});
 
 // ERC-8004 Identity Registry ABI (minimal)
 const IDENTITY_ABI = [
@@ -150,7 +144,6 @@ export class RegistryClient {
   private readonly client: PublicClient;
   private readonly identityRegistry: IdentityContract;
   private readonly reputationSystem: ReputationContract;
-  private readonly logger: Logger;
 
   constructor(config: RegistryConfig) {
     // Initialize viem public client
@@ -170,8 +163,6 @@ export class RegistryClient {
       abi: REPUTATION_ABI,
       client: this.client,
     });
-
-    this.logger = new Logger('info');
   }
 
   /**
@@ -306,8 +297,8 @@ export class RegistryClient {
     skills: string[];
     domains: string[];
   } {
-    const parsed = JSON.parse(metadata);
-    const validation = CapabilitiesSchema.safeParse(parsed);
+    const parsed = JSON.parse(metadata) as Record<string, unknown>;
+    const validation = AgentCapabilitiesSchema.safeParse(parsed);
     return {
       strategies: validation.data?.strategies ?? [],
       markets: validation.data?.markets ?? [],
@@ -348,7 +339,7 @@ export class RegistryClient {
     agentId: string,
     data: Record<string, JsonValue>
   ): Promise<void> {
-    this.logger.info(`Register agent ${agentId} (read-only client)`, { data });
+    logger.info(`Register agent ${agentId} (read-only client)`, { data });
     throw new Error(
       'RegistryClient is read-only. Use Agent0Client.registerAgent() or /api/agents/onboard for registration'
     );
@@ -362,7 +353,7 @@ export class RegistryClient {
    * server-side operation.
    */
   async unregister(agentId: string): Promise<void> {
-    this.logger.info(`Unregister agent ${agentId} (read-only client)`);
+    logger.info(`Unregister agent ${agentId} (read-only client)`);
     throw new Error(
       'RegistryClient is read-only. Unregistration requires direct blockchain interaction with agent owner wallet'
     );

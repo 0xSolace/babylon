@@ -10,11 +10,14 @@
  * GET /api/airdrop/status
  */
 
-import { getAirdropBonusService } from '@babylon/api/src/services/airdrop-bonus-service';
-import { EngagementService } from '@babylon/api/src/services/engagement-service';
-import { TokenService } from '@babylon/api/src/services/token-service';
-import { getServerSession } from '@babylon/auth';
+import {
+  authenticate,
+  EngagementService,
+  getAirdropBonusService,
+  TokenService,
+} from '@babylon/api';
 import { airdropAllocations, db, eq } from '@babylon/db';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 // Airdrop vesting constants
@@ -88,30 +91,31 @@ interface AirdropStatusResponse {
   message?: string;
 }
 
-export async function GET(): Promise<NextResponse> {
-  const session = await getServerSession();
-
-  if (!session?.user?.id) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  let authUser;
+  try {
+    authUser = await authenticate(request);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Unauthorized' },
       { status: 401 }
     );
   }
 
+  const userId = authUser.userId;
+
   // Get allocation from database
   const allocationResult = await db
     .select()
     .from(airdropAllocations)
-    .where(eq(airdropAllocations.userId, session.user.id))
+    .where(eq(airdropAllocations.userId, userId))
     .limit(1);
 
   const allocation = allocationResult[0];
 
   if (!allocation) {
     // Check if user is eligible but not yet registered
-    const eligibility = await TokenService.calculateAirdropAllocation(
-      session.user.id
-    );
+    const eligibility = await TokenService.calculateAirdropAllocation(userId);
 
     if (eligibility && eligibility.finalAllocation > 0n) {
       return NextResponse.json({
@@ -220,12 +224,10 @@ export async function GET(): Promise<NextResponse> {
 
   // Get bonus period status
   const bonusService = getAirdropBonusService();
-  const bonusStatus = await bonusService.getUserBonusStatus(session.user.id);
+  const bonusStatus = await bonusService.getUserBonusStatus(userId);
 
   // Get engagement status for drip qualification
-  const engagementStatus = await EngagementService.getEngagementStatus(
-    session.user.id
-  );
+  const engagementStatus = await EngagementService.getEngagementStatus(userId);
 
   // Update action if engagement is required
   if (!action) {

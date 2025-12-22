@@ -11,7 +11,7 @@ interface MockGame {
 }
 
 /**
- * Mock database model interface
+ * Mock CQL database model interface
  */
 interface MockModel {
   findFirst: () => Promise<MockGame | null>;
@@ -25,23 +25,33 @@ interface MockModel {
 }
 
 /**
- * Mock database transaction callback
+ * Mock CQL database transaction callback
  */
 type TransactionCallback<T> = (tx: MockDb) => Promise<T>;
 
 /**
- * Mock database interface
+ * Mock CQL database interface
  */
 interface MockDb {
   game: MockModel;
   user: MockModel;
-  $transaction: <T>(
-    fn: TransactionCallback<T> | Array<Promise<T>>
-  ) => Promise<T | T[]>;
+  // CQL raw query methods
+  query: <T>(sql: string, params?: unknown[]) => Promise<T[]>;
+  queryOne: <T>(sql: string, params?: unknown[]) => Promise<T | null>;
+  exec: (sql: string, params?: unknown[]) => Promise<{ rowsAffected: number }>;
+  $queryRaw: <T>(
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ) => Promise<T[]>;
+  $executeRaw: (
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ) => Promise<number>;
+  transaction: <T>(fn: TransactionCallback<T>) => Promise<T>;
 }
 
 /**
- * Drizzle SQL condition result
+ * SQL condition result
  */
 interface SqlCondition {
   sql?: string;
@@ -71,28 +81,35 @@ mock.module('@babylon/db', () => {
     db: {
       game: createModelMock(),
       user: createModelMock(),
-      $transaction: async <T>(
-        fn: TransactionCallback<T> | Array<Promise<T>>
-      ): Promise<T | T[]> => {
-        if (typeof fn === 'function') return fn({} as MockDb);
-        return Promise.all(fn);
+      // CQL raw query methods
+      query: mock(async () => []),
+      queryOne: mock(async () => null),
+      exec: mock(async () => ({ rowsAffected: 0 })),
+      $queryRaw: mock(async () => []),
+      $executeRaw: mock(async () => 0),
+      transaction: async <T>(fn: TransactionCallback<T>): Promise<T> => {
+        return fn({} as MockDb);
       },
     },
+    // CQL initialization functions
+    initializeDB: mock(async () => {}),
+    resetDB: mock(() => {}),
+    getDB: mock(() => ({})),
     // Schema exports (tables)
     schema: {},
     users: mockTable,
-    actors: mockTable,
+    actorState: mockTable,
     posts: mockTable,
     comments: mockTable,
     games: mockTable,
-    organizations: mockTable,
+    organizationState: mockTable,
     balanceTransactions: mockTable,
     pointsTransactions: mockTable,
     perpPositions: mockTable,
     poolPositions: mockTable,
     markets: mockTable,
     questions: mockTable,
-    // Operators
+    // Operators (re-exported from drizzle-orm via CQL)
     eq: (): SqlCondition => ({}),
     ne: (): SqlCondition => ({}),
     gt: (): SqlCondition => ({}),
@@ -107,7 +124,7 @@ mock.module('@babylon/db', () => {
     sql: (): SqlCondition => ({}),
     desc: (): SqlCondition => ({}),
     asc: (): SqlCondition => ({}),
-    // Transaction helpers
+    // Transaction helpers (CQL style)
     withTransaction: async <T>(fn: (tx: MockDb) => Promise<T>): Promise<T> =>
       fn({} as MockDb),
     asUser: async <T>(

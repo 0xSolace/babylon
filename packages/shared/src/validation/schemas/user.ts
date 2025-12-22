@@ -259,3 +259,25 @@ export const UserPostsQuerySchema = z.object({
 export const UserFollowersQuerySchema = PaginationSchema.extend({
   includeMutual: z.coerce.boolean().default(false),
 });
+
+// Type exports
+export type CreateUser = z.infer<typeof CreateUserSchema>;
+export type UpdateUser = z.infer<typeof UpdateUserSchema>;
+export type ConnectSocial = z.infer<typeof ConnectSocialSchema>;
+export type Referral = z.infer<typeof ReferralSchema>;
+export type UserAuth = z.infer<typeof UserAuthSchema>;
+export type UserBalanceTransaction = z.infer<
+  typeof UserBalanceTransactionSchema
+>;
+export type UserPointsTransaction = z.infer<typeof UserPointsTransactionSchema>;
+export type UserQuery = z.infer<typeof UserQuerySchema>;
+export type FollowUser = z.infer<typeof FollowUserSchema>;
+export type FavoriteUser = z.infer<typeof FavoriteUserSchema>;
+export type CompleteOnboarding = z.infer<typeof CompleteOnboardingSchema>;
+export type OnChainRegistration = z.infer<typeof OnChainRegistrationSchema>;
+export type Agent0Registration = z.infer<typeof Agent0RegistrationSchema>;
+export type UpdateWallet = z.infer<typeof UpdateWalletSchema>;
+export type UserResponse = z.infer<typeof UserResponseSchema>;
+export type UserListResponse = z.infer<typeof UserListResponseSchema>;
+export type UserPostsQuery = z.infer<typeof UserPostsQuerySchema>;
+export type UserFollowersQuery = z.infer<typeof UserFollowersQuerySchema>;

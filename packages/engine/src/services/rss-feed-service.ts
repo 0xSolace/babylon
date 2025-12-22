@@ -20,16 +20,8 @@ import {
   rssHeadlines,
   sql,
 } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, type JsonValue, logger } from '@babylon/shared';
 import { parseStringPromise } from 'xml2js';
-
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
 
 type Xml2JsFeed = {
   rss?: {

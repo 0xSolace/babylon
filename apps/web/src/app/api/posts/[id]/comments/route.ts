@@ -36,7 +36,7 @@
  *     summary: Add comment to post
  *     description: Creates a new comment on a post. Supports mentions and replies. Creates notifications.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -275,8 +275,13 @@ export const GET = withErrorHandling(
             .groupBy(reactions.commentId)
         : [];
 
+    // Type assertion for aggregate query results
+    const typedLikeCounts = likeCounts as unknown as Array<{
+      commentId: string | null;
+      count: number;
+    }>;
     const likeCountMap = new Map(
-      likeCounts.map((l) => [l.commentId, Number(l.count)])
+      typedLikeCounts.map((l) => [l.commentId, Number(l.count)])
     );
 
     // Get user's likes if authenticated

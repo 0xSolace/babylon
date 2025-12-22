@@ -30,6 +30,26 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const TRAINING_PACKAGE_ROOT = resolve(__dirname, '..');
 
+/**
+ * Parse JSON steps for E2E data quality validation
+ * Returns array on success, null if JSON is invalid
+ */
+function parseStepsJson(json: string): unknown[] | null {
+  const parsed: unknown = JSON.parse(json);
+  return Array.isArray(parsed) ? parsed : null;
+}
+
+/**
+ * Parse JSONL line for file quality validation
+ * Returns parsed object or null if invalid
+ */
+function parseJsonLine(line: string): Record<string, unknown> | null {
+  const parsed: unknown = JSON.parse(line);
+  return typeof parsed === 'object' && parsed !== null
+    ? (parsed as Record<string, unknown>)
+    : null;
+}
+
 interface TestResult {
   name: string;
   passed: boolean;
@@ -140,10 +160,11 @@ async function testTrajectoryQuality(): Promise<{
   let hasActionsCount = 0;
   let hasRealLLMCalls = 0;
   let totalLLMCalls = 0;
+  let invalidJsonCount = 0;
 
   for (const traj of recent) {
     // Check if stepsJson is valid
-    let steps: Array<{
+    type StepData = {
       llmCalls?: Array<{
         systemPrompt?: string;
         system_prompt?: string;
@@ -158,14 +179,19 @@ async function testTrajectoryQuality(): Promise<{
         user_prompt?: string;
         response?: string;
       }>;
-    }>;
-    try {
-      steps = JSON.parse(traj.stepsJson);
-      if (Array.isArray(steps) && steps.length > 0) {
-        validStepsCount++;
-      }
-    } catch {
+    };
+
+    // Parse stored trajectory data - may be corrupted (what we're testing for)
+    // Malformed JSON is caught and counted, not thrown
+    const parseResult = parseStepsJson(traj.stepsJson);
+
+    if (!parseResult) {
+      invalidJsonCount++;
       continue;
+    }
+    const steps: StepData[] = parseResult as StepData[];
+    if (steps.length > 0) {
+      validStepsCount++;
     }
 
     // Check if has meaningful actions
@@ -217,7 +243,7 @@ async function testTrajectoryQuality(): Promise<{
 
   return {
     passed: true,
-    message: `${validStepsCount}/${recent.length} valid steps, ${hasActionsCount}/${recent.length} with actions, ${hasRealLLMCalls}/${recent.length} with real LLM calls (${totalLLMCalls} total)`,
+    message: `${validStepsCount}/${recent.length} valid steps, ${hasActionsCount}/${recent.length} with actions, ${hasRealLLMCalls}/${recent.length} with real LLM calls (${totalLLMCalls} total)${invalidJsonCount > 0 ? `, ${invalidJsonCount} invalid JSON` : ''}`,
   };
 }
 
@@ -314,9 +340,10 @@ async function testDataExport(): Promise<{
     };
   }
 
-  // Check file quality
+  // Check file quality - counting valid vs invalid JSONL entries
   let totalLines = 0;
   let validLines = 0;
+  let invalidLines = 0;
 
   for (const file of files.slice(0, 3)) {
     const content = readFileSync(file, 'utf-8');
@@ -324,20 +351,24 @@ async function testDataExport(): Promise<{
     totalLines += lines.length;
 
     for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line);
-        if (parsed.trajectory_id && parsed.steps) {
-          validLines++;
-        }
-      } catch {
-        // Invalid JSON
+      // JSONL line validation - external file data may be malformed
+      const parsed = parseJsonLine(line);
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        'trajectory_id' in parsed &&
+        'steps' in parsed
+      ) {
+        validLines++;
+      } else {
+        invalidLines++;
       }
     }
   }
 
   return {
     passed: validLines > 0,
-    message: `Found ${files.length} JSONL files with ${validLines}/${totalLines} valid training examples`,
+    message: `Found ${files.length} JSONL files with ${validLines}/${totalLines} valid training examples${invalidLines > 0 ? ` (${invalidLines} invalid)` : ''}`,
   };
 }
 
@@ -446,15 +477,15 @@ async function testTrainingDataConsistency(): Promise<{
 
   let hasSteps = 0;
   let hasScore = 0;
+  let invalidSteps = 0;
 
   for (const t of trainingData) {
-    try {
-      const steps = JSON.parse(t.stepsJson);
-      if (Array.isArray(steps) && steps.length > 0) {
-        hasSteps++;
-      }
-    } catch {
-      // Invalid steps
+    // Validate stored trajectory data
+    const steps = parseStepsJson(t.stepsJson);
+    if (steps && steps.length > 0) {
+      hasSteps++;
+    } else {
+      invalidSteps++;
     }
 
     if (t.aiJudgeReward !== null) {
@@ -466,7 +497,7 @@ async function testTrainingDataConsistency(): Promise<{
 
   return {
     passed: ready,
-    message: `${trainingData.length} training trajectories: ${hasSteps} have steps, ${hasScore} have scores. ${ready ? 'Ready for training!' : 'Need scoring or steps.'}`,
+    message: `${trainingData.length} training trajectories: ${hasSteps} have steps, ${hasScore} have scores${invalidSteps > 0 ? `, ${invalidSteps} invalid` : ''}. ${ready ? 'Ready for training!' : 'Need scoring or steps.'}`,
   };
 }
 

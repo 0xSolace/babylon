@@ -2,6 +2,7 @@
  * Decentralized Message Storage using @jeju/db
  */
 
+import { ServiceUnavailableError } from '@babylon/shared';
 import {
   type CQLClient,
   type CQLConfig,
@@ -69,7 +70,9 @@ export class DecentralizedMessageStorage {
     });
 
     const healthy = await this.client.isHealthy();
-    if (!healthy) throw new Error('[MessageStorage] CQL not healthy');
+    if (!healthy) {
+      throw new ServiceUnavailableError('CQL not healthy for MessageStorage');
+    }
 
     await this.createTables();
     this.initialized = true;

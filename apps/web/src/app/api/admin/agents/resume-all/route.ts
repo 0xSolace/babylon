@@ -17,7 +17,7 @@
  *     summary: Resume all agents
  *     description: Resumes all agents with sufficient points (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Agents resumed successfully

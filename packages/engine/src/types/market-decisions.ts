@@ -1,51 +1,23 @@
 /**
  * Market Decision Types
  *
- * Types for LLM-driven NPC trading decisions
+ * Types for LLM-driven NPC trading decisions.
+ * Uses z.infer<> from @babylon/shared to avoid duplicate type definitions.
  */
 
-export type MarketAction =
-  | 'open_long'
-  | 'open_short'
-  | 'buy_yes'
-  | 'buy_no'
-  | 'close_position'
-  | 'hold';
+import type {
+  ExecutedTradeSchema,
+  MarketActionSchema,
+  MarketTypeSchema,
+  TradingDecisionSchema,
+} from '@babylon/shared';
+import type { z } from 'zod';
 
-export type MarketType = 'perp' | 'prediction';
-
-export interface TradingDecision {
-  npcId: string;
-  npcName: string;
-  action: MarketAction;
-  marketType: MarketType | null;
-  ticker?: string;
-  marketId?: number;
-  positionId?: string;
-  amount: number;
-  confidence: number;
-  reasoning: string;
-  timestamp?: string;
-}
-
-export interface ExecutedTrade {
-  npcId: string;
-  npcName: string;
-  poolId: string;
-  marketType: MarketType;
-  ticker?: string;
-  marketId?: number;
-  action: MarketAction;
-  side: string;
-  amount: number;
-  size: number;
-  shares?: number;
-  executionPrice: number;
-  confidence: number;
-  reasoning: string;
-  positionId: string;
-  timestamp: string;
-}
+// Re-export types derived from Zod schemas
+export type MarketAction = z.infer<typeof MarketActionSchema>;
+export type MarketType = z.infer<typeof MarketTypeSchema>;
+export type TradingDecision = z.infer<typeof TradingDecisionSchema>;
+export type ExecutedTrade = z.infer<typeof ExecutedTradeSchema>;
 
 export interface TradingExecutionResult {
   totalDecisions: number;

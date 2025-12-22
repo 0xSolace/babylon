@@ -1,21 +1,25 @@
-# Babylon Complete Development Stack
+# Babylon Complete Development Stack (CQL)
 #
 # Runs all Babylon services locally for development:
 # - Game server (Next.js web app)
 # - Training CPU (data processing, benchmarks)
 # - Training GPU (GRPO training - requires NVIDIA GPU)
-# - PostgreSQL database
 # - Redis (caching, pub/sub)
 # - MinIO (local S3 for storage)
 #
+# NOTE: Database is provided by CovenantQL (CQL) via Jeju platform.
+# Ensure Jeju is running before starting this stack:
+#   cd /path/to/jeju && bun run dev
+#
 # Usage:
 #   docker-compose up -d                    # Start all services
-#   docker-compose up game db redis         # Start only core services
+#   docker-compose up game redis            # Start only core services
 #   docker-compose up training-cpu          # Start CPU training
 #   docker-compose --profile gpu up         # Include GPU training
 #
 # Environment:
 #   Copy ../.env.example to ../.env and configure
+#   Ensure CQL_BLOCK_PRODUCER_ENDPOINT is set to your Jeju instance
 
 version: '3.8'
 
@@ -23,23 +27,6 @@ services:
   # ===========================================================================
   # Core Services
   # ===========================================================================
-
-  db:
-    image: postgres:15-alpine
-    container_name: babylon-db
-    environment:
-      POSTGRES_USER: babylon
-      POSTGRES_PASSWORD: babylon_dev_password
-      POSTGRES_DB: babylon
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U babylon"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -84,7 +71,8 @@ services:
     container_name: babylon-game
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://babylon:babylon_dev_password@db:5432/babylon
+      - CQL_BLOCK_PRODUCER_ENDPOINT=${CQL_BLOCK_PRODUCER_ENDPOINT:-http://host.docker.internal:4300}
+      - CQL_DATABASE_ID=${CQL_DATABASE_ID:-babylon}
       - REDIS_URL=redis://redis:6379
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=babylon
@@ -95,8 +83,6 @@ services:
       - "3000:3000"
       - "8080:8080"
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -117,7 +103,8 @@ services:
     command: serve
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://babylon:babylon_dev_password@db:5432/babylon
+      - CQL_BLOCK_PRODUCER_ENDPOINT=${CQL_BLOCK_PRODUCER_ENDPOINT:-http://host.docker.internal:4300}
+      - CQL_DATABASE_ID=${CQL_DATABASE_ID:-babylon}
       - API_BASE_URL=http://game:3000
     env_file:
       - ../.env
@@ -126,9 +113,6 @@ services:
     volumes:
       - training_data:/app/data
       - checkpoints:/app/checkpoints
-    depends_on:
-      db:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -153,7 +137,8 @@ services:
               capabilities: [gpu]
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://babylon:babylon_dev_password@db:5432/babylon
+      - CQL_BLOCK_PRODUCER_ENDPOINT=${CQL_BLOCK_PRODUCER_ENDPOINT:-http://host.docker.internal:4300}
+      - CQL_DATABASE_ID=${CQL_DATABASE_ID:-babylon}
       - API_BASE_URL=http://game:3000
       - CUDA_VISIBLE_DEVICES=0
       - MODEL_NAME=Qwen/Qwen2.5-3B-Instruct
@@ -165,9 +150,6 @@ services:
     volumes:
       - training_data:/app/data
       - checkpoints:/app/checkpoints
-    depends_on:
-      db:
-        condition: service_healthy
     shm_size: '16gb'  # Required for PyTorch
 
   # ===========================================================================
@@ -215,7 +197,6 @@ services:
       retries: 3
 
 volumes:
-  postgres_data:
   redis_data:
   minio_data:
   training_data:

@@ -19,7 +19,7 @@
  *     summary: Get world facts
  *     description: Returns all world facts, RSS feeds, parodies, and mappings (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Facts retrieved successfully
@@ -46,7 +46,7 @@
  *     summary: Create/update world facts
  *     description: Creates or updates world facts (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       content:
  *         application/json:
@@ -65,7 +65,7 @@
  *     summary: Delete world fact
  *     description: Deletes a world fact (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       content:
  *         application/json:
@@ -91,8 +91,7 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-// Removed fs and path imports - using TypeScript imports instead
-import { db } from '@babylon/db';
+import { db, desc, parodyHeadlines } from '@babylon/db';
 import {
   characterMappingService,
   createParodyHeadlineGenerator,
@@ -110,8 +109,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const facts = await worldFactsService.getAllFacts();
   const rssFeeds = await rssFeedService.getUntransformedHeadlines(10);
-  const parodyGenerator = createParodyHeadlineGenerator();
-  const recentParodies = await parodyGenerator.getRecentParodies(10);
+  // Query recent parodies directly from database
+  const recentParodies = await db
+    .select()
+    .from(parodyHeadlines)
+    .orderBy(desc(parodyHeadlines.generatedAt))
+    .limit(10);
   const characterMappings =
     await characterMappingService.getCharacterMappings();
   const organizationMappings =
@@ -252,7 +255,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       // Generate parodies from untransformed headlines
       const headlines = await rssFeedService.getUntransformedHeadlines(10);
       const generator = createParodyHeadlineGenerator();
-      const parodies = await generator.processHeadlines(headlines);
+      // processHeadlines expects string[] - extract titles from headline objects
+      const headlineStrings = headlines.map((h) => h.title);
+      const parodies = await generator.processHeadlines(headlineStrings);
       logger.info(
         `Generated ${parodies.length} parody headlines`,
         undefined,

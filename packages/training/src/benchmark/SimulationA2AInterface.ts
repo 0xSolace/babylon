@@ -18,7 +18,7 @@
  * ```
  */
 
-import { logger } from '../utils/logger';
+import { logger } from '@babylon/shared';
 import type { SimulationEngine } from './SimulationEngine';
 
 /**
@@ -428,7 +428,9 @@ export class SimulationA2AInterface {
   private handleGetPredictions(_params: A2AMethodParams | undefined): {
     predictions: Omit<PredictionMarket, 'resolved'>[];
   } {
-    const state = this.engine.getGameState();
+    const state = this.engine.getState() as {
+      predictionMarkets: PredictionMarket[];
+    };
 
     const predictions = state.predictionMarkets
       .filter((m: PredictionMarket) => !m.resolved)
@@ -485,8 +487,13 @@ export class SimulationA2AInterface {
       );
     }
 
-    const { marketId, outcome, amount } = params;
-
+    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
+    // This needs to be reimplemented using the new game engine API
+    // Unused: const { marketId, outcome, amount } = params;
+    throw new Error(
+      'performAction not available - SimulationEngine is deprecated'
+    );
+    /*
     const result = await this.engine.performAction('buy_prediction', {
       marketId,
       outcome,
@@ -502,7 +509,7 @@ export class SimulationA2AInterface {
       shares: number;
     };
 
-    const state = this.engine.getGameState();
+    const state = this.engine.getState();
     const market = state.predictionMarkets.find(
       (m: { id: string }) => m.id === marketId
     );
@@ -513,6 +520,7 @@ export class SimulationA2AInterface {
       : 0.5;
 
     return { shares, avgPrice, positionId };
+    */
   }
 
   /**
@@ -553,7 +561,13 @@ export class SimulationA2AInterface {
     const { marketId, shares } = params;
 
     // Simplified: calculate proceeds based on current market price
-    const state = this.engine.getGameState();
+    const state = this.engine.getState() as {
+      predictionMarkets: Array<{
+        id: string;
+        yesPrice: number;
+        noPrice: number;
+      }>;
+    };
     const market = state.predictionMarkets.find(
       (m: { id: string }) => m.id === marketId
     );
@@ -580,7 +594,9 @@ export class SimulationA2AInterface {
   private handleGetPerpetuals(_params: A2AMethodParams | undefined): {
     perpetuals: PerpetualMarket[];
   } {
-    const state = this.engine.getGameState();
+    const state = this.engine.getState() as {
+      perpetualMarkets: PerpetualMarket[];
+    };
 
     const perpetuals = state.perpetualMarkets.map((m: PerpetualMarket) => ({
       ticker: m.ticker,
@@ -635,8 +651,13 @@ export class SimulationA2AInterface {
       );
     }
 
-    const { ticker, side, size, leverage } = params;
-
+    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
+    // This needs to be reimplemented using the new game engine API
+    // Unused: const { ticker, side, size, leverage } = params;
+    throw new Error(
+      'performAction not available - SimulationEngine is deprecated'
+    );
+    /*
     const result = await this.engine.performAction('open_perp', {
       ticker,
       side,
@@ -650,7 +671,7 @@ export class SimulationA2AInterface {
 
     const { positionId } = result.result as { positionId: string };
 
-    const state = this.engine.getGameState();
+    const state = this.engine.getState();
     const market = state.perpetualMarkets.find(
       (m: { ticker: string }) => m.ticker === ticker
     );
@@ -659,6 +680,7 @@ export class SimulationA2AInterface {
       positionId,
       entryPrice: market?.price || 0,
     };
+    */
   }
 
   /**
@@ -694,8 +716,13 @@ export class SimulationA2AInterface {
       );
     }
 
-    const { positionId } = params;
-
+    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
+    // This needs to be reimplemented using the new game engine API
+    // Unused: const { positionId } = params;
+    throw new Error(
+      'performAction not available - SimulationEngine is deprecated'
+    );
+    /*
     const result = await this.engine.performAction('close_perp', {
       positionId,
     });
@@ -710,6 +737,7 @@ export class SimulationA2AInterface {
       pnl,
       exitPrice: 0, // Simplified
     };
+    */
   }
 
   /**
@@ -723,7 +751,9 @@ export class SimulationA2AInterface {
   private handleGetFeed(_params: A2AMethodParams | undefined): {
     posts: FeedPost[];
   } {
-    const state = this.engine.getGameState();
+    const state = this.engine.getState() as {
+      posts?: FeedPost[];
+    };
 
     const posts = (state.posts || [])
       .slice(-20) // Last 20 posts
@@ -778,8 +808,13 @@ export class SimulationA2AInterface {
       );
     }
 
-    const { content, marketId } = params;
-
+    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
+    // This needs to be reimplemented using the new game engine API
+    // Unused: const { content, marketId } = params;
+    throw new Error(
+      'performAction not available - SimulationEngine is deprecated'
+    );
+    /*
     const result = await this.engine.performAction('create_post', {
       content,
       marketId: marketId ?? null,
@@ -792,6 +827,7 @@ export class SimulationA2AInterface {
     const { postId } = result.result as { postId: string };
 
     return { postId };
+    */
   }
 
   /**
@@ -805,7 +841,9 @@ export class SimulationA2AInterface {
   private handleGetChats(_params: A2AMethodParams | undefined): {
     chats: ChatEntry[];
   } {
-    const state = this.engine.getGameState();
+    const state = this.engine.getState() as {
+      groupChats?: GroupChat[];
+    };
 
     const chats: ChatEntry[] = (state.groupChats || []).map(
       (g: GroupChat): ChatEntry => ({
@@ -854,13 +892,19 @@ export class SimulationA2AInterface {
       );
     }
 
-    const { groupId } = params;
-
+    // TODO: SimulationEngine.performAction() doesn't exist - engine is deprecated
+    // This needs to be reimplemented using the new game engine API
+    // Unused: const { groupId } = params;
+    throw new Error(
+      'performAction not available - SimulationEngine is deprecated'
+    );
+    /*
     const result = await this.engine.performAction('join_group', {
       groupId,
     });
 
     return { success: result.success };
+    */
   }
 
   /**
@@ -892,7 +936,9 @@ export class SimulationA2AInterface {
   private handleGetPortfolio(
     _params: A2AMethodParams | undefined
   ): PortfolioResult {
-    const state = this.engine.getGameState();
+    const state = this.engine.getState() as {
+      agents: Array<{ id: string; totalPnl?: number }>;
+    };
     const agent = state.agents.find(
       (a: { id: string }) => a.id === this.agentId
     );
@@ -945,7 +991,9 @@ export class SimulationA2AInterface {
   private handleGetDashboard(
     _params: A2AMethodParams | undefined
   ): DashboardResult {
-    const state = this.engine.getGameState();
+    const state = this.engine.getState() as {
+      agents: Array<{ id: string; totalPnl?: number }>;
+    };
     const agent = state.agents.find(
       (a: { id: string }) => a.id === this.agentId
     );

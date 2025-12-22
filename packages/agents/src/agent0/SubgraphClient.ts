@@ -6,7 +6,7 @@
  */
 
 import { GraphQLClient } from 'graphql-request';
-import { parseCapabilities } from './capabilities-schema';
+import { parseCapabilities } from '../shared/capabilities';
 
 // Raw subgraph response structure
 interface RawSubgraphAgent {

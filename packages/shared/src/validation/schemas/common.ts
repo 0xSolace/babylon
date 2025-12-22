@@ -17,10 +17,10 @@ export const SnowflakeIdSchema = z
   });
 
 /**
- * User ID schema - accepts UUID, Privy DID, or username formats
+ * User ID schema - accepts UUID, Jeju DID (OAuth3), or username formats
  * Examples:
  * - UUID: "550e8400-e29b-41d4-a716-446655440000"
- * - Privy DID: "did:privy:cm6sqq4og01qw9l70rbmyjn20"
+ * - Jeju DID: "did:jeju:cm6sqq4og01qw9l70rbmyjn20"
  * - Username: "eddy-snowjob" or "john_doe"
  */
 export const UserIdSchema = z.string().refine(
@@ -28,18 +28,18 @@ export const UserIdSchema = z.string().refine(
     // Check if it's a valid UUID
     const uuidRegex =
       /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
-    // Check if it's a valid Privy DID
-    const privyDidRegex = /^did:privy:[a-z0-9]+$/;
+    // Check if it's a valid Jeju DID (OAuth3)
+    const jejuDidRegex = /^did:jeju:[a-z0-9]+$/;
     // Check if it's a valid username (3-30 chars, letters, numbers, underscores, hyphens)
     const usernameRegex = /^[a-zA-Z0-9_-]{3,30}$/;
 
     return (
-      uuidRegex.test(val) || privyDidRegex.test(val) || usernameRegex.test(val)
+      uuidRegex.test(val) || jejuDidRegex.test(val) || usernameRegex.test(val)
     );
   },
   {
     message:
-      'Invalid user identifier. Must be a UUID, Privy DID (did:privy:...), or username',
+      'Invalid user identifier. Must be a UUID, Jeju DID (did:jeju:...), or username',
   }
 );
 
@@ -72,13 +72,22 @@ export const TransactionHashSchema = z
   .regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid transaction hash');
 
 /**
- * Pagination schema for list endpoints
+ * Pagination schema for list endpoints (page-based)
  */
 export const PaginationSchema = z.object({
   page: z.coerce.number().positive().default(1),
   limit: z.coerce.number().positive().max(100).default(20),
   sortBy: z.string().optional(),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
+});
+
+/**
+ * Offset-based pagination schema for list endpoints
+ * Use this for APIs that accept limit/offset instead of page/limit
+ */
+export const OffsetPaginationSchema = z.object({
+  limit: z.coerce.number().min(1).max(100).default(50),
+  offset: z.coerce.number().min(0).default(0),
 });
 
 /**
@@ -419,3 +428,43 @@ export const LeaderboardQuerySchema = z.object({
       return val as 'all' | 'earned' | 'referral';
     }),
 });
+
+// Type exports
+export type SnowflakeId = z.infer<typeof SnowflakeIdSchema>;
+export type UserId = z.infer<typeof UserIdSchema>;
+export type OffsetPagination = z.infer<typeof OffsetPaginationSchema>;
+export type Email = z.infer<typeof EmailSchema>;
+export type DateTime = z.infer<typeof DateTimeSchema>;
+export type WalletAddress = z.infer<typeof WalletAddressSchema>;
+export type TransactionHash = z.infer<typeof TransactionHashSchema>;
+export type Pagination = z.infer<typeof PaginationSchema>;
+export type DateRange = z.infer<typeof DateRangeSchema>;
+export type Money = z.infer<typeof MoneySchema>;
+export type Percentage = z.infer<typeof PercentageSchema>;
+export type DecimalPercentage = z.infer<typeof DecimalPercentageSchema>;
+export type URL = z.infer<typeof URLSchema>;
+export type PhoneNumber = z.infer<typeof PhoneNumberSchema>;
+export type Username = z.infer<typeof UsernameSchema>;
+export type Password = z.infer<typeof PasswordSchema>;
+export type APIKey = z.infer<typeof APIKeySchema>;
+export type MarketId = z.infer<typeof MarketIdSchema>;
+export type StrategyType = z.infer<typeof StrategyTypeSchema>;
+export type OrderSide = z.infer<typeof OrderSideSchema>;
+export type OrderType = z.infer<typeof OrderTypeSchema>;
+export type PositionStatus = z.infer<typeof PositionStatusSchema>;
+export type PoolStatus = z.infer<typeof PoolStatusSchema>;
+export type AgentTier = z.infer<typeof AgentTierSchema>;
+export type RiskTolerance = z.infer<typeof RiskToleranceSchema>;
+export type TimeFrame = z.infer<typeof TimeFrameSchema>;
+export type NumericString = z.infer<typeof NumericStringSchema>;
+export type BigNumber = z.infer<typeof BigNumberSchema>;
+export type HexString = z.infer<typeof HexStringSchema>;
+export type OptionalString = z.infer<typeof OptionalStringSchema>;
+export type TrimmedString = z.infer<typeof TrimmedStringSchema>;
+export type SearchQuery = z.infer<typeof SearchQuerySchema>;
+export type FileUpload = z.infer<typeof FileUploadSchema>;
+export type IdParam = z.infer<typeof IdParamSchema>;
+export type PredictionMarketId = z.infer<typeof PredictionMarketIdSchema>;
+export type SuccessResponse = z.infer<typeof SuccessResponseSchema>;
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+export type LeaderboardQuery = z.infer<typeof LeaderboardQuerySchema>;

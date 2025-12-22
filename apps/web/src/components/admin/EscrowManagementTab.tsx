@@ -1,6 +1,6 @@
 'use client';
 
-import { cn, logger } from '@babylon/shared';
+import { cn, type Escrow, EscrowSchema, logger } from '@babylon/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -34,45 +34,6 @@ function getAuthToken(): string | null {
     (window as { __oauth3AccessToken?: string }).__oauth3AccessToken || null
   );
 }
-
-/**
- * Escrow schema for validation.
- */
-const EscrowSchema = z.object({
-  id: z.string(),
-  recipientId: z.string(),
-  recipient: z.object({
-    id: z.string(),
-    username: z.string().nullable(),
-    displayName: z.string().nullable(),
-    profileImageUrl: z.string().nullable(),
-  }),
-  adminId: z.string(),
-  admin: z.object({
-    id: z.string(),
-    username: z.string().nullable(),
-    displayName: z.string().nullable(),
-  }),
-  amountUSD: z.string(),
-  amountWei: z.string(),
-  status: z.enum(['pending', 'paid', 'refunded', 'expired']),
-  reason: z.string().nullable(),
-  paymentRequestId: z.string().nullable(),
-  paymentTxHash: z.string().nullable(),
-  refundTxHash: z.string().nullable(),
-  refundedBy: z.string().nullable(),
-  refundedByUser: z
-    .object({
-      id: z.string(),
-      username: z.string().nullable(),
-      displayName: z.string().nullable(),
-    })
-    .nullable(),
-  refundedAt: z.string().nullable(),
-  createdAt: z.string(),
-  expiresAt: z.string(),
-});
-type Escrow = z.infer<typeof EscrowSchema>;
 
 /**
  * Status filter type for escrow management tab.

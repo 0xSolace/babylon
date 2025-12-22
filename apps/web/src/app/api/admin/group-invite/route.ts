@@ -16,7 +16,7 @@
  *     summary: Send NPC group invite
  *     description: Sends group chat invite from NPC to user (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

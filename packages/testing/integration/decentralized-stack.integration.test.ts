@@ -12,6 +12,12 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import type {
+  DecentralizedCacheClient,
+  DecentralizedDBClient,
+  DecentralizedKMSClient,
+  DecentralizedStorageClient,
+} from '../shared/types';
 
 // NOTE: This test file is intentionally excluded from tsconfig.json because
 // it uses dynamic imports and requires running against real services.
@@ -24,8 +30,7 @@ const skipIfNoServices = (fn: () => Promise<void>) => fn;
 // ============================================================================
 
 describe('CovenantSQL Integration', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let db: any;
+  let db: DecentralizedDBClient;
 
   beforeAll(async () => {
     const decentralized = await import('@babylon/db/decentralized');
@@ -181,8 +186,7 @@ describe('CovenantSQL Integration', () => {
 // ============================================================================
 
 describe('Decentralized Cache Integration', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let cache: any;
+  let cache: DecentralizedCacheClient;
 
   beforeAll(async () => {
     const { getCache, initializeCache } = await import('@babylon/api');
@@ -305,8 +309,7 @@ describe('Decentralized Cache Integration', () => {
 // ============================================================================
 
 describe('Decentralized Storage Integration', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let storage: any;
+  let storage: DecentralizedStorageClient;
   let uploadedCid: string;
 
   beforeAll(async () => {
@@ -422,8 +425,7 @@ describe('Decentralized Storage Integration', () => {
 // ============================================================================
 
 describe('KMS Integration', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let kms: any;
+  let kms: DecentralizedKMSClient;
 
   beforeAll(async () => {
     const { getKMSClient, initializeKMS } = await import('@babylon/api');

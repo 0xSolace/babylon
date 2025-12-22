@@ -124,7 +124,7 @@ export function Avatar({
   }
 
   // Display name is alt (if provided) or name (if provided) or first letter of id
-  const displayName = alt || name || (id ? id : 'User');
+  const displayName = alt ?? name ?? id ?? 'User';
   const initial = displayName.charAt(0).toUpperCase();
 
   // Reset error flags when source changes

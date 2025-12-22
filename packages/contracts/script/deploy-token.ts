@@ -42,6 +42,7 @@ if (existsSync(envPath)) {
   }
 }
 
+import { type JejuNetwork, logger, ValidationError } from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -52,7 +53,7 @@ import {
   parseEther,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { base, baseSepolia, hardhat, sepolia } from 'viem/chains';
+import { getDeploymentConfig } from '../src/config/networks';
 import {
   AIRDROP_TOKENS,
   BABYLON_LABS_TOKENS,
@@ -73,8 +74,6 @@ import {
 // CONFIGURATION
 // =============================================================================
 
-type NetworkType = 'localnet' | 'testnet' | 'mainnet';
-
 interface DeploymentAddresses {
   token: Address;
   vesting: Address;
@@ -91,30 +90,6 @@ interface DeploymentResult {
   txHashes: Hex[];
 }
 
-// Network configurations
-const NETWORK_CONFIGS = {
-  localnet: {
-    chain: hardhat,
-    rpcUrl: 'http://localhost:8545',
-    isHomeChain: true,
-  },
-  testnet: {
-    chain: baseSepolia,
-    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? 'https://sepolia.base.org',
-    isHomeChain: false,
-  },
-  'testnet-sepolia': {
-    chain: sepolia,
-    rpcUrl: process.env.SEPOLIA_RPC_URL ?? 'https://rpc.sepolia.org',
-    isHomeChain: true,
-  },
-  mainnet: {
-    chain: base,
-    rpcUrl: process.env.BASE_RPC_URL ?? 'https://mainnet.base.org',
-    isHomeChain: true,
-  },
-};
-
 // =============================================================================
 // DEPLOYMENT FUNCTIONS
 // =============================================================================
@@ -127,11 +102,11 @@ async function deployBabylonToken(
   useCREATE2: boolean,
   salt?: Hex
 ): Promise<{ address: Address; txHash: Hex }> {
-  console.log('\n📦 Deploying BabylonToken...');
-  console.log(`   Name: ${TOKEN_NAME}`);
-  console.log(`   Symbol: ${TOKEN_SYMBOL}`);
-  console.log(`   Total Supply: ${TOTAL_SUPPLY_WEI.toString()} wei`);
-  console.log(`   Is Home Chain: ${isHomeChain}`);
+  logger.info('\n📦 Deploying BabylonToken...');
+  logger.info(`   Name: ${TOKEN_NAME}`);
+  logger.info(`   Symbol: ${TOKEN_SYMBOL}`);
+  logger.info(`   Total Supply: ${TOTAL_SUPPLY_WEI.toString()} wei`);
+  logger.info(`   Is Home Chain: ${isHomeChain}`);
 
   const args = [
     TOKEN_NAME,
@@ -160,7 +135,7 @@ async function deployTokenVesting(
   tokenAddress: Address,
   owner: Address
 ): Promise<{ address: Address; txHash: Hex }> {
-  console.log('\n📦 Deploying TokenVesting...');
+  logger.info('\n📦 Deploying TokenVesting...');
 
   return deployContract(publicClient, walletClient, 'TokenVesting', [
     tokenAddress,
@@ -174,7 +149,7 @@ async function deployAirdrop(
   tokenAddress: Address,
   owner: Address
 ): Promise<{ address: Address; txHash: Hex }> {
-  console.log('\n📦 Deploying Airdrop...');
+  logger.info('\n📦 Deploying Airdrop...');
 
   return deployContract(publicClient, walletClient, 'Airdrop', [
     tokenAddress,
@@ -188,7 +163,7 @@ async function deployFeeDistributor(
   tokenAddress: Address,
   owner: Address
 ): Promise<{ address: Address; txHash: Hex }> {
-  console.log('\n📦 Deploying FeeDistributor...');
+  logger.info('\n📦 Deploying FeeDistributor...');
 
   // Minimum stake period: 7 days in seconds
   const minimumStakePeriod = 7n * 24n * 60n * 60n;
@@ -206,7 +181,7 @@ async function deployCCALauncher(
   tokenAddress: Address,
   owner: Address
 ): Promise<{ address: Address; txHash: Hex }> {
-  console.log('\n📦 Deploying CCALauncher...');
+  logger.info('\n📦 Deploying CCALauncher...');
 
   // Use ETH as payment token (address(0))
   return deployContract(publicClient, walletClient, 'CCALauncher', [
@@ -226,7 +201,7 @@ async function setupTokenDistribution(
   addresses: DeploymentAddresses,
   owner: Address
 ): Promise<void> {
-  console.log('\n🔧 Setting up token distribution...');
+  logger.info('\n🔧 Setting up token distribution...');
 
   const tokenAbi = [
     {
@@ -260,7 +235,7 @@ async function setupTokenDistribution(
   ];
 
   for (const { to, amount, name } of transfers) {
-    console.log(`   📤 Transferring ${formatEther(amount)} BBLN to ${name}...`);
+    logger.info(`   📤 Transferring ${formatEther(amount)} BBLN to ${name}...`);
     const hash = await walletClient.writeContract({
       address: addresses.token,
       abi: tokenAbi,
@@ -269,66 +244,66 @@ async function setupTokenDistribution(
       account: owner,
     });
     await publicClient.waitForTransactionReceipt({ hash });
-    console.log(`      ✅ Tx: ${hash}`);
+    logger.info(`      ✅ Tx: ${hash}`);
   }
 
   // LIQUIDITY_TOKENS remain with deployer for market making setup
-  console.log(
+  logger.info(
     `   💧 ${formatEther(tokensToWei(LIQUIDITY_TOKENS))} BBLN retained for liquidity provision`
   );
-  console.log('   ⏭️  Token distribution setup complete');
+  logger.info('   ⏭️  Token distribution setup complete');
 }
 
 async function setupVestingSchedules(
-  publicClient: ReturnType<typeof createPublicClient>,
-  walletClient: ReturnType<typeof createWalletClient>,
-  vestingAddress: Address,
-  owner: Address
+  _publicClient: ReturnType<typeof createPublicClient>,
+  _walletClient: ReturnType<typeof createWalletClient>,
+  _vestingAddress: Address,
+  _owner: Address
 ): Promise<void> {
-  console.log('\n🔧 Setting up vesting schedules...');
+  logger.info('\n🔧 Setting up vesting schedules...');
 
   // TODO: Create vesting schedules
   // - Babylon Labs: 4-year linear with 1-year cliff
   // - Treasury: Long-term gradual unlock
 
-  console.log('   ⏭️  Vesting schedules setup complete');
+  logger.info('   ⏭️  Vesting schedules setup complete');
 }
 
 async function setupAirdrop(
-  publicClient: ReturnType<typeof createPublicClient>,
-  walletClient: ReturnType<typeof createWalletClient>,
-  airdropAddress: Address,
-  owner: Address
+  _publicClient: ReturnType<typeof createPublicClient>,
+  _walletClient: ReturnType<typeof createWalletClient>,
+  _airdropAddress: Address,
+  _owner: Address
 ): Promise<void> {
-  console.log('\n🔧 Setting up airdrop...');
+  logger.info('\n🔧 Setting up airdrop...');
 
   // TODO: Configure airdrop
   // - Set merkle root
   // - Set start/end time
   // - Authorize drippers (backend service)
 
-  console.log('   ⏭️  Airdrop setup complete');
+  logger.info('   ⏭️  Airdrop setup complete');
 }
 
 // =============================================================================
 // MAIN DEPLOYMENT
 // =============================================================================
 
-async function deploy(network: NetworkType): Promise<DeploymentResult> {
-  console.log('═'.repeat(60));
-  console.log(`🚀 BABYLON TOKEN DEPLOYMENT - ${network.toUpperCase()}`);
-  console.log('═'.repeat(60));
+async function deploy(network: JejuNetwork): Promise<DeploymentResult> {
+  logger.info('═'.repeat(60));
+  logger.info(`🚀 BABYLON TOKEN DEPLOYMENT - ${network.toUpperCase()}`);
+  logger.info('═'.repeat(60));
 
-  // Get configuration
-  const config = NETWORK_CONFIGS[network];
-  if (!config) {
-    throw new Error(`Unknown network: ${network}`);
-  }
+  // Get configuration from consolidated config
+  const config = getDeploymentConfig(network);
 
   // Get deployer private key
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
   if (!privateKey && network !== 'localnet') {
-    throw new Error('DEPLOYER_PRIVATE_KEY environment variable required');
+    throw new ValidationError(
+      'DEPLOYER_PRIVATE_KEY environment variable required',
+      ['DEPLOYER_PRIVATE_KEY']
+    );
   }
 
   // Use default Hardhat account for localnet
@@ -337,11 +312,11 @@ async function deploy(network: NetworkType): Promise<DeploymentResult> {
     '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
   const account = privateKeyToAccount(deployerKey as Hex);
 
-  console.log(`\n📍 Network: ${config.chain.name}`);
-  console.log(`📍 Chain ID: ${config.chain.id}`);
-  console.log(`📍 RPC: ${config.rpcUrl}`);
-  console.log(`📍 Deployer: ${account.address}`);
-  console.log(`📍 Is Home Chain: ${config.isHomeChain}`);
+  logger.info(`\n📍 Network: ${config.chain.name}`);
+  logger.info(`📍 Chain ID: ${config.chain.id}`);
+  logger.info(`📍 RPC: ${config.rpcUrl}`);
+  logger.info(`📍 Deployer: ${account.address}`);
+  logger.info(`📍 Is Home Chain: ${config.isHomeChain}`);
 
   // Create clients
   const publicClient = createPublicClient({
@@ -357,10 +332,10 @@ async function deploy(network: NetworkType): Promise<DeploymentResult> {
 
   // Check deployer balance
   const balance = await publicClient.getBalance({ address: account.address });
-  console.log(`\n💰 Deployer Balance: ${formatEther(balance)} ETH`);
+  logger.info(`\n💰 Deployer Balance: ${formatEther(balance)} ETH`);
 
   if (balance < parseEther('0.01')) {
-    console.warn('⚠️  Low deployer balance, deployment may fail');
+    logger.warn('⚠️  Low deployer balance, deployment may fail');
   }
 
   const txHashes: Hex[] = [];
@@ -374,7 +349,7 @@ async function deploy(network: NetworkType): Promise<DeploymentResult> {
     false // Use standard deployment for now
   );
   txHashes.push(tokenResult.txHash);
-  console.log(`   ✅ Token deployed at: ${tokenResult.address}`);
+  logger.info(`   ✅ Token deployed at: ${tokenResult.address}`);
 
   const vestingResult = await deployTokenVesting(
     publicClient,
@@ -383,7 +358,7 @@ async function deploy(network: NetworkType): Promise<DeploymentResult> {
     account.address
   );
   txHashes.push(vestingResult.txHash);
-  console.log(`   ✅ Vesting deployed at: ${vestingResult.address}`);
+  logger.info(`   ✅ Vesting deployed at: ${vestingResult.address}`);
 
   const airdropResult = await deployAirdrop(
     publicClient,
@@ -392,7 +367,7 @@ async function deploy(network: NetworkType): Promise<DeploymentResult> {
     account.address
   );
   txHashes.push(airdropResult.txHash);
-  console.log(`   ✅ Airdrop deployed at: ${airdropResult.address}`);
+  logger.info(`   ✅ Airdrop deployed at: ${airdropResult.address}`);
 
   const feeDistributorResult = await deployFeeDistributor(
     publicClient,
@@ -401,7 +376,7 @@ async function deploy(network: NetworkType): Promise<DeploymentResult> {
     account.address
   );
   txHashes.push(feeDistributorResult.txHash);
-  console.log(
+  logger.info(
     `   ✅ FeeDistributor deployed at: ${feeDistributorResult.address}`
   );
 
@@ -412,7 +387,7 @@ async function deploy(network: NetworkType): Promise<DeploymentResult> {
     account.address
   );
   txHashes.push(ccaResult.txHash);
-  console.log(`   ✅ CCALauncher deployed at: ${ccaResult.address}`);
+  logger.info(`   ✅ CCALauncher deployed at: ${ccaResult.address}`);
 
   const addresses: DeploymentAddresses = {
     token: tokenResult.address,
@@ -445,19 +420,19 @@ async function deploy(network: NetworkType): Promise<DeploymentResult> {
   }
 
   // Print summary
-  console.log('\n' + '═'.repeat(60));
-  console.log('📋 DEPLOYMENT SUMMARY');
-  console.log('═'.repeat(60));
-  console.log(`\nNetwork: ${config.chain.name} (${config.chain.id})`);
-  console.log(`\nContract Addresses:`);
-  console.log(`  Token:          ${addresses.token}`);
-  console.log(`  Vesting:        ${addresses.vesting}`);
-  console.log(`  Airdrop:        ${addresses.airdrop}`);
-  console.log(`  FeeDistributor: ${addresses.feeDistributor}`);
-  console.log(`  CCALauncher:    ${addresses.ccaLauncher}`);
-  console.log('\n' + '═'.repeat(60));
-  console.log('✅ DEPLOYMENT COMPLETE');
-  console.log('═'.repeat(60));
+  logger.info('\n' + '═'.repeat(60));
+  logger.info('📋 DEPLOYMENT SUMMARY');
+  logger.info('═'.repeat(60));
+  logger.info(`\nNetwork: ${config.chain.name} (${config.chain.id})`);
+  logger.info(`\nContract Addresses:`);
+  logger.info(`  Token:          ${addresses.token}`);
+  logger.info(`  Vesting:        ${addresses.vesting}`);
+  logger.info(`  Airdrop:        ${addresses.airdrop}`);
+  logger.info(`  FeeDistributor: ${addresses.feeDistributor}`);
+  logger.info(`  CCALauncher:    ${addresses.ccaLauncher}`);
+  logger.info('\n' + '═'.repeat(60));
+  logger.info('✅ DEPLOYMENT COMPLETE');
+  logger.info('═'.repeat(60));
 
   return {
     network: config.chain.name,
@@ -473,11 +448,11 @@ async function deploy(network: NetworkType): Promise<DeploymentResult> {
 
 async function main() {
   const args = process.argv.slice(2);
-  const network = (args[0] ?? 'localnet') as NetworkType;
+  const network = (args[0] ?? 'localnet') as JejuNetwork;
 
   if (!['localnet', 'testnet', 'mainnet'].includes(network)) {
-    console.error(`Invalid network: ${network}`);
-    console.error('Usage: bun run deploy-token.ts [localnet|testnet|mainnet]');
+    logger.error(`Invalid network: ${network}`);
+    logger.error('Usage: bun run deploy-token.ts [localnet|testnet|mainnet]');
     process.exit(1);
   }
 
@@ -486,10 +461,10 @@ async function main() {
   // Save deployment result
   const outputPath = `deployments/${network}-${Date.now()}.json`;
   await Bun.write(outputPath, JSON.stringify(result, null, 2));
-  console.log(`\n📄 Deployment saved to: ${outputPath}`);
+  logger.info(`\n📄 Deployment saved to: ${outputPath}`);
 }
 
 main().catch((error) => {
-  console.error('Deployment failed:', error);
+  logger.error('Deployment failed:', error);
   process.exit(1);
 });

@@ -56,8 +56,12 @@ export class TrajectoryLoggerService {
         environmentReward: 0,
       },
       metrics: {
-        episodeLength: 0,
-        finalStatus: 'completed',
+        totalSteps: 0,
+        successfulActions: 0,
+        failedActions: 0,
+        totalLLMCalls: 0,
+        totalTokens: 0,
+        avgStepDuration: 0,
       },
       metadata: (options.metadata || {}) as Record<string, JsonValue>,
     };
@@ -79,22 +83,17 @@ export class TrajectoryLoggerService {
 
     const step: TrajectoryStep = {
       stepId: stepId as UUID,
-      stepNumber: trajectory.steps.length,
-      timestamp: envState.timestamp || Date.now(),
+      sequenceNum: trajectory.steps.length,
+      startTime: envState.timestamp || Date.now(),
       environmentState: envState,
-      observation: {},
       llmCalls: [],
       providerAccesses: [],
       action: {
-        attemptId: '',
-        timestamp: 0,
         actionType: 'pending',
         actionName: 'pending',
         parameters: {},
         success: false,
       },
-      reward: 0,
-      done: false,
     };
 
     trajectory.steps.push(step);
@@ -105,40 +104,41 @@ export class TrajectoryLoggerService {
   /**
    * Log an LLM call
    */
-  logLLMCall(
-    stepId: string,
-    llmCall: Omit<LLMCall, 'callId' | 'timestamp'>
-  ): void {
+  logLLMCall(stepId: string, llmCall: LLMCall): void {
     const trajectory = this.findTrajectoryByStepId(stepId);
     if (!trajectory) {
       logger.warn('Trajectory not found for LLM call', { stepId });
       return;
     }
 
-    const step = trajectory.steps.find((s) => s.stepId === stepId);
+    const step = trajectory.steps.find(
+      (s: TrajectoryStep) => s.stepId === stepId
+    );
     if (!step) {
       logger.warn('Step not found for LLM call', { stepId });
       return;
     }
 
-    const fullLLMCall: LLMCall = {
-      callId: uuidv4(),
-      timestamp: Date.now(),
+    if (!step.llmCalls) {
+      step.llmCalls = [];
+    }
+
+    step.llmCalls.push(llmCall);
+
+    // Also save to database for analysis (with callId and timestamp for DB)
+    const callId = uuidv4();
+    const timestamp = Date.now();
+    this.saveLLMCallToDB(trajectory.trajectoryId, stepId, {
       ...llmCall,
-    };
-
-    step.llmCalls.push(fullLLMCall);
-
-    // Also save to database for analysis
-    this.saveLLMCallToDB(trajectory.trajectoryId, stepId, fullLLMCall).catch(
-      (error) => {
-        logger.error(
-          'Failed to save LLM call to database',
-          error,
-          'TrajectoryLoggerService'
-        );
-      }
-    );
+      callId,
+      timestamp,
+    }).catch((error) => {
+      logger.error(
+        'Failed to save LLM call to database',
+        error,
+        'TrajectoryLoggerService'
+      );
+    });
   }
 
   /**
@@ -147,7 +147,7 @@ export class TrajectoryLoggerService {
   private async saveLLMCallToDB(
     trajectoryId: string,
     stepId: string,
-    llmCall: LLMCall
+    llmCall: LLMCall & { callId: string; timestamp: number }
   ): Promise<void> {
     await db.insert(llmCallLogs).values({
       id: await generateSnowflakeId(),
@@ -155,24 +155,23 @@ export class TrajectoryLoggerService {
       stepId,
       callId: llmCall.callId,
       timestamp: new Date(llmCall.timestamp),
-      latencyMs: llmCall.latencyMs || undefined,
+      latencyMs: llmCall.latencyMs ?? undefined,
       model: llmCall.model,
       purpose: llmCall.purpose,
-      actionType: llmCall.actionType || null,
+      actionType: llmCall.actionType ?? undefined,
       systemPrompt: llmCall.systemPrompt,
       userPrompt: llmCall.userPrompt,
-      messagesJson: llmCall.messages ? JSON.stringify(llmCall.messages) : null,
+      messagesJson: undefined,
       response: llmCall.response,
-      reasoning: llmCall.reasoning || null,
+      reasoning: llmCall.reasoning ?? undefined,
       temperature: llmCall.temperature,
-      maxTokens: llmCall.maxTokens,
-      topP: llmCall.topP || null,
-      promptTokens: llmCall.promptTokens || null,
-      completionTokens: llmCall.completionTokens || null,
+      maxTokens: llmCall.maxTokens ?? 8192,
+      promptTokens: llmCall.promptTokens ?? undefined,
+      completionTokens: llmCall.completionTokens ?? undefined,
       totalTokens:
         llmCall.promptTokens && llmCall.completionTokens
           ? llmCall.promptTokens + llmCall.completionTokens
-          : null,
+          : undefined,
       metadata: JSON.stringify({
         purpose: llmCall.purpose,
         actionType: llmCall.actionType,
@@ -194,7 +193,9 @@ export class TrajectoryLoggerService {
       return;
     }
 
-    const step = trajectory.steps.find((s) => s.stepId === stepId);
+    const step = trajectory.steps.find(
+      (s: TrajectoryStep) => s.stepId === stepId
+    );
     if (!step) {
       logger.warn('Step not found for provider access', { stepId });
       return;
@@ -206,16 +207,16 @@ export class TrajectoryLoggerService {
       ...access,
     };
 
+    if (!step.providerAccesses) {
+      step.providerAccesses = [];
+    }
     step.providerAccesses.push(fullAccess);
   }
 
   /**
    * Log LLM call using trajectory ID (convenience method)
    */
-  logLLMCallByTrajectoryId(
-    trajectoryId: string,
-    llmCall: Omit<LLMCall, 'callId' | 'timestamp'>
-  ): void {
+  logLLMCallByTrajectoryId(trajectoryId: string, llmCall: LLMCall): void {
     const stepId = this.activeStepIds.get(trajectoryId);
     if (!stepId) {
       logger.warn('No active step for trajectory', { trajectoryId });
@@ -261,17 +262,23 @@ export class TrajectoryLoggerService {
       return;
     }
 
-    const step = trajectory.steps.find((s) => s.stepId === stepId);
+    const step = trajectory.steps.find(
+      (s: TrajectoryStep) => s.stepId === stepId
+    );
     if (!step) {
       logger.warn('Step not found for completeStep', { trajectoryId, stepId });
       return;
     }
 
     step.action = {
-      attemptId: uuidv4(),
-      timestamp: Date.now(),
       ...action,
     };
+
+    // Set end time and duration
+    step.endTime = Date.now();
+    if (step.startTime) {
+      step.durationMs = step.endTime - step.startTime;
+    }
 
     if (rewardInfo?.reward !== undefined) {
       step.reward = rewardInfo.reward;
@@ -279,8 +286,8 @@ export class TrajectoryLoggerService {
     }
 
     if (rewardInfo?.components) {
-      trajectory.rewardComponents = {
-        ...trajectory.rewardComponents,
+      step.rewardComponents = {
+        ...step.rewardComponents,
         ...rewardInfo.components,
       };
     }
@@ -321,8 +328,53 @@ export class TrajectoryLoggerService {
 
     trajectory.endTime = Date.now();
     trajectory.durationMs = trajectory.endTime - trajectory.startTime;
-    trajectory.metrics.finalStatus = status;
-    trajectory.metrics.episodeLength = trajectory.steps.length;
+
+    // Update metrics
+    if (!trajectory.metrics) {
+      trajectory.metrics = {
+        totalSteps: 0,
+        successfulActions: 0,
+        failedActions: 0,
+        totalLLMCalls: 0,
+        totalTokens: 0,
+        avgStepDuration: 0,
+      };
+    }
+    trajectory.metrics.totalSteps = trajectory.steps.length;
+
+    // Count successful/failed actions and LLM calls
+    let successfulActions = 0;
+    let failedActions = 0;
+    let totalLLMCalls = 0;
+    let totalTokens = 0;
+    let totalDuration = 0;
+
+    for (const step of trajectory.steps) {
+      if (step.action) {
+        if (step.action.success) {
+          successfulActions++;
+        } else {
+          failedActions++;
+        }
+      }
+      if (step.llmCalls) {
+        totalLLMCalls += step.llmCalls.length;
+        for (const call of step.llmCalls) {
+          if (call.promptTokens) totalTokens += call.promptTokens;
+          if (call.completionTokens) totalTokens += call.completionTokens;
+        }
+      }
+      if (step.durationMs) {
+        totalDuration += step.durationMs;
+      }
+    }
+
+    trajectory.metrics.successfulActions = successfulActions;
+    trajectory.metrics.failedActions = failedActions;
+    trajectory.metrics.totalLLMCalls = totalLLMCalls;
+    trajectory.metrics.totalTokens = totalTokens;
+    trajectory.metrics.avgStepDuration =
+      trajectory.steps.length > 0 ? totalDuration / trajectory.steps.length : 0;
 
     if (finalMetrics) {
       trajectory.metrics = {
@@ -347,8 +399,8 @@ export class TrajectoryLoggerService {
       metricsJson: JSON.stringify(trajectory.metrics),
       metadataJson: JSON.stringify(trajectory.metadata),
       totalReward: trajectory.totalReward,
-      episodeLength: trajectory.metrics.episodeLength,
-      finalStatus: trajectory.metrics.finalStatus,
+      episodeLength: trajectory.metrics.totalSteps,
+      finalStatus: status,
       finalBalance:
         (trajectory.metrics.finalBalance as number | undefined) ?? null,
       finalPnL: (trajectory.metrics.finalPnL as number | undefined) ?? null,
@@ -357,9 +409,9 @@ export class TrajectoryLoggerService {
       postsCreated:
         (trajectory.metrics.postsCreated as number | undefined) ?? null,
       isTrainingData:
-        (trajectory.metadata.isTrainingData as boolean | undefined) ?? true,
+        (trajectory.metadata?.isTrainingData as boolean | undefined) ?? true,
       isEvaluation:
-        (trajectory.metadata.isEvaluation as boolean | undefined) ?? false,
+        (trajectory.metadata?.isEvaluation as boolean | undefined) ?? false,
       usedInTraining: false,
       updatedAt: new Date(),
     });
@@ -392,7 +444,7 @@ export class TrajectoryLoggerService {
    */
   private findTrajectoryByStepId(stepId: string): Trajectory | null {
     for (const trajectory of this.activeTrajectories.values()) {
-      if (trajectory.steps.some((s) => s.stepId === stepId)) {
+      if (trajectory.steps.some((s: TrajectoryStep) => s.stepId === stepId)) {
         return trajectory;
       }
     }

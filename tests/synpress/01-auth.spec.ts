@@ -11,17 +11,17 @@
 
 import { expect, test } from '@playwright/test';
 import {
+  getOAuth3TestAccount,
+  isAuthenticated,
+  loginWithOAuth3Email,
+  logoutFromOAuth3,
+} from './helpers/oauth3-auth';
+import {
   clickButton,
   isVisible,
   navigateTo,
   waitForPageLoad,
 } from './helpers/page-helpers';
-import {
-  getPrivyTestAccount,
-  isAuthenticated,
-  loginWithPrivyEmail,
-  logoutFromPrivy,
-} from './helpers/privy-auth';
 import { ROUTES } from './helpers/test-data';
 
 test.describe('Authentication Flow', () => {
@@ -59,7 +59,7 @@ test.describe('Authentication Flow', () => {
     console.log('✅ Login button is visible');
   });
 
-  test('should open Privy modal when clicking login', async ({ page }) => {
+  test('should open OAuth3 modal when clicking login', async ({ page }) => {
     // Click login button
     const loginSelectors = [
       'button:has-text("Login")',
@@ -81,23 +81,23 @@ test.describe('Authentication Flow', () => {
 
     expect(clicked).toBe(true);
 
-    // Wait for Privy modal
-    await page.waitForSelector('[data-privy-modal], [role="dialog"]', {
+    // Wait for OAuth3 modal
+    await page.waitForSelector('[data-oauth3-modal], [role="dialog"]', {
       timeout: 10000,
     });
 
     await page.screenshot({
-      path: 'test-results/screenshots/01-privy-modal-opened.png',
+      path: 'test-results/screenshots/01-oauth3-modal-opened.png',
     });
 
-    console.log('✅ Privy modal opened');
+    console.log('✅ OAuth3 modal opened');
   });
 
   test('should successfully login with email', async ({ page }) => {
-    const testAccount = getPrivyTestAccount();
+    const testAccount = getOAuth3TestAccount();
 
-    // Login with Privy email
-    await loginWithPrivyEmail(page, testAccount);
+    // Login with OAuth3 email
+    await loginWithOAuth3Email(page, testAccount);
 
     // Verify authentication
     const authenticated = await isAuthenticated(page);
@@ -111,10 +111,10 @@ test.describe('Authentication Flow', () => {
   });
 
   test('should persist session after page reload', async ({ page }) => {
-    const testAccount = getPrivyTestAccount();
+    const testAccount = getOAuth3TestAccount();
 
     // Login
-    await loginWithPrivyEmail(page, testAccount);
+    await loginWithOAuth3Email(page, testAccount);
 
     // Verify authenticated
     expect(await isAuthenticated(page)).toBe(true);
@@ -130,10 +130,10 @@ test.describe('Authentication Flow', () => {
   });
 
   test('should handle onboarding flow for new users', async ({ page }) => {
-    const testAccount = getPrivyTestAccount();
+    const testAccount = getOAuth3TestAccount();
 
     // Login
-    await loginWithPrivyEmail(page, testAccount);
+    await loginWithOAuth3Email(page, testAccount);
 
     // Check if onboarding modal appears
     const onboardingVisible = await isVisible(
@@ -182,14 +182,14 @@ test.describe('Authentication Flow', () => {
   });
 
   test('should successfully logout', async ({ page }) => {
-    const testAccount = getPrivyTestAccount();
+    const testAccount = getOAuth3TestAccount();
 
     // Login first
-    await loginWithPrivyEmail(page, testAccount);
+    await loginWithOAuth3Email(page, testAccount);
     expect(await isAuthenticated(page)).toBe(true);
 
     // Logout
-    await logoutFromPrivy(page);
+    await logoutFromOAuth3(page);
 
     // Wait a bit
     await page.waitForTimeout(2000);
@@ -206,10 +206,10 @@ test.describe('Authentication Flow', () => {
   });
 
   test('should show embedded wallet creation', async ({ page }) => {
-    const testAccount = getPrivyTestAccount();
+    const testAccount = getOAuth3TestAccount();
 
     // Login
-    await loginWithPrivyEmail(page, testAccount);
+    await loginWithOAuth3Email(page, testAccount);
 
     // Check if wallet was created
     // This is validated as part of login flow
@@ -230,15 +230,15 @@ test.describe('Authentication Error Handling', () => {
     if (await loginButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       await loginButton.click();
 
-      // Wait for Privy modal
+      // Wait for OAuth3 modal
       await page
-        .waitForSelector('[data-privy-modal]', { timeout: 10000 })
+        .waitForSelector('[data-oauth3-modal]', { timeout: 10000 })
         .catch(() => {});
 
       const emailInput = page.locator('input[type="email"]').first();
       if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
         // Enter email
-        await emailInput.fill(getPrivyTestAccount().email);
+        await emailInput.fill(getOAuth3TestAccount().email);
 
         // Click continue
         const continueButton = page

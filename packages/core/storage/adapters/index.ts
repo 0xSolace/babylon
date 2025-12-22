@@ -6,5 +6,3 @@
 
 export * from './cql';
 export * from './json';
-// Legacy postgres export - deprecated, use CQL instead
-export * from './postgres';

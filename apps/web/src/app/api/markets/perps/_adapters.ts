@@ -3,16 +3,37 @@
  * Creates WalletPort implementations that wrap WalletService.
  */
 
-import type { WalletPort } from '@babylon/core/markets/shared/common';
+import type { WalletPort } from '@babylon/core';
 import { FEE_CONFIG, WalletService } from '@babylon/engine';
 
 /**
  * Creates a WalletPort adapter that wraps WalletService methods.
  * Used by PerpMarketService in API handlers.
  */
+interface DebitCreditParams {
+  userId: string;
+  amount: number;
+  reason: string;
+  description?: string;
+  relatedId?: string;
+}
+
+interface RecordPnLParams {
+  userId: string;
+  pnl: number;
+  reason: string;
+  relatedId?: string;
+}
+
 export function createWalletAdapter(): WalletPort {
   return {
-    debit: async ({ userId, amount, reason, description, relatedId }) => {
+    debit: async ({
+      userId,
+      amount,
+      reason,
+      description,
+      relatedId,
+    }: DebitCreditParams) => {
       await WalletService.debit(
         userId,
         amount,
@@ -21,7 +42,13 @@ export function createWalletAdapter(): WalletPort {
         relatedId
       );
     },
-    credit: async ({ userId, amount, reason, description, relatedId }) => {
+    credit: async ({
+      userId,
+      amount,
+      reason,
+      description,
+      relatedId,
+    }: DebitCreditParams) => {
       await WalletService.credit(
         userId,
         amount,
@@ -30,7 +57,7 @@ export function createWalletAdapter(): WalletPort {
         relatedId
       );
     },
-    recordPnL: async ({ userId, pnl, reason, relatedId }) => {
+    recordPnL: async ({ userId, pnl, reason, relatedId }: RecordPnLParams) => {
       await WalletService.recordPnL(userId, pnl, reason, relatedId);
     },
     getBalance: (userId: string) => WalletService.getBalance(userId),

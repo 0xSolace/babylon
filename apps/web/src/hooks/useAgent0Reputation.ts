@@ -1,5 +1,6 @@
 'use client';
 
+import { AgentDetailsApiResponseSchema } from '@babylon/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -39,27 +40,6 @@ interface UseAgent0ReputationReturn {
   refetch: () => Promise<void>;
 }
 
-interface AgentReputation {
-  trustScore?: number;
-  accuracyScore?: number;
-  totalBets?: number;
-  winningBets?: number;
-  feedbackCount?: number;
-  averageScore?: number;
-}
-
-interface Agent0AgentData {
-  agent0TokenId: number;
-  name: string;
-  walletAddress: string;
-  isActive: boolean;
-  reputation?: AgentReputation;
-}
-
-interface AgentApiResponse {
-  agent?: Agent0AgentData;
-}
-
 interface Agent0QueryData {
   profile: Agent0Profile | null;
   reputation: Agent0ReputationSummary | null;
@@ -89,7 +69,8 @@ export function useAgent0Reputation(
         throw new Error(`Failed to fetch agent: ${response.statusText}`);
       }
 
-      const responseData = (await response.json()) as AgentApiResponse;
+      const json: unknown = await response.json();
+      const responseData = AgentDetailsApiResponseSchema.parse(json);
       const agent = responseData.agent;
 
       if (!agent?.agent0TokenId) {

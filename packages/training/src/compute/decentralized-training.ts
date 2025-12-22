@@ -4,6 +4,7 @@
  * @dev Wraps the DWS distributed training client for Babylon-specific workflows
  */
 
+import { logger } from '@babylon/shared';
 import type { Address, Chain, Hex, PublicClient, WalletClient } from 'viem';
 import {
   createPublicClient,
@@ -17,7 +18,6 @@ import {
   zeroHash,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { logger } from '../utils/logger';
 import type { TrainingJobRequest, TrainingJobResult } from './types';
 
 // ============ Types ============
@@ -314,18 +314,15 @@ export class DecentralizedTrainingClient {
       const job = await this.getJobStatus(runId);
 
       if (job?.state === RunState.Finished) {
-        // Get final checkpoint
-        let checkpoint;
-        try {
-          checkpoint = await this.publicClient.readContract({
+        // Get final checkpoint - may not exist if training just completed
+        const checkpoint = await this.publicClient
+          .readContract({
             address: this.config.contracts.registry,
             abi: registryAbi,
             functionName: 'getLatestCheckpoint',
             args: [runId],
-          });
-        } catch {
-          // No checkpoint available
-        }
+          })
+          .catch(() => null);
 
         return {
           jobId: runId,
@@ -458,21 +455,22 @@ export class DecentralizedTrainingClient {
 
     // Update checkpoint if available
     if (job.state === RunState.Finished || job.epoch > 0) {
-      try {
-        const checkpoint = await this.publicClient.readContract({
+      const checkpoint = await this.publicClient
+        .readContract({
           address: this.config.contracts.registry,
           abi: registryAbi,
           functionName: 'getLatestCheckpoint',
           args: [runId],
-        });
+        })
+        .catch(() => null);
+
+      if (checkpoint) {
         job.latestCheckpoint = {
           modelHash: checkpoint.modelHash,
           hfRepo: checkpoint.hfRepo,
           ipfsCid: checkpoint.ipfsCid,
           step: checkpoint.step,
         };
-      } catch {
-        // Checkpoint not available
       }
     }
   }

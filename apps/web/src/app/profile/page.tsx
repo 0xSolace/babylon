@@ -1,7 +1,7 @@
 'use client';
 
 import { cn, getProfileUrl } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   ArrowLeft,
@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArticleCard } from '@/components/articles/ArticleCard';
+import { LoginButton } from '@/components/auth/LoginButton';
 import { PostCard } from '@/components/posts/PostCard';
 import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
 import { OnChainBadge } from '@/components/profile/OnChainBadge';
@@ -154,6 +155,33 @@ export default function ProfilePage() {
     items?: PostItem[] | ReplyItem[];
   }
 
+  interface UploadImageResponse {
+    url: string;
+  }
+
+  interface UpdateProfileResponse {
+    user: {
+      username: string;
+      displayName: string;
+      bio: string;
+      profileImageUrl: string;
+      coverImageUrl: string | null;
+      profileComplete: boolean;
+      usernameChangedAt: string | null;
+      referralCode: string | null;
+      reputationPoints: number;
+      referralCount: number;
+    };
+  }
+
+  interface UpdateVisibilityResponse {
+    visibility?: {
+      twitter: boolean;
+      farcaster: boolean;
+      wallet: boolean;
+    };
+  }
+
   // Fetch posts using react-query
   const { data: postsData, isLoading: loadingPosts } = useQuery({
     queryKey: ['profile', 'posts', user?.id, tab],
@@ -177,8 +205,189 @@ export default function ProfilePage() {
     enabled: !!user?.id && tab !== 'trades',
   });
 
-  const posts = tab === 'posts' ? ((postsData as PostItem[]) ?? []) : [];
-  const replies = tab === 'replies' ? ((postsData as ReplyItem[]) ?? []) : [];
+  const posts = tab === 'posts' ? (postsData as PostItem[]) || [] : [];
+  const replies = tab === 'replies' ? (postsData as ReplyItem[]) || [] : [];
+
+  const queryClient = useQueryClient();
+
+  // Profile update mutation
+  const profileMutation = useMutation({
+    mutationFn: async (data: {
+      formData: ProfileFormData;
+      profileImageFile: File | null;
+      coverImageFile: File | null;
+    }): Promise<UpdateProfileResponse> => {
+      const token = await getAccessToken();
+      const headers: HeadersInit = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+
+      const updatedData = { ...data.formData };
+
+      // Upload profile image if changed
+      if (data.profileImageFile) {
+        const formDataObj = new FormData();
+        formDataObj.append('file', data.profileImageFile);
+        formDataObj.append('type', 'profile');
+
+        const uploadResponse = await fetch('/api/upload/image', {
+          method: 'POST',
+          headers,
+          body: formDataObj,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload profile image');
+        }
+        const uploadData = (await uploadResponse.json()) as UploadImageResponse;
+        updatedData.profileImageUrl = uploadData.url;
+      }
+
+      // Upload cover image if changed
+      if (data.coverImageFile) {
+        const formDataObj = new FormData();
+        formDataObj.append('file', data.coverImageFile);
+        formDataObj.append('type', 'cover');
+
+        const uploadResponse = await fetch('/api/upload/image', {
+          method: 'POST',
+          headers,
+          body: formDataObj,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload cover image');
+        }
+        const uploadData = (await uploadResponse.json()) as UploadImageResponse;
+        updatedData.coverImageUrl = uploadData.url;
+      }
+
+      // Remove empty strings from updatedData
+      const cleanedData: Partial<ProfileFormData> = {};
+      (Object.keys(updatedData) as Array<keyof ProfileFormData>).forEach(
+        (key) => {
+          if (updatedData[key] !== '') {
+            cleanedData[key] = updatedData[key];
+          }
+        }
+      );
+
+      const updateResponse = await fetch(
+        `/api/users/${encodeURIComponent(user!.id)}/update-profile`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(cleanedData),
+        }
+      );
+
+      if (!updateResponse.ok) {
+        const errorData = (await updateResponse.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        throw new Error(
+          errorData?.error?.message || 'Failed to update profile'
+        );
+      }
+
+      return updateResponse.json() as Promise<UpdateProfileResponse>;
+    },
+    onSuccess: (data) => {
+      setFormData({
+        username: data.user.username,
+        displayName: data.user.displayName,
+        bio: data.user.bio,
+        profileImageUrl: data.user.profileImageUrl,
+        coverImageUrl: data.user.coverImageUrl || '',
+      });
+
+      const oldUsername = user ? user.username : null;
+      const newUsername = data.user.username;
+      const usernameChanged = oldUsername !== newUsername && newUsername;
+
+      if (user) {
+        setUser({
+          ...user,
+          username: data.user.username,
+          displayName: data.user.displayName,
+          bio: data.user.bio ?? undefined,
+          profileImageUrl: data.user.profileImageUrl,
+          coverImageUrl: data.user.coverImageUrl ?? undefined,
+          profileComplete: data.user.profileComplete,
+          usernameChangedAt: data.user.usernameChangedAt,
+          referralCode: data.user.referralCode ?? undefined,
+          reputationPoints: data.user.reputationPoints,
+          referralCount: data.user.referralCount,
+        });
+      }
+
+      if (usernameChanged && newUsername) {
+        const cleanUsername = newUsername.startsWith('@')
+          ? newUsername.slice(1)
+          : newUsername;
+        router.replace(`/profile/${cleanUsername}`);
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      closeEditModal();
+
+      // Invalidate posts query to refresh content
+      void queryClient.invalidateQueries({
+        queryKey: ['profile', 'posts', user?.id],
+      });
+    },
+    onError: (error: Error) => {
+      setEditModal((prev) => ({
+        ...prev,
+        error: error.message,
+        isSaving: false,
+      }));
+    },
+  });
+
+  // Social visibility toggle mutation
+  const visibilityMutation = useMutation({
+    mutationFn: async (data: {
+      platform: keyof SocialVisibility;
+      visible: boolean;
+    }): Promise<UpdateVisibilityResponse> => {
+      const token = await getAccessToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(user!.id)}/update-visibility`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            platform: data.platform,
+            visible: data.visible,
+          }),
+        }
+      );
+
+      return response.json() as Promise<UpdateVisibilityResponse>;
+    },
+    onSuccess: (data) => {
+      if (data.visibility && user) {
+        setUser({
+          ...user,
+          showTwitterPublic: data.visibility.twitter,
+          showFarcasterPublic: data.visibility.farcaster,
+          showWalletPublic: data.visibility.wallet,
+        });
+      }
+    },
+  });
 
   // Social visibility toggles
   const [socialVisibility, setSocialVisibility] = useState<SocialVisibility>({
@@ -250,7 +459,11 @@ export default function ProfilePage() {
         const delta = type === 'follow' ? 1 : -1;
         setOptimisticFollowingCount((prev) => {
           const currentCount =
-            prev !== null ? prev : user?.stats?.following || 0;
+            prev !== null
+              ? prev
+              : user && user.stats
+                ? (user.stats?.following ?? 0)
+                : 0;
           return Math.max(0, currentCount + delta);
         });
 
@@ -266,20 +479,22 @@ export default function ProfilePage() {
     window.addEventListener('profile-updated', handleProfileUpdate);
     return () =>
       window.removeEventListener('profile-updated', handleProfileUpdate);
-  }, [user?.stats?.following]);
+  }, [user]);
 
   // Filter posts by search query
   const filteredPosts = useMemo(() => {
     if (!searchQuery.trim()) return posts;
     const query = searchQuery.toLowerCase();
-    return posts.filter((post) => post.content?.toLowerCase().includes(query));
+    return posts.filter(
+      (post) => post.content && post.content.toLowerCase().includes(query)
+    );
   }, [posts, searchQuery]);
 
   const filteredReplies = useMemo(() => {
     if (!searchQuery.trim()) return replies;
     const query = searchQuery.toLowerCase();
-    return replies.filter((reply) =>
-      reply.content?.toLowerCase().includes(query)
+    return replies.filter(
+      (reply) => reply.content && reply.content.toLowerCase().includes(query)
     );
   }, [replies, searchQuery]);
 
@@ -352,7 +567,9 @@ export default function ProfilePage() {
   };
 
   const handleCoverImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
     if (!file) return;
 
     const allowedTypes = [
@@ -382,185 +599,40 @@ export default function ProfilePage() {
     reader.onloadend = () => {
       setEditModal((prev) => ({
         ...prev,
-        coverImage: { file, preview: reader.result as string },
+        coverImage: { file: file ?? null, preview: reader.result as string },
         error: null,
       }));
     };
     reader.readAsDataURL(file);
   };
 
-  const saveProfile = async () => {
+  const saveProfile = () => {
     if (!user?.id) return;
 
     setEditModal((prev) => ({ ...prev, isSaving: true, error: null }));
 
-    const token = await getAccessToken();
-    const headers: HeadersInit = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
-
-    const updatedData = { ...editModal.formData };
-
-    // Upload profile image if changed
-    if (editModal.profileImage.file) {
-      const formData = new FormData();
-      formData.append('file', editModal.profileImage.file);
-      formData.append('type', 'profile');
-
-      const uploadResponse = await fetch('/api/upload/image', {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-
-      if (!uploadResponse.ok) {
-        const error = new Error('Failed to upload profile image');
-        setEditModal((prev) => ({
-          ...prev,
-          error: error.message,
-          isSaving: false,
-        }));
-        throw error;
-      }
-      const uploadData = await uploadResponse.json();
-      updatedData.profileImageUrl = uploadData.url;
-    }
-
-    // Upload cover image if changed
-    if (editModal.coverImage.file) {
-      const formData = new FormData();
-      formData.append('file', editModal.coverImage.file);
-      formData.append('type', 'cover');
-
-      const uploadResponse = await fetch('/api/upload/image', {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-
-      if (!uploadResponse.ok) {
-        const error = new Error('Failed to upload cover image');
-        setEditModal((prev) => ({
-          ...prev,
-          error: error.message,
-          isSaving: false,
-        }));
-        throw error;
-      }
-      const uploadData = await uploadResponse.json();
-      updatedData.coverImageUrl = uploadData.url;
-    }
-
-    // Remove empty strings from updatedData
-    Object.keys(updatedData).forEach((key) => {
-      if (updatedData[key as keyof ProfileFormData] === '') {
-        delete updatedData[key as keyof ProfileFormData];
-      }
+    profileMutation.mutate({
+      formData: editModal.formData,
+      profileImageFile: editModal.profileImage.file,
+      coverImageFile: editModal.coverImage.file,
     });
-
-    const updateResponse = await fetch(
-      `/api/users/${encodeURIComponent(user.id)}/update-profile`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(updatedData),
-      }
-    );
-
-    if (!updateResponse.ok) {
-      const errorData = await updateResponse.json().catch(() => ({}));
-      const errorMessage =
-        errorData?.error?.message || 'Failed to update profile';
-      setEditModal((prev) => ({
-        ...prev,
-        error: errorMessage,
-        isSaving: false,
-      }));
-      throw new Error(errorMessage);
-    }
-    const data = await updateResponse.json();
-
-    setFormData({
-      username: data.user.username,
-      displayName: data.user.displayName,
-      bio: data.user.bio,
-      profileImageUrl: data.user.profileImageUrl,
-      coverImageUrl: data.user.coverImageUrl || '',
-    });
-
-    const oldUsername = user.username;
-    const newUsername = data.user.username;
-    const usernameChanged = oldUsername !== newUsername && newUsername;
-
-    setUser({
-      ...user,
-      username: data.user.username,
-      displayName: data.user.displayName,
-      bio: data.user.bio,
-      profileImageUrl: data.user.profileImageUrl,
-      coverImageUrl: data.user.coverImageUrl,
-      profileComplete: data.user.profileComplete,
-      usernameChangedAt: data.user.usernameChangedAt,
-      referralCode: data.user.referralCode,
-      reputationPoints: data.user.reputationPoints,
-      referralCount: data.user.referralCount,
-    });
-
-    if (usernameChanged && newUsername) {
-      const cleanUsername = newUsername.startsWith('@')
-        ? newUsername.slice(1)
-        : newUsername;
-      router.replace(`/profile/${cleanUsername}`);
-    }
-
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
-    closeEditModal();
   };
 
-  const toggleSocialVisibility = async (platform: keyof SocialVisibility) => {
-    if (!user?.id) return;
+  const toggleSocialVisibility = (platform: keyof SocialVisibility) => {
+    if (!user || !user.id) return;
 
     const newValue = !socialVisibility[platform];
 
+    // Optimistic update
     setSocialVisibility((prev) => ({
       ...prev,
       [platform]: newValue,
     }));
 
-    const token = await getAccessToken();
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(
-      `/api/users/${encodeURIComponent(user.id)}/update-visibility`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          platform,
-          visible: newValue,
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (data.visibility) {
-      setUser({
-        ...user,
-        showTwitterPublic: data.visibility.twitter,
-        showFarcasterPublic: data.visibility.farcaster,
-        showWalletPublic: data.visibility.wallet,
-      });
-    }
+    visibilityMutation.mutate({
+      platform,
+      visible: newValue,
+    });
   };
 
   // Render the profile header content (shared between desktop and mobile)
@@ -625,8 +697,14 @@ export default function ProfilePage() {
               {formData.displayName || 'Your Name'}
             </h2>
             <OnChainBadge
-              isRegistered={user?.onChainRegistered ?? false}
-              nftTokenId={user?.nftTokenId}
+              isRegistered={
+                user
+                  ? user.onChainRegistered !== undefined
+                    ? user.onChainRegistered
+                    : false
+                  : false
+              }
+              nftTokenId={user ? user.nftTokenId : undefined}
               size="md"
             />
           </div>
@@ -645,7 +723,7 @@ export default function ProfilePage() {
         {/* Social Links Section */}
         <div className="mb-3 space-y-2">
           {/* Twitter/X */}
-          {user?.hasTwitter && user?.twitterUsername && (
+          {user && user.hasTwitter && user.twitterUsername && (
             <div className="group flex items-center justify-between">
               <a
                 href={`https://x.com/${user.twitterUsername}`}
@@ -723,7 +801,9 @@ export default function ProfilePage() {
             <span className="font-bold text-foreground">
               {optimisticFollowingCount !== null
                 ? optimisticFollowingCount
-                : user?.stats?.following || 0}
+                : user && user.stats
+                  ? user.stats.following
+                  : 0}
             </span>
             <span className="ml-1 text-muted-foreground">Following</span>
           </Link>
@@ -828,19 +908,25 @@ export default function ProfilePage() {
       return (
         <div className="space-y-0">
           {filteredPosts.map((item) => {
-            const authorId = item.authorId || item.author?.id || user?.id || '';
+            const authorId =
+              item.authorId ||
+              (item.author ? item.author.id : undefined) ||
+              (user ? user.id : undefined) ||
+              '';
             const authorName =
-              item.author?.displayName ||
-              item.author?.username ||
-              user?.displayName ||
-              user?.username ||
+              (item.author ? item.author.displayName : undefined) ||
+              (item.author ? item.author.username : undefined) ||
+              (user ? user.displayName : undefined) ||
+              (user ? user.username : undefined) ||
               'You';
             const authorUsername =
-              item.author?.username || user?.username || undefined;
+              (item.author ? item.author.username : undefined) ||
+              (user ? user.username : undefined) ||
+              undefined;
             const authorImage =
               item.authorProfileImageUrl ||
-              item.author?.profileImageUrl ||
-              user?.profileImageUrl ||
+              (item.author ? item.author.profileImageUrl : undefined) ||
+              (user ? user.profileImageUrl : undefined) ||
               undefined;
 
             const postData = {
@@ -921,8 +1007,12 @@ export default function ProfilePage() {
                 href={`/post/${reply.postId}`}
                 className="text-primary hover:underline"
               >
-                {reply.post.author?.displayName ||
-                  reply.post.author?.username ||
+                {(reply.post.author
+                  ? reply.post.author.displayName
+                  : undefined) ||
+                  (reply.post.author
+                    ? reply.post.author.username
+                    : undefined) ||
                   'a post'}
               </a>
             </div>
@@ -973,28 +1063,15 @@ export default function ProfilePage() {
   if (!authenticated || !user) {
     return (
       <PageContainer noPadding className="flex flex-col">
-        <div className="sticky top-0 z-10 bg-background">
-          <div className="flex items-center gap-4 px-4 py-3">
-            <Link
-              href="/feed"
-              className="rounded-full p-2 transition-colors hover:bg-muted/50"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <h1 className="font-bold text-xl">Profile</h1>
+        <div className="flex flex-1 items-center justify-center p-8">
+          <div className="max-w-md text-center">
+            <User className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+            <h2 className="mb-2 font-bold text-foreground text-xl">log in</h2>
+            <p className="mb-6 text-muted-foreground">
+              Sign in to view and edit your profile
+            </p>
+            <LoginButton />
           </div>
-        </div>
-        <div className="flex flex-1 flex-col items-center justify-center gap-4">
-          <User className="h-12 w-12 text-muted-foreground opacity-50" />
-          <p className="text-muted-foreground">
-            Please log in to view your profile.
-          </p>
-          <Link
-            href="/feed"
-            className="rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground transition-all hover:bg-primary/90"
-          >
-            Back to Feed
-          </Link>
         </div>
       </PageContainer>
     );
@@ -1177,7 +1254,11 @@ export default function ProfilePage() {
                     disabled={editModal.isSaving}
                   />
                   <button
-                    onClick={() => profileImageInputRef.current?.click()}
+                    onClick={() => {
+                      if (profileImageInputRef.current) {
+                        profileImageInputRef.current.click();
+                      }
+                    }}
                     disabled={editModal.isSaving}
                     className="absolute right-0 bottom-0 rounded-full border-2 border-background bg-primary p-2 text-primary-foreground transition-colors hover:bg-primary/90 active:bg-primary/90 disabled:opacity-50 sm:hidden"
                     aria-label="Change profile picture"
@@ -1185,7 +1266,11 @@ export default function ProfilePage() {
                     <Camera className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => profileImageInputRef.current?.click()}
+                    onClick={() => {
+                      if (profileImageInputRef.current) {
+                        profileImageInputRef.current.click();
+                      }
+                    }}
                     disabled={editModal.isSaving}
                     className="absolute inset-0 hidden items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity hover:opacity-100 disabled:opacity-0 sm:flex"
                     aria-label="Change profile picture"

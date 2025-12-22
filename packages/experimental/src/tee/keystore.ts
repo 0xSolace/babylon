@@ -9,6 +9,7 @@
  * but cannot provide the hardware isolation guarantees.
  */
 
+import { logger, ValidationError } from '@babylon/shared';
 import { keccak256, toBytes } from 'viem';
 import {
   decrypt,
@@ -55,7 +56,7 @@ export class TEEKeystore {
     config: KeystoreConfig = {}
   ): Promise<TEEKeystore> {
     if (!enclaveMeasurement || enclaveMeasurement.length < 10) {
-      throw new Error('Invalid enclave measurement');
+      throw new ValidationError('Invalid enclave measurement');
     }
 
     // Derive master seed from measurement using keccak256
@@ -66,7 +67,7 @@ export class TEEKeystore {
     const keystore = new TEEKeystore(masterSeed, config);
 
     if (config.verbose) {
-      console.log(
+      logger.info(
         `[TEE Keystore] Initialized with measurement: ${enclaveMeasurement.slice(0, 16)}...`
       );
     }
@@ -80,10 +81,10 @@ export class TEEKeystore {
    */
   async deriveKey(label: string, version = 1): Promise<CryptoKey> {
     if (!label || label.length === 0) {
-      throw new Error('Key label cannot be empty');
+      throw new ValidationError('Key label cannot be empty');
     }
     if (version < 1) {
-      throw new Error('Key version must be >= 1');
+      throw new ValidationError('Key version must be >= 1');
     }
 
     const keyId = `${label}:v${version}`;
@@ -103,7 +104,7 @@ export class TEEKeystore {
     this.keyVersions.set(label, version);
 
     if (this.config.verbose) {
-      console.log(`[TEE Keystore] Derived key: ${label} (version ${version})`);
+      logger.info(`[TEE Keystore] Derived key: ${label} (version ${version})`);
     }
 
     return cryptoKey;
@@ -134,7 +135,7 @@ export class TEEKeystore {
     this.derivedKeys.delete(oldKeyId);
 
     if (this.config.verbose) {
-      console.log(
+      logger.info(
         `[TEE Keystore] Rotated key ${label}: v${oldVersion} -> v${newVersion}`
       );
     }
@@ -148,7 +149,7 @@ export class TEEKeystore {
    */
   async seal(data: Uint8Array, label: string): Promise<SealedData> {
     if (data.length === 0) {
-      throw new Error('Cannot seal empty data');
+      throw new ValidationError('Cannot seal empty data');
     }
 
     const version = this.getKeyVersion(label);

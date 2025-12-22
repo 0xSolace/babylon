@@ -39,7 +39,7 @@ describe('WaitlistService', () => {
       // Create a test user first
       const user = await prisma.user.create({
         data: {
-          privyId: `test-privy-${Date.now()}`,
+          oauth3Id: `test-oauth3-${Date.now()}`,
           username: `testuser${Date.now()}`,
           displayName: 'Test User',
           reputationPoints: 100,
@@ -74,7 +74,7 @@ describe('WaitlistService', () => {
     it('should prevent self-referral', async () => {
       const user = await prisma.user.create({
         data: {
-          privyId: `test-privy-${Date.now()}`,
+          oauth3Id: `test-oauth3-${Date.now()}`,
           username: `testuser${Date.now()}`,
           displayName: 'Test User',
           reputationPoints: 100,
@@ -106,7 +106,7 @@ describe('WaitlistService', () => {
       // Create referrer
       const referrer = await prisma.user.create({
         data: {
-          privyId: `test-privy-ref-${Date.now()}`,
+          oauth3Id: `test-oauth3-ref-${Date.now()}`,
           username: `referrer${Date.now()}`,
           displayName: 'Referrer',
           reputationPoints: 100,
@@ -119,7 +119,7 @@ describe('WaitlistService', () => {
       // Create user already referred by someone else
       const user = await prisma.user.create({
         data: {
-          privyId: `test-privy-${Date.now()}`,
+          oauth3Id: `test-oauth3-${Date.now()}`,
           username: `testuser${Date.now()}`,
           displayName: 'Test User',
           reputationPoints: 100,
@@ -152,7 +152,7 @@ describe('WaitlistService', () => {
       // Create referrer
       const referrer = await prisma.user.create({
         data: {
-          privyId: `test-privy-ref-${Date.now()}`,
+          oauth3Id: `test-oauth3-ref-${Date.now()}`,
           username: `referrer${Date.now()}`,
           displayName: 'Referrer',
           reputationPoints: 100,
@@ -165,7 +165,7 @@ describe('WaitlistService', () => {
       // Create new user
       const user = await prisma.user.create({
         data: {
-          privyId: `test-privy-${Date.now()}`,
+          oauth3Id: `test-oauth3-${Date.now()}`,
           username: `testuser${Date.now()}`,
           displayName: 'Test User',
           reputationPoints: 100,
@@ -204,7 +204,7 @@ describe('WaitlistService', () => {
       // Create users with different invite points
       const userA = await prisma.user.create({
         data: {
-          privyId: `test-a-${Date.now()}`,
+          oauth3Id: `test-a-${Date.now()}`,
           username: `usera${Date.now()}`,
           displayName: 'User A',
           reputationPoints: 100,
@@ -218,7 +218,7 @@ describe('WaitlistService', () => {
 
       const userB = await prisma.user.create({
         data: {
-          privyId: `test-b-${Date.now()}`,
+          oauth3Id: `test-b-${Date.now()}`,
           username: `userb${Date.now()}`,
           displayName: 'User B',
           reputationPoints: 150,
@@ -254,7 +254,7 @@ describe('WaitlistService', () => {
       // Create two users with same invite points
       const user1 = await prisma.user.create({
         data: {
-          privyId: `test-1-${now}`,
+          oauth3Id: `test-1-${now}`,
           username: `user1${now}`,
           displayName: 'User 1',
           invitePoints: 100,
@@ -267,7 +267,7 @@ describe('WaitlistService', () => {
 
       const user2 = await prisma.user.create({
         data: {
-          privyId: `test-2-${now}`,
+          oauth3Id: `test-2-${now}`,
           username: `user2${now}`,
           displayName: 'User 2',
           invitePoints: 100, // Same points
@@ -291,7 +291,7 @@ describe('WaitlistService', () => {
     it('should calculate percentile correctly', async () => {
       const user = await prisma.user.create({
         data: {
-          privyId: `test-perc-${Date.now()}`,
+          oauth3Id: `test-perc-${Date.now()}`,
           username: `userperc${Date.now()}`,
           displayName: 'User Percentile',
           invitePoints: 100,
@@ -315,7 +315,7 @@ describe('WaitlistService', () => {
     it('should award email bonus only once', async () => {
       const user = await prisma.user.create({
         data: {
-          privyId: `test-email-${Date.now()}`,
+          oauth3Id: `test-email-${Date.now()}`,
           username: `useremail${Date.now()}`,
           displayName: 'Test Email User',
           reputationPoints: 100,
@@ -351,7 +351,7 @@ describe('WaitlistService', () => {
     it('should award wallet bonus only once', async () => {
       const user = await prisma.user.create({
         data: {
-          privyId: `test-wallet-${Date.now()}`,
+          oauth3Id: `test-wallet-${Date.now()}`,
           username: `userwallet${Date.now()}`,
           displayName: 'Test Wallet User',
           reputationPoints: 100,
@@ -391,7 +391,7 @@ describe('WaitlistService', () => {
       const users = await Promise.all([
         prisma.user.create({
           data: {
-            privyId: `test-top1-${Date.now()}`,
+            oauth3Id: `test-top1-${Date.now()}`,
             username: `top1${Date.now()}`,
             displayName: 'Top 1',
             invitePoints: 150, // Most invites
@@ -400,7 +400,7 @@ describe('WaitlistService', () => {
         }),
         prisma.user.create({
           data: {
-            privyId: `test-top2-${Date.now()}`,
+            oauth3Id: `test-top2-${Date.now()}`,
             username: `top2${Date.now()}`,
             displayName: 'Top 2',
             invitePoints: 100,
@@ -409,7 +409,7 @@ describe('WaitlistService', () => {
         }),
         prisma.user.create({
           data: {
-            privyId: `test-top3-${Date.now()}`,
+            oauth3Id: `test-top3-${Date.now()}`,
             username: `top3${Date.now()}`,
             displayName: 'Top 3',
             invitePoints: 50,

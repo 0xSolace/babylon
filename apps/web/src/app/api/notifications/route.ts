@@ -18,7 +18,7 @@
  *     summary: Get user notifications
  *     description: Returns paginated notifications with filtering support. Cached for 10 seconds.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: limit
@@ -60,7 +60,7 @@
  *     summary: Mark notifications as read
  *     description: Marks specific notifications or all notifications as read.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       content:
  *         application/json:
@@ -296,7 +296,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         }));
 
       // Get unread count
-      const [unreadCountResult] = await db
+      const unreadCountResults = await db
         .select({ count: count() })
         .from(notifications)
         .where(
@@ -305,6 +305,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             eq(notifications.read, false)
           )
         );
+
+      // Type assertion for aggregate query result
+      const unreadCountResult = (
+        unreadCountResults as unknown as Array<{ count: number }>
+      )[0];
 
       if (!unreadCountResult) {
         throw new InternalServerError('Failed to fetch unread count');

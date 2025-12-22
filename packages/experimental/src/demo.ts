@@ -13,6 +13,7 @@
  * Run with: bun run src/demo.ts
  */
 
+import { sleep } from '@babylon/shared';
 import { type Address, keccak256, toBytes } from 'viem';
 import {
   GameOrchestrator,
@@ -49,10 +50,6 @@ function success(text: string) {
 
 function info(text: string) {
   console.log(colors.dim + '  ' + text + colors.reset);
-}
-
-async function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function runDemo() {

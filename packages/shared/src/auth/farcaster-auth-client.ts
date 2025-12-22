@@ -275,7 +275,7 @@ export async function signInWithFarcaster(
   }
 
   // Generate state for backend verification (userId|timestamp|random)
-  // Using pipe separator because userId may contain colons (e.g., did:privy:xxx)
+  // Using pipe separator because userId may contain colons (e.g., did:oauth3:xxx)
   const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`;
 
   logger.info(
@@ -316,7 +316,7 @@ export async function createFarcasterAuthChannel(userId: string): Promise<{
   const nonce = generateNonce();
 
   const channel = await createChannel(domain, siweUri, nonce);
-  // Using pipe separator because userId may contain colons (e.g., did:privy:xxx)
+  // Using pipe separator because userId may contain colons (e.g., did:oauth3:xxx)
   const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`;
 
   return {

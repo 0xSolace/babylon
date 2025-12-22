@@ -16,7 +16,7 @@
  *     summary: Deploy model version
  *     description: Deploys model version to agents with rollout strategy (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

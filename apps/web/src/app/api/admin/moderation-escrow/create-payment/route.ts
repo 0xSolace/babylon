@@ -17,7 +17,7 @@
  *     summary: Create escrow payment
  *     description: Creates escrow payment request via X402 (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -71,10 +71,14 @@
 import { X402Manager } from '@babylon/a2a';
 import { requireAdmin } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId, logger, parseEther } from '@babylon/shared';
+import {
+  CreateEscrowPaymentSchema,
+  generateSnowflakeId,
+  logger,
+  parseEther,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 
 // Initialize x402 manager
 const x402Manager = new X402Manager({
@@ -98,15 +102,6 @@ if (PAYMENT_RECEIVER === '0x0000000000000000000000000000000000000000') {
   );
 }
 
-const CreateEscrowPaymentSchema = z.object({
-  recipientId: z.string().min(1, 'Recipient ID is required'),
-  amountUSD: z.number().positive('Amount must be positive'),
-  reason: z.string().optional(),
-  recipientWalletAddress: z
-    .string()
-    .min(1, 'Recipient wallet address is required'),
-});
-
 export async function POST(req: NextRequest) {
   const _adminUser = await requireAdmin(req);
   const adminId = _adminUser.userId;
@@ -127,8 +122,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { recipientId, amountUSD, reason, recipientWalletAddress } =
-    validation.data;
+  const { recipientId, amountUSD, reason } = validation.data;
 
   // Verify recipient exists and is not an actor
   const recipient = await db.user.findUnique({
@@ -156,20 +150,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validate recipient wallet address matches user's actual wallet
-  if (
-    recipient.walletAddress &&
-    recipientWalletAddress.toLowerCase() !==
-      recipient.walletAddress.toLowerCase()
-  ) {
-    return NextResponse.json(
-      {
-        error:
-          "Recipient wallet address does not match user's registered wallet address",
-      },
-      { status: 400 }
-    );
-  }
+  // Get recipient wallet address from user record
+  const recipientWalletAddress = recipient.walletAddress;
 
   // Prevent self-payment
   if (recipientId === adminId) {
@@ -231,7 +213,7 @@ export async function POST(req: NextRequest) {
     {
       adminId,
       recipientId,
-      recipientWalletAddress, // Store recipient address for refunds
+      recipientWalletAddress: recipientWalletAddress || null, // Store recipient address for refunds
       amountUSD,
       reason: reason || null,
     }
@@ -252,7 +234,7 @@ export async function POST(req: NextRequest) {
       expiresAt,
       updatedAt: new Date(),
       metadata: {
-        recipientWalletAddress,
+        recipientWalletAddress: recipientWalletAddress || null,
         adminWalletAddress: adminWalletAddress,
       },
     },

@@ -17,7 +17,7 @@
  *     summary: Get user list
  *     description: Returns paginated user list with metrics and filtering (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: limit
@@ -109,31 +109,8 @@ import {
   userMutes,
   users,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { AdminUserQuerySchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const QuerySchema = z.object({
-  limit: z.coerce.number().min(1).max(100).default(50),
-  offset: z.coerce.number().min(0).default(0),
-  search: z.string().optional(),
-  filter: z.enum(['all', 'actors', 'users', 'banned', 'admins']).default('all'),
-  sortBy: z
-    .enum([
-      'created',
-      'balance',
-      'reputation',
-      'username',
-      'reports_received',
-      'blocks_received',
-      'mutes_received',
-      'report_ratio',
-      'block_ratio',
-      'bad_user_score',
-    ])
-    .default('created'),
-  sortOrder: z.enum(['asc', 'desc']).default('desc'),
-});
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   // Require admin authentication
@@ -141,7 +118,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Parse query parameters
   const { searchParams } = new URL(request.url);
-  const params = QuerySchema.parse({
+  const params = AdminUserQuerySchema.parse({
     limit: searchParams.get('limit') || '50',
     offset: searchParams.get('offset') || '0',
     search: searchParams.get('search') || undefined,
@@ -228,11 +205,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     .offset(params.offset);
 
   // Get total count - count queries always return exactly one row
-  const [totalResult] = await db
-    .select({ count: count() })
+  const countResult = (await db
+    .select({ userCount: count() })
     .from(users)
-    .where(whereClause);
-  const total = totalResult.count;
+    .where(whereClause)) as unknown as Array<{ userCount: number }>;
+  const total = countResult[0]?.userCount ?? 0;
+
+  // Define type for count queries
+  type CountResult = { id: string; cnt: number };
 
   // Get moderation counts per user (batched queries)
   const [
@@ -245,81 +225,91 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     blocksReceived,
     mutesReceived,
     reportsSent,
-  ] = await Promise.all([
+  ] = (await Promise.all([
     // Comment counts
     db
-      .select({ userId: comments.authorId, count: count() })
+      .select({ id: comments.authorId, cnt: count() })
       .from(comments)
       .groupBy(comments.authorId),
     // Reaction counts
     db
-      .select({ userId: reactions.userId, count: count() })
+      .select({ id: reactions.userId, cnt: count() })
       .from(reactions)
       .groupBy(reactions.userId),
     // Position counts
     db
-      .select({ userId: positions.userId, count: count() })
+      .select({ id: positions.userId, cnt: count() })
       .from(positions)
       .groupBy(positions.userId),
     // Follower counts (users following this user)
     db
-      .select({ userId: follows.followingId, count: count() })
+      .select({ id: follows.followingId, cnt: count() })
       .from(follows)
       .groupBy(follows.followingId),
     // Following counts (users this user follows)
     db
-      .select({ userId: follows.followerId, count: count() })
+      .select({ id: follows.followerId, cnt: count() })
       .from(follows)
       .groupBy(follows.followerId),
     // Reports received
     db
-      .select({ userId: reports.reportedUserId, count: count() })
+      .select({ id: reports.reportedUserId, cnt: count() })
       .from(reports)
       .groupBy(reports.reportedUserId),
     // Blocks received
     db
-      .select({ userId: userBlocks.blockedId, count: count() })
+      .select({ id: userBlocks.blockedId, cnt: count() })
       .from(userBlocks)
       .groupBy(userBlocks.blockedId),
     // Mutes received
     db
-      .select({ userId: userMutes.mutedId, count: count() })
+      .select({ id: userMutes.mutedId, cnt: count() })
       .from(userMutes)
       .groupBy(userMutes.mutedId),
     // Reports sent
     db
-      .select({ userId: reports.reporterId, count: count() })
+      .select({ id: reports.reporterId, cnt: count() })
       .from(reports)
       .groupBy(reports.reporterId),
-  ]);
+  ])) as unknown as [
+    CountResult[],
+    CountResult[],
+    CountResult[],
+    CountResult[],
+    CountResult[],
+    CountResult[],
+    CountResult[],
+    CountResult[],
+    CountResult[],
+  ];
 
   // Build lookup maps
   const commentCountMap = new Map(
-    commentCounts.filter((c) => c.userId).map((c) => [c.userId!, c.count])
+    commentCounts.filter((c) => c.id).map((c) => [c.id, c.cnt])
   );
   const reactionCountMap = new Map(
-    reactionCounts.filter((r) => r.userId).map((r) => [r.userId!, r.count])
+    reactionCounts.filter((r) => r.id).map((r) => [r.id, r.cnt])
   );
   const positionCountMap = new Map(
-    positionCounts.filter((p) => p.userId).map((p) => [p.userId!, p.count])
+    positionCounts.filter((p) => p.id).map((p) => [p.id, p.cnt])
   );
   const followerCountMap = new Map(
-    followerCounts.filter((f) => f.userId).map((f) => [f.userId!, f.count])
+    followerCounts.filter((f) => f.id).map((f) => [f.id, f.cnt])
   );
   const followingCountMap = new Map(
-    followingCounts.filter((f) => f.userId).map((f) => [f.userId!, f.count])
+    followingCounts.filter((f) => f.id).map((f) => [f.id, f.cnt])
   );
   const reportsReceivedMap = new Map(
-    reportsReceived.filter((r) => r.userId).map((r) => [r.userId!, r.count])
+    reportsReceived.filter((r) => r.id).map((r) => [r.id, r.cnt])
   );
   const blocksReceivedMap = new Map(
-    blocksReceived.filter((b) => b.userId).map((b) => [b.userId!, b.count])
+    blocksReceived.filter((b) => b.id).map((b) => [b.id, b.cnt])
   );
   const mutesReceivedMap = new Map(
-    mutesReceived.filter((m) => m.userId).map((m) => [m.userId!, m.count])
+    mutesReceived.filter((m) => m.id).map((m) => [m.id, m.cnt])
   );
   const reportsSentMap = new Map(
-    reportsSent.filter((r) => r.userId).map((r) => [r.userId!, r.count])
+    reportsSent.filter((r) => r.id).map((r) => [r.id, r.cnt])
   );
 
   // Calculate moderation metrics and bad user scores

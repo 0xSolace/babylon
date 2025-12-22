@@ -5,6 +5,7 @@
  * Synchronizes ban status between Jeju and Babylon networks.
  */
 
+import { logger } from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -104,12 +105,18 @@ export class ModerationBridge {
     this.babylonClient = createPublicClient({
       transport: http(babylonConfig.rpcUrl),
     });
+
+    logger.debug('ModerationBridge initialized', {
+      jejuChainId: jejuConfig.chainId,
+      babylonChainId: babylonConfig.chainId,
+    });
   }
 
   /**
    * Check if an address is banned on Jeju
    */
   async isJejuBanned(address: Address): Promise<boolean> {
+    logger.debug('Checking Jeju ban status', { address });
     return this.jejuClient.readContract({
       address: this.jejuConfig.banManager,
       abi: BAN_MANAGER_ABI,
@@ -122,6 +129,7 @@ export class ModerationBridge {
    * Check if an address is banned on Babylon
    */
   async isBabylonBanned(address: Address): Promise<boolean> {
+    logger.debug('Checking Babylon ban status', { address });
     return this.babylonClient.readContract({
       address: this.babylonConfig.banManager,
       abi: BABYLON_BAN_MANAGER_ABI,
@@ -231,6 +239,10 @@ export class ModerationBridge {
   recordSync(sync: CrossChainBanSync): void {
     const key = `${sync.sourceChainId}:${sync.caseId}`;
     this.syncedBans.set(key, sync);
+    logger.debug('Ban sync recorded', {
+      key,
+      targetAddress: sync.targetAddress,
+    });
   }
 
   /**

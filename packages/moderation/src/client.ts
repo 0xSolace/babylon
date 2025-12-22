@@ -2,6 +2,7 @@
  * Moderation Client - interfaces with Jeju ModerationMarketplace and BanManager contracts.
  */
 
+import { logger } from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -9,8 +10,10 @@ import {
   keccak256,
   type PublicClient,
   toHex,
+  zeroHash,
 } from 'viem';
 import { BAN_MANAGER_ABI, MODERATION_MARKETPLACE_ABI } from './abis';
+import { JejuModerationConfigSchema } from './schemas';
 import type {
   BanCase,
   JejuModerationConfig,
@@ -24,8 +27,13 @@ export class ModerationClient {
   private readonly config: JejuModerationConfig;
 
   constructor(config: JejuModerationConfig) {
+    // Validate config - throws ZodError on invalid input
+    JejuModerationConfigSchema.parse(config);
     this.config = config;
-    this.publicClient = createPublicClient({ transport: http(config.rpcUrl) });
+    this.publicClient = createPublicClient({
+      transport: http(this.config.rpcUrl),
+    });
+    logger.debug('ModerationClient initialized', { chainId: config.chainId });
   }
 
   async getStake(address: Address): Promise<StakeInfo> {
@@ -97,15 +105,14 @@ export class ModerationClient {
   }
 
   async getActiveCase(target: Address): Promise<`0x${string}` | null> {
+    logger.debug('Getting active case', { target });
     const caseId = await this.publicClient.readContract({
       address: this.config.moderationMarketplace,
       abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'activeCase',
       args: [target],
     });
-    const zeroBytes32 =
-      '0x0000000000000000000000000000000000000000000000000000000000000000';
-    return caseId === zeroBytes32 ? null : (caseId as `0x${string}`);
+    return caseId === zeroHash ? null : (caseId as `0x${string}`);
   }
 
   async getVote(caseId: `0x${string}`, voter: Address): Promise<Vote> {
@@ -132,6 +139,7 @@ export class ModerationClient {
   }
 
   async isBanned(address: Address, appId?: `0x${string}`): Promise<boolean> {
+    logger.debug('Checking ban status', { address, appId });
     if (appId) {
       return this.publicClient.readContract({
         address: this.config.banManager,
@@ -188,8 +196,9 @@ export class ModerationClient {
   buildOpenCaseRequest(
     target: Address,
     reason: string,
-    evidenceHash: `0x${string}` = '0x0000000000000000000000000000000000000000000000000000000000000000'
+    evidenceHash: `0x${string}` = zeroHash
   ) {
+    logger.debug('Building open case request', { target, reason });
     return {
       address: this.config.moderationMarketplace,
       abi: MODERATION_MARKETPLACE_ABI,
@@ -268,14 +277,5 @@ export class ModerationClient {
   }
 }
 
-export const createModerationClient = (
-  config: Partial<JejuModerationConfig> & { rpcUrl: string }
-) =>
-  new ModerationClient({
-    moderationMarketplace:
-      '0x0000000000000000000000000000000000000000' as Address,
-    banManager: '0x0000000000000000000000000000000000000000' as Address,
-    identityRegistry: '0x0000000000000000000000000000000000000000' as Address,
-    chainId: 1337,
-    ...config,
-  });
+export const createModerationClient = (config: JejuModerationConfig) =>
+  new ModerationClient(config);

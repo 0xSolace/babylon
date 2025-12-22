@@ -206,7 +206,8 @@ export const GET = withErrorHandling(
     } else {
       // Target is a regular user
       // Get users being followed (Follow model)
-      const userFollowsList = await db
+      // CQL join doesn't preserve select fields in types, so we type assert
+      const userFollowsList = (await db
         .select({
           id: follows.id,
           followingId: follows.followingId,
@@ -220,7 +221,16 @@ export const GET = withErrorHandling(
         .from(follows)
         .innerJoin(users, eq(follows.followingId, users.id))
         .where(eq(follows.followerId, targetId))
-        .orderBy(desc(follows.createdAt));
+        .orderBy(desc(follows.createdAt))) as unknown as Array<{
+        id: string;
+        followingId: string;
+        createdAt: Date;
+        followingDisplayName: string | null;
+        followingUsername: string | null;
+        followingProfileImageUrl: string | null;
+        followingBio: string | null;
+        followingIsActor: boolean;
+      }>;
 
       // Get actors being followed (UserActorFollow model)
       const actorFollowRelations = await db
@@ -272,18 +282,30 @@ export const GET = withErrorHandling(
       );
 
       followingList = [
-        ...userFollowsList.map((f) => ({
-          id: f.followingId,
-          displayName: f.followingDisplayName ?? '',
-          username: f.followingUsername ?? null,
-          profileImageUrl: f.followingProfileImageUrl ?? null,
-          bio: f.followingBio ?? null,
-          isActor: f.followingIsActor,
-          followedAt: f.createdAt.toISOString(),
-          type: 'user' as const,
-          tier: null,
-          isMutualFollow: mutualFollowMap.get(f.followingId) ?? false,
-        })),
+        ...userFollowsList.map((f) => {
+          const typedF = f as {
+            id: string;
+            followingId: string;
+            createdAt: Date;
+            followingDisplayName: string | null;
+            followingUsername: string | null;
+            followingProfileImageUrl: string | null;
+            followingBio: string | null;
+            followingIsActor: boolean;
+          };
+          return {
+            id: typedF.followingId,
+            displayName: typedF.followingDisplayName ?? '',
+            username: typedF.followingUsername ?? null,
+            profileImageUrl: typedF.followingProfileImageUrl ?? null,
+            bio: typedF.followingBio ?? null,
+            isActor: typedF.followingIsActor,
+            followedAt: typedF.createdAt.toISOString(),
+            type: 'user' as const,
+            tier: null,
+            isMutualFollow: mutualFollowMap.get(typedF.followingId) ?? false,
+          };
+        }),
         ...actorFollowsList.map((f) => {
           if (!f.actorName) {
             return {

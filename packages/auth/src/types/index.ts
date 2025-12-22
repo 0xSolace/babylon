@@ -1,8 +1,8 @@
 /**
  * Decentralized Auth Types
  *
- * Core type definitions for the TEE/MPC-based authentication system.
- * Replaces Privy with a fully decentralized alternative.
+ * Core type definitions for the TEE/MPC-based authentication system (OAuth3).
+ * Provides fully decentralized authentication via Jeju's MPC network.
  */
 
 import type { Address, Hex } from 'viem';

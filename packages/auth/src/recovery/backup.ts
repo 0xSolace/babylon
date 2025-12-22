@@ -4,6 +4,7 @@
 
 import { logger } from '@babylon/shared';
 import { toBytes, toHex } from 'viem';
+import { KeyBackupSchema } from '../schemas/index';
 import type { DID, KeyBackup } from '../types/index';
 
 export interface BackupOptions {
@@ -163,11 +164,7 @@ export class KeyBackupManager {
   }
 
   static importFromJSON(json: string): KeyBackup {
-    const backup = JSON.parse(json) as KeyBackup;
-    if (!backup.userId || !backup.encryptedKey || !backup.salt || !backup.iv) {
-      throw new Error('Invalid backup format');
-    }
-    return backup;
+    return KeyBackupSchema.parse(JSON.parse(json));
   }
 
   static exportToBase64(backup: KeyBackup): string {

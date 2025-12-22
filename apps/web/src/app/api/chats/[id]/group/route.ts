@@ -16,7 +16,7 @@
  *     summary: Get group ID for chat
  *     description: Returns user group ID associated with group chat (participants only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id

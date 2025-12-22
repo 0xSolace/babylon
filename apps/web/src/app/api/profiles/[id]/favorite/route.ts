@@ -17,7 +17,7 @@
  *     summary: Favorite profile
  *     description: Adds profile to favorites (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -38,7 +38,7 @@
  *     summary: Unfavorite profile
  *     description: Removes profile from favorites (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id

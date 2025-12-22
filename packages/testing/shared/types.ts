@@ -5,7 +5,7 @@
  * and eliminate use of 'any' types.
  */
 
-import type { Database, JsonValue } from '@babylon/db';
+import type { ActorStateRow, Database, JsonValue, User } from '@babylon/db';
 import type { Page, Route } from '@playwright/test';
 
 /**
@@ -154,29 +154,6 @@ export type TestPage = Page;
 export type TestRoute = Route;
 
 /**
- * Error with message property
- */
-export interface ErrorWithMessage {
-  message: string;
-  code?: number | string;
-  stack?: string;
-  name?: string;
-  cause?: Error | string;
-}
-
-/**
- * Check if error has message property
- */
-export function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof (error as ErrorWithMessage).message === 'string'
-  );
-}
-
-/**
  * A2A Client Error
  */
 export interface A2AClientError extends Error {
@@ -185,42 +162,22 @@ export interface A2AClientError extends Error {
 }
 
 /**
- * Test User type
+ * Test User type - Based on the User type from @babylon/db
  */
-export interface TestUser {
-  id: string;
-  username: string;
-  displayName: string;
-  email?: string;
-  walletAddress?: string;
-  /** OAuth3 identity ID (decentralized identity) */
-  oauth3Id?: string;
-  /** @deprecated Use oauth3Id instead */
-  privyId?: string;
-  bio?: string;
-  reputationPoints?: number;
-  virtualBalance?: number;
-  isAgent?: boolean;
-  isActor?: boolean;
-  isAdmin?: boolean;
-  isBanned?: boolean;
-  isTest?: boolean;
-  profileComplete?: boolean;
-  hasUsername?: boolean;
-  updatedAt?: Date;
-  createdAt?: Date;
-}
+export type TestUser = Partial<User> & { id: string };
 
 /**
- * Test Actor type
+ * Test Actor type - Represents static actor data for testing
+ * Note: Actor static data is stored in TypeScript (StaticDataRegistry from @babylon/engine).
+ * Dynamic state is in ActorStateRow. This combines common fields for testing.
  */
-export interface TestActor {
+export type TestActor = Partial<ActorStateRow> & {
   id: string;
-  name: string;
+  name?: string;
   realName?: string;
   username?: string;
   description?: string;
-}
+};
 
 /**
  * Experience Service type
@@ -559,4 +516,98 @@ export interface CronJob {
   enabled?: boolean;
   lastRun?: string;
   nextRun?: string;
+}
+
+// ============================================================================
+// Decentralized Service Types
+// ============================================================================
+
+/**
+ * Decentralized Database interface for integration tests
+ */
+export interface DecentralizedDBClient {
+  isHealthy(): Promise<boolean>;
+  getBlockHeight(): Promise<number>;
+  exec(sql: string, params?: unknown[]): Promise<{ rowsAffected?: number }>;
+  insert(table: string, data: Record<string, unknown>): Promise<void>;
+  selectOne<T>(
+    table: string,
+    options: { where: Record<string, unknown> }
+  ): Promise<T | null>;
+  update(
+    table: string,
+    data: Record<string, unknown>,
+    options: { where: Record<string, unknown> }
+  ): Promise<void>;
+  delete(
+    table: string,
+    options: { where: Record<string, unknown> }
+  ): Promise<number>;
+  count(table: string, where: Record<string, unknown>): Promise<number>;
+  transaction<T>(
+    fn: (ctx: {
+      exec: (sql: string, params?: unknown[]) => Promise<void>;
+    }) => Promise<T>
+  ): Promise<T>;
+}
+
+/**
+ * Decentralized Cache interface for integration tests
+ */
+export interface DecentralizedCacheClient {
+  healthCheck(): Promise<boolean>;
+  set(key: string, value: unknown, ttl?: number): Promise<void>;
+  get<T>(key: string): Promise<T | null>;
+  delete(key: string): Promise<boolean>;
+  exists(key: string): Promise<boolean>;
+  mset(pairs: Record<string, unknown>, ttl?: number): Promise<void>;
+  mget<T>(...keys: string[]): Promise<(T | null)[]>;
+  incr(key: string, amount?: number): Promise<number>;
+  decr(key: string, amount?: number): Promise<number>;
+  getStats(): Promise<{ totalKeys: number; hitRate: number }>;
+  flush(): Promise<void>;
+}
+
+/**
+ * Decentralized Storage interface for integration tests
+ */
+export interface DecentralizedStorageClient {
+  healthCheck(): Promise<boolean>;
+  upload(
+    blob: Blob,
+    options: { name: string; mimeType: string }
+  ): Promise<{ cid: string; size: number }>;
+  download(cid: string): Promise<Uint8Array>;
+  uploadJson(data: unknown, name: string): Promise<{ cid: string }>;
+  downloadJson<T>(cid: string): Promise<T>;
+  exists(cid: string): Promise<boolean>;
+  getMetadata(cid: string): Promise<{ cid: string } | null>;
+  list(options: { limit: number }): Promise<Array<{ cid: string }>>;
+  getStats(): Promise<{ totalFiles: number }>;
+}
+
+/**
+ * Decentralized KMS interface for integration tests
+ */
+export interface DecentralizedKMSClient {
+  healthCheck(): Promise<boolean>;
+  storeSecret(name: string, value: string): Promise<void>;
+  getSecret(name: string): Promise<string>;
+  deleteSecret(name: string): Promise<void>;
+  encrypt(options: {
+    data: string;
+    name: string;
+  }): Promise<{ encryptedPayload: string }>;
+  decrypt(options: { payload: `0x${string}` }): Promise<string>;
+  rotateSecret(name: string, newValue: string): Promise<{ version: number }>;
+  generateKey(name: string): Promise<{ keyId: string; publicKey: string }>;
+  sign(options: {
+    message: `0x${string}`;
+    keyId: string;
+  }): Promise<{ signature: string }>;
+  verify(
+    message: `0x${string}`,
+    signature: string,
+    publicKey: string
+  ): Promise<boolean>;
 }

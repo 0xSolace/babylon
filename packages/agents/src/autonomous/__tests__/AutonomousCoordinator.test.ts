@@ -14,7 +14,7 @@ const testWalletAddress = generateRandomWallet().address;
 // Mock user data (users table)
 const mockUser = {
   id: testAgentId,
-  privyId: `did:privy:test-agent-${testAgentId}`,
+  oauth3Id: `oauth3:test-agent-${testAgentId}`,
   username: `test_agent`,
   displayName: 'Test Autonomous Agent',
   walletAddress: testWalletAddress,

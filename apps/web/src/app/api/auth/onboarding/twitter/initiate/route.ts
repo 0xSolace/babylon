@@ -16,7 +16,7 @@
  *     summary: Initiate Twitter OAuth for onboarding
  *     description: Redirects to Twitter OAuth authorization page for profile import
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       302:
  *         description: Redirect to Twitter OAuth

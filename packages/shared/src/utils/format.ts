@@ -72,36 +72,6 @@ export function formatTime(date: Date | string): string {
 }
 
 /**
- * Calculate sentiment score from text (simple heuristic)
- *
- * Uses keyword matching to determine sentiment. Returns value between
- * -1 (negative) and 1 (positive). Returns 0 if no sentiment keywords found.
- *
- * @param text - Text to analyze
- * @returns Sentiment score between -1 and 1 (0 for neutral/no keywords)
- *
- * @example
- * ```typescript
- * calculateSentiment("This is amazing!"); // Returns: ~0.5 (positive)
- * calculateSentiment("This is terrible"); // Returns: ~-0.5 (negative)
- * ```
- */
-export function calculateSentiment(text: string): number {
-  const positive =
-    /\b(great|amazing|success|win|best|love|excellent|awesome)\b/gi;
-  const negative =
-    /\b(terrible|awful|fail|worst|hate|disaster|crisis|scandal)\b/gi;
-
-  const positiveCount = (text.match(positive) || []).length;
-  const negativeCount = (text.match(negative) || []).length;
-
-  const total = positiveCount + negativeCount;
-  if (total === 0) return 0;
-
-  return clamp((positiveCount - negativeCount) / total, -1, 1);
-}
-
-/**
  * Format relative time (e.g., "5m", "2h", "3d")
  *
  * @description Converts a date to a human-readable relative time string.
@@ -238,4 +208,48 @@ export function sanitizeId(id: string | undefined | null): string {
  */
 export function formatNumber(num: number): string {
   return formatCompactNumber(num);
+}
+
+/**
+ * Balance data structure
+ */
+interface BalanceData {
+  virtualBalance: number | string | bigint;
+  totalDeposited: number | string | bigint;
+  totalWithdrawn: number | string | bigint;
+  lifetimePnL: number | string | bigint;
+}
+
+/**
+ * Convert balance numeric values to strings for API responses
+ *
+ * @description Converts all numeric balance fields to string representations
+ * for consistent API response formatting. Handles numbers, strings, and BigInts.
+ *
+ * @param {BalanceData} balance - Balance data with numeric values
+ * @returns {Object} Balance data with all values as strings
+ *
+ * @example
+ * ```typescript
+ * convertBalanceToStrings({
+ *   virtualBalance: 1000,
+ *   totalDeposited: BigInt(5000),
+ *   totalWithdrawn: "100",
+ *   lifetimePnL: -50,
+ * })
+ * // Returns: { virtualBalance: "1000", totalDeposited: "5000", ... }
+ * ```
+ */
+export function convertBalanceToStrings(balance: BalanceData): {
+  virtualBalance: string;
+  totalDeposited: string;
+  totalWithdrawn: string;
+  lifetimePnL: string;
+} {
+  return {
+    virtualBalance: String(balance.virtualBalance),
+    totalDeposited: String(balance.totalDeposited),
+    totalWithdrawn: String(balance.totalWithdrawn),
+    lifetimePnL: String(balance.lifetimePnL),
+  };
 }

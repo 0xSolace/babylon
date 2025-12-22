@@ -1,6 +1,14 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import {
+  type AdminBalanceTrade,
+  type AdminNPCTrade,
+  type AdminPositionTrade,
+  type AdminTrade,
+  AdminTradeSchema,
+  type AdminTradeType,
+  cn,
+} from '@babylon/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, Plus, RefreshCw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -8,92 +16,6 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
-
-/**
- * Trade type schema for validation.
- */
-const TradeTypeSchema = z.enum(['balance', 'npc', 'position']);
-type TradeType = z.infer<typeof TradeTypeSchema>;
-
-/**
- * User schema for validation.
- */
-const UserSchema = z.object({
-  id: z.string(),
-  username: z.string().nullable(),
-  displayName: z.string().nullable(),
-  profileImageUrl: z.string().nullable(),
-  isActor: z.boolean(),
-});
-
-/**
- * Base trade schema for validation.
- */
-const BaseTradeSchema = z.object({
-  type: TradeTypeSchema,
-  id: z.string(),
-  timestamp: z.coerce.date(),
-  user: UserSchema.nullable(),
-});
-
-/**
- * Balance trade schema for validation.
- */
-const BalanceTradeSchema = BaseTradeSchema.extend({
-  type: z.literal('balance'),
-  amount: z.string(),
-  balanceBefore: z.string(),
-  balanceAfter: z.string(),
-  transactionType: z.string(),
-  description: z.string().nullable(),
-  relatedId: z.string().nullable(),
-});
-type BalanceTrade = z.infer<typeof BalanceTradeSchema>;
-
-/**
- * NPC trade schema for validation.
- */
-const NPCTradeSchema = BaseTradeSchema.extend({
-  type: z.literal('npc'),
-  marketType: z.string(),
-  ticker: z.string().nullable(),
-  marketId: z.string().nullable(),
-  action: z.string(),
-  side: z.string().nullable(),
-  amount: z.number(),
-  price: z.number(),
-  sentiment: z.number().nullable(),
-  reason: z.string().nullable(),
-});
-type NPCTrade = z.infer<typeof NPCTradeSchema>;
-
-/**
- * Position trade schema for validation.
- */
-const PositionTradeSchema = BaseTradeSchema.extend({
-  type: z.literal('position'),
-  market: z.object({
-    id: z.string(),
-    question: z.string(),
-    resolved: z.boolean(),
-    resolution: z.boolean().nullable(),
-  }),
-  side: z.string(),
-  shares: z.string(),
-  avgPrice: z.string(),
-  createdAt: z.coerce.date(),
-});
-type PositionTrade = z.infer<typeof PositionTradeSchema>;
-
-/**
- * Trade schema union for validation.
- */
-const TradeSchema = z.discriminatedUnion('type', [
-  BalanceTradeSchema,
-  NPCTradeSchema,
-  PositionTradeSchema,
-]);
-type Trade = z.infer<typeof TradeSchema>;
 
 /**
  * Trading feed tab component for viewing and creating trades.
@@ -114,7 +36,7 @@ type Trade = z.infer<typeof TradeSchema>;
  */
 export function TradingFeedTab() {
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<'all' | TradeType>('all');
+  const [filter, setFilter] = useState<'all' | AdminTradeType>('all');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -169,6 +91,7 @@ export function TradingFeedTab() {
         tradeTypeSelect.removeEventListener('change', handleTradeTypeChange);
       };
     }
+    return undefined;
   }, []);
 
   const {
@@ -176,7 +99,7 @@ export function TradingFeedTab() {
     isLoading,
     refetch,
     isFetching,
-  } = useQuery<Trade[]>({
+  } = useQuery<AdminTrade[]>({
     queryKey: ['admin', 'trades', filter],
     queryFn: async () => {
       const url =
@@ -187,7 +110,7 @@ export function TradingFeedTab() {
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch trades');
       const data = await response.json();
-      const validation = z.array(TradeSchema).safeParse(data.trades);
+      const validation = z.array(AdminTradeSchema).safeParse(data.trades);
       if (!validation.success) {
         throw new Error('Invalid trade data structure');
       }
@@ -280,7 +203,7 @@ export function TradingFeedTab() {
     return 'Just now';
   };
 
-  const TradeCard = ({ trade }: { trade: Trade }) => {
+  const TradeCard = ({ trade }: { trade: AdminTrade }) => {
     // Handle null user (should not happen, but be safe)
     if (!trade.user) return null;
 
@@ -322,7 +245,7 @@ export function TradingFeedTab() {
     );
   };
 
-  const BalanceTradeDetails = ({ trade }: { trade: BalanceTrade }) => {
+  const BalanceTradeDetails = ({ trade }: { trade: AdminBalanceTrade }) => {
     const amount = parseFloat(trade.amount);
     const isPositive = amount >= 0;
 
@@ -360,7 +283,7 @@ export function TradingFeedTab() {
     );
   };
 
-  const NPCTradeDetails = ({ trade }: { trade: NPCTrade }) => {
+  const NPCTradeDetails = ({ trade }: { trade: AdminNPCTrade }) => {
     const isLong = trade.side === 'long' || trade.side === 'YES';
 
     return (
@@ -416,7 +339,7 @@ export function TradingFeedTab() {
     );
   };
 
-  const PositionTradeDetails = ({ trade }: { trade: PositionTrade }) => {
+  const PositionTradeDetails = ({ trade }: { trade: AdminPositionTrade }) => {
     const isYes = trade.side === 'YES';
 
     return (
@@ -437,8 +360,8 @@ export function TradingFeedTab() {
           {trade.market.question}
         </p>
         <div className="flex items-center gap-3 text-muted-foreground text-xs">
-          <span>Shares: {parseFloat(trade.shares).toFixed(2)}</span>
-          <span>Avg Price: {formatCurrency(trade.avgPrice)}</span>
+          <span>Shares: {trade.shares.toFixed(2)}</span>
+          <span>Avg Cost: {formatCurrency(trade.avgCost)}</span>
         </div>
         {trade.market.resolved && (
           <div className="text-xs">

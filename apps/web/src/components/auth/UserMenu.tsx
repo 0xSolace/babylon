@@ -108,11 +108,14 @@ export function UserMenu() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const tradingBalance = Number(balanceData?.balance || 0);
+  const tradingBalance = Number(balanceData?.balance ?? 0);
 
   // Update reputation points in auth store when profile data changes
   useEffect(() => {
     if (profileData?.user?.reputationPoints !== undefined && user) {
+      if (!profileData.user) {
+        throw new Error('Profile data user is missing');
+      }
       if (profileData.user.reputationPoints !== user.reputationPoints) {
         setUser({
           ...user,
@@ -120,7 +123,7 @@ export function UserMenu() {
         });
       }
     }
-  }, [profileData?.user?.reputationPoints, user, setUser]);
+  }, [profileData?.user?.reputationPoints, user, setUser, profileData.user]);
 
   // Listen for rewards-updated events to refresh auth state
   // This ensures the sidebar updates when rewards are claimed elsewhere

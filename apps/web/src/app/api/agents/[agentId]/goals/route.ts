@@ -17,7 +17,7 @@
  *     summary: List agent goals
  *     description: Returns list of agent goals (manager only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: agentId
@@ -47,7 +47,7 @@
  *     summary: Create agent goal
  *     description: Creates a new goal for agent (manager only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: agentId

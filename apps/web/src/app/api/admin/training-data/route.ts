@@ -16,7 +16,7 @@
  *     summary: Get training data status
  *     description: Returns training data statistics and readiness (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Status retrieved successfully

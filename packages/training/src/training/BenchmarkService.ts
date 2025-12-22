@@ -16,9 +16,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { db } from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { BenchmarkRunner } from '../benchmark/BenchmarkRunner';
 import { getAgentRuntimeManager } from '../dependencies';
-import { logger } from '../utils/logger';
 
 export interface BenchmarkResults {
   modelId: string;

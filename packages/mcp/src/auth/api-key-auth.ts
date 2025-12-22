@@ -5,7 +5,7 @@
  */
 
 import { hashApiKey } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db, type UserApiKey } from '@babylon/db';
 import { logger } from '@babylon/shared';
 
 /**
@@ -25,12 +25,10 @@ export async function validateUserApiKey(
   const keyHash = hashApiKey(apiKey);
 
   // Query for a valid key that matches the hash, is not revoked, and hasn't expired
-  type KeyRecord = {
-    id: string;
-    userId: string;
-    expiresAt: Date | null;
-    revokedAt: Date | null;
-  };
+  type KeyRecord = Pick<
+    UserApiKey,
+    'id' | 'userId' | 'expiresAt' | 'revokedAt'
+  >;
   const keys = await db.query<KeyRecord>(
     `SELECT id, "userId", "expiresAt", "revokedAt"
      FROM "UserApiKey"

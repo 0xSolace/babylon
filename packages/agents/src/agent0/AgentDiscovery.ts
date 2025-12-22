@@ -7,9 +7,9 @@
 
 import type { AgentProfile } from '@babylon/a2a';
 import { AgentRegistryService } from '../services/agent-registry.service';
+import { parseCapabilities } from '../shared/capabilities';
 import type { AgentRegistration } from '../types/agent-registry';
 import { getAgent0Client } from './Agent0Client';
-import { parseCapabilities } from './capabilities-schema';
 import { ReputationBridge } from './ReputationBridge';
 import { type SubgraphAgent, SubgraphClient } from './SubgraphClient';
 import type {

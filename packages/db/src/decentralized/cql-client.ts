@@ -59,19 +59,17 @@ export interface CQLHealthStatus {
 }
 
 /**
- * Check if CQL service is available without throwing
+ * Check if CQL service is available.
+ * Returns true if healthy, false if endpoint responds but is unhealthy.
+ * Throws if network/connection error occurs (caller should handle).
  */
 export async function isCQLAvailable(): Promise<boolean> {
   const endpoint =
     process.env.CQL_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4300';
-  try {
-    const response = await fetch(`${endpoint}/health`, {
-      signal: AbortSignal.timeout(3000),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
+  const response = await fetch(`${endpoint}/health`, {
+    signal: AbortSignal.timeout(3000),
+  });
+  return response.ok;
 }
 
 /**

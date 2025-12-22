@@ -87,9 +87,7 @@ const nextConfig: NextConfig = {
     '@libp2p/interface',
     'electron-fetch',
     'swagger-jsdoc',
-    'postgres',
-    'drizzle-orm',
-    'drizzle-orm/postgres-js',
+    '@jejunetwork/db', // CQL client from Jeju - requires HTTP client
     'ioredis', // Node.js Redis client - requires tls/net modules not available in edge runtime
   ],
   images: {
@@ -209,7 +207,7 @@ const nextConfig: NextConfig = {
         // Ignore server-only npm packages
         new webpack.IgnorePlugin({
           resourceRegExp:
-            /^(ioredis|postgres|electron-fetch|agent0-sdk|ipfs-http-client)$/,
+            /^(ioredis|@jejunetwork\/db|electron-fetch|agent0-sdk|ipfs-http-client)$/,
         }),
         // Ignore @elizaos/core for client builds (it imports node:fs)
         new webpack.IgnorePlugin({
@@ -235,13 +233,13 @@ const nextConfig: NextConfig = {
       new webpack.IgnorePlugin({
         resourceRegExp: /^swagger-jsdoc$/,
       }),
-      // Ignore postgres package for client-side builds only
-      // postgres requires Node.js built-ins (net, tls, crypto, stream) not available in browser
+      // Ignore @jejunetwork/db for client-side builds only
+      // CQL client requires HTTP/net modules not available in browser
       ...(isServer
         ? []
         : [
             new webpack.IgnorePlugin({
-              resourceRegExp: /^postgres$/,
+              resourceRegExp: /^@jejunetwork\/db$/,
               contextRegExp: /node_modules/,
             }),
           ])
@@ -257,9 +255,7 @@ const nextConfig: NextConfig = {
       // NOTE: Do NOT externalize @babylon/* packages - they are TypeScript source files
       // and must be transpiled by webpack via transpilePackages
       const serverExternalPackagesList = [
-        'postgres',
-        'drizzle-orm',
-        'drizzle-orm/postgres-js',
+        '@jejunetwork/db',
         'ioredis',
         'swagger-jsdoc',
       ];
@@ -318,7 +314,7 @@ const nextConfig: NextConfig = {
       }
     } else {
       // Externalize agent0-sdk and related packages to prevent bundling electron-fetch
-      // Also externalize postgres and Node.js-only packages
+      // Also externalize CQL and Node.js-only packages
       // These should only be loaded server-side via dynamic imports
       // CRITICAL: Externalize @babylon/api and @babylon/db to prevent bundling server-only code in client
       const serverOnlyPackages = [
@@ -326,7 +322,7 @@ const nextConfig: NextConfig = {
         '@babylon/agents/agent0',
         'ipfs-http-client',
         'electron-fetch',
-        'postgres',
+        '@jejunetwork/db',
         'ioredis',
         '@babylon/db',
         '@babylon/api',
@@ -396,11 +392,11 @@ const nextConfig: NextConfig = {
       }
     }
 
-    // Ignore postgres package completely for client-side builds
-    // postgres requires Node.js built-ins (net, tls, crypto, stream) not available in browser
+    // Ignore @jejunetwork/db package completely for client-side builds
+    // CQL client requires HTTP/net modules not available in browser
     config.plugins.push(
       new webpack.IgnorePlugin({
-        resourceRegExp: /^postgres$/,
+        resourceRegExp: /^@jejunetwork\/db$/,
         contextRegExp: /node_modules/,
       })
     );

@@ -5,7 +5,14 @@
  * All contracts deploy via Jeju CLI auto-deployment.
  */
 
+import { logger, WalletError } from '@babylon/shared';
 import type { Abi, Address } from 'viem';
+import { ChainIdSchema, parseAddress } from './schemas';
+
+// Re-export network configurations
+export * from './config';
+// Re-export schemas for consumers
+export * from './schemas';
 
 // ============================================================================
 // Contract ABIs (minimal for TypeScript usage)
@@ -604,22 +611,19 @@ export const PaymasterABI = [
 // Contract Addresses
 // ============================================================================
 
+// Re-define ContractAddresses with viem's Address type for proper typing
 export interface ContractAddresses {
-  // Network info
   network: string;
   chainId: number;
-  // DAO Infrastructure
   dao: Address;
   agentVault: Address;
   treasury: Address;
   trainingOrchestrator: Address;
-  // Legacy/Other
   banManager: Address;
   moderationMarketplace: Address;
   x402Facilitator: Address;
   paymaster: Address;
   entryPoint: Address;
-  // Additional registries used by services
   identityRegistry: Address;
   reputationSystem: Address;
   diamond: Address;
@@ -629,47 +633,80 @@ export interface ContractAddresses {
   gameOracle: Address;
 }
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
+const DEFAULT_ENTRY_POINT =
+  '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789' as Address;
+
+/**
+ * Validates and returns an address from env, or returns the default
+ */
+function getValidatedAddress(
+  envVar: string | undefined,
+  defaultValue: Address = ZERO_ADDRESS
+): Address {
+  const parsed = parseAddress(envVar);
+  return (parsed ?? defaultValue) as Address;
+}
+
+/**
+ * Determines network name from chain ID
+ */
+function getNetworkFromChainId(chainId: number): string {
+  switch (chainId) {
+    case 31337:
+      return 'localnet';
+    case 84532:
+      return 'base-sepolia';
+    case 8453:
+      return 'base';
+    case 11155111:
+      return 'sepolia';
+    default:
+      return 'unknown';
+  }
+}
+
 // Addresses are loaded from environment or Jeju deployment registry
 function getAddresses(): ContractAddresses {
-  const ZERO = '0x0000000000000000000000000000000000000000' as Address;
   const chainIdEnv = process.env.CHAIN_ID ?? process.env.NEXT_PUBLIC_CHAIN_ID;
-  const chainId = chainIdEnv ? Number.parseInt(chainIdEnv, 10) : 31337;
-  const network =
-    chainId === 31337
-      ? 'localnet'
-      : chainId === 84532
-        ? 'base-sepolia'
-        : chainId === 8453
-          ? 'base'
-          : 'unknown';
+  const chainIdResult = ChainIdSchema.safeParse(chainIdEnv);
+  const chainId = chainIdResult.success ? chainIdResult.data : 31337;
+  const network = getNetworkFromChainId(chainId);
+
   return {
     // Network info
     network,
     chainId,
     // DAO Infrastructure
-    dao: (process.env.BABYLON_DAO_ADDRESS ?? ZERO) as Address,
-    agentVault: (process.env.BABYLON_AGENT_VAULT_ADDRESS ?? ZERO) as Address,
-    treasury: (process.env.BABYLON_TREASURY_ADDRESS ?? ZERO) as Address,
-    trainingOrchestrator: (process.env.TRAINING_ORCHESTRATOR_ADDRESS ??
-      ZERO) as Address,
+    dao: getValidatedAddress(process.env.BABYLON_DAO_ADDRESS),
+    agentVault: getValidatedAddress(process.env.BABYLON_AGENT_VAULT_ADDRESS),
+    treasury: getValidatedAddress(process.env.BABYLON_TREASURY_ADDRESS),
+    trainingOrchestrator: getValidatedAddress(
+      process.env.TRAINING_ORCHESTRATOR_ADDRESS
+    ),
     // Legacy/Other
-    banManager: (process.env.BAN_MANAGER_ADDRESS ?? ZERO) as Address,
-    moderationMarketplace: (process.env.MODERATION_MARKETPLACE_ADDRESS ??
-      ZERO) as Address,
-    x402Facilitator: (process.env.X402_FACILITATOR_ADDRESS ?? ZERO) as Address,
-    paymaster: (process.env.BABYLON_PAYMASTER_ADDRESS ?? ZERO) as Address,
-    entryPoint: (process.env.ENTRY_POINT_ADDRESS ??
-      '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789') as Address,
+    banManager: getValidatedAddress(process.env.BAN_MANAGER_ADDRESS),
+    moderationMarketplace: getValidatedAddress(
+      process.env.MODERATION_MARKETPLACE_ADDRESS
+    ),
+    x402Facilitator: getValidatedAddress(process.env.X402_FACILITATOR_ADDRESS),
+    paymaster: getValidatedAddress(process.env.BABYLON_PAYMASTER_ADDRESS),
+    entryPoint: getValidatedAddress(
+      process.env.ENTRY_POINT_ADDRESS,
+      DEFAULT_ENTRY_POINT
+    ),
     // Registries
-    identityRegistry: (process.env.IDENTITY_REGISTRY_ADDRESS ??
-      ZERO) as Address,
-    reputationSystem: (process.env.REPUTATION_SYSTEM_ADDRESS ??
-      ZERO) as Address,
-    diamond: (process.env.BABYLON_DIAMOND_ADDRESS ?? ZERO) as Address,
-    serverRegistry: (process.env.SERVER_REGISTRY_ADDRESS ?? ZERO) as Address,
-    modelRegistry: (process.env.MODEL_REGISTRY_ADDRESS ?? ZERO) as Address,
-    jobRegistry: (process.env.JOB_REGISTRY_ADDRESS ?? ZERO) as Address,
-    gameOracle: (process.env.GAME_ORACLE_ADDRESS ?? ZERO) as Address,
+    identityRegistry: getValidatedAddress(
+      process.env.IDENTITY_REGISTRY_ADDRESS
+    ),
+    reputationSystem: getValidatedAddress(
+      process.env.REPUTATION_SYSTEM_ADDRESS
+    ),
+    diamond: getValidatedAddress(process.env.BABYLON_DIAMOND_ADDRESS),
+    serverRegistry: getValidatedAddress(process.env.SERVER_REGISTRY_ADDRESS),
+    modelRegistry: getValidatedAddress(process.env.MODEL_REGISTRY_ADDRESS),
+    jobRegistry: getValidatedAddress(process.env.JOB_REGISTRY_ADDRESS),
+    gameOracle: getValidatedAddress(process.env.GAME_ORACLE_ADDRESS),
   };
 }
 
@@ -690,7 +727,7 @@ export function requireContractDeployed(name: AddressKeys): Address {
   const addr = ADDRESSES[name];
   if (addr === '0x0000000000000000000000000000000000000000') {
     throw new Error(
-      `Contract ${name} not deployed. Run Jeju CLI to deploy contracts.`
+      `Contract ${String(name)} not deployed. Run Jeju CLI to deploy contracts.`
     );
   }
   return addr;
@@ -815,7 +852,11 @@ export class BabylonRegistryClient {
     _attestation: `0x${string}`
   ): Promise<{ serverId: `0x${string}`; txHash: `0x${string}` }> {
     if (!this.walletClient) {
-      throw new Error('[Registry] Wallet client required for registration');
+      throw new WalletError(
+        'Wallet client required for server registration',
+        '0x0',
+        'NOT_CONNECTED'
+      );
     }
     // In production, this would call ServerRegistry.register()
     const serverId =
@@ -825,28 +866,40 @@ export class BabylonRegistryClient {
 
   async sendHeartbeat(serverId: `0x${string}`): Promise<`0x${string}`> {
     if (!this.walletClient) {
-      throw new Error('[Registry] Wallet client required for heartbeat');
+      throw new WalletError(
+        'Wallet client required for heartbeat',
+        '0x0',
+        'NOT_CONNECTED'
+      );
     }
     // In production, this would call ServerRegistry.heartbeat()
-    console.log('[Registry] Heartbeat for:', serverId);
+    logger.debug('[Registry] Heartbeat for:', serverId);
     return '0x0' as `0x${string}`;
   }
 
   async claimStaleServer(serverId: `0x${string}`): Promise<`0x${string}`> {
     if (!this.walletClient) {
-      throw new Error('[Registry] Wallet client required for claiming');
+      throw new WalletError(
+        'Wallet client required for claiming stale server',
+        '0x0',
+        'NOT_CONNECTED'
+      );
     }
     // In production, this would call ServerRegistry.claimStale()
-    console.log('[Registry] Claiming stale server:', serverId);
+    logger.debug('[Registry] Claiming stale server:', serverId);
     return '0x0' as `0x${string}`;
   }
 
   async terminateServer(serverId: `0x${string}`): Promise<`0x${string}`> {
     if (!this.walletClient) {
-      throw new Error('[Registry] Wallet client required for termination');
+      throw new WalletError(
+        'Wallet client required for server termination',
+        '0x0',
+        'NOT_CONNECTED'
+      );
     }
     // In production, this would call ServerRegistry.terminate()
-    console.log('[Registry] Terminating server:', serverId);
+    logger.debug('[Registry] Terminating server:', serverId);
     return '0x0' as `0x${string}`;
   }
 
@@ -882,7 +935,7 @@ class ServerRegistryClient {
   async getServerInstance(
     serverId: `0x${string}`
   ): Promise<ServerInstance | null> {
-    console.log('[ServerRegistry] getServerInstance:', serverId);
+    logger.debug('[ServerRegistry] getServerInstance:', serverId);
     return null;
   }
 
@@ -924,9 +977,13 @@ class ServerRegistryClient {
 
   async heartbeat(serverId: `0x${string}`): Promise<`0x${string}`> {
     if (!this.walletClient) {
-      throw new Error('[ServerRegistry] Wallet required');
+      throw new WalletError(
+        'Wallet required for heartbeat',
+        '0x0',
+        'NOT_CONNECTED'
+      );
     }
-    console.log('[ServerRegistry] Heartbeat:', serverId);
+    logger.debug('[ServerRegistry] Heartbeat:', serverId);
     return '0x0' as `0x${string}`;
   }
 
@@ -943,7 +1000,7 @@ class ServerRegistryClient {
     endpoint?: string;
     stake?: bigint;
   }): Promise<{ instanceId: string; txHash: `0x${string}` }> {
-    console.log('[ServerRegistry] Claim stale instance:', config);
+    logger.debug('[ServerRegistry] Claim stale instance:', config);
     return { instanceId: '0x0', txHash: '0x0' as `0x${string}` };
   }
 
@@ -956,15 +1013,15 @@ class ServerRegistryClient {
   }
 
   async shutdown(): Promise<void> {
-    console.log('[ServerRegistry] Shutdown');
+    logger.debug('[ServerRegistry] Shutdown');
   }
 
   async startInstance(_instanceId: string): Promise<void> {
-    console.log('[ServerRegistry] Start instance');
+    logger.debug('[ServerRegistry] Start instance');
   }
 
   async checkpoint(cid: string, stateHash: string): Promise<`0x${string}`> {
-    console.log('[ServerRegistry] Checkpoint:', { cid, stateHash });
+    logger.debug('[ServerRegistry] Checkpoint:', { cid, stateHash });
     return '0x0' as `0x${string}`;
   }
 
@@ -981,9 +1038,13 @@ class ServerRegistryClient {
     tickCount: number
   ): Promise<`0x${string}`> {
     if (!this.walletClient) {
-      throw new Error('[ServerRegistry] Wallet required');
+      throw new WalletError(
+        'Wallet required for checkpoint update',
+        '0x0',
+        'NOT_CONNECTED'
+      );
     }
-    console.log('[ServerRegistry] Update checkpoint:', {
+    logger.debug('[ServerRegistry] Update checkpoint:', {
       serverId,
       checkpointCid,
       tickCount,

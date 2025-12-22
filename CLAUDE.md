@@ -19,12 +19,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Contracts:** `cd packages/contracts && forge test`
 - **Single test:** `bun test path/to/test.ts`
 
-### Database (Drizzle + Postgres)
-- **Generate migrations:** `bun run db:generate`
-- **Run migrations:** `bun run db:migrate`
-- **Push schema:** `bun run db:push` (dev only)
-- **Studio UI:** `bun run db:studio`
+### Database (CovenantQL / CQL)
+- **Check status:** `bun run babylon db status`
+- **Connect/test:** `bun run babylon db connect`
 - **Seed data:** `bun run db:seed` or `bun run db:seed:test all`
+- Schema is managed by Jeju platform; local schema definitions are for TypeScript types
 
 ### Deployment & Operations
 - **Deploy contracts:** `bun run deploy:local|testnet|mainnet`
@@ -49,7 +48,7 @@ apps/* → packages/* → contracts
 - **engine:** Game world, perpetuals, simulation logic (domain)
 - **agents:** Agent runtime, Agent0/A2A/MCP integrations
 - **api:** Server utilities (auth, rate limit, redis, SSE, token counting)
-- **db:** Drizzle schema and client
+- **db:** CQL client and schema types
 - **shared:** Client-safe types, utils, config
 - **contracts:** Smart contracts (Hardhat + Foundry)
 
@@ -75,8 +74,8 @@ Only consider work done after all three pass without errors.
 1. Copy `.env.example` to `.env`
 2. Run `scripts/pre-dev/pre-dev-local.ts` for localnet defaults
 3. Key variables:
-   - `DATABASE_URL` - Postgres connection
-   - `NEXT_PUBLIC_PRIVY_APP_ID` - Auth
+   - `CQL_BLOCK_PRODUCER_ENDPOINT` - CQL database endpoint
+   - `JEJU_OAUTH3_SERVICE_URL` - Auth (OAuth3)
    - `GROQ_API_KEY` or `OPENAI_API_KEY` - AI models
    - `CRON_SECRET` - For cron endpoints
    - `GAME_START` - Control game state (pause/running)
@@ -112,3 +111,120 @@ Currently migrating architecture while keeping new code portable:
 - Don't use bash for file operations (use dedicated Read/Write/Edit tools)
 - Don't ignore linter issues from other work-in-progress
 - Always check existing code before writing new implementations
+
+## Production Operations
+
+### Game Control
+
+**Pause/Resume via Environment:**
+```bash
+# Pause game (skips all ticks)
+GAME_START=false
+
+# Resume game (default behavior)
+GAME_START=true  # or unset
+```
+
+**Pause/Resume via Database:**
+```sql
+-- Pause game
+UPDATE "Game" SET "isRunning" = false, "pausedAt" = NOW() WHERE "isContinuous" = true;
+
+-- Resume game
+UPDATE "Game" SET "isRunning" = true, "pausedAt" = NULL WHERE "isContinuous" = true;
+```
+
+**Via API:**
+```bash
+# Control game state
+curl -X POST https://your-domain/api/game/control \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "pause"}'  # or "start"
+```
+
+### Cron Job Configuration
+
+All cron jobs are defined in [`vercel.json`](vercel.json):
+
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| `game-tick` | Every minute | Content generation, NPC trading, question resolution |
+| `agent-tick` | Every minute | Autonomous agent actions |
+| `realtime-drain` | Every minute | Flush SSE outbox to Redis |
+| `reputation-sync` | Daily 2am | Sync reputation to blockchain |
+| `perp-funding` | Every 8 hours | Calculate perpetual funding rates |
+| `world-facts` | Every 6 hours | Fetch RSS feeds, generate parody headlines |
+
+**Relay to Staging:**
+Set `REDIRECT_CRON_STAGING=true` to forward production cron calls to staging for testing.
+
+### Health Checks
+
+**Verify cron health:**
+```bash
+curl -X GET https://your-domain/api/cron/health-check \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+**Check game state:**
+```bash
+curl -s https://your-domain/api/health
+# Returns: {"status":"ok","timestamp":"...","env":"production"}
+```
+
+**View cron metrics (admin):**
+```bash
+curl -X GET https://your-domain/api/admin/cron-metrics \
+  -H "x-admin-token: $ADMIN_TOKEN"
+```
+
+### Troubleshooting Runbook
+
+**Cron not firing:**
+1. Check `vercel.json` has the cron entry
+2. Verify `CRON_SECRET` is set in Vercel environment
+3. Check Vercel dashboard → Cron Jobs tab for execution history
+4. Review function logs for auth failures
+
+**Content not generating:**
+1. Check game is running: `SELECT "isRunning" FROM "Game" WHERE "isContinuous" = true`
+2. Verify active questions exist: `SELECT COUNT(*) FROM "Question" WHERE status = 'active'`
+3. Check lookahead buffer: `SELECT MAX(timestamp) FROM "Post"` should be 15+ min ahead
+4. Review game-tick logs for errors
+
+**Agents not trading:**
+1. Verify game is running (see above)
+2. Check agent configs: `SELECT * FROM "UserAgentConfig" WHERE "autonomousTrading" = true`
+3. Verify agent has sufficient points: `pointsBalance >= 1`
+4. Check agent-tick logs for lock contention or errors
+
+**Lock contention (frequent "lock held" messages):**
+1. This is expected if ticks take > 1 minute
+2. Check tick duration in logs
+3. If consistently slow, investigate which phase is slow:
+   - Content generation (LLM calls)
+   - NPC trading decisions
+   - Question resolution
+4. Consider increasing tick interval or optimizing slow operations
+
+### Critical Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CRON_SECRET` | Production | Cron auth (fail-closed if missing) |
+| `CQL_BLOCK_PRODUCER_ENDPOINT` | Yes | CovenantQL block producer endpoint |
+| `CQL_DATABASE_ID` | Yes | CQL database identifier |
+| `GAME_START` | No | Set to `false` to pause all game activity |
+| `REDIRECT_CRON_STAGING` | No | Set to `true` to relay crons to staging |
+| `GROQ_API_KEY` | Yes | LLM provider for content generation |
+| `OPENAI_API_KEY` | Fallback | Alternative LLM provider |
+
+### Monitoring Alerts
+
+Configure alerts for:
+- **Game tick failure:** 3+ consecutive failures → critical
+- **Agent tick timeout:** > 600s execution → warning
+- **No content generated:** 30+ minutes without new posts → warning
+- **Lookahead buffer low:** < 5 minutes ahead → critical
+- **Database connection failures:** Any connection error → critical

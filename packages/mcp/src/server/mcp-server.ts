@@ -2,8 +2,10 @@
  * MCP Server Implementation
  *
  * Defines MCP server info, capabilities, and available tools
+ * Uses Zod schemas as single source of truth for tool input validation
  */
 
+import { toJSONSchema, type ZodObject, type ZodRawShape } from 'zod';
 import type {
   Implementation,
   InitializeResult,
@@ -12,6 +14,94 @@ import type {
   ServerCapabilities,
 } from '../types/mcp';
 import { MCP_PROTOCOL_VERSIONS } from '../types/mcp';
+import {
+  AcceptGroupInviteArgsSchema,
+  AppealBanArgsSchema,
+  AppealBanWithEscrowArgsSchema,
+  BlockUserArgsSchema,
+  BuySharesArgsSchema,
+  CheckBlockStatusArgsSchema,
+  CheckMuteStatusArgsSchema,
+  ClosePositionArgsSchema,
+  CreateCommentArgsSchema,
+  CreateEscrowPaymentArgsSchema,
+  CreateGroupArgsSchema,
+  CreatePostArgsSchema,
+  DeclineGroupInviteArgsSchema,
+  DeleteCommentArgsSchema,
+  DeletePostArgsSchema,
+  FavoriteProfileArgsSchema,
+  FollowUserArgsSchema,
+  GetBalanceArgsSchema,
+  GetBlocksArgsSchema,
+  GetChatMessagesArgsSchema,
+  GetChatsArgsSchema,
+  GetCommentsArgsSchema,
+  GetFavoritePostsArgsSchema,
+  GetFavoritesArgsSchema,
+  GetFollowersArgsSchema,
+  GetFollowingArgsSchema,
+  GetGroupInvitesArgsSchema,
+  GetLeaderboardArgsSchema,
+  GetMarketDataArgsSchema,
+  GetMarketPricesArgsSchema,
+  GetMarketsArgsSchema,
+  GetMutesArgsSchema,
+  GetNotificationsArgsSchema,
+  GetOrganizationsArgsSchema,
+  GetPerpetualsArgsSchema,
+  GetPositionsArgsSchema,
+  GetPostsByTagArgsSchema,
+  GetReferralCodeArgsSchema,
+  GetReferralStatsArgsSchema,
+  GetReferralsArgsSchema,
+  GetReputationArgsSchema,
+  GetReputationBreakdownArgsSchema,
+  GetSystemStatsArgsSchema,
+  GetTradeHistoryArgsSchema,
+  GetTradesArgsSchema,
+  GetTrendingTagsArgsSchema,
+  GetUnreadCountArgsSchema,
+  GetUserProfileArgsSchema,
+  GetUserStatsArgsSchema,
+  GetUserWalletArgsSchema,
+  LeaveChatArgsSchema,
+  LikeCommentArgsSchema,
+  LikePostArgsSchema,
+  ListEscrowPaymentsArgsSchema,
+  MarkNotificationsReadArgsSchema,
+  MuteUserArgsSchema,
+  OpenPositionArgsSchema,
+  PaymentReceiptArgsSchema,
+  PaymentRequestArgsSchema,
+  PlaceBetArgsSchema,
+  QueryFeedArgsSchema,
+  RefundEscrowPaymentArgsSchema,
+  ReportPostArgsSchema,
+  ReportUserArgsSchema,
+  SearchUsersArgsSchema,
+  SellSharesArgsSchema,
+  SendMessageArgsSchema,
+  SharePostArgsSchema,
+  TransferPointsArgsSchema,
+  UnblockUserArgsSchema,
+  UnfavoriteProfileArgsSchema,
+  UnfollowUserArgsSchema,
+  UnlikePostArgsSchema,
+  UnmuteUserArgsSchema,
+  UpdateProfileArgsSchema,
+  VerifyEscrowPaymentArgsSchema,
+} from '../utils/tool-args-validation';
+
+/**
+ * Convert Zod schema to MCP-compatible inputSchema
+ */
+function schemaToInputSchema(
+  schema: ZodObject<ZodRawShape>
+): MCPTool['inputSchema'] {
+  const jsonSchema = toJSONSchema(schema);
+  return jsonSchema as MCPTool['inputSchema'];
+}
 
 /**
  * Default MCP protocol version
@@ -73,991 +163,406 @@ export function getInitializeResult(
 
 /**
  * Get available MCP tools
+ * Uses Zod schemas as the single source of truth for input validation
  */
 export function getAvailableTools(): MCPTool[] {
   return [
+    // Core Market Operations
     {
       name: 'get_markets',
       description: 'Get all active prediction markets',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          type: {
-            type: 'string',
-            enum: ['prediction', 'perpetuals', 'all'],
-            description: 'Market type to filter',
-          },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetMarketsArgsSchema),
     },
     {
       name: 'place_bet',
       description: 'Place a bet on a prediction market',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          marketId: { type: 'string', description: 'Market ID' },
-          side: {
-            type: 'string',
-            enum: ['YES', 'NO'],
-            description: 'Bet side',
-          },
-          amount: { type: 'number', description: 'Bet amount in points' },
-        },
-        required: ['marketId', 'side', 'amount'],
-      },
+      inputSchema: schemaToInputSchema(PlaceBetArgsSchema),
     },
     {
       name: 'get_balance',
       description: 'Get your current balance and P&L',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetBalanceArgsSchema),
     },
     {
       name: 'get_positions',
       description: 'Get all open positions',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          marketId: {
-            type: 'string',
-            description: 'Filter by specific market ID',
-          },
-          limit: {
-            type: 'number',
-            description: 'Limit number of results',
-          },
-          offset: {
-            type: 'number',
-            description: 'Pagination offset',
-          },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetPositionsArgsSchema),
     },
     {
       name: 'close_position',
       description: 'Close an open position',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          positionId: { type: 'string', description: 'Position ID to close' },
-        },
-        required: ['positionId'],
-      },
+      inputSchema: schemaToInputSchema(ClosePositionArgsSchema),
     },
     {
       name: 'get_market_data',
       description: 'Get detailed data for a specific market',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          marketId: { type: 'string', description: 'Market ID' },
-        },
-        required: ['marketId'],
-      },
+      inputSchema: schemaToInputSchema(GetMarketDataArgsSchema),
     },
     {
       name: 'query_feed',
       description: 'Query the social feed for posts',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: {
-            type: 'number',
-            description: 'Number of posts to return',
-            default: 20,
-          },
-          questionId: {
-            type: 'string',
-            description: 'Filter by question ID',
-          },
-        },
-      },
+      inputSchema: schemaToInputSchema(QueryFeedArgsSchema),
     },
     // Market Operations - Additional Tools
     {
       name: 'buy_shares',
       description: 'Buy shares in a prediction market',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          marketId: { type: 'string', description: 'Market ID' },
-          outcome: {
-            type: 'string',
-            enum: ['YES', 'NO'],
-            description: 'Outcome to buy shares for',
-          },
-          amount: { type: 'number', description: 'Amount to invest' },
-        },
-        required: ['marketId', 'outcome', 'amount'],
-      },
+      inputSchema: schemaToInputSchema(BuySharesArgsSchema),
     },
     {
       name: 'sell_shares',
       description: 'Sell shares from a position',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          positionId: { type: 'string', description: 'Position ID' },
-          shares: { type: 'number', description: 'Number of shares to sell' },
-        },
-        required: ['positionId', 'shares'],
-      },
+      inputSchema: schemaToInputSchema(SellSharesArgsSchema),
     },
     {
       name: 'open_position',
       description: 'Open a new perpetual position',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          ticker: { type: 'string', description: 'Ticker symbol' },
-          side: {
-            type: 'string',
-            enum: ['LONG', 'SHORT'],
-            description: 'Position side',
-          },
-          amount: { type: 'number', description: 'Position amount' },
-          leverage: {
-            type: 'number',
-            description: 'Leverage (1-100)',
-          },
-        },
-        required: ['ticker', 'side', 'amount', 'leverage'],
-      },
+      inputSchema: schemaToInputSchema(OpenPositionArgsSchema),
     },
     {
       name: 'get_market_prices',
       description: 'Get real-time market prices',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          marketId: { type: 'string', description: 'Market ID' },
-        },
-        required: ['marketId'],
-      },
+      inputSchema: schemaToInputSchema(GetMarketPricesArgsSchema),
     },
     {
       name: 'get_perpetuals',
       description: 'Get all perpetual markets',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetPerpetualsArgsSchema),
     },
     {
       name: 'get_trades',
       description: 'Get recent trades',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: { type: 'number', description: 'Number of trades to return' },
-          marketId: { type: 'string', description: 'Filter by market ID' },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetTradesArgsSchema),
     },
     {
       name: 'get_trade_history',
       description: 'Get trade history for a user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID' },
-          limit: { type: 'number', description: 'Number of trades to return' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(GetTradeHistoryArgsSchema),
     },
     // Social Features
     {
       name: 'create_post',
       description: 'Create a new post',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          content: {
-            type: 'string',
-            description: 'Post content (1-5000 characters)',
-          },
-          type: {
-            type: 'string',
-            enum: ['post', 'article'],
-            description: 'Post type',
-            default: 'post',
-          },
-        },
-        required: ['content'],
-      },
+      inputSchema: schemaToInputSchema(CreatePostArgsSchema),
     },
     {
       name: 'delete_post',
       description: 'Delete a post',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'string', description: 'Post ID' },
-        },
-        required: ['postId'],
-      },
+      inputSchema: schemaToInputSchema(DeletePostArgsSchema),
     },
     {
       name: 'like_post',
       description: 'Like a post',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'string', description: 'Post ID' },
-        },
-        required: ['postId'],
-      },
+      inputSchema: schemaToInputSchema(LikePostArgsSchema),
     },
     {
       name: 'unlike_post',
       description: 'Unlike a post',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'string', description: 'Post ID' },
-        },
-        required: ['postId'],
-      },
+      inputSchema: schemaToInputSchema(UnlikePostArgsSchema),
     },
     {
       name: 'share_post',
       description: 'Share a post',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'string', description: 'Post ID' },
-          comment: { type: 'string', description: 'Optional comment' },
-        },
-        required: ['postId'],
-      },
+      inputSchema: schemaToInputSchema(SharePostArgsSchema),
     },
     {
       name: 'get_comments',
       description: 'Get comments on a post',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'string', description: 'Post ID' },
-          limit: {
-            type: 'number',
-            description: 'Number of comments to return',
-          },
-        },
-        required: ['postId'],
-      },
+      inputSchema: schemaToInputSchema(GetCommentsArgsSchema),
     },
     {
       name: 'create_comment',
       description: 'Create a comment on a post',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'string', description: 'Post ID' },
-          content: {
-            type: 'string',
-            description: 'Comment content (1-2000 characters)',
-          },
-        },
-        required: ['postId', 'content'],
-      },
+      inputSchema: schemaToInputSchema(CreateCommentArgsSchema),
     },
     {
       name: 'delete_comment',
       description: 'Delete a comment',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          commentId: { type: 'string', description: 'Comment ID' },
-        },
-        required: ['commentId'],
-      },
+      inputSchema: schemaToInputSchema(DeleteCommentArgsSchema),
     },
     {
       name: 'like_comment',
       description: 'Like a comment',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          commentId: { type: 'string', description: 'Comment ID' },
-        },
-        required: ['commentId'],
-      },
+      inputSchema: schemaToInputSchema(LikeCommentArgsSchema),
     },
     {
       name: 'get_posts_by_tag',
       description: 'Get posts by tag',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tag: { type: 'string', description: 'Tag name' },
-          limit: { type: 'number', description: 'Number of posts to return' },
-          offset: { type: 'number', description: 'Pagination offset' },
-        },
-        required: ['tag'],
-      },
+      inputSchema: schemaToInputSchema(GetPostsByTagArgsSchema),
     },
     // User Management
     {
       name: 'get_user_profile',
       description: 'Get user profile information',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(GetUserProfileArgsSchema),
     },
     {
       name: 'update_profile',
       description: 'Update your profile',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          displayName: { type: 'string', description: 'Display name' },
-          bio: { type: 'string', description: 'Bio (max 500 characters)' },
-          username: { type: 'string', description: 'Username' },
-          profileImageUrl: { type: 'string', description: 'Profile image URL' },
-        },
-      },
+      inputSchema: schemaToInputSchema(UpdateProfileArgsSchema),
     },
     {
       name: 'follow_user',
       description: 'Follow a user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to follow' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(FollowUserArgsSchema),
     },
     {
       name: 'unfollow_user',
       description: 'Unfollow a user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to unfollow' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(UnfollowUserArgsSchema),
     },
     {
       name: 'get_followers',
       description: 'Get user followers',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID' },
-          limit: {
-            type: 'number',
-            description: 'Number of followers to return',
-          },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(GetFollowersArgsSchema),
     },
     {
       name: 'get_following',
       description: 'Get users being followed',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID' },
-          limit: { type: 'number', description: 'Number of users to return' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(GetFollowingArgsSchema),
     },
     {
       name: 'search_users',
       description: 'Search for users',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Search query' },
-          limit: { type: 'number', description: 'Number of results to return' },
-        },
-        required: ['query'],
-      },
+      inputSchema: schemaToInputSchema(SearchUsersArgsSchema),
     },
     {
       name: 'get_user_wallet',
       description: 'Get user wallet information',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(GetUserWalletArgsSchema),
     },
     {
       name: 'get_user_stats',
       description: 'Get user statistics',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(GetUserStatsArgsSchema),
     },
     // Chats & Messaging
     {
       name: 'get_chats',
       description: 'List all chats',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          filter: {
-            type: 'string',
-            enum: ['all', 'dms', 'groups'],
-            description: 'Filter by chat type',
-          },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetChatsArgsSchema),
     },
     {
       name: 'get_chat_messages',
       description: 'Get messages in a chat',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          chatId: { type: 'string', description: 'Chat ID' },
-          limit: {
-            type: 'number',
-            description: 'Number of messages to return',
-          },
-          offset: { type: 'number', description: 'Pagination offset' },
-        },
-        required: ['chatId'],
-      },
+      inputSchema: schemaToInputSchema(GetChatMessagesArgsSchema),
     },
     {
       name: 'send_message',
       description: 'Send a message in a chat',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          chatId: { type: 'string', description: 'Chat ID' },
-          content: {
-            type: 'string',
-            description: 'Message content (1-5000 characters)',
-          },
-        },
-        required: ['chatId', 'content'],
-      },
+      inputSchema: schemaToInputSchema(SendMessageArgsSchema),
     },
     {
       name: 'create_group',
       description: 'Create a group chat',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Group name (1-100 characters)',
-          },
-          description: {
-            type: 'string',
-            description: 'Group description (max 500 characters)',
-          },
-          memberIds: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Member user IDs (at least 1 required)',
-          },
-        },
-        required: ['name', 'memberIds'],
-      },
+      inputSchema: schemaToInputSchema(CreateGroupArgsSchema),
     },
     {
       name: 'leave_chat',
       description: 'Leave a chat',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          chatId: { type: 'string', description: 'Chat ID' },
-        },
-        required: ['chatId'],
-      },
+      inputSchema: schemaToInputSchema(LeaveChatArgsSchema),
     },
     {
       name: 'get_unread_count',
       description: 'Get unread message count',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetUnreadCountArgsSchema),
     },
     // Notifications
     {
       name: 'get_notifications',
       description: 'Get notifications',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: {
-            type: 'number',
-            description: 'Number of notifications to return',
-          },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetNotificationsArgsSchema),
     },
     {
       name: 'mark_notifications_read',
       description: 'Mark notifications as read',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          notificationIds: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Notification IDs to mark as read',
-          },
-        },
-        required: ['notificationIds'],
-      },
+      inputSchema: schemaToInputSchema(MarkNotificationsReadArgsSchema),
     },
     {
       name: 'get_group_invites',
       description: 'Get group invites',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetGroupInvitesArgsSchema),
     },
     {
       name: 'accept_group_invite',
       description: 'Accept a group invite',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          inviteId: { type: 'string', description: 'Invite ID' },
-        },
-        required: ['inviteId'],
-      },
+      inputSchema: schemaToInputSchema(AcceptGroupInviteArgsSchema),
     },
     {
       name: 'decline_group_invite',
       description: 'Decline a group invite',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          inviteId: { type: 'string', description: 'Invite ID' },
-        },
-        required: ['inviteId'],
-      },
+      inputSchema: schemaToInputSchema(DeclineGroupInviteArgsSchema),
     },
     // Leaderboard & Stats
     {
       name: 'get_leaderboard',
       description: 'Get leaderboard',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          page: { type: 'number', description: 'Page number' },
-          pageSize: { type: 'number', description: 'Page size' },
-          pointsType: {
-            type: 'string',
-            enum: ['all', 'earned', 'referral'],
-            description: 'Points type filter',
-          },
-          minPoints: { type: 'number', description: 'Minimum points' },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetLeaderboardArgsSchema),
     },
     {
       name: 'get_system_stats',
       description: 'Get system statistics',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetSystemStatsArgsSchema),
     },
     // Referrals & Rewards
     {
       name: 'get_referral_code',
       description: 'Get your referral code',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetReferralCodeArgsSchema),
     },
     {
       name: 'get_referrals',
       description: 'List your referrals',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetReferralsArgsSchema),
     },
     {
       name: 'get_referral_stats',
       description: 'Get referral statistics',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetReferralStatsArgsSchema),
     },
     // Reputation
     {
       name: 'get_reputation',
       description: 'Get user reputation',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: {
-            type: 'string',
-            description: 'User ID (optional, defaults to self)',
-          },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetReputationArgsSchema),
     },
     {
       name: 'get_reputation_breakdown',
       description: 'Get reputation breakdown',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(GetReputationBreakdownArgsSchema),
     },
     // Trending & Discovery
     {
       name: 'get_trending_tags',
       description: 'Get trending tags',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: { type: 'number', description: 'Number of tags to return' },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetTrendingTagsArgsSchema),
     },
     // Organizations
     {
       name: 'get_organizations',
       description: 'List organizations',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: {
-            type: 'number',
-            description: 'Number of organizations to return',
-          },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetOrganizationsArgsSchema),
     },
     // x402 Micropayments
     {
       name: 'payment_request',
       description: 'Request a payment via x402',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          to: { type: 'string', description: 'Recipient address' },
-          amount: { type: 'string', description: 'Amount in wei' },
-          service: { type: 'string', description: 'Service identifier' },
-          metadata: { type: 'object', description: 'Optional metadata' },
-          from: { type: 'string', description: 'Sender address (optional)' },
-        },
-        required: ['to', 'amount', 'service'],
-      },
+      inputSchema: schemaToInputSchema(PaymentRequestArgsSchema),
     },
     {
       name: 'payment_receipt',
       description: 'Get payment receipt',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          requestId: { type: 'string', description: 'Payment request ID' },
-          txHash: { type: 'string', description: 'Transaction hash' },
-        },
-        required: ['requestId', 'txHash'],
-      },
+      inputSchema: schemaToInputSchema(PaymentReceiptArgsSchema),
     },
     // Moderation
     {
       name: 'block_user',
       description: 'Block a user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to block' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(BlockUserArgsSchema),
     },
     {
       name: 'unblock_user',
       description: 'Unblock a user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to unblock' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(UnblockUserArgsSchema),
     },
     {
       name: 'mute_user',
       description: 'Mute a user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to mute' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(MuteUserArgsSchema),
     },
     {
       name: 'unmute_user',
       description: 'Unmute a user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to unmute' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(UnmuteUserArgsSchema),
     },
     {
       name: 'report_user',
       description: 'Report a user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to report' },
-          reason: { type: 'string', description: 'Report reason' },
-        },
-        required: ['userId', 'reason'],
-      },
+      inputSchema: schemaToInputSchema(ReportUserArgsSchema),
     },
     {
       name: 'report_post',
       description: 'Report a post',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'string', description: 'Post ID to report' },
-          reason: { type: 'string', description: 'Report reason' },
-        },
-        required: ['postId', 'reason'],
-      },
+      inputSchema: schemaToInputSchema(ReportPostArgsSchema),
     },
     {
       name: 'get_blocks',
       description: 'Get blocked users',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetBlocksArgsSchema),
     },
     {
       name: 'get_mutes',
       description: 'Get muted users',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
+      inputSchema: schemaToInputSchema(GetMutesArgsSchema),
     },
     {
       name: 'check_block_status',
       description: 'Check if a user is blocked',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to check' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(CheckBlockStatusArgsSchema),
     },
     {
       name: 'check_mute_status',
       description: 'Check if a user is muted',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to check' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(CheckMuteStatusArgsSchema),
     },
     // Moderation Escrow
     {
       name: 'create_escrow_payment',
       description: 'Create escrow payment (Admin only)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          recipientId: { type: 'string', description: 'Recipient user ID' },
-          amountUSD: { type: 'number', description: 'Amount in USD' },
-          reason: { type: 'string', description: 'Reason for escrow' },
-          recipientWalletAddress: {
-            type: 'string',
-            description: 'Recipient wallet address',
-          },
-        },
-        required: ['recipientId', 'amountUSD', 'recipientWalletAddress'],
-      },
+      inputSchema: schemaToInputSchema(CreateEscrowPaymentArgsSchema),
     },
     {
       name: 'verify_escrow_payment',
       description: 'Verify escrow payment (Admin only)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          escrowId: { type: 'string', description: 'Escrow ID' },
-          txHash: { type: 'string', description: 'Transaction hash' },
-          fromAddress: { type: 'string', description: 'From address' },
-          toAddress: { type: 'string', description: 'To address' },
-          amount: { type: 'string', description: 'Amount in wei' },
-        },
-        required: ['escrowId', 'txHash', 'fromAddress', 'toAddress', 'amount'],
-      },
+      inputSchema: schemaToInputSchema(VerifyEscrowPaymentArgsSchema),
     },
     {
       name: 'refund_escrow_payment',
       description: 'Refund escrow payment (Admin only)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          escrowId: { type: 'string', description: 'Escrow ID' },
-          refundTxHash: {
-            type: 'string',
-            description: 'Refund transaction hash',
-          },
-          reason: { type: 'string', description: 'Refund reason' },
-        },
-        required: ['escrowId', 'refundTxHash'],
-      },
+      inputSchema: schemaToInputSchema(RefundEscrowPaymentArgsSchema),
     },
     {
       name: 'list_escrow_payments',
       description: 'List escrow payments (Admin only)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          recipientId: {
-            type: 'string',
-            description: 'Filter by recipient ID',
-          },
-          adminId: { type: 'string', description: 'Filter by admin ID' },
-          status: {
-            type: 'string',
-            enum: ['pending', 'paid', 'refunded', 'expired'],
-            description: 'Filter by status',
-          },
-          limit: { type: 'number', description: 'Number of results' },
-          offset: { type: 'number', description: 'Pagination offset' },
-        },
-      },
+      inputSchema: schemaToInputSchema(ListEscrowPaymentsArgsSchema),
     },
     // Ban Appeals
     {
       name: 'appeal_ban',
       description: 'Appeal a ban',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          reason: {
-            type: 'string',
-            description: 'Appeal reason (10-2000 characters)',
-          },
-        },
-        required: ['reason'],
-      },
+      inputSchema: schemaToInputSchema(AppealBanArgsSchema),
     },
     {
       name: 'appeal_ban_with_escrow',
       description: 'Appeal ban with escrow payment',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          reason: {
-            type: 'string',
-            description: 'Appeal reason (10-2000 characters)',
-          },
-          escrowPaymentTxHash: {
-            type: 'string',
-            description: 'Escrow payment transaction hash',
-          },
-        },
-        required: ['reason', 'escrowPaymentTxHash'],
-      },
+      inputSchema: schemaToInputSchema(AppealBanWithEscrowArgsSchema),
     },
     // Favorites
     {
       name: 'favorite_profile',
       description: 'Favorite a profile',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to favorite' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(FavoriteProfileArgsSchema),
     },
     {
       name: 'unfavorite_profile',
       description: 'Unfavorite a profile',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          userId: { type: 'string', description: 'User ID to unfavorite' },
-        },
-        required: ['userId'],
-      },
+      inputSchema: schemaToInputSchema(UnfavoriteProfileArgsSchema),
     },
     {
       name: 'get_favorites',
       description: 'Get favorited profiles',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: {
-            type: 'number',
-            description: 'Number of favorites to return',
-          },
-          offset: { type: 'number', description: 'Pagination offset' },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetFavoritesArgsSchema),
     },
     {
       name: 'get_favorite_posts',
       description: 'Get favorited posts',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: { type: 'number', description: 'Number of posts to return' },
-          offset: { type: 'number', description: 'Pagination offset' },
-        },
-      },
+      inputSchema: schemaToInputSchema(GetFavoritePostsArgsSchema),
     },
     // Points Transfer
     {
       name: 'transfer_points',
       description: 'Transfer points to another user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          recipientId: { type: 'string', description: 'Recipient user ID' },
-          amount: { type: 'number', description: 'Amount to transfer' },
-          message: {
-            type: 'string',
-            description: 'Optional message (max 200 characters)',
-          },
-        },
-        required: ['recipientId', 'amount'],
-      },
+      inputSchema: schemaToInputSchema(TransferPointsArgsSchema),
     },
   ];
 }

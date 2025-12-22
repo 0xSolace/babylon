@@ -1,6 +1,7 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
+import { useMutation } from '@tanstack/react-query';
 import { Send, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -32,19 +33,32 @@ import { useAuth } from '@/hooks/useAuth';
  * />
  * ```
  */
+/**
+ * Created post structure returned from the API.
+ */
+interface CreatedPost {
+  id: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  authorUsername?: string | null;
+  authorDisplayName?: string | null;
+  authorProfileImageUrl?: string | null;
+  timestamp: string;
+}
+
+/**
+ * Create post API response structure.
+ */
+interface CreatePostResponse {
+  post?: CreatedPost;
+  error?: string;
+}
+
 interface CreatePostModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onPostCreated?: (post: {
-    id: string;
-    content: string;
-    authorId: string;
-    authorName: string;
-    authorUsername?: string | null;
-    authorDisplayName?: string | null;
-    authorProfileImageUrl?: string | null;
-    timestamp: string;
-  }) => void;
+  onPostCreated?: (post: CreatedPost) => void;
 }
 
 export function CreatePostModal({
@@ -53,8 +67,47 @@ export function CreatePostModal({
   onPostCreated,
 }: CreatePostModalProps) {
   const [content, setContent] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { authenticated, user } = useAuth();
+  const { authenticated, user, getAccessToken } = useAuth();
+
+  const createPostMutation = useMutation({
+    mutationFn: async (postContent: string): Promise<CreatePostResponse> => {
+      const token = await getAccessToken();
+
+      if (!token) {
+        throw new Error('Please wait for authentication to complete.');
+      }
+
+      const response = await fetch('/api/posts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: postContent }),
+      });
+
+      const data: CreatePostResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create post');
+      }
+
+      return data;
+    },
+    onSuccess: (data) => {
+      setContent('');
+      if (data.post) {
+        onPostCreated?.(data.post);
+      }
+      onClose();
+    },
+    onError: (error: Error) => {
+      logger.error('Failed to create post:', error.message, 'CreatePostModal');
+      toast.error(error.message || 'Failed to create post. Please try again.');
+    },
+  });
+
+  const isSubmitting = createPostMutation.isPending;
 
   // Handle escape key and body scroll lock
   useEffect(() => {
@@ -87,49 +140,12 @@ export function CreatePostModal({
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!authenticated || !user || !content.trim()) return;
 
-    setIsSubmitting(true);
-    // Get auth token from window (set by useAuth hook)
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-
-    if (!token) {
-      toast.error('Please wait for authentication to complete.');
-      setIsSubmitting(false);
-      return;
-    }
-
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    };
-
-    const response = await fetch('/api/posts', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        content: content.trim(),
-      }),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      setContent('');
-      // Pass the created post data to the callback
-      if (data.post) {
-        onPostCreated?.(data.post);
-      }
-      onClose();
-    } else {
-      const error = await response.json();
-      logger.error('Failed to create post:', error, 'CreatePostModal');
-      toast.error(error.error || 'Failed to create post. Please try again.');
-    }
-    setIsSubmitting(false);
+    createPostMutation.mutate(content.trim());
   };
 
   return (

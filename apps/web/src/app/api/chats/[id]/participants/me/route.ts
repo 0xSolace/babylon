@@ -16,7 +16,7 @@
  *     summary: Leave chat
  *     description: Removes authenticated user from chat participants
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id

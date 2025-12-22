@@ -8,11 +8,12 @@
  * - Babylon server running on localhost:5007
  * - Valid API keys in .env.local
  * - Agent0 testnet access (Sepolia)
+ * - CQL database running (CovenantSQL via Jeju)
  */
 
 import { describe, expect, it } from 'bun:test';
 import type { A2APerpPosition } from '@babylon/a2a';
-import { db, eq, users } from '@babylon/db';
+import { db, initializeDB } from '@babylon/db';
 import dotenv from 'dotenv';
 import { BabylonA2AClient } from '../src/a2a-client';
 import { executeAction } from '../src/actions';
@@ -42,6 +43,9 @@ describe('E2E - Autonomous Agent Live Tests', () => {
   it('Phase 1: should have valid agent identity', async () => {
     console.log('\n🔍 Setting up E2E test environment...');
 
+    // Initialize CQL database
+    await initializeDB();
+
     // Use mock identity for tests (no Agent0 registration needed)
     agentIdentity = {
       tokenId: 888888,
@@ -49,23 +53,25 @@ describe('E2E - Autonomous Agent Live Tests', () => {
       agentId: 'agent-888888-0x888888',
     };
 
-    // Create test user in database if needed using Drizzle
-    const existing = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, agentIdentity.agentId))
-      .limit(1);
-    if (existing.length === 0) {
-      await db.insert(users).values({
-        id: agentIdentity.agentId,
-        walletAddress: agentIdentity.address,
-        displayName: 'E2E Test Agent',
-        username: 'e2e_test_agent',
-        email: 'e2e@test.local',
-        bio: 'E2E test user',
-        virtualBalance: '1000',
-        reputationPoints: 500,
-        updatedAt: new Date(),
+    // Check if test user already exists using CQL repository
+    const existing = await db.user.findUnique({
+      where: { id: agentIdentity.agentId },
+    });
+
+    if (!existing) {
+      // Create test user using CQL repository
+      await db.user.create({
+        data: {
+          id: agentIdentity.agentId,
+          walletAddress: agentIdentity.address,
+          displayName: 'E2E Test Agent',
+          username: 'e2e_test_agent',
+          email: 'e2e@test.local',
+          bio: 'E2E test user',
+          virtualBalance: '1000',
+          reputationPoints: 500,
+          updatedAt: new Date(),
+        },
       });
       console.log('✅ Created E2E test user in database');
     }

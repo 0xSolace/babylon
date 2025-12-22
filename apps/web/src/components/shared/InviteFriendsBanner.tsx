@@ -1,9 +1,10 @@
 'use client';
 
 import { getReferralUrl } from '@babylon/shared';
+import { useMutation } from '@tanstack/react-query';
 import { Check, Copy, ExternalLink, Trophy, X } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
@@ -25,46 +26,87 @@ interface InviteFriendsBannerProps {
   onDismiss?: () => void;
 }
 
+interface ProfileUpdatePayload {
+  bannerLastShown?: string;
+  bannerDismissCount?: number;
+}
+
+async function updateUserProfile(
+  userId: string,
+  payload: ProfileUpdatePayload
+): Promise<void> {
+  const token =
+    typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await fetch(
+    `/api/users/${encodeURIComponent(userId)}/update-profile`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to update profile');
+  }
+}
+
 export function InviteFriendsBanner({ onDismiss }: InviteFriendsBannerProps) {
   const { user, setUser } = useAuthStore();
   const [copiedReferral, setCopiedReferral] = useState(false);
+  const hasTrackedView = useRef(false);
+
+  const trackViewMutation = useMutation({
+    mutationFn: (userId: string) =>
+      updateUserProfile(userId, {
+        bannerLastShown: new Date().toISOString(),
+      }),
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: ({
+      userId,
+      dismissCount,
+    }: {
+      userId: string;
+      dismissCount: number;
+    }) =>
+      updateUserProfile(userId, {
+        bannerDismissCount: dismissCount,
+      }),
+    onSuccess: (_, { dismissCount }) => {
+      if (user) {
+        setUser({
+          ...user,
+          bannerDismissCount: dismissCount,
+        });
+      }
+      onDismiss?.();
+    },
+  });
 
   useEffect(() => {
-    const trackBannerView = async () => {
-      if (!user?.id) return;
+    if (!user?.id || hasTrackedView.current) return;
 
-      const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-      if (!token) return;
+    const viewKey = `banner_view_${user.id}`;
+    const lastView = localStorage.getItem(viewKey);
+    const now = Date.now();
 
-      // Track banner view in local storage
-      const viewKey = `banner_view_${user.id}`;
-      const lastView = localStorage.getItem(viewKey);
-      const now = Date.now();
+    localStorage.setItem(viewKey, now.toString());
 
-      // Store this view
-      localStorage.setItem(viewKey, now.toString());
-
-      // Update server if more than 1 day since last tracked
-      if (!lastView || now - parseInt(lastView) > 86400000) {
-        await fetch(
-          `/api/users/${encodeURIComponent(user.id)}/update-profile`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              bannerLastShown: new Date().toISOString(),
-            }),
-          }
-        );
-      }
-    };
-
-    trackBannerView();
-  }, [user]);
+    // Update server if more than 1 day since last tracked
+    if (!lastView || now - parseInt(lastView) > 86400000) {
+      hasTrackedView.current = true;
+      trackViewMutation.mutate(user.id);
+    }
+  }, [user?.id, trackViewMutation]);
 
   const handleCopyReferral = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -75,47 +117,21 @@ export function InviteFriendsBanner({ onDismiss }: InviteFriendsBannerProps) {
     setTimeout(() => setCopiedReferral(false), 2000);
   };
 
-  const handleDismiss = async (e: React.MouseEvent) => {
+  const handleDismiss = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (!user?.id) return;
 
-    // Track dismiss in local storage
     const dismissKey = `banner_dismiss_${user.id}`;
-    const dismissCount = parseInt(localStorage.getItem(dismissKey) || '0');
-    localStorage.setItem(dismissKey, (dismissCount + 1).toString());
+    const dismissCount = parseInt(localStorage.getItem(dismissKey) ?? '0') + 1;
+    localStorage.setItem(dismissKey, dismissCount.toString());
     localStorage.setItem(
       `banner_dismiss_time_${user.id}`,
       Date.now().toString()
     );
 
-    // Update server
-    const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-    if (token) {
-      await fetch(`/api/users/${encodeURIComponent(user.id)}/update-profile`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bannerDismissCount: dismissCount + 1,
-        }),
-      });
-
-      // Update local user state
-      if (user) {
-        setUser({
-          ...user,
-          bannerDismissCount: dismissCount + 1,
-        });
-      }
-    }
-
-    // Call parent dismiss handler
-    onDismiss?.();
+    dismissMutation.mutate({ userId: user.id, dismissCount });
   };
 
   if (!user?.referralCode) {

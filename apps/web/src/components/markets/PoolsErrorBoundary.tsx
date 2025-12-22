@@ -1,8 +1,8 @@
 'use client';
 
+import { logger } from '@babylon/shared';
 import { AlertTriangle } from 'lucide-react';
 import React from 'react';
-import { logger } from '@/lib/logger';
 
 interface Props {
   children: React.ReactNode;

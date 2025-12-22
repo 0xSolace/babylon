@@ -8,8 +8,15 @@
  *   a2a      - Run A2A protocol stress tests
  */
 
+import { z } from 'zod';
 import { getOption, parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';
+
+// Zod schema for A2A endpoint response
+const A2AEndpointResponseSchema = z.object({
+  service: z.string(),
+  version: z.string(),
+});
 
 function printHelp(): void {
   console.log(`
@@ -58,7 +65,13 @@ async function runLoadTest(args: ReturnType<typeof parseArgs>): Promise<void> {
   );
 
   const scenarioKey = scenario.toUpperCase() as keyof typeof TEST_SCENARIOS;
-  const config = TEST_SCENARIOS[scenarioKey];
+  const scenarioConfig = TEST_SCENARIOS[scenarioKey];
+
+  // Spread to make mutable copy
+  const config = {
+    ...scenarioConfig,
+    endpoints: [...scenarioConfig.endpoints],
+  };
 
   console.log(`Concurrent Users: ${config.concurrentUsers}`);
   console.log(`Duration: ${config.durationSeconds}s`);
@@ -156,7 +169,13 @@ async function runA2AStressTest(
   const scenarioKey = scenario
     .toUpperCase()
     .replace('-', '_') as keyof typeof A2A_TEST_SCENARIOS;
-  const config = A2A_TEST_SCENARIOS[scenarioKey];
+  const scenarioConfig = A2A_TEST_SCENARIOS[scenarioKey];
+
+  // Spread to make mutable copy
+  const config = {
+    ...scenarioConfig,
+    endpoints: [...scenarioConfig.endpoints],
+  };
 
   console.log(`Concurrent Agents: ${config.concurrentUsers}`);
   console.log(`Duration: ${config.durationSeconds}s`);
@@ -164,7 +183,8 @@ async function runA2AStressTest(
 
   // Check A2A endpoint
   const response = await fetch(`${baseUrl}/api/a2a`);
-  const data = await response.json();
+  const rawData = await response.json();
+  const data = A2AEndpointResponseSchema.parse(rawData);
 
   if (data.service !== 'Babylon A2A Protocol') {
     logger.fail('A2A endpoint not responding correctly');

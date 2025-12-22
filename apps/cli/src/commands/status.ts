@@ -12,23 +12,19 @@
 
 import { getAgentLLMStatus } from '@babylon/agents/llm';
 import {
-  actorState,
   checkDatabaseHealth,
   closeDatabase,
   db,
-  count as drizzleCount,
-  eq,
-  gameConfigs,
-  games,
-  gte,
-  isNotNull,
-  organizationState,
-  posts,
-  questions,
-  worldEvents,
+  type Game,
+  type GameConfig,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
-import { formatEther, formatUnits } from '@babylon/shared';
+import {
+  CHAIN_ID,
+  formatEther,
+  formatUnits,
+  getERC8004ContractAddresses,
+} from '@babylon/shared';
 import { execSync } from 'child_process';
 import { createPublicClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -56,6 +52,10 @@ EXAMPLES:
 `);
 }
 
+interface CountResult {
+  count: string;
+}
+
 async function checkGameStatus(): Promise<void> {
   logger.header('🎮 Game Status');
 
@@ -69,37 +69,40 @@ async function checkGameStatus(): Promise<void> {
 
   // Get actor count from static registry + actorState
   const staticActorCount = StaticDataRegistry.getAllActors().length;
-  const actorStateCount = await db
-    .select({ count: drizzleCount() })
-    .from(actorState);
-  const stateCount = Number(actorStateCount[0]!.count);
+  const actorStateCountResult = await db.query<CountResult>(
+    'SELECT COUNT(*)::text as count FROM "ActorState"'
+  );
+  const stateCount = Number(actorStateCountResult[0]!.count);
   console.log(`Actors: ${staticActorCount} static, ${stateCount} with state`);
 
   if (staticActorCount === 0) {
     logger.warn('No actors defined! Check packages/engine/src/data/actors/');
   }
 
-  const questionCountResult = await db
-    .select({ count: drizzleCount() })
-    .from(questions);
-  const questionCount = Number(questionCountResult[0]!.count);
+  const questionCountResult = await db.query<CountResult>(
+    'SELECT COUNT(*)::text as count FROM "Question"'
+  );
+  if (!questionCountResult[0]) {
+    throw new Error('Failed to query question count');
+  }
+  const questionCount = Number(questionCountResult[0].count);
 
-  const activeQuestionsResult = await db
-    .select({ count: drizzleCount() })
-    .from(questions)
-    .where(eq(questions.status, 'active'));
+  const activeQuestionsResult = await db.query<CountResult>(
+    `SELECT COUNT(*)::text as count FROM "Question" WHERE status = 'active'`
+  );
   const activeQuestions = Number(activeQuestionsResult[0]!.count);
   console.log(`Questions: ${questionCount} total, ${activeQuestions} active`);
 
-  const postCountResult = await db
-    .select({ count: drizzleCount() })
-    .from(posts);
+  const postCountResult = await db.query<CountResult>(
+    'SELECT COUNT(*)::text as count FROM "Post"'
+  );
   const postCount = Number(postCountResult[0]!.count);
 
-  const recentPostsResult = await db
-    .select({ count: drizzleCount() })
-    .from(posts)
-    .where(gte(posts.createdAt, new Date(Date.now() - 5 * 60 * 1000)));
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const recentPostsResult = await db.query<CountResult>(
+    `SELECT COUNT(*)::text as count FROM "Post" WHERE "createdAt" >= $1`,
+    [fiveMinutesAgo]
+  );
   const recentPosts = Number(recentPostsResult[0]!.count);
   console.log(`Posts: ${postCount} total, ${recentPosts} in last 5 minutes`);
 
@@ -109,21 +112,21 @@ async function checkGameStatus(): Promise<void> {
     logger.success('Content is being generated');
   }
 
-  const gameResult = await db
-    .select()
-    .from(games)
-    .where(eq(games.isContinuous, true))
-    .limit(1);
-  const game = gameResult[0] || null;
+  const gameResult = await db.query<Game>(
+    `SELECT * FROM "Game" WHERE "isContinuous" = true LIMIT 1`
+  );
+  const game = gameResult[0] ?? null;
   if (game) {
     console.log('\nGame State:');
     console.log(`  Status: ${game.isRunning ? '✅ RUNNING' : '⏸️  PAUSED'}`);
     console.log(`  Current Day: ${game.currentDay}`);
-    console.log(`  Current Date: ${game.currentDate.toLocaleString()}`);
+    console.log(
+      `  Current Date: ${game.currentDate ? new Date(game.currentDate).toLocaleString() : 'N/A'}`
+    );
     console.log(`  Active Questions: ${game.activeQuestions}`);
     console.log(`  Speed: ${game.speed}ms between ticks`);
     console.log(
-      `  Last Tick: ${game.lastTickAt ? game.lastTickAt.toLocaleString() : 'Never'}`
+      `  Last Tick: ${game.lastTickAt ? new Date(game.lastTickAt).toLocaleString() : 'Never'}`
     );
 
     if (!game.isRunning) {
@@ -133,15 +136,18 @@ async function checkGameStatus(): Promise<void> {
     logger.warn('No game state found');
   }
 
-  const eventCountResult = await db
-    .select({ count: drizzleCount() })
-    .from(worldEvents);
-  const eventCount = Number(eventCountResult[0]!.count);
+  const eventCountResult = await db.query<CountResult>(
+    'SELECT COUNT(*)::text as count FROM "WorldEvent"'
+  );
+  if (!eventCountResult[0]) {
+    throw new Error('Failed to query event count');
+  }
+  const eventCount = Number(eventCountResult[0].count);
 
-  const recentEventsResult = await db
-    .select({ count: drizzleCount() })
-    .from(worldEvents)
-    .where(gte(worldEvents.createdAt, new Date(Date.now() - 5 * 60 * 1000)));
+  const recentEventsResult = await db.query<CountResult>(
+    `SELECT COUNT(*)::text as count FROM "WorldEvent" WHERE "createdAt" >= $1`,
+    [fiveMinutesAgo]
+  );
   const recentEvents = Number(recentEventsResult[0]!.count);
   console.log(
     `\nEvents: ${eventCount} total, ${recentEvents} in last 5 minutes`
@@ -152,10 +158,9 @@ async function checkGameStatus(): Promise<void> {
   const companyCount =
     StaticDataRegistry.getOrganizationsByType('company').length;
 
-  const orgsWithPricesResult = await db
-    .select({ count: drizzleCount() })
-    .from(organizationState)
-    .where(isNotNull(organizationState.currentPrice));
+  const orgsWithPricesResult = await db.query<CountResult>(
+    `SELECT COUNT(*)::text as count FROM "OrganizationState" WHERE "currentPrice" IS NOT NULL`
+  );
   const orgsWithPrices = Number(orgsWithPricesResult[0]!.count);
   console.log(
     `Organizations: ${staticOrgCount} total, ${companyCount} companies, ${orgsWithPrices} with prices`
@@ -259,6 +264,12 @@ async function checkLLMStatus(): Promise<void> {
   }
 }
 
+interface Agent0RegistrationValue {
+  tokenId: number | string;
+  metadataCID?: string;
+  registeredAt?: string;
+}
+
 async function checkAgent0Status(): Promise<void> {
   logger.header('🤖 Agent0 Status');
 
@@ -275,81 +286,72 @@ async function checkAgent0Status(): Promise<void> {
     `  PINATA_JWT: ${process.env.PINATA_JWT ? '✅ Set' : '❌ Not set'}`
   );
 
-  try {
-    const configResult = await db
-      .select()
-      .from(gameConfigs)
-      .where(eq(gameConfigs.key, 'agent0_registration'))
-      .limit(1);
-    const config = configResult[0] || null;
+  const configResult = await db.query<GameConfig>(
+    `SELECT * FROM "GameConfig" WHERE key = 'agent0_registration' LIMIT 1`
+  );
+  const config = configResult[0];
 
-    if (
-      config?.value &&
-      typeof config.value === 'object' &&
-      'tokenId' in config.value
-    ) {
-      const regValue = config.value as {
-        tokenId: unknown;
-        metadataCID?: unknown;
-        registeredAt?: unknown;
-      };
+  if (
+    config &&
+    config.value &&
+    typeof config.value === 'object' &&
+    'tokenId' in config.value
+  ) {
+    const regValue = config.value as unknown as Agent0RegistrationValue;
 
-      console.log('\n✅ Database Registration Found:');
-      console.log(`   Token ID: ${regValue.tokenId}`);
-      console.log(`   Metadata CID: ${regValue.metadataCID}`);
-      console.log(`   Registered At: ${regValue.registeredAt}`);
+    console.log('\n✅ Database Registration Found:');
+    console.log(`   Token ID: ${regValue.tokenId}`);
+    console.log(`   Metadata CID: ${regValue.metadataCID}`);
+    console.log(`   Registered At: ${regValue.registeredAt}`);
 
-      const tokenId = Number(regValue.tokenId);
-      const registryAddress = '0x8004a6090Cd10A7288092483047B097295Fb8847';
-      const rpcUrl =
-        process.env.NEXT_PUBLIC_RPC_URL ||
-        process.env.SEPOLIA_RPC_URL ||
-        'https://ethereum-sepolia-rpc.publicnode.com';
+    const tokenId = Number(regValue.tokenId);
+    const { identityRegistry: registryAddress } =
+      getERC8004ContractAddresses(CHAIN_ID);
+    const rpcUrl =
+      process.env.NEXT_PUBLIC_RPC_URL ||
+      process.env.SEPOLIA_RPC_URL ||
+      'https://ethereum-sepolia-rpc.publicnode.com';
 
-      console.log('\n🔗 Checking On-Chain Registration:');
-      console.log(`   Registry: ${registryAddress}`);
-      console.log(`   Token ID: ${tokenId}`);
+    console.log('\n🔗 Checking On-Chain Registration:');
+    console.log(`   Registry: ${registryAddress}`);
+    console.log(`   Token ID: ${tokenId}`);
 
-      try {
-        const owner = execSync(
-          `cast call ${registryAddress} "ownerOf(uint256)(address)" ${tokenId} --rpc-url ${rpcUrl}`,
-          { encoding: 'utf-8' }
-        ).trim();
+    const owner = execSync(
+      `cast call ${registryAddress} "ownerOf(uint256)(address)" ${tokenId} --rpc-url ${rpcUrl}`,
+      { encoding: 'utf-8' }
+    ).trim();
 
-        logger.success('On-chain registration confirmed');
-        console.log(`   Owner: ${owner}`);
+    logger.success('On-chain registration confirmed');
+    console.log(`   Owner: ${owner}`);
 
-        if (
-          owner.toLowerCase() ===
-          process.env.BABYLON_GAME_WALLET_ADDRESS?.toLowerCase()
-        ) {
-          logger.success('Owner matches BABYLON_GAME_WALLET_ADDRESS');
-        } else {
-          logger.warn('Owner does NOT match BABYLON_GAME_WALLET_ADDRESS');
-        }
-
-        const tokenURI = execSync(
-          `cast call ${registryAddress} "tokenURI(uint256)(string)" ${tokenId} --rpc-url ${rpcUrl}`,
-          { encoding: 'utf-8' }
-        )
-          .trim()
-          .replace(/"/g, '');
-
-        console.log('\n📄 Token URI:');
-        console.log(`   ${tokenURI}`);
-
-        const cid = tokenURI.replace('ipfs://', '');
-        console.log('\n🌐 View metadata:');
-        console.log(`   https://ipfs.io/ipfs/${cid}`);
-      } catch {
-        logger.warn('Could not verify on-chain registration');
-      }
-    } else {
-      logger.warn('No registration found in database');
-      console.log('   Run: bun run agent0:setup');
+    const gameWalletAddress = process.env.BABYLON_GAME_WALLET_ADDRESS;
+    if (!gameWalletAddress) {
+      throw new Error(
+        'BABYLON_GAME_WALLET_ADDRESS environment variable is not set'
+      );
     }
-  } catch {
-    logger.warn('Database not available');
+    if (owner.toLowerCase() === gameWalletAddress.toLowerCase()) {
+      logger.success('Owner matches BABYLON_GAME_WALLET_ADDRESS');
+    } else {
+      logger.warn('Owner does NOT match BABYLON_GAME_WALLET_ADDRESS');
+    }
+
+    const tokenURI = execSync(
+      `cast call ${registryAddress} "tokenURI(uint256)(string)" ${tokenId} --rpc-url ${rpcUrl}`,
+      { encoding: 'utf-8' }
+    )
+      .trim()
+      .replace(/"/g, '');
+
+    console.log('\n📄 Token URI:');
+    console.log(`   ${tokenURI}`);
+
+    const cid = tokenURI.replace('ipfs://', '');
+    console.log('\n🌐 View metadata:');
+    console.log(`   https://ipfs.io/ipfs/${cid}`);
+  } else {
+    logger.warn('No registration found in database');
+    console.log('   Run: bun run agent0:setup');
   }
 }
 
@@ -375,34 +377,32 @@ export async function runStatusCommand(args: string[]): Promise<void> {
     process.exit(0);
   }
 
-  try {
-    switch (parsed.command || 'all') {
-      case 'game':
-        await checkGameStatus();
-        break;
+  switch (parsed.command || 'all') {
+    case 'game':
+      await checkGameStatus();
+      break;
 
-      case 'wallet':
-        await checkWalletStatus();
-        break;
+    case 'wallet':
+      await checkWalletStatus();
+      break;
 
-      case 'agent0':
-        await checkAgent0Status();
-        break;
+    case 'agent0':
+      await checkAgent0Status();
+      break;
 
-      case 'llm':
-        await checkLLMStatus();
-        break;
+    case 'llm':
+      await checkLLMStatus();
+      break;
 
-      case 'all':
-        await showAllStatus();
-        break;
+    case 'all':
+      await showAllStatus();
+      break;
 
-      default:
-        logger.fail(`Unknown target: ${parsed.command}`);
-        printHelp();
-        process.exit(1);
-    }
-  } finally {
-    await closeDatabase();
+    default:
+      logger.fail(`Unknown target: ${parsed.command}`);
+      printHelp();
+      process.exit(1);
   }
+
+  await closeDatabase();
 }

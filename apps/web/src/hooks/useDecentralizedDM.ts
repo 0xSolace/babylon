@@ -14,6 +14,12 @@ import {
   publicKeyToHex,
   serializeEncryptedMessage,
 } from '@babylon/messaging';
+import {
+  ErrorApiResponseSchema,
+  InboxApiResponseSchema,
+  MessagingPublicKeyApiResponseSchema,
+  SendMessageApiResponseSchema,
+} from '@babylon/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -25,22 +31,6 @@ interface DecentralizedMessage {
   timestamp: Date;
   status: 'pending' | 'delivered' | 'read';
   isDecentralized: true;
-}
-
-interface Sender {
-  id: string;
-  displayName: string;
-  username: string | null;
-  profileImageUrl: string | null;
-}
-
-interface RawMessage {
-  id: string;
-  from: string;
-  to: string;
-  encryptedContent: string;
-  timestamp: number;
-  sender: Sender;
 }
 
 interface UseDecentralizedDMOptions {
@@ -67,23 +57,6 @@ interface UseDecentralizedDMReturn {
   fetchMessages: () => Promise<void>;
   /** Public key for sharing */
   publicKey: string | null;
-}
-
-interface KeysApiResponse {
-  publicKey: string;
-}
-
-interface SendApiResponse {
-  messageId: string;
-  timestamp: number;
-}
-
-interface InboxApiResponse {
-  messages: RawMessage[];
-}
-
-interface ErrorApiResponse {
-  error?: string;
 }
 
 /**
@@ -113,7 +86,8 @@ export function useDecentralizedDM(
           return null;
         }
 
-        const responseData = (await response.json()) as KeysApiResponse;
+        const json: unknown = await response.json();
+        const responseData = MessagingPublicKeyApiResponseSchema.parse(json);
 
         const hex = responseData.publicKey.startsWith('0x')
           ? responseData.publicKey.slice(2)
@@ -148,7 +122,8 @@ export function useDecentralizedDM(
         throw new Error('Failed to fetch messages');
       }
 
-      const responseData = (await response.json()) as InboxApiResponse;
+      const json: unknown = await response.json();
+      const responseData = InboxApiResponseSchema.parse(json);
 
       const decrypted: DecentralizedMessage[] = [];
 
@@ -195,8 +170,9 @@ export function useDecentralizedDM(
       });
 
       if (!response.ok) {
-        const responseData = (await response.json()) as ErrorApiResponse;
-        throw new Error(responseData.error ?? 'Failed to register keys');
+        const errorJson: unknown = await response.json();
+        const errorData = ErrorApiResponseSchema.parse(errorJson);
+        throw new Error(errorData.error ?? 'Failed to register keys');
       }
 
       setIsInitialized(true);
@@ -243,11 +219,13 @@ export function useDecentralizedDM(
       });
 
       if (!response.ok) {
-        const responseData = (await response.json()) as ErrorApiResponse;
-        throw new Error(responseData.error ?? 'Failed to send message');
+        const errorJson: unknown = await response.json();
+        const errorData = ErrorApiResponseSchema.parse(errorJson);
+        throw new Error(errorData.error ?? 'Failed to send message');
       }
 
-      const result = (await response.json()) as SendApiResponse;
+      const resultJson: unknown = await response.json();
+      const result = SendMessageApiResponseSchema.parse(resultJson);
 
       return result.messageId;
     },

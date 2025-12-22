@@ -86,7 +86,7 @@ export async function createTestAgent(
     agent = await db.user.create({
       data: {
         id: agentId,
-        privyId: `did:privy:${prefix}-${agentId}`,
+        oauth3Id: `did:oauth3:test${agentId}`,
         username: finalUsername,
         displayName,
         walletAddress: generateRandomWallet().address,

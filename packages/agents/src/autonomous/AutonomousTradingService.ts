@@ -1,26 +1,28 @@
 /**
  * Autonomous Trading Service
  *
- * Handles agents making REAL trades on prediction markets and perps
+ * Handles agents making REAL trades on prediction markets and perps.
+ * Uses DirectExecutors for actual trade execution (DRY principle).
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
-import { asUser, db } from '@babylon/db';
+import { db } from '@babylon/db';
 import {
   formatRandomContext,
   generateRandomMarketContext,
-  PredictionPricing,
   StaticDataRegistry,
   shuffleArray,
   WalletService,
 } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
-import { agentPnLService } from '../services/AgentPnLService';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
+import { executeDirectTrade } from './DirectExecutors';
+import {
+  parseLLMResponseWithDefault,
+  TradeDecisionSchema,
+} from './schemas/llm-response-schemas';
 
 export class AutonomousTradingService {
   /**
@@ -41,11 +43,8 @@ export class AutonomousTradingService {
     });
 
     if (!agent?.isAgent) {
-      logger.error('Agent not found or not an agent', { agentUserId });
       throw new Error('Agent not found');
     }
-
-    const config = await getAgentConfig(agentUserId);
 
     // Get agent's positions separately
     const positionsResult = await db.position.findMany({
@@ -96,20 +95,18 @@ export class AutonomousTradingService {
       includeLosers: true,
       includeQuestions: true,
       includePosts: false,
-      includeEvents: true,
+      includeEvents: false,
     });
     const contextString = formatRandomContext(marketContext);
 
+    const config = await getAgentConfig(agentUserId);
     const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
     const lifetimePnL = agent.lifetimePnL ? Number(agent.lifetimePnL) : 0;
-    const managedBy = agent.managedBy ? String(agent.managedBy) : null;
 
     // Build trading decision prompt
     const prompt = `${config?.systemPrompt ?? 'You are an autonomous trading agent on Babylon.'}
 
 You are ${displayName}, an autonomous trading agent.
-
-Trading Strategy: ${config?.tradingStrategy ?? 'General market analysis'}
 
 Current Status:
 - Balance: $${balance.balance}
@@ -137,24 +134,9 @@ ${shuffledPerps
   })
   .join('\n')}
 
-Your Open Positions:
-${positionsResult.map((p) => `- Prediction: ${p.marketId}, ${p.side ? 'YES' : 'NO'}, ${p.shares} shares`).join('\n') || 'None'}
-${perpPositionsResult.map((p) => `- Perp: ${p.ticker}, ${p.side}, $${p.size}, ${p.leverage}x`).join('\n') || 'None'}
+Strategy: ${config?.tradingStrategy || 'Balanced risk/reward seeking alpha'}
 
-Analyze the markets and decide if you should trade based on YOUR strategy and personality.
-
-Trading Guidelines:
-- Consider using 10-20% of balance per trade (e.g. $100-$200 with $1000 balance)
-- Prediction markets: buy_yes, buy_no, or sell existing positions
-- Perp markets: open_long, open_short, or close existing positions
-- Consider YES/NO odds and look for value
-- You decide the trade size based on your conviction and strategy
-
-IMPORTANT: After your analysis, you MUST output valid JSON at the end.
-
-Your response format:
-1. Think through the decision (optional analysis/reasoning)
-2. End with ONLY this JSON (no text after):
+Task: Decide on ONE trade action:
 
 {"action": "hold"} OR
 {"action": "trade", "trade": {"type": "prediction"|"perp", "market": "market_id_or_name", "action": "buy_yes"|"buy_no"|"open_long"|"open_short", "amount": number, "reasoning": "brief_reason"}}
@@ -166,7 +148,6 @@ Now analyze and decide:`;
     // Ensure prompt fits within context limit
     const estimatedTokens = countTokensSync(prompt);
     let finalPrompt = prompt;
-
     if (estimatedTokens > 30000) {
       logger.warn(
         `Trading prompt too long: ${estimatedTokens} tokens, truncating`,
@@ -235,222 +216,73 @@ Now analyze and decide:`;
           const side = trade.action === 'buy_yes';
           const marketIdStr = String(market.id);
 
-          // Execute buy via internal service
-          const result = await asUser({ userId: agentUserId }, async () => {
-            // Calculate shares and pricing
-            const calculation = PredictionPricing.calculateBuyWithFees(
-              Number(market.yesShares),
-              Number(market.noShares),
-              side ? 'yes' : 'no',
-              trade.amount
-            );
-
-            // Debit amount from balance
-            const marketQuestion = market.question
-              ? String(market.question)
-              : 'Market';
-            await WalletService.debit(
-              agentUserId,
-              trade.amount,
-              'pred_buy',
-              `Bought ${calculation.sharesBought} ${side ? 'YES' : 'NO'} shares: ${marketQuestion}`,
-              marketIdStr
-            );
-
-            // Update market shares via raw SQL
-            const newYesShares = side
-              ? Number(market.yesShares) + calculation.sharesBought
-              : calculation.newYesShares;
-            const newNoShares = side
-              ? calculation.newNoShares
-              : Number(market.noShares) + calculation.sharesBought;
-
-            await db.market.update({
-              where: { id: marketIdStr },
-              data: {
-                yesShares: String(newYesShares),
-                noShares: String(newNoShares),
-              },
-            });
-
-            // Create or update position
-            const existingPosition = await db.position.findFirst({
-              where: { userId: agentUserId, marketId: marketIdStr },
-            });
-
-            let position;
-            if (existingPosition) {
-              const existingPositionId = String(existingPosition.id);
-              const newShares =
-                Number(existingPosition.shares) + calculation.sharesBought;
-              const newAmount = Number(existingPosition.amount) + trade.amount;
-
-              position = await db.position.update({
-                where: { id: existingPositionId },
-                data: {
-                  shares: String(newShares),
-                  amount: String(newAmount),
-                  updatedAt: new Date(),
-                },
-              });
-            } else {
-              position = await db.position.create({
-                data: {
-                  id: await generateSnowflakeId(),
-                  userId: agentUserId,
-                  marketId: marketIdStr,
-                  side,
-                  shares: String(calculation.sharesBought),
-                  avgPrice: String(calculation.avgPrice),
-                  amount: String(trade.amount),
-                  status: 'active',
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                },
-              });
-            }
-
-            return { position, calculation };
-          });
-
-          // Record in AgentTrade
-          await agentPnLService.recordTrade({
-            agentId: agentUserId,
-            userId: managedBy || agentUserId,
+          // Execute via DirectExecutors
+          const result = await executeDirectTrade({
+            agentUserId,
             marketType: 'prediction',
             marketId: marketIdStr,
-            action: 'open',
-            side: side ? 'yes' : 'no',
+            side: trade.action,
             amount: trade.amount,
-            price: (result as { calculation: { avgPrice: number } }).calculation
-              .avgPrice,
-            reasoning: trade.reasoning || undefined,
+            reasoning: trade.reasoning,
           });
 
-          tradesExecuted++;
-          lastMarketId = marketIdStr;
-          lastSide = side ? 'YES' : 'NO';
-          lastMarketType = 'prediction';
-          const logMarketQuestion = market.question
-            ? String(market.question)
-            : 'Market';
-          logger.info(
-            `Agent ${displayName} bought ${side ? 'YES' : 'NO'} on ${logMarketQuestion}`,
-            undefined,
-            'AutonomousTrading'
-          );
+          if (result.success) {
+            tradesExecuted++;
+            lastMarketId = marketIdStr;
+            lastSide = side ? 'YES' : 'NO';
+            lastMarketType = 'prediction';
+            const logMarketQuestion = market.question
+              ? String(market.question)
+              : 'Market';
+            logger.info(
+              `Agent ${displayName} bought ${side ? 'YES' : 'NO'} on ${logMarketQuestion}`,
+              undefined,
+              'AutonomousTrading'
+            );
+          }
         }
       }
     } else if (trade.type === 'perp' && perpMarkets.length > 0) {
       const org = perpMarkets.find(
         (o) =>
           o.name === trade.market ||
-          o.id === trade.market ||
+          String(o.id) === trade.market ||
           o.ticker === trade.market
       );
       if (org && trade.amount <= Number(balance.balance)) {
         if (trade.action === 'open_long' || trade.action === 'open_short') {
-          const side = trade.action === 'open_long' ? 'long' : 'short';
-          const ticker = org.name;
+          const perpSide = trade.action === 'open_long' ? 'long' : 'short';
+          const ticker = org.ticker;
 
-          await asUser({ userId: agentUserId }, async () => {
-            const service = new PerpMarketService({
-              db: new PerpDbAdapter(),
-              wallet: {
-                debit: (params: {
-                  userId: string;
-                  amount: number;
-                  reason: string;
-                  description?: string;
-                  relatedId?: string;
-                }) => {
-                  return WalletService.debit(
-                    params.userId,
-                    params.amount,
-                    params.reason,
-                    params.description ?? '',
-                    params.relatedId ?? ''
-                  );
-                },
-                credit: (params: {
-                  userId: string;
-                  amount: number;
-                  reason: string;
-                  description?: string;
-                  relatedId?: string;
-                }) => {
-                  return WalletService.credit(
-                    params.userId,
-                    params.amount,
-                    params.reason,
-                    params.description ?? '',
-                    params.relatedId ?? ''
-                  );
-                },
-                getBalance: (userId: string) =>
-                  WalletService.getBalance(userId),
-                recordPnL: async (params: {
-                  userId: string;
-                  pnl: number;
-                  reason: string;
-                  relatedId?: string;
-                }) => {
-                  // Record PnL using credit/debit based on sign
-                  if (params.pnl > 0) {
-                    await WalletService.credit(
-                      params.userId,
-                      params.pnl,
-                      'perp_pnl',
-                      params.reason
-                    );
-                  } else if (params.pnl < 0) {
-                    await WalletService.debit(
-                      params.userId,
-                      Math.abs(params.pnl),
-                      'perp_pnl',
-                      params.reason
-                    );
-                  }
-                },
-              },
-              fees: {
-                tradingFeeRate: 0.001,
-                platformShare: 0.5,
-                referrerShare: 0.5,
-                minFeeAmount: 0.01,
-              },
+          if (!ticker) {
+            logger.warn(
+              `Org ${org.id} has no ticker`,
+              undefined,
+              'AutonomousTrading'
+            );
+          } else {
+            // Execute via DirectExecutors
+            const result = await executeDirectTrade({
+              agentUserId,
+              marketType: 'perp',
+              marketId: ticker,
+              side: trade.action,
+              amount: trade.amount,
+              reasoning: trade.reasoning,
             });
 
-            await service.openPosition({
-              userId: agentUserId,
-              ticker: ticker ?? '',
-              side,
-              size: trade.amount,
-              leverage: 1,
-            });
-          });
-
-          await agentPnLService.recordTrade({
-            agentId: agentUserId,
-            userId: managedBy ?? agentUserId,
-            marketType: 'perp',
-            ticker: org.name ?? '',
-            action: 'open',
-            side,
-            amount: trade.amount,
-            price: Number(org.currentPrice ?? 0),
-            reasoning: trade.reasoning ?? undefined,
-          });
-
-          tradesExecuted++;
-          lastTicker = org.name;
-          lastSide = side;
-          lastMarketType = 'perp';
-          logger.info(
-            `Agent ${displayName} opened ${side} position on ${org.name}`,
-            undefined,
-            'AutonomousTrading'
-          );
+            if (result.success) {
+              tradesExecuted++;
+              lastTicker = ticker;
+              lastSide = perpSide;
+              lastMarketType = 'perp';
+              logger.info(
+                `Agent ${displayName} opened ${perpSide} position on ${org.name}`,
+                undefined,
+                'AutonomousTrading'
+              );
+            }
+          }
         }
       }
     }
@@ -466,7 +298,7 @@ Now analyze and decide:`;
 }
 
 /**
- * Parse trade decision from LLM response
+ * Parse trade decision from LLM response with Zod validation
  */
 function parseTradeDecision(response: string): {
   action: 'hold' | 'trade';
@@ -478,36 +310,22 @@ function parseTradeDecision(response: string): {
     reasoning?: string;
   };
 } {
-  // Find JSON in response
-  const jsonMatch = response.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    logger.warn(
-      'No JSON found in trade decision response',
-      undefined,
-      'AutonomousTrading'
-    );
-    return {
-      action: 'hold',
-      trade: { type: 'prediction', market: '', action: 'buy_yes', amount: 0 },
-    };
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]) as {
-    action?: string;
-    trade?: {
-      type?: string;
-      market?: string;
-      action?: string;
-      amount?: number;
-      reasoning?: string;
-    };
+  const defaultHold = {
+    action: 'hold' as const,
+    trade: {
+      type: 'prediction' as const,
+      market: '',
+      action: 'buy_yes' as const,
+      amount: 0,
+    },
   };
 
+  const parsed = parseLLMResponseWithDefault(response, TradeDecisionSchema, {
+    action: 'hold' as const,
+  });
+
   if (parsed.action === 'hold' || !parsed.trade) {
-    return {
-      action: 'hold',
-      trade: { type: 'prediction', market: '', action: 'buy_yes', amount: 0 },
-    };
+    return defaultHold;
   }
 
   return {

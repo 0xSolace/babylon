@@ -1,64 +1,32 @@
 'use client';
 
+import { cn } from '@babylon/shared';
 import { Bell } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { cn } from '@/lib/utils';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 
 interface NotificationsButtonProps {
   className?: string;
   compact?: boolean;
 }
 
+/**
+ * Notifications button component with unread count badge.
+ *
+ * Uses shared useUnreadNotifications hook for consistent caching
+ * across components. Shows a red dot when there are unread notifications.
+ *
+ * @param props - NotificationsButton component props
+ * @returns Notifications button element or null if not authenticated
+ */
 export function NotificationsButton({
   className,
   compact = false,
 }: NotificationsButtonProps) {
-  const { authenticated, user } = useAuth();
+  const { authenticated } = useAuth();
   const router = useRouter();
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadCount(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      setIsLoading(true);
-      const token =
-        typeof window !== 'undefined' ? window.__privyAccessToken : null;
-
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        // Use unreadCount directly from API response - it's accurate and efficient
-        setUnreadCount(data.unreadCount || 0);
-      }
-      setIsLoading(false);
-    };
-
-    fetchUnreadCount();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
+  const { unreadCount, isLoading } = useUnreadNotifications();
 
   if (!authenticated) {
     return null;

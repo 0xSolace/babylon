@@ -18,7 +18,7 @@
  *     summary: Get report details
  *     description: Returns detailed report information with related reports (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: reportId
@@ -50,7 +50,7 @@
  *     summary: Take action on report
  *     description: Resolves, dismisses, escalates, bans user, or evaluates report (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: reportId

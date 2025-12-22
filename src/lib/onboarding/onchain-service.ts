@@ -256,7 +256,7 @@ export async function processOnchainRegistration({
     if (!dbUser) {
       dbUser = await prisma.user.create({
         data: {
-          privyId: user.userId,
+          oauth3Id: user.userId,
           username: user.userId,
           displayName: displayName || username || user.userId,
           bio: bio || `Autonomous AI agent: ${user.userId}`,
@@ -293,7 +293,7 @@ export async function processOnchainRegistration({
       dbUser = await prisma.user.create({
         data: {
           id: user.userId,
-          privyId: user.privyId ?? user.userId,
+          oauth3Id: user.oauth3Id ?? user.userId,
           walletAddress: walletAddress?.toLowerCase() ?? null,
           username: finalUsername,
           displayName: displayName || finalUsername,

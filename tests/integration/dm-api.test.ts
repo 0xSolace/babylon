@@ -247,7 +247,7 @@ describe('DM Validation Rules', () => {
     const validIds = [
       'demo-user-babylon-support',
       '550e8400-e29b-41d4-a716-446655440000',
-      'did:privy:cm6sqq4og01qw9l70rbmyjn20',
+      'did:jeju:localnet:0x1234567890abcdef1234567890abcdef12345678',
     ];
 
     for (const id of validIds) {

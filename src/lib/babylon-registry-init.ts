@@ -127,7 +127,7 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
       protocols: ['a2a', 'mcp', 'rest'],
       socialFeatures: true,
       realtime: true,
-      authentication: ['privy', 'agent-secret', 'wallet-signature'],
+      authentication: ['oauth3', 'agent-secret', 'wallet-signature'],
     },
 
     metadata: {

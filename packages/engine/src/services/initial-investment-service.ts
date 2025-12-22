@@ -7,7 +7,16 @@
  * Uses LLM to determine appropriate investments based on NPC characteristics.
  */
 
-import { actorState, db, eq, getDbInstance, sql } from '@babylon/db';
+import {
+  actorState,
+  and,
+  db,
+  eq,
+  getDbInstance,
+  gte,
+  npcTrades,
+  sql,
+} from '@babylon/db';
 import {
   BabylonLLMClient,
   loadActorById,
@@ -566,30 +575,41 @@ Generate investments for ALL ${npcs.length} NPCs. Each NPC must have 2-5 investm
       },
     });
 
-    // Deduct from NPC trading balance using raw SQL decrement
-    await db
+    // Deduct from NPC trading balance (atomic check to prevent negative balance)
+    const debitResult = await db
       .update(actorState)
       .set({
         tradingBalance: sql`${actorState.tradingBalance} - ${investment.amount}`,
+        updatedAt: new Date(),
       })
-      .where(eq(actorState.id, investment.npcId));
+      .where(
+        and(
+          eq(actorState.id, investment.npcId),
+          gte(actorState.tradingBalance, String(investment.amount))
+        )
+      )
+      .returning();
+
+    if (debitResult.length === 0) {
+      throw new Error(
+        `Insufficient NPC balance for initial investment: ${investment.npcName} → ${investment.ticker} $${investment.amount}`
+      );
+    }
 
     // Record the trade
-    await db.npcTrade.create({
-      data: {
-        id: await generateSnowflakeId(),
-        npcActorId: investment.npcId,
-        poolId: null,
-        marketType: 'perp',
-        ticker: org.ticker,
-        action: 'open_long',
-        side: 'long',
-        amount: investment.amount,
-        price: entryPrice,
-        sentiment: null,
-        reason: `Initial investment: ${investment.reasoning}`,
-        executedAt: new Date(),
-      },
+    await db.insert(npcTrades).values({
+      id: await generateSnowflakeId(),
+      npcActorId: investment.npcId,
+      poolId: null,
+      marketType: 'perp',
+      ticker: org.ticker,
+      action: 'open_long',
+      side: 'long',
+      amount: investment.amount,
+      price: entryPrice,
+      sentiment: null,
+      reason: `Initial investment: ${investment.reasoning}`,
+      executedAt: new Date(),
     });
 
     logger.debug(

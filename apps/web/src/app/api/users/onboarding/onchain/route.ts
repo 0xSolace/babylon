@@ -16,7 +16,7 @@
  *     summary: Register user on-chain
  *     description: Registers user to EIP-8004 Identity Registry (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       content:
  *         application/json:
@@ -80,18 +80,18 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     | OnchainRequestBody
     | Record<string, JsonValue>;
 
+  const bodyTyped = body as OnchainRequestBody;
+  const rawTxHash = bodyTyped.txHash;
   const txHash =
-    typeof (body as OnchainRequestBody).txHash === 'string'
-      ? (body as OnchainRequestBody).txHash.trim() || null
-      : null;
+    typeof rawTxHash === 'string' ? rawTxHash.trim() || null : null;
+  const rawWalletAddress = bodyTyped.walletAddress;
   const walletOverride =
-    typeof (body as OnchainRequestBody).walletAddress === 'string'
-      ? (body as OnchainRequestBody).walletAddress.trim() || null
+    typeof rawWalletAddress === 'string'
+      ? rawWalletAddress.trim() || null
       : null;
+  const rawReferralCode = bodyTyped.referralCode;
   const referralCode =
-    typeof (body as OnchainRequestBody).referralCode === 'string'
-      ? (body as OnchainRequestBody).referralCode.trim() || null
-      : null;
+    typeof rawReferralCode === 'string' ? rawReferralCode.trim() || null : null;
 
   if (!authUser.dbUserId && !authUser.userId) {
     throw new Error('Database user ID not found in authentication');

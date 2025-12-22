@@ -119,7 +119,3 @@ export async function authenticateWithOAuth3(page: Page) {
 
   console.log(`✅ Authentication successful for wallet: ${walletAddress}`);
 }
-
-// Legacy exports for backwards compatibility
-export const getPrivyTestAccount = getOAuth3TestAccount;
-export const authenticateWithPrivy = authenticateWithOAuth3;

@@ -22,22 +22,23 @@ import {
   isNull,
   trajectories,
 } from '@babylon/db';
+import { logger } from '@babylon/shared';
 import { spawn } from 'child_process';
 import { getExportGroupedForGRPO } from '../dependencies';
-import { logger } from '../utils/logger';
 import { benchmarkService } from './BenchmarkService';
 import { MarketOutcomesTracker } from './MarketOutcomesTracker';
 import { modelSelectionService } from './ModelSelectionService';
 import { rewardBackpropagationService } from './RewardBackpropagationService';
 import { rulerScoringService } from './RulerScoringService';
-import type {
-  AutomationConfig,
-  AutomationStatus,
-  TrainingMonitoringStatus,
-  TrainingReadinessResult,
-  TrainingTriggerOptions,
-  TrainingTriggerResult,
-  TrajectoryStep,
+import {
+  type AutomationConfig,
+  type AutomationStatus,
+  parseTrajectoryIds,
+  parseTrajectorySteps,
+  type TrainingMonitoringStatus,
+  type TrainingReadinessResult,
+  type TrainingTriggerOptions,
+  type TrainingTriggerResult,
 } from './types';
 import { getCurrentWindowId, getPreviousWindowId } from './window-utils';
 
@@ -202,21 +203,11 @@ export class AutomationPipeline {
     let totalChecks = 0;
 
     for (const traj of sample) {
-      // Validate stepsJson exists and is valid before parsing
-      if (
-        !traj.stepsJson ||
-        traj.stepsJson === 'null' ||
-        traj.stepsJson === '[]'
-      ) {
-        continue; // Skip invalid trajectories
-      }
+      // parseTrajectorySteps handles validation and returns empty array for invalid data
+      const steps = parseTrajectorySteps(traj.stepsJson);
 
-      const steps: TrajectoryStep[] = JSON.parse(
-        traj.stepsJson
-      ) as TrajectoryStep[];
-
-      if (!Array.isArray(steps)) {
-        continue; // Skip if not an array
+      if (steps.length === 0) {
+        continue; // Skip invalid or empty trajectories
       }
 
       // Check 1: Has steps
@@ -868,26 +859,8 @@ export class AutomationPipeline {
     });
 
     // Mark trajectories as used
-    // Parse trajectory IDs
-    let trajectoryIds: string[];
-    if (
-      !batch.trajectoryIds ||
-      batch.trajectoryIds === 'null' ||
-      batch.trajectoryIds === '[]'
-    ) {
-      logger.warn('Training batch has invalid trajectoryIds', {
-        batchId: batch.id,
-      });
-      trajectoryIds = [];
-    } else {
-      trajectoryIds = JSON.parse(batch.trajectoryIds) as string[];
-      if (!Array.isArray(trajectoryIds)) {
-        logger.warn('Training batch trajectoryIds is not an array', {
-          batchId: batch.id,
-        });
-        trajectoryIds = [];
-      }
-    }
+    // parseTrajectoryIds handles validation and returns empty array for invalid data
+    const trajectoryIds = parseTrajectoryIds(batch.trajectoryIds);
 
     if (trajectoryIds.length > 0) {
       await db.trajectory.updateMany({

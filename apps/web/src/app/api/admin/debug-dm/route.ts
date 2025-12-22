@@ -16,7 +16,7 @@
  *     summary: Debug user DM chats
  *     description: Returns all DM chats for a user (admin only, bypasses RLS)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: userId
@@ -52,17 +52,31 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import {
-  asSystem,
-  chatParticipants,
-  chats,
-  db,
-  desc,
-  inArray,
-  messages,
-} from '@babylon/db';
+import { db } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+
+interface ChatRow {
+  id: string;
+  name: string | null;
+  isGroup: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface ParticipantRow {
+  id: string;
+  chatId: string;
+  userId: string;
+}
+
+interface MessageRow {
+  id: string;
+  chatId: string;
+  senderId: string;
+  content: string;
+  createdAt: Date;
+}
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   // Require admin authentication
@@ -79,12 +93,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   logger.info('Debug DM lookup', { userId }, 'GET /api/admin/debug-dm');
 
-  // Get user info (try by ID, username, or privyId)
+  // Get user info (try by ID, username, oauth3Id, or privyId for backward compatibility)
   let user = await db.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
-      privyId: true,
+      oauth3Id: true,
+      privyId: true, // @deprecated - kept for migration compatibility
       username: true,
       displayName: true,
     },
@@ -96,7 +111,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       where: { username: userId },
       select: {
         id: true,
-        privyId: true,
+        oauth3Id: true,
+        privyId: true, // @deprecated - kept for migration compatibility
         username: true,
         displayName: true,
       },
@@ -104,12 +120,27 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   if (!user) {
-    // Try by privyId
+    // Try by oauth3Id
+    user = await db.user.findUnique({
+      where: { oauth3Id: userId },
+      select: {
+        id: true,
+        oauth3Id: true,
+        privyId: true, // @deprecated - kept for migration compatibility
+        username: true,
+        displayName: true,
+      },
+    });
+  }
+
+  if (!user) {
+    // Try by privyId (deprecated - for backward compatibility)
     user = await db.user.findUnique({
       where: { privyId: userId },
       select: {
         id: true,
-        privyId: true,
+        oauth3Id: true,
+        privyId: true, // @deprecated - kept for migration compatibility
         username: true,
         displayName: true,
       },
@@ -125,84 +156,79 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       chats: [],
     });
   }
-  const resolvedUserId = user.id || user.privyId || userId;
+  const resolvedUserId = user.id || user.oauth3Id || user.privyId || userId;
 
-  // Get all ChatParticipant records for this user (bypass RLS)
+  // Get all ChatParticipant records for this user
   const participants = await db.chatParticipant.findMany({
     where: {
       userId: resolvedUserId,
     },
   });
 
-  // Get details for each chat using Drizzle query builder
+  // Get details for each chat
   const chatIds = participants.map((p) => p.chatId);
 
-  const { chatsList, allParticipants, allMessages, messageCounts } =
-    await asSystem(async (database) => {
-      // Get chats
-      const chatsList =
-        chatIds.length > 0
-          ? await database
-              .select()
-              .from(chats)
-              .where(inArray(chats.id, chatIds))
-          : [];
+  // Fetch chats, participants, messages using repository methods
+  const chatsList: ChatRow[] =
+    chatIds.length > 0
+      ? await db.chat.findMany({
+          where: { id: { in: chatIds } },
+        })
+      : [];
 
-      // Get all participants for these chats
-      const allParticipants =
-        chatIds.length > 0
-          ? await database
-              .select()
-              .from(chatParticipants)
-              .where(inArray(chatParticipants.chatId, chatIds))
-          : [];
+  // Get all participants for these chats
+  const allParticipants: ParticipantRow[] =
+    chatIds.length > 0
+      ? await db.chatParticipant.findMany({
+          where: { chatId: { in: chatIds } },
+        })
+      : [];
 
-      // Get recent messages for each chat (last 5)
-      const allMessages =
-        chatIds.length > 0
-          ? await database
-              .select()
-              .from(messages)
-              .where(inArray(messages.chatId, chatIds))
-              .orderBy(desc(messages.createdAt))
-          : [];
+  // Get recent messages for each chat (ordered by most recent)
+  const allMessages: MessageRow[] =
+    chatIds.length > 0
+      ? await db.message.findMany({
+          where: { chatId: { in: chatIds } },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
 
-      // Get message counts for each chat
-      const messageCounts = await Promise.all(
-        chatIds.map((chatId) =>
-          database.message.count({
-            where: { chatId: { equals: chatId } },
-          })
-        )
-      );
-
-      return { chatsList, allParticipants, allMessages, messageCounts };
-    }, 'admin-debug-dm');
+  // Get message counts for each chat
+  const messageCounts = await Promise.all(
+    chatIds.map((chatId) =>
+      db.message.count({
+        where: { chatId: { equals: chatId } },
+      })
+    )
+  );
 
   // Get all user IDs from participants
   const participantUserIds = [...new Set(allParticipants.map((p) => p.userId))];
-  const participantUsers = await db.user.findMany({
-    where: {
-      id: { in: participantUserIds },
-    },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-    },
-  });
+  const participantUsers =
+    participantUserIds.length > 0
+      ? await db.user.findMany({
+          where: {
+            id: { in: participantUserIds },
+          },
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+          },
+        })
+      : [];
 
   const usersMap = new Map(participantUsers.map((u) => [u.id, u]));
 
   // Group participants and messages by chat
-  const participantsByChat = new Map<string, typeof allParticipants>();
+  const participantsByChat = new Map<string, ParticipantRow[]>();
   allParticipants.forEach((p) => {
     const list = participantsByChat.get(p.chatId) || [];
     list.push(p);
     participantsByChat.set(p.chatId, list);
   });
 
-  const messagesByChat = new Map<string, typeof allMessages>();
+  const messagesByChat = new Map<string, MessageRow[]>();
   allMessages.forEach((m) => {
     const list = messagesByChat.get(m.chatId) || [];
     if (list.length < 5) {
@@ -224,7 +250,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   return successResponse({
     user,
     note: user
-      ? `User database ID: ${user.id}, Privy ID: ${user.privyId}`
+      ? `User database ID: ${user.id}, OAuth3 ID: ${user.oauth3Id || 'none'}, Privy ID (deprecated): ${user.privyId || 'none'}`
       : 'User not found',
     participantRecords: participants,
     chats: chatsList.map((chat, index) => ({
@@ -234,12 +260,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
       participants: (participantsByChat.get(chat.id) || []).map((p) => {
-        const user = usersMap.get(p.userId);
+        const participantUser = usersMap.get(p.userId);
         return {
           id: p.id,
           userId: p.userId,
-          username: user?.username || null,
-          displayName: user?.displayName || null,
+          username: participantUser?.username || null,
+          displayName: participantUser?.displayName || null,
         };
       }),
       totalMessageCount: messageCounts[index] || 0,

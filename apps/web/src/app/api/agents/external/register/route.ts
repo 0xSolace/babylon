@@ -12,77 +12,17 @@
 import type { ExternalAgentConnectionParams } from '@babylon/agents';
 import { agentRegistry } from '@babylon/agents';
 import { authenticate, generateApiKey, hashApiKey } from '@babylon/api';
+import { ExternalAgentSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-// Validation schema for external agent registration
-const ExternalAgentRegisterSchema = z.object({
-  externalId: z.string().min(1).max(255),
-  name: z.string().min(1).max(255),
-  description: z.string(),
-  endpoint: z.string().url(),
-  protocol: z.enum(['a2a', 'mcp', 'agent0', 'custom']),
-  capabilities: z.object({
-    strategies: z.array(z.string()).optional().default([]),
-    markets: z.array(z.string()).optional().default([]),
-    actions: z.array(z.string()).optional().default([]),
-    version: z.string().optional().default('1.0.0'),
-    skills: z.array(z.string()).optional().default([]),
-    domains: z.array(z.string()).optional().default([]),
-    x402Support: z.boolean().optional(),
-    platform: z.string().optional(),
-  }),
-  authentication: z
-    .object({
-      type: z.enum(['API_KEY', 'OAUTH', 'JWT', 'MUTUAL_TLS']),
-      credentials: z.record(z.string(), z.any()).optional(),
-    })
-    .optional(),
-  agentCard: z
-    .object({
-      version: z.literal('1.0'),
-      agentId: z.string(),
-      name: z.string(),
-      description: z.string(),
-      endpoints: z.object({
-        a2a: z.string().optional(),
-        mcp: z.string().optional(),
-        rpc: z.string().optional(),
-      }),
-      capabilities: z.object({
-        strategies: z.array(z.string()).optional().default([]),
-        markets: z.array(z.string()).optional().default([]),
-        actions: z.array(z.string()).optional().default([]),
-        version: z.string().optional().default('1.0.0'),
-        skills: z.array(z.string()).optional().default([]),
-        domains: z.array(z.string()).optional().default([]),
-        x402Support: z.boolean().optional(),
-        platform: z.string().optional(),
-      }),
-      authentication: z
-        .object({
-          required: z.boolean(),
-          methods: z.array(z.enum(['apiKey', 'oauth', 'wallet'])),
-        })
-        .optional(),
-      limits: z
-        .object({
-          rateLimit: z.number().optional(),
-          costPerAction: z.number().optional(),
-        })
-        .optional(),
-    })
-    .optional(),
-});
 
 export async function POST(req: NextRequest) {
-  // Authenticate the request (requires valid Privy session)
+  // Authenticate the request (requires valid OAuth3 session)
   const authUser = await authenticate(req);
 
   // Parse and validate request body
   const body = await req.json();
-  const validated = ExternalAgentRegisterSchema.parse(body);
+  const validated = ExternalAgentSchema.parse(body);
 
   // Generate API key for this external agent
   const apiKey = generateApiKey();

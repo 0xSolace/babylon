@@ -17,7 +17,7 @@
  *     summary: Get reports list
  *     description: Returns paginated reports with filtering and sorting (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: limit

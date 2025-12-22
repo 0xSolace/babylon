@@ -16,7 +16,7 @@
  *     summary: Get favorites feed
  *     description: Returns posts from favorited profiles with interaction counts
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: limit
@@ -182,7 +182,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     // Get total count (only count posts up to current time)
     const countResult = await dbClient
       .select({
-        value: count(posts.id),
+        count: count(posts.id),
       })
       .from(posts)
       .where(
@@ -191,7 +191,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           lte(posts.timestamp, now)
         )
       );
-    const totalCount = countResult[0]?.value ?? 0;
+    // Type assertion for aggregate query result
+    const typedCountResult = countResult as unknown as Array<{ count: number }>;
+    const totalCount = typedCountResult[0]?.count ?? 0;
 
     // Get interaction counts and user states - OPTIMIZED: Batch queries instead of N+1
     const postIds = postsToReturn.map((p) => p.id);
@@ -247,14 +249,22 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           ),
       ]);
 
+    // Type assertions for grouped count query results
+    type PostCountResult = { postId: string | null; count: number };
+    const typedReactions = allReactions as unknown as PostCountResult[];
+    const typedComments = allComments as unknown as PostCountResult[];
+    const typedShares = allShares as unknown as PostCountResult[];
+
     // Create lookup maps for O(1) access
     const reactionMap = new Map(
-      allReactions.map((r) => [r.postId, Number(r.count)])
+      typedReactions.map((r) => [r.postId, Number(r.count)])
     );
     const commentMap = new Map(
-      allComments.map((c) => [c.postId, Number(c.count)])
+      typedComments.map((c) => [c.postId, Number(c.count)])
     );
-    const shareMap = new Map(allShares.map((s) => [s.postId, Number(s.count)]));
+    const shareMap = new Map(
+      typedShares.map((s) => [s.postId, Number(s.count)])
+    );
     const userReactionSet = new Set(userReactions.map((r) => r.postId));
     const userShareSet = new Set(userShares.map((s) => s.postId));
 

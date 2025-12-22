@@ -8,29 +8,6 @@
 
 import type { AgentCard, DataPart, Message, Task, TextPart } from '@a2a-js/sdk';
 import { A2AClient } from '@a2a-js/sdk/client';
-
-/** Type guard for JSON-RPC error responses */
-function isErrorResponse(response: unknown): response is {
-  error: { code: number; message: string };
-} {
-  return (
-    typeof response === 'object' &&
-    response !== null &&
-    'error' in response &&
-    (response as { error: unknown }).error !== undefined
-  );
-}
-
-/** Type guard for successful responses with result */
-function isSuccessResponse(response: unknown): response is { result: unknown } {
-  return (
-    typeof response === 'object' &&
-    response !== null &&
-    'result' in response &&
-    (response as { result: unknown }).result !== undefined
-  );
-}
-
 import type {
   A2AChat,
   A2AFeedPost,
@@ -45,6 +22,147 @@ import type {
   A2AUserSearchResult,
   JsonValue,
 } from '@babylon/a2a';
+import { z } from 'zod';
+
+// ============================================================================
+// Response Validation Schemas (replaces type guards)
+// ============================================================================
+
+const ErrorResponseSchema = z.object({
+  error: z.object({
+    code: z.number(),
+    message: z.string(),
+  }),
+});
+
+const SuccessResponseSchema = z.object({
+  result: z.unknown(),
+});
+
+const A2APredictionMarketSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  yesPrice: z.number().optional(),
+  noPrice: z.number().optional(),
+  status: z.string().optional(),
+  totalVolume: z.number().optional(),
+  createdAt: z.string().optional(),
+});
+
+const A2APerpetualMarketSchema = z.object({
+  ticker: z.string(),
+  currentPrice: z.number(),
+  name: z.string().optional(),
+  change24h: z.number().optional(),
+  volume24h: z.number().optional(),
+  fundingRate: z.number().optional(),
+});
+
+const A2AFeedPostSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  authorId: z.string().optional(),
+  createdAt: z.string().optional(),
+  likesCount: z.number().optional(),
+  commentsCount: z.number().optional(),
+});
+
+const A2AChatSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  type: z.string().optional(),
+  lastMessage: z.string().optional(),
+  lastMessageAt: z.string().optional(),
+});
+
+const A2ANotificationSchema = z.object({
+  id: z.string(),
+  type: z.string().optional(),
+  message: z.string().optional(),
+  read: z.boolean().optional(),
+  createdAt: z.string().optional(),
+});
+
+const A2ALeaderboardEntrySchema = z.object({
+  userId: z.string(),
+  rank: z.number().optional(),
+  score: z.number().optional(),
+  displayName: z.string().optional(),
+  avatarUrl: z.string().optional(),
+});
+
+const A2ATrendingTagSchema = z.object({
+  tag: z.string(),
+  count: z.number().optional(),
+  trend: z.string().optional(),
+});
+
+const A2AOrganizationSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  ticker: z.string().optional(),
+  description: z.string().optional(),
+});
+
+const A2AUserSearchResultSchema = z.object({
+  id: z.string(),
+  displayName: z.string().optional(),
+  username: z.string().optional(),
+  avatarUrl: z.string().optional(),
+  isVerified: z.boolean().optional(),
+});
+
+const A2AMarketPositionSchema = z.object({
+  id: z.string(),
+  marketId: z.string(),
+  outcome: z.string().optional(),
+  shares: z.number().optional(),
+  avgPrice: z.number().optional(),
+  currentValue: z.number().optional(),
+  pnl: z.number().optional(),
+});
+
+const A2APerpPositionSchema = z.object({
+  id: z.string(),
+  ticker: z.string(),
+  side: z.string().optional(),
+  size: z.number().optional(),
+  entryPrice: z.number().optional(),
+  markPrice: z.number().optional(),
+  pnl: z.number().optional(),
+  leverage: z.number().optional(),
+});
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/** Validate and check for JSON-RPC error responses */
+function isErrorResponse(response: unknown): response is {
+  error: { code: number; message: string };
+} {
+  return ErrorResponseSchema.safeParse(response).success;
+}
+
+/** Validate and check for successful responses with result */
+function isSuccessResponse(response: unknown): response is { result: unknown } {
+  return SuccessResponseSchema.safeParse(response).success;
+}
+
+/**
+ * Parse an array of items using a Zod schema, filtering out invalid items
+ */
+function parseArraySafe<T>(items: unknown, schema: z.ZodType<T>): T[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items
+    .map((item) => schema.safeParse(item))
+    .filter((result): result is z.SafeParseSuccess<T> => result.success)
+    .map((result) => result.data);
+}
+
+import { ExternalServiceError, NotFoundError } from '@babylon/shared';
 
 /**
  * A2A command with operation and params
@@ -185,13 +303,18 @@ export class BabylonA2AClient {
     const response = await client.sendMessage({ message });
 
     if (isErrorResponse(response)) {
-      throw new Error(
-        `A2A Error [${response.error.code}]: ${response.error.message}`
+      throw new ExternalServiceError(
+        'A2A',
+        `Error [${response.error.code}]: ${response.error.message}`,
+        response.error.code
       );
     }
 
     if (!isSuccessResponse(response)) {
-      throw new Error('Unexpected response format - no result');
+      throw new ExternalServiceError(
+        'A2A',
+        'Unexpected response format - no result'
+      );
     }
 
     const result = response.result as unknown as Record<string, unknown>;
@@ -237,7 +360,7 @@ export class BabylonA2AClient {
         return result.message as unknown as Message;
       }
     }
-    throw new Error('Unexpected response format');
+    throw new ExternalServiceError('A2A', 'Unexpected response format');
   }
 
   // normalizeCommand removed - now using operation/params format directly
@@ -252,20 +375,25 @@ export class BabylonA2AClient {
     const response = await client.getTask({ id: taskId });
 
     if (isErrorResponse(response)) {
-      throw new Error(
-        `A2A Error [${response.error.code}]: ${response.error.message}`
+      throw new ExternalServiceError(
+        'A2A',
+        `Error [${response.error.code}]: ${response.error.message}`,
+        response.error.code
       );
     }
 
     if (!isSuccessResponse(response)) {
-      throw new Error('Unexpected response format - no result');
+      throw new ExternalServiceError(
+        'A2A',
+        'Unexpected response format - no result'
+      );
     }
 
     const result = response.result as unknown as Record<string, unknown>;
     if ('task' in result && result.task) {
       return result.task as unknown as Task;
     }
-    throw new Error(`Task ${taskId} not found`);
+    throw new NotFoundError('Task', taskId);
   }
 
   /**
@@ -290,169 +418,6 @@ export class BabylonA2AClient {
     }
 
     throw new Error(`Task ${taskId} did not complete within ${maxWaitMs}ms`);
-  }
-
-  /**
-   * Type guard to check if value is an array of a specific type
-   */
-  private isArrayOf<T>(
-    value: unknown,
-    itemGuard: (item: unknown) => item is T
-  ): value is T[] {
-    return Array.isArray(value) && value.every(itemGuard);
-  }
-
-  /**
-   * Type guard for A2APredictionMarket
-   */
-  private isA2APredictionMarket(value: unknown): value is A2APredictionMarket {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'id' in value &&
-      'question' in value &&
-      typeof (value as Record<string, JsonValue>).id === 'string' &&
-      typeof (value as Record<string, JsonValue>).question === 'string'
-    );
-  }
-
-  /**
-   * Type guard for A2APerpetualMarket
-   */
-  private isA2APerpetualMarket(value: unknown): value is A2APerpetualMarket {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'ticker' in value &&
-      'currentPrice' in value &&
-      typeof (value as Record<string, JsonValue>).ticker === 'string' &&
-      typeof (value as Record<string, JsonValue>).currentPrice === 'number'
-    );
-  }
-
-  /**
-   * Type guard for A2AFeedPost
-   */
-  private isA2AFeedPost(value: unknown): value is A2AFeedPost {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'id' in value &&
-      'content' in value &&
-      typeof (value as Record<string, JsonValue>).id === 'string' &&
-      typeof (value as Record<string, JsonValue>).content === 'string'
-    );
-  }
-
-  /**
-   * Type guard for A2AChat
-   */
-  private isA2AChat(value: unknown): value is A2AChat {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'id' in value &&
-      typeof (value as Record<string, JsonValue>).id === 'string'
-    );
-  }
-
-  /**
-   * Type guard for A2ANotification
-   */
-  private isA2ANotification(value: unknown): value is A2ANotification {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'id' in value &&
-      typeof (value as Record<string, JsonValue>).id === 'string'
-    );
-  }
-
-  /**
-   * Type guard for A2ALeaderboardEntry
-   */
-  private isA2ALeaderboardEntry(value: unknown): value is A2ALeaderboardEntry {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'userId' in value &&
-      typeof (value as Record<string, JsonValue>).userId === 'string'
-    );
-  }
-
-  /**
-   * Type guard for A2ATrendingTag
-   */
-  private isA2ATrendingTag(value: unknown): value is A2ATrendingTag {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'tag' in value &&
-      typeof (value as Record<string, JsonValue>).tag === 'string'
-    );
-  }
-
-  /**
-   * Type guard for A2AOrganization
-   */
-  private isA2AOrganization(value: unknown): value is A2AOrganization {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'id' in value &&
-      typeof (value as Record<string, JsonValue>).id === 'string'
-    );
-  }
-
-  /**
-   * Type guard for A2AUserSearchResult
-   */
-  private isA2AUserSearchResult(value: unknown): value is A2AUserSearchResult {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'id' in value &&
-      typeof (value as Record<string, JsonValue>).id === 'string'
-    );
-  }
-
-  /**
-   * Type guard for A2AMarketPosition
-   */
-  private isA2AMarketPosition(value: unknown): value is A2AMarketPosition {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'id' in value &&
-      'marketId' in value &&
-      typeof (value as Record<string, JsonValue>).id === 'string' &&
-      typeof (value as Record<string, JsonValue>).marketId === 'string'
-    );
-  }
-
-  /**
-   * Type guard for A2APerpPosition
-   */
-  private isA2APerpPosition(value: unknown): value is A2APerpPosition {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      'id' in value &&
-      'ticker' in value &&
-      typeof (value as Record<string, JsonValue>).id === 'string' &&
-      typeof (value as Record<string, JsonValue>).ticker === 'string'
-    );
   }
 
   /**
@@ -648,21 +613,19 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        predictions:
-          Array.isArray(result.predictions) &&
-          this.isArrayOf(result.predictions, this.isA2APredictionMarket)
-            ? result.predictions
-            : [],
+        predictions: parseArraySafe(
+          result.predictions,
+          A2APredictionMarketSchema
+        ) as A2APredictionMarket[],
       };
     }
 
     const result = this.extractResult(response);
     return {
-      predictions:
-        Array.isArray(result.predictions) &&
-        this.isArrayOf(result.predictions, this.isA2APredictionMarket)
-          ? result.predictions
-          : [],
+      predictions: parseArraySafe(
+        result.predictions,
+        A2APredictionMarketSchema
+      ) as A2APredictionMarket[],
     };
   }
 
@@ -682,21 +645,19 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        perpetuals:
-          Array.isArray(result.perpetuals) &&
-          this.isArrayOf(result.perpetuals, this.isA2APerpetualMarket)
-            ? result.perpetuals
-            : [],
+        perpetuals: parseArraySafe(
+          result.perpetuals,
+          A2APerpetualMarketSchema
+        ) as A2APerpetualMarket[],
       };
     }
 
     const result = this.extractResult(response);
     return {
-      perpetuals:
-        Array.isArray(result.perpetuals) &&
-        this.isArrayOf(result.perpetuals, this.isA2APerpetualMarket)
-          ? result.perpetuals
-          : [],
+      perpetuals: parseArraySafe(
+        result.perpetuals,
+        A2APerpetualMarketSchema
+      ) as A2APerpetualMarket[],
     };
   }
 
@@ -760,32 +721,28 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        marketPositions:
-          Array.isArray(result.marketPositions) &&
-          this.isArrayOf(result.marketPositions, this.isA2AMarketPosition)
-            ? result.marketPositions
-            : [],
-        perpPositions:
-          Array.isArray(result.perpPositions) &&
-          this.isArrayOf(result.perpPositions, this.isA2APerpPosition)
-            ? result.perpPositions
-            : [],
+        marketPositions: parseArraySafe(
+          result.marketPositions,
+          A2AMarketPositionSchema
+        ) as A2AMarketPosition[],
+        perpPositions: parseArraySafe(
+          result.perpPositions,
+          A2APerpPositionSchema
+        ) as A2APerpPosition[],
         totalPnL: typeof result.totalPnL === 'number' ? result.totalPnL : 0,
       };
     }
 
     const result = this.extractResult(response);
     return {
-      marketPositions:
-        Array.isArray(result.marketPositions) &&
-        this.isArrayOf(result.marketPositions, this.isA2AMarketPosition)
-          ? result.marketPositions
-          : [],
-      perpPositions:
-        Array.isArray(result.perpPositions) &&
-        this.isArrayOf(result.perpPositions, this.isA2APerpPosition)
-          ? result.perpPositions
-          : [],
+      marketPositions: parseArraySafe(
+        result.marketPositions,
+        A2AMarketPositionSchema
+      ) as A2AMarketPosition[],
+      perpPositions: parseArraySafe(
+        result.perpPositions,
+        A2APerpPositionSchema
+      ) as A2APerpPosition[],
       totalPnL: typeof result.totalPnL === 'number' ? result.totalPnL : 0,
     };
   }
@@ -835,21 +792,13 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        posts:
-          Array.isArray(result.posts) &&
-          this.isArrayOf(result.posts, this.isA2AFeedPost)
-            ? result.posts
-            : [],
+        posts: parseArraySafe(result.posts, A2AFeedPostSchema) as A2AFeedPost[],
       };
     }
 
     const result = this.extractResult(response);
     return {
-      posts:
-        Array.isArray(result.posts) &&
-        this.isArrayOf(result.posts, this.isA2AFeedPost)
-          ? result.posts
-          : [],
+      posts: parseArraySafe(result.posts, A2AFeedPostSchema) as A2AFeedPost[],
     };
   }
 
@@ -995,21 +944,13 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        chats:
-          Array.isArray(result.chats) &&
-          this.isArrayOf(result.chats, this.isA2AChat)
-            ? result.chats
-            : [],
+        chats: parseArraySafe(result.chats, A2AChatSchema) as A2AChat[],
       };
     }
 
     const result = this.extractResult(response);
     return {
-      chats:
-        Array.isArray(result.chats) &&
-        this.isArrayOf(result.chats, this.isA2AChat)
-          ? result.chats
-          : [],
+      chats: parseArraySafe(result.chats, A2AChatSchema) as A2AChat[],
     };
   }
 
@@ -1028,21 +969,19 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        notifications:
-          Array.isArray(result.notifications) &&
-          this.isArrayOf(result.notifications, this.isA2ANotification)
-            ? result.notifications
-            : [],
+        notifications: parseArraySafe(
+          result.notifications,
+          A2ANotificationSchema
+        ) as A2ANotification[],
       };
     }
 
     const result = this.extractResult(response);
     return {
-      notifications:
-        Array.isArray(result.notifications) &&
-        this.isArrayOf(result.notifications, this.isA2ANotification)
-          ? result.notifications
-          : [],
+      notifications: parseArraySafe(
+        result.notifications,
+        A2ANotificationSchema
+      ) as A2ANotification[],
     };
   }
 
@@ -1066,21 +1005,19 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        leaderboard:
-          Array.isArray(result.leaderboard) &&
-          this.isArrayOf(result.leaderboard, this.isA2ALeaderboardEntry)
-            ? result.leaderboard
-            : [],
+        leaderboard: parseArraySafe(
+          result.leaderboard,
+          A2ALeaderboardEntrySchema
+        ) as A2ALeaderboardEntry[],
       };
     }
 
     const result = this.extractResult(response);
     return {
-      leaderboard:
-        Array.isArray(result.leaderboard) &&
-        this.isArrayOf(result.leaderboard, this.isA2ALeaderboardEntry)
-          ? result.leaderboard
-          : [],
+      leaderboard: parseArraySafe(
+        result.leaderboard,
+        A2ALeaderboardEntrySchema
+      ) as A2ALeaderboardEntry[],
     };
   }
 
@@ -1183,21 +1120,19 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        tags:
-          Array.isArray(result.tags) &&
-          this.isArrayOf(result.tags, this.isA2ATrendingTag)
-            ? result.tags
-            : [],
+        tags: parseArraySafe(
+          result.tags,
+          A2ATrendingTagSchema
+        ) as A2ATrendingTag[],
       };
     }
 
     const result = this.extractResult(response);
     return {
-      tags:
-        Array.isArray(result.tags) &&
-        this.isArrayOf(result.tags, this.isA2ATrendingTag)
-          ? result.tags
-          : [],
+      tags: parseArraySafe(
+        result.tags,
+        A2ATrendingTagSchema
+      ) as A2ATrendingTag[],
     };
   }
 
@@ -1219,21 +1154,19 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        organizations:
-          Array.isArray(result.organizations) &&
-          this.isArrayOf(result.organizations, this.isA2AOrganization)
-            ? result.organizations
-            : [],
+        organizations: parseArraySafe(
+          result.organizations,
+          A2AOrganizationSchema
+        ) as A2AOrganization[],
       };
     }
 
     const result = this.extractResult(response);
     return {
-      organizations:
-        Array.isArray(result.organizations) &&
-        this.isArrayOf(result.organizations, this.isA2AOrganization)
-          ? result.organizations
-          : [],
+      organizations: parseArraySafe(
+        result.organizations,
+        A2AOrganizationSchema
+      ) as A2AOrganization[],
     };
   }
 
@@ -1257,21 +1190,19 @@ export class BabylonA2AClient {
       const task = await this.waitForTask(response.id);
       const result = this.extractResult(task);
       return {
-        users:
-          Array.isArray(result.users) &&
-          this.isArrayOf(result.users, this.isA2AUserSearchResult)
-            ? result.users
-            : [],
+        users: parseArraySafe(
+          result.users,
+          A2AUserSearchResultSchema
+        ) as A2AUserSearchResult[],
       };
     }
 
     const result = this.extractResult(response);
     return {
-      users:
-        Array.isArray(result.users) &&
-        this.isArrayOf(result.users, this.isA2AUserSearchResult)
-          ? result.users
-          : [],
+      users: parseArraySafe(
+        result.users,
+        A2AUserSearchResultSchema
+      ) as A2AUserSearchResult[],
     };
   }
 

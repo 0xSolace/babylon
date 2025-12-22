@@ -1,6 +1,10 @@
 'use client';
 
 import type { PortfolioPnLSnapshot } from '@babylon/engine/client';
+import {
+  BalanceApiResponseSchema,
+  UserPositionsApiResponseSchema,
+} from '@babylon/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -35,26 +39,6 @@ function toNumber(value: unknown, fallback = 0): number {
   }
 
   return fallback;
-}
-
-interface BalanceApiResponse {
-  totalDeposited?: number | string;
-  totalWithdrawn?: number | string;
-  lifetimePnL?: number | string;
-  balance?: number | string;
-}
-
-interface PositionData {
-  unrealizedPnL?: number;
-}
-
-interface PositionsApiResponse {
-  perpetuals?: {
-    positions?: PositionData[];
-  };
-  predictions?: {
-    positions?: PositionData[];
-  };
 }
 
 interface PortfolioQueryData {
@@ -104,27 +88,31 @@ export function usePortfolioPnL(): UsePortfolioPnLResult {
         fetch(`/api/markets/positions/${encodeURIComponent(user!.id)}`),
       ]);
 
-      const balanceJson = (await balanceRes.json()) as BalanceApiResponse;
-      const positionsJson = (await positionsRes.json()) as PositionsApiResponse;
+      const balanceRaw: unknown = await balanceRes.json();
+      const positionsRaw: unknown = await positionsRes.json();
+      const balanceJson = BalanceApiResponseSchema.parse(balanceRaw);
+      const positionsJson = UserPositionsApiResponseSchema.parse(positionsRaw);
 
       const totalDeposited = toNumber(balanceJson.totalDeposited);
       const totalWithdrawn = toNumber(balanceJson.totalWithdrawn);
       const lifetimePnL = toNumber(balanceJson.lifetimePnL);
       const availableBalance = toNumber(balanceJson.balance);
 
-      const perpUnrealized = (
-        positionsJson?.perpetuals?.positions ?? []
-      ).reduce(
-        (sum: number, position: PositionData) =>
-          sum + toNumber(position?.unrealizedPnL),
+      const perpUnrealized = (positionsJson.perpetuals?.positions ?? []).reduce(
+        (
+          sum: number,
+          position: { unrealizedPnL?: number | string | undefined }
+        ) => sum + toNumber(position.unrealizedPnL),
         0
       );
 
       const predictionUnrealized = (
-        positionsJson?.predictions?.positions ?? []
+        positionsJson.predictions?.positions ?? []
       ).reduce(
-        (sum: number, position: PositionData) =>
-          sum + toNumber(position?.unrealizedPnL),
+        (
+          sum: number,
+          position: { unrealizedPnL?: number | string | undefined }
+        ) => sum + toNumber(position.unrealizedPnL),
         0
       );
 

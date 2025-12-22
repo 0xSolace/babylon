@@ -45,17 +45,8 @@ export {
   type EventArcValidationResult,
   EventArcValidator,
 } from './event-arc-validator';
+export * from './market-mover-agent';
 export * from './onchain-market-service';
-// Prediction Market Service
-export {
-  type BroadcasterFn,
-  type PredictionHistoryEventType,
-  type PredictionHistorySource,
-  PredictionMarketService,
-  type PredictionPriceSnapshot,
-  type PredictionResolutionEvent,
-  type PredictionTradeEvent,
-} from './prediction-market-service';
 export * from './price-update-service';
 export * from './signal-extraction-service';
 export * from './trajectory-market-engine';
@@ -64,6 +55,7 @@ export * from './trajectory-market-engine';
 // Content Generation
 // =============================================================================
 
+export * from './article-image-service';
 export * from './event-generation-helpers';
 export * from './narrative-state-service';
 export * from './parody-headline-generator';

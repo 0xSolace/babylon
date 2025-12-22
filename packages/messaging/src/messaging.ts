@@ -7,6 +7,7 @@
  * This service is the single entry point for ALL messaging in Babylon.
  */
 
+import { logger, ServiceUnavailableError } from '@babylon/shared';
 import { type CQLClient, getCQL } from '@jeju/db';
 import { randomBytes } from 'crypto';
 import { type Address } from 'viem';
@@ -15,6 +16,13 @@ import {
   hexToBytes,
   serializeEncryptedMessage,
 } from './crypto';
+import {
+  EncryptedMessageSchema,
+  KmsKeyResponseSchema,
+  MetadataSchema,
+  ParticipantsSchema,
+  SendMessageRequestSchema,
+} from './schemas';
 
 export interface Message {
   id: string;
@@ -84,13 +92,13 @@ export class MessagingService {
 
     const healthy = await this.cql.isHealthy();
     if (!healthy) {
-      throw new Error(
-        '[Messaging] CovenantSQL is not healthy - decentralized messaging requires CQL. Run `jeju dev` to start all services.'
+      throw new ServiceUnavailableError(
+        'CovenantSQL is not healthy - decentralized messaging requires CQL. Run `jeju dev` to start all services.'
       );
     }
 
     await this.createTables();
-    console.log('[Messaging] Connected to CovenantSQL');
+    logger.info('Connected to CovenantSQL', undefined, 'Messaging');
     this.initialized = true;
   }
 
@@ -149,26 +157,28 @@ export class MessagingService {
    * Send a message to a conversation (DM, group, or channel)
    */
   async sendMessage(request: SendMessageRequest): Promise<Message> {
+    // Validate request at boundary
+    const validated = SendMessageRequestSchema.parse(request);
     await this.ensureInitialized();
 
     const messageId = `msg-${Date.now()}-${randomBytes(4).toString('hex')}`;
     const timestamp = Date.now();
 
-    let content = request.content;
+    // Use validated fields
+    const conversationId = validated.conversationId;
+    const senderAddress = validated.senderAddress as Address;
+    const recipientAddress = validated.recipientAddress as Address | undefined;
+    const messageType = validated.messageType;
+    const metadata = validated.metadata;
+
+    let content = validated.content;
     let encryptedContent: string | undefined;
     let ephemeralPublicKey: string | undefined;
     let nonce: string | undefined;
 
     // Encrypt message if requested
-    if (
-      this.useEncryption &&
-      request.encrypt !== false &&
-      request.recipientAddress
-    ) {
-      const encrypted = await this.encryptMessage(
-        content,
-        request.recipientAddress
-      );
+    if (this.useEncryption && validated.encrypt !== false && recipientAddress) {
+      const encrypted = await this.encryptMessage(content, recipientAddress);
       encryptedContent = encrypted.ciphertext;
       ephemeralPublicKey = encrypted.ephemeralPublicKey;
       nonce = encrypted.nonce;
@@ -181,37 +191,37 @@ export class MessagingService {
       `INSERT INTO messages (id, conversation_id, sender, recipient, content, encrypted_content, ephemeral_public_key, nonce, timestamp, message_type, delivery_status, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         messageId,
-        request.conversationId,
-        request.senderAddress,
-        request.recipientAddress ?? null,
+        conversationId,
+        senderAddress,
+        recipientAddress ?? null,
         content,
         encryptedContent ?? null,
         ephemeralPublicKey ?? null,
         nonce ?? null,
         timestamp,
-        request.messageType,
+        messageType,
         'pending',
-        request.metadata ? JSON.stringify(request.metadata) : null,
+        metadata ? JSON.stringify(metadata) : null,
       ]
     );
 
     // Update conversation
     await this.cql.exec(
       `UPDATE conversations SET last_message_at = $1, last_message_preview = $2 WHERE id = $3`,
-      [timestamp, request.content.slice(0, 50), request.conversationId]
+      [timestamp, validated.content.slice(0, 50), conversationId]
     );
 
     return {
       id: messageId,
-      conversationId: request.conversationId,
-      sender: request.senderAddress,
-      recipient: request.recipientAddress ?? null,
-      content: request.content,
+      conversationId,
+      sender: senderAddress,
+      recipient: recipientAddress ?? null,
+      content: validated.content,
       encryptedContent,
       timestamp,
-      messageType: request.messageType,
+      messageType,
       deliveryStatus: 'pending',
-      metadata: request.metadata,
+      metadata,
     };
   }
 
@@ -420,11 +430,9 @@ export class MessagingService {
       publicKey: new Uint8Array(32),
       privateKey: new Uint8Array(32),
     });
-    const serialized = JSON.parse(serializeEncryptedMessage(encrypted)) as {
-      ciphertext: string;
-      nonce: string;
-      ephemeralPublicKey: string;
-    };
+    const serialized = EncryptedMessageSchema.parse(
+      JSON.parse(serializeEncryptedMessage(encrypted))
+    );
 
     return {
       ciphertext: serialized.ciphertext,
@@ -467,10 +475,12 @@ export class MessagingService {
 
     if (!response.ok) return null;
 
-    const data = (await response.json()) as {
-      publicKey: string;
-      metadata: { id: string };
-    };
+    const parseResult = KmsKeyResponseSchema.safeParse(await response.json());
+    if (!parseResult.success) {
+      console.error('[Messaging] Invalid KMS response:', parseResult.error);
+      return null;
+    }
+    const data = parseResult.data;
 
     await this.cql.exec(
       `INSERT INTO user_keys (address, encryption_public_key, signing_public_key, kms_key_id, registered_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -491,6 +501,14 @@ export class MessagingService {
   }
 
   private mapMessageRow(row: Record<string, unknown>): Message {
+    let metadata: Record<string, unknown> | undefined;
+    if (row.metadata) {
+      const parseResult = MetadataSchema.safeParse(
+        JSON.parse(row.metadata as string)
+      );
+      metadata = parseResult.success ? parseResult.data : undefined;
+    }
+
     return {
       id: row.id as string,
       conversationId: row.conversation_id as string,
@@ -501,20 +519,37 @@ export class MessagingService {
       timestamp: row.timestamp as number,
       messageType: row.message_type as 'dm' | 'group' | 'channel',
       deliveryStatus: row.delivery_status as 'pending' | 'delivered' | 'read',
-      metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
+      metadata,
     };
   }
 
   private mapConversationRow(row: Record<string, unknown>): Conversation {
+    const participantsResult = ParticipantsSchema.safeParse(
+      JSON.parse(row.participants as string)
+    );
+    if (!participantsResult.success) {
+      throw new Error(
+        `Invalid participants data: ${participantsResult.error.message}`
+      );
+    }
+
+    let metadata: Record<string, unknown> | undefined;
+    if (row.metadata) {
+      const parseResult = MetadataSchema.safeParse(
+        JSON.parse(row.metadata as string)
+      );
+      metadata = parseResult.success ? parseResult.data : undefined;
+    }
+
     return {
       id: row.id as string,
       type: row.type as 'dm' | 'group' | 'channel',
       name: row.name as string | undefined,
-      participants: JSON.parse(row.participants as string) as Address[],
+      participants: participantsResult.data as Address[],
       createdAt: row.created_at as number,
       lastMessageAt: row.last_message_at as number,
       lastMessagePreview: row.last_message_preview as string | undefined,
-      metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
+      metadata,
     };
   }
 }

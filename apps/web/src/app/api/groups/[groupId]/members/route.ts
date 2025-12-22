@@ -18,7 +18,7 @@
  *     summary: Get group members
  *     description: Returns list of group members
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: groupId
@@ -56,7 +56,7 @@
  *     summary: Add member to group
  *     description: Adds a user to the group (admin only, sends notification)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: groupId
@@ -93,7 +93,7 @@
  *     summary: Remove member from group
  *     description: Removes a member from the group (admin only or self-remove)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: groupId
@@ -143,14 +143,9 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { asUser } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { AddMemberSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { z } from 'zod';
-
-const AddMemberSchema = z.object({
-  userId: z.string(),
-});
 
 /**
  * POST /api/groups/[groupId]/members

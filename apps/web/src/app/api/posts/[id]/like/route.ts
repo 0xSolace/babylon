@@ -10,7 +10,7 @@
  *     summary: Like a post
  *     description: Adds a like reaction to a post. Creates notification for post author.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -33,7 +33,7 @@
  *     summary: Unlike a post
  *     description: Removes a like reaction from a post.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -221,10 +221,14 @@ export const POST = withErrorHandling(
     );
 
     // Get updated like count
-    const [likeCountResult] = await db
+    const likeCountResults = await db
       .select({ count: count() })
       .from(reactions)
       .where(and(eq(reactions.postId, postId), eq(reactions.type, 'like')));
+    // Type assertion for aggregate query result
+    const likeCountResult = (
+      likeCountResults as unknown as Array<{ count: number }>
+    )[0];
     const likeCount = Number(likeCountResult?.count ?? 0);
 
     // Invalidate interaction cache for this post
@@ -303,11 +307,15 @@ export const DELETE = withErrorHandling(
     await db.delete(reactions).where(eq(reactions.id, reaction.id));
 
     // Get updated like count
-    const [likeCountResult] = await db
+    const likeCountResults2 = await db
       .select({ count: count() })
       .from(reactions)
       .where(and(eq(reactions.postId, postId), eq(reactions.type, 'like')));
-    const likeCount = Number(likeCountResult?.count ?? 0);
+    // Type assertion for aggregate query result
+    const likeCountResult2 = (
+      likeCountResults2 as unknown as Array<{ count: number }>
+    )[0];
+    const likeCount = Number(likeCountResult2?.count ?? 0);
 
     // Invalidate interaction cache for this post
     await invalidateCache(`post:${postId}:interactions:*`, {

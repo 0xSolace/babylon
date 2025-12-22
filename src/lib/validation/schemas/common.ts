@@ -12,10 +12,11 @@ export const UUIDSchema = z.string().uuid({
 });
 
 /**
- * User ID schema - accepts UUID, Privy DID, or username formats
+ * User ID schema - accepts UUID, OAuth3/Jeju DID, legacy Privy DID, or username formats
  * Examples:
  * - UUID: "550e8400-e29b-41d4-a716-446655440000"
- * - Privy DID: "did:privy:cm6sqq4og01qw9l70rbmyjn20"
+ * - OAuth3/Jeju DID: "did:jeju:mainnet:0x1234567890abcdef1234567890abcdef12345678"
+ * - Legacy Privy DID: "did:privy:cm6sqq4og01qw9l70rbmyjn20" (deprecated)
  * - Username: "eddy-snowjob" or "john_doe"
  */
 export const UserIdSchema = z.string().refine(
@@ -23,18 +24,24 @@ export const UserIdSchema = z.string().refine(
     // Check if it's a valid UUID
     const uuidRegex =
       /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
-    // Check if it's a valid Privy DID
+    // Check if it's a valid OAuth3/Jeju DID (did:jeju:{network}:0x{address})
+    const oauth3DidRegex =
+      /^did:jeju:(localnet|testnet|mainnet):0x[a-fA-F0-9]{40}$/;
+    // Check if it's a valid legacy Privy DID (deprecated)
     const privyDidRegex = /^did:privy:[a-z0-9]+$/;
     // Check if it's a valid username (3-30 chars, letters, numbers, underscores, hyphens)
     const usernameRegex = /^[a-zA-Z0-9_-]{3,30}$/;
 
     return (
-      uuidRegex.test(val) || privyDidRegex.test(val) || usernameRegex.test(val)
+      uuidRegex.test(val) ||
+      oauth3DidRegex.test(val) ||
+      privyDidRegex.test(val) ||
+      usernameRegex.test(val)
     );
   },
   {
     message:
-      'Invalid user identifier. Must be a UUID, Privy DID (did:privy:...), or username',
+      'Invalid user identifier. Must be a UUID, OAuth3 DID (did:jeju:...), or username',
   }
 );
 

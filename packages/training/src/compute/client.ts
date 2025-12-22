@@ -2,10 +2,10 @@
  * Submits training jobs to Jeju compute or executes locally as fallback.
  */
 
+import { logger } from '@babylon/shared';
 import { spawn } from 'child_process';
 import path from 'path';
 import type { Address } from 'viem';
-import { logger } from '../utils/logger';
 import type {
   ComputeTrainingConfig,
   GPURentalRequest,

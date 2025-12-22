@@ -1,217 +1,76 @@
 /**
- * Perp Markets Store - Centralized state management for perpetual markets data
+ * Perp Markets Hooks - React Query based data fetching for perpetual markets
  *
- * This store prevents duplicate API calls by:
- * 1. Caching data with a TTL (10 seconds)
- * 2. Deduplicating concurrent requests via a fetchPromise
- * 3. Providing a single polling mechanism that all components share
+ * This module provides hooks for fetching and caching perp markets data using react-query.
+ * The hooks prevent duplicate API calls via react-query's built-in caching and deduplication.
  *
  * Usage:
  * ```tsx
- * import { usePerpMarkets, usePerpMarketsPolling } from '@/stores/perpMarketsStore';
+ * import { usePerpMarkets, usePerpMarket } from '@/stores/perpMarketsStore';
  *
  * function MyComponent() {
  *   const { markets, loading, error, refetch } = usePerpMarkets();
- *   usePerpMarketsPolling(30000); // Optional: enable polling every 30s
  *   return <div>{markets.map(m => ...)}</div>;
  * }
  * ```
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { create } from 'zustand';
-import { useShallow } from 'zustand/react/shallow';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import type { PerpMarket } from '@/types/markets';
+import { MARKETS_CONFIG } from '@/types/markets';
 
-/**
- * Perp market data structure from API
- */
-export interface PerpMarket {
-  ticker: string;
-  organizationId: string;
-  name: string;
-  currentPrice: number;
-  change24h: number;
-  changePercent24h: number;
-  high24h: number;
-  low24h: number;
-  volume24h: number;
-  openInterest: number;
-  fundingRate: {
-    rate: number;
-    nextFundingTime: string;
-    predictedRate: number;
-  };
-  maxLeverage: number;
-  minOrderSize: number;
-}
+// Re-export for backwards compatibility
+export type { PerpMarket } from '@/types/markets';
 
-interface PerpMarketsState {
-  // Data
-  markets: PerpMarket[];
-  loading: boolean;
-  error: string | null;
-  lastFetchedAt: number | null;
+/** Query key for perp markets */
+export const PERP_MARKETS_QUERY_KEY = ['markets', 'perps'] as const;
 
-  // Internal state for request deduplication
-  fetchPromise: Promise<void> | null;
-  pollingInterval: ReturnType<typeof setInterval> | null;
-  subscriberCount: number;
+/** Fetch perp markets from API */
+async function fetchPerpMarkets(): Promise<PerpMarket[]> {
+  const response = await fetch('/api/markets/perps');
 
-  // Actions
-  fetchMarkets: (force?: boolean) => Promise<void>;
-  subscribe: (intervalMs: number) => () => void;
-}
+  if (!response.ok) {
+    throw new Error(`Failed to fetch perp markets: ${response.status}`);
+  }
 
-// Cache TTL in milliseconds (10 seconds)
-const CACHE_TTL = 10000;
-
-export const usePerpMarketsStore = create<PerpMarketsState>((set, get) => ({
-  markets: [],
-  loading: false,
-  error: null,
-  lastFetchedAt: null,
-  fetchPromise: null,
-  pollingInterval: null,
-  subscriberCount: 0,
-
-  fetchMarkets: async (force = false) => {
-    const state = get();
-
-    // Return existing promise if already fetching (deduplication)
-    if (state.fetchPromise) {
-      return state.fetchPromise;
-    }
-
-    // Return cached data if fresh and not forced
-    if (
-      !force &&
-      state.lastFetchedAt &&
-      Date.now() - state.lastFetchedAt < CACHE_TTL &&
-      state.markets.length > 0
-    ) {
-      return;
-    }
-
-    // Create and store the fetch promise
-    const fetchPromise = (async () => {
-      // Only show loading on initial fetch (not background refreshes)
-      if (state.markets.length === 0) {
-        set({ loading: true });
-      }
-      set({ error: null });
-
-      const response = await fetch('/api/markets/perps');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch perp markets: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data.markets && Array.isArray(data.markets)) {
-        set({
-          markets: data.markets,
-          lastFetchedAt: Date.now(),
-          error: null,
-        });
-      }
-      set({ loading: false, fetchPromise: null });
-    })();
-
-    set({ fetchPromise });
-    return fetchPromise;
-  },
-
-  // Combined subscribe/unsubscribe that handles polling lifecycle
-  subscribe: (intervalMs: number) => {
-    const state = get();
-    const newCount = state.subscriberCount + 1;
-    set({ subscriberCount: newCount });
-
-    // Start polling on first subscriber
-    if (newCount === 1) {
-      // Initial fetch
-      get().fetchMarkets();
-
-      // Set up interval
-      const interval = setInterval(() => {
-        get().fetchMarkets(true);
-      }, intervalMs);
-
-      set({ pollingInterval: interval });
-    }
-
-    // Return unsubscribe function
-    return () => {
-      const currentState = get();
-      const updatedCount = currentState.subscriberCount - 1;
-      set({ subscriberCount: updatedCount });
-
-      // Stop polling when last subscriber leaves
-      if (updatedCount === 0 && currentState.pollingInterval) {
-        clearInterval(currentState.pollingInterval);
-        set({ pollingInterval: null });
-      }
-    };
-  },
-}));
-
-// Selector for data (memoized by zustand)
-const dataSelector = (state: PerpMarketsState) => ({
-  markets: state.markets,
-  loading: state.loading,
-  error: state.error,
-});
-
-/**
- * Hook for consuming perp markets data
- * Automatically fetches data on mount if not cached
- */
-export function usePerpMarkets() {
-  // Single subscription with shallow comparison for the object
-  const { markets, loading, error } = usePerpMarketsStore(
-    useShallow(dataSelector)
-  );
-  const fetchMarkets = usePerpMarketsStore((state) => state.fetchMarkets);
-
-  // Fetch on mount if needed
-  useEffect(() => {
-    fetchMarkets();
-  }, [fetchMarkets]);
-
-  const refetch = useCallback(() => {
-    return fetchMarkets(true);
-  }, [fetchMarkets]);
-
-  return { markets, loading, error, refetch };
+  const data = (await response.json()) as { markets?: PerpMarket[] };
+  return data.markets ?? [];
 }
 
 /**
- * Hook for enabling polling on perp markets
- * Uses reference counting so multiple components can request polling
- * and it only stops when all components unmount
+ * Hook for consuming perp markets data.
+ * Automatically fetches data on mount and caches results.
  *
- * @param intervalMs - Polling interval in milliseconds (default: 30000)
+ * @param options - Optional configuration
  */
-export function usePerpMarketsPolling(intervalMs = 30000) {
-  const subscribe = usePerpMarketsStore((state) => state.subscribe);
+export function usePerpMarkets(options?: { pollingInterval?: number }) {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: PERP_MARKETS_QUERY_KEY,
+    queryFn: fetchPerpMarkets,
+    staleTime: MARKETS_CONFIG.CACHE_TTL_MS,
+    refetchInterval: options?.pollingInterval,
+    placeholderData: (previousData) => previousData,
+  });
 
-  // Store interval in ref so it doesn't cause re-subscriptions
-  const intervalRef = useRef(intervalMs);
+  const markets = data ?? [];
 
-  useEffect(() => {
-    // Subscribe returns the unsubscribe function
-    const unsubscribe = subscribe(intervalRef.current);
-    return unsubscribe;
-  }, [subscribe]);
+  return {
+    markets,
+    loading: isLoading,
+    error: error?.message ?? null,
+    refetch: useCallback(() => refetch(), [refetch]),
+  };
 }
 
 /**
- * Get a specific market by ticker (memoized)
+ * Get a specific perp market by ticker (memoized)
  */
 export function usePerpMarket(ticker: string) {
   const { markets, loading, error, refetch } = usePerpMarkets();
 
   const market = useMemo(
-    () => markets.find((m) => m.ticker.toLowerCase() === ticker.toLowerCase()),
+    () => markets.find((m) => m.ticker === ticker),
     [markets, ticker]
   );
 
@@ -219,20 +78,15 @@ export function usePerpMarket(ticker: string) {
 }
 
 /**
- * Get top movers (gainers and losers) - memoized
+ * Hook to invalidate perp markets cache.
+ * Useful after mutations (open/close positions).
  */
-export function usePerpTopMovers(count = 4) {
-  const { markets, loading, error, refetch } = usePerpMarkets();
+export function useInvalidatePerpMarkets() {
+  const queryClient = useQueryClient();
 
-  const { topGainers, topLosers } = useMemo(() => {
-    const sorted = [...markets].sort(
-      (a, b) => b.changePercent24h - a.changePercent24h
-    );
-    return {
-      topGainers: sorted.slice(0, count),
-      topLosers: sorted.slice(-count).reverse(),
-    };
-  }, [markets, count]);
-
-  return { topGainers, topLosers, loading, error, refetch };
+  return useCallback(() => {
+    return queryClient.invalidateQueries({
+      queryKey: PERP_MARKETS_QUERY_KEY,
+    });
+  }, [queryClient]);
 }

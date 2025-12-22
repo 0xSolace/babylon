@@ -5,6 +5,11 @@
  * No server-side client secret required.
  */
 
+import { ExternalServiceError, retryIfRetryable } from '@babylon/shared';
+import {
+  DiscordUserResponseSchema,
+  OAuthTokenResponseSchema,
+} from '../schemas/index';
 import { generatePKCE, PKCEUtils } from './pkce';
 import type {
   OAuthCallbackResult,
@@ -79,26 +84,39 @@ export class DiscordOAuth implements OAuthProvider {
       code_verifier: codeVerifier,
     });
 
-    const response = await fetch(DISCORD_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(DISCORD_TOKEN_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: body.toString(),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `Discord token exchange failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
       },
-      body: body.toString(),
-    });
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Token exchange failed: ${error}`);
+      const errorText = await response.text();
+      throw new ExternalServiceError(
+        'Discord OAuth',
+        `Token exchange failed: ${errorText}`,
+        response.status
+      );
     }
 
-    const data = (await response.json()) as {
-      access_token: string;
-      refresh_token?: string;
-      token_type: string;
-      expires_in: number;
-      scope: string;
-    };
+    const data = OAuthTokenResponseSchema.parse(await response.json());
 
     return {
       accessToken: data.access_token,
@@ -113,31 +131,43 @@ export class DiscordOAuth implements OAuthProvider {
    * Get user info from access token
    */
   async getUserInfo(accessToken: string): Promise<OAuthUserInfo> {
-    const response = await fetch(DISCORD_USER_URL, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(DISCORD_USER_URL, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `Discord user info failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
       },
-    });
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to get user info: ${error}`);
+      const errorText = await response.text();
+      throw new ExternalServiceError(
+        'Discord OAuth',
+        `Failed to get user info: ${errorText}`,
+        response.status
+      );
     }
 
-    const data = (await response.json()) as {
-      id: string;
-      username: string;
-      global_name?: string;
-      email?: string;
-      avatar?: string;
-      verified?: boolean;
-    };
+    const data = DiscordUserResponseSchema.parse(await response.json());
 
     return {
       id: data.id,
       username: data.username,
       displayName: data.global_name ?? data.username,
-      email: data.email,
+      email: data.email ?? undefined,
       avatar: data.avatar
         ? `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.png`
         : undefined,

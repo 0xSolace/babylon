@@ -199,10 +199,9 @@ async function testArticleGeneration() {
     if (process.env.OPENAI_API_KEY) {
       console.log('🔥 Testing live article generation with LLM...\n');
 
-      try {
-        const llm = new BabylonLLMClient();
+      const llm = new BabylonLLMClient();
 
-        const testPrompt = `You are BloombAIrg News, a news organization. Write a comprehensive news article about this prediction market: "Will OpenAGI achieve AGI by 2030?".
+      const testPrompt = `You are BloombAIrg News, a news organization. Write a comprehensive news article about this prediction market: "Will OpenAGI achieve AGI by 2030?".
 
 Provide:
 - "title": a compelling headline (max 100 characters)
@@ -216,61 +215,58 @@ Return your response as XML in this exact format:
   <article>full article body here</article>
 </response>`;
 
-        const rawResponse = await llm.generateJSON<
-          | { title: string; summary: string; article: string }
-          | { response: { title: string; summary: string; article: string } }
-        >(
-          testPrompt,
-          {
-            properties: {
-              title: { type: 'string' },
-              summary: { type: 'string' },
-              article: { type: 'string' },
-            },
-            required: ['title', 'summary', 'article'],
+      const rawResponse = await llm.generateJSON<
+        | { title: string; summary: string; article: string }
+        | { response: { title: string; summary: string; article: string } }
+      >(
+        testPrompt,
+        {
+          properties: {
+            title: { type: 'string' },
+            summary: { type: 'string' },
+            article: { type: 'string' },
           },
-          { temperature: 0.7, maxTokens: 1000 }
+          required: ['title', 'summary', 'article'],
+        },
+        { temperature: 0.7, maxTokens: 1000 }
+      );
+
+      // Handle XML structure
+      const response =
+        'response' in rawResponse && rawResponse.response
+          ? rawResponse.response
+          : (rawResponse as {
+              title: string;
+              summary: string;
+              article: string;
+            });
+
+      console.log('✅ LLM Response Received!');
+      console.log(`   Title: ${response.title}`);
+      console.log(`   Summary Length: ${response.summary.length} chars`);
+      console.log(`   Article Length: ${response.article.length} chars`);
+
+      const wordCount = response.article.split(/\s+/).length;
+      console.log(`   Article Words: ~${wordCount} words`);
+
+      const paragraphs = response.article
+        .split('\n\n')
+        .filter((p) => p.trim()).length;
+      console.log(`   Paragraphs: ${paragraphs}`);
+      console.log();
+
+      if (response.article.length >= 400) {
+        console.log('✅ SUCCESS: Article meets longform requirements!');
+      } else {
+        throw new Error(
+          `Article too short: expected >= 400 chars, got ${response.article.length} chars`
         );
-
-        // Handle XML structure
-        const response =
-          'response' in rawResponse && rawResponse.response
-            ? rawResponse.response
-            : (rawResponse as {
-                title: string;
-                summary: string;
-                article: string;
-              });
-
-        console.log('✅ LLM Response Received!');
-        console.log(`   Title: ${response.title}`);
-        console.log(`   Summary Length: ${response.summary.length} chars`);
-        console.log(`   Article Length: ${response.article.length} chars`);
-
-        const wordCount = response.article.split(/\s+/).length;
-        console.log(`   Article Words: ~${wordCount} words`);
-
-        const paragraphs = response.article
-          .split('\n\n')
-          .filter((p) => p.trim()).length;
-        console.log(`   Paragraphs: ${paragraphs}`);
-        console.log();
-
-        if (response.article.length >= 400) {
-          console.log('✅ SUCCESS: Article meets longform requirements!');
-        } else {
-          console.log('❌ FAILED: Article too short');
-          console.log('   Expected: >= 400 chars');
-          console.log(`   Got: ${response.article.length} chars`);
-        }
-        console.log();
-
-        console.log('Sample output:');
-        console.log(response.article.substring(0, 300) + '...');
-        console.log();
-      } catch (error) {
-        console.log(`❌ LLM test failed: ${error}`);
       }
+      console.log();
+
+      console.log('Sample output:');
+      console.log(response.article.substring(0, 300) + '...');
+      console.log();
     } else {
       console.log('⚠️  Skipped - Set OPENAI_API_KEY to test live generation');
     }

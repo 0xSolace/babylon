@@ -1,4 +1,4 @@
-import { logger } from '@babylon/shared';
+import { ChatMessagesApiResponseSchema, logger } from '@babylon/shared';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSSEChannel } from './useSSE';
@@ -26,14 +26,6 @@ interface ApiMessage {
   content: string;
   senderId: string;
   createdAt: string | Date;
-}
-
-interface ChatApiResponse {
-  messages?: ApiMessage[];
-  pagination?: {
-    hasMore?: boolean;
-    nextCursor?: string;
-  };
 }
 
 interface ChatPage {
@@ -125,11 +117,12 @@ export function useChatMessages(chatId: string | null) {
         throw new Error('Failed to load messages');
       }
 
-      const responseData = (await response.json()) as ChatApiResponse;
+      const json: unknown = await response.json();
+      const responseData = ChatMessagesApiResponseSchema.parse(json);
 
       const formattedMessages: ChatMessage[] = (
         responseData.messages ?? []
-      ).map((msg) => formatMessage(msg, chatId!));
+      ).map((msg) => formatMessage(msg as ApiMessage, chatId!));
 
       logger.debug(
         `Loaded ${formattedMessages.length} messages for chat ${chatId}`,
@@ -217,10 +210,11 @@ export function useChatMessages(chatId: string | null) {
 
       const response = await fetch(`/api/chats/${chatId}?limit=50`);
       if (response.ok) {
-        const responseData = (await response.json()) as ChatApiResponse;
+        const json: unknown = await response.json();
+        const responseData = ChatMessagesApiResponseSchema.parse(json);
         if (responseData.messages) {
           const formattedMessages: ChatMessage[] = responseData.messages.map(
-            (msg) => formatMessage(msg, chatId)
+            (msg) => formatMessage(msg as ApiMessage, chatId)
           );
 
           // Check for new messages and add them via SSE messages

@@ -8,11 +8,17 @@
  */
 
 import { db } from '@babylon/db';
+import { logger } from '@babylon/shared';
+import type { z } from 'zod';
 import { getLLMCaller } from '../dependencies';
 import { type BehavioralMetrics, trajectoryMetricsExtractor } from '../metrics';
 import { hasCustomRubric } from '../rubrics';
-import type { TrajectoryStep } from '../training/types';
-import { logger, splitIntoBatches } from '../utils';
+import {
+  parseTrajectorySteps,
+  RulerScoreResponseSchema,
+  TrajectoryScoreResponseSchema,
+} from '../training/types';
+import { splitIntoBatches } from '../utils';
 import {
   judgePromptBuilder,
   type TrajectoryContext,
@@ -33,26 +39,7 @@ export interface ArchetypeScore {
   scoredAt: Date;
 }
 
-/**
- * LLM response for single trajectory scoring.
- */
-interface TrajectoryScoreResponse {
-  score: number;
-  reasoning: string;
-  strengths?: string[];
-  weaknesses?: string[];
-}
-
-/**
- * LLM response for RULER comparison scoring.
- */
-interface RulerScoreResponse {
-  scores: Array<{
-    trajectory_id: string;
-    explanation: string;
-    score: number;
-  }>;
-}
+// Response types imported from ../training/types
 
 /**
  * Options for scoring operations.
@@ -99,7 +86,7 @@ export class ArchetypeScoringService {
     }
 
     const archetype = traj.archetype ?? opts.archetype ?? 'default';
-    const steps = JSON.parse(traj.stepsJson) as TrajectoryStep[];
+    const steps = parseTrajectorySteps(traj.stepsJson);
 
     const metrics = trajectoryMetricsExtractor.extractFromRaw({
       trajectoryId: traj.trajectoryId,
@@ -219,7 +206,7 @@ export class ArchetypeScoringService {
     const fallbackArchetype = opts.archetype || 'default';
 
     for (const traj of trajResults) {
-      const steps = JSON.parse(traj.stepsJson) as TrajectoryStep[];
+      const steps = parseTrajectorySteps(traj.stepsJson);
       const archetype = traj.archetype || fallbackArchetype;
 
       const metrics = trajectoryMetricsExtractor.extractFromRaw({
@@ -442,7 +429,7 @@ export class ArchetypeScoringService {
   private async callSingleJudge(
     system: string,
     user: string
-  ): Promise<TrajectoryScoreResponse | null> {
+  ): Promise<ReturnType<typeof TrajectoryScoreResponseSchema.parse> | null> {
     const llmCaller = getLLMCaller();
     const prompt = `${user}\n\nReturn ONLY valid JSON, no other text.`;
 
@@ -455,7 +442,7 @@ export class ArchetypeScoringService {
       actionType: 'archetype_score_trajectory',
     });
 
-    return this.parseJudgeResponse<TrajectoryScoreResponse>(response);
+    return this.parseJudgeResponse(response, TrajectoryScoreResponseSchema);
   }
 
   /**
@@ -464,7 +451,7 @@ export class ArchetypeScoringService {
   private async callComparisonJudge(
     system: string,
     user: string
-  ): Promise<RulerScoreResponse | null> {
+  ): Promise<ReturnType<typeof RulerScoreResponseSchema.parse> | null> {
     const llmCaller = getLLMCaller();
     const prompt = `${user}\n\nReturn ONLY valid JSON, no other text.`;
 
@@ -477,13 +464,16 @@ export class ArchetypeScoringService {
       actionType: 'archetype_ruler_score',
     });
 
-    return this.parseJudgeResponse<RulerScoreResponse>(response);
+    return this.parseJudgeResponse(response, RulerScoreResponseSchema);
   }
 
   /**
-   * Parse JSON response from judge.
+   * Parse JSON response from judge with Zod validation.
    */
-  private parseJudgeResponse<T>(response: string): T | null {
+  private parseJudgeResponse<T>(
+    response: string,
+    schema: z.ZodType<T>
+  ): T | null {
     const jsonText = response
       .trim()
       .replace(/```json\n?/g, '')
@@ -502,7 +492,24 @@ export class ArchetypeScoringService {
       return null;
     }
 
-    return JSON.parse(jsonMatch[0]) as T;
+    const parsed: unknown = JSON.parse(jsonMatch[0]);
+    const result = schema.safeParse(parsed);
+
+    if (!result.success) {
+      logger.error(
+        'Judge response validation failed',
+        {
+          errors: result.error.issues.map(
+            (i) => `${i.path.map(String).join('.')}: ${String(i.message)}`
+          ),
+          preview: jsonMatch[0]?.substring(0, 200),
+        },
+        'ArchetypeScoring'
+      );
+      return null;
+    }
+
+    return result.data;
   }
 }
 

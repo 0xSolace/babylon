@@ -5,7 +5,10 @@
  * Used by ModelBenchmarkService and HuggingFaceModelUploader.
  */
 
-import type { SimulationMetrics } from './SimulationEngine';
+// TODO: SimulationEngine.ts was deleted in merge - using type export from benchmark/index
+// Importing from index to get the type (circular import workaround)
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports
+import type { SimulationMetrics } from './index';
 
 /**
  * JSON value type for parsing untyped data

@@ -1,11 +1,11 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { GroupInviteCard } from '@/components/groups/GroupInviteCard';
 import { Avatar } from '@/components/shared/Avatar';
@@ -56,11 +56,6 @@ export default function NotificationsPage() {
   const { authenticated, user, getAccessToken } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
-  // Local state for optimistic updates on read status
-  const [localNotifications, setLocalNotifications] = useState<Notification[]>(
-    []
-  );
-  const [localUnreadCount, setLocalUnreadCount] = useState(0);
 
   const {
     data: notificationsData,
@@ -117,18 +112,76 @@ export default function NotificationsPage() {
     enabled: authenticated && !!user,
   });
 
-  // Keep local state in sync with query data
-  useEffect(() => {
-    if (notificationsData) {
-      setLocalNotifications(notificationsData.notifications || []);
-      setLocalUnreadCount(notificationsData.unreadCount || 0);
-    }
-  }, [notificationsData]);
-
-  const notifications = localNotifications;
-  const groupInvites = invitesData ?? [];
+  const notifications = notificationsData
+    ? notificationsData.notifications
+    : [];
+  const groupInvites = invitesData || [];
   const loading = notificationsLoading || invitesLoading;
-  const unreadCount = localUnreadCount;
+  const unreadCount = notificationsData ? notificationsData.unreadCount : 0;
+
+  // Mutation for marking notifications as read with optimistic updates
+  const markAsReadMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      const token = await getAccessToken();
+      if (!token) throw new Error('No auth token');
+
+      const response = await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notificationIds: [notificationId],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to mark notification as read');
+      }
+
+      return notificationId;
+    },
+    onMutate: async (notificationId) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['notifications'] });
+
+      // Snapshot the previous value
+      const previousData = queryClient.getQueryData<NotificationsResponse>([
+        'notifications',
+      ]);
+
+      // Optimistically update the cache
+      queryClient.setQueryData<NotificationsResponse>(
+        ['notifications'],
+        (old) => {
+          if (!old) return old;
+          return {
+            notifications: old.notifications.map((n) =>
+              n.id === notificationId ? { ...n, read: true } : n
+            ),
+            unreadCount: Math.max(0, old.unreadCount - 1),
+          };
+        }
+      );
+
+      return { previousData };
+    },
+    onError: (_err, _notificationId, context) => {
+      // Rollback on error
+      if (context?.previousData) {
+        queryClient.setQueryData(['notifications'], context.previousData);
+      }
+    },
+  });
+
+  const markAsRead = useCallback(
+    (notificationId: string, isAlreadyRead: boolean) => {
+      if (isAlreadyRead) return;
+      markAsReadMutation.mutate(notificationId);
+    },
+    [markAsReadMutation]
+  );
 
   const handleRefresh = useCallback(async () => {
     await refetchNotifications();
@@ -145,50 +198,6 @@ export default function NotificationsPage() {
     await refetchNotifications();
     await queryClient.invalidateQueries({ queryKey: ['group-invites'] });
   }, [refetchNotifications, queryClient]);
-
-  const markAsRead = useCallback(
-    async (notificationId: string, isAlreadyRead: boolean) => {
-      // Skip if already marked as read
-      if (isAlreadyRead) {
-        return;
-      }
-
-      const token = await getAccessToken();
-
-      if (!token) return;
-
-      // Update local state optimistically first
-      setLocalNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-      );
-      setLocalUnreadCount((prev) => Math.max(0, prev - 1));
-
-      // Then make the API call
-      const response = await fetch('/api/notifications', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          notificationIds: [notificationId],
-        }),
-      });
-
-      if (!response.ok) {
-        console.error(
-          'Failed to mark notification as read:',
-          response.statusText
-        );
-        // Revert optimistic update on error
-        setLocalNotifications((prev) =>
-          prev.map((n) => (n.id === notificationId ? { ...n, read: false } : n))
-        );
-        setLocalUnreadCount((prev) => prev + 1);
-      }
-    },
-    [getAccessToken]
-  );
 
   // Intersection Observer - marks notifications as read after viewing for 3 seconds
   useEffect(() => {
@@ -352,22 +361,27 @@ export default function NotificationsPage() {
 
   if (!authenticated) {
     return (
-      <PageContainer noPadding className="flex flex-col">
-        <div className="sticky top-0 z-10 border-border border-b bg-background">
-          <div className="px-4 py-3">
-            <h1 className="font-bold text-xl">Notifications</h1>
+      <PageContainer
+        noPadding
+        className="!overflow-visible flex w-full flex-col"
+      >
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-[rgba(120,120,120,0.5)] lg:border-r lg:border-l">
+          <div className="sticky top-0 z-10 border-border border-b bg-background">
+            <div className="px-4 py-3 lg:px-6">
+              <h1 className="font-bold text-xl">Notifications</h1>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-1 flex-col items-center justify-center gap-4">
-          <p className="text-muted-foreground">
-            Please sign in to view notifications
-          </p>
-          <Link
-            href="/feed"
-            className="rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground transition-all hover:bg-primary/90"
-          >
-            Go to Feed
-          </Link>
+          <div className="flex flex-1 flex-col items-center justify-center gap-4">
+            <p className="text-muted-foreground">
+              Please sign in to view notifications
+            </p>
+            <Link
+              href="/feed"
+              className="rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground transition-all hover:bg-primary/90"
+            >
+              Go to Feed
+            </Link>
+          </div>
         </div>
       </PageContainer>
     );
@@ -453,7 +467,7 @@ export default function NotificationsPage() {
                 onClick={() => markAsRead(notification.id, notification.read)}
                 data-notification-id={notification.id}
                 className={cn(
-                  'block border-border border-b px-4 py-4',
+                  'block border-border border-b px-4 py-4 lg:px-6',
                   'transition-colors hover:bg-muted/30',
                   !notification.read && 'bg-primary/5'
                 )}
@@ -501,27 +515,22 @@ export default function NotificationsPage() {
                           </p>
                         ) : (
                           <p className="text-foreground leading-relaxed">
-                            {notification.type !== 'system' ? (
-                              <>
-                                <span className="font-semibold">
-                                  {notification.actor?.displayName || 'Someone'}
-                                </span>{' '}
-                                <span className="text-muted-foreground">
-                                  {getNotificationIcon(notification.type)}{' '}
-                                  {notification.message
-                                    .replace(
-                                      notification.actor?.displayName || '',
-                                      ''
-                                    )
-                                    .replace(/^:\s*/, '')}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-muted-foreground">
-                                {getNotificationIcon(notification.type)}{' '}
-                                {notification.message}
-                              </span>
-                            )}
+                            <span className="font-semibold">
+                              {notification.actor
+                                ? notification.actor.displayName
+                                : 'Someone'}
+                            </span>{' '}
+                            <span className="text-muted-foreground">
+                              {getNotificationIcon(notification.type)}{' '}
+                              {notification.message
+                                .replace(
+                                  notification.actor
+                                    ? notification.actor.displayName
+                                    : '',
+                                  ''
+                                )
+                                .replace(/^:\s*/, '')}
+                            </span>
                           </p>
                         )}
                         <time className="mt-1 block text-muted-foreground text-sm">

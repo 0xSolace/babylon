@@ -3,7 +3,12 @@
  * Dev mode uses single simulated node; production uses multiple TEE nodes.
  */
 
-import { logger } from '@babylon/shared';
+import {
+  ExternalServiceError,
+  logger,
+  retryIfRetryable,
+  ValidationError,
+} from '@babylon/shared';
 import type { Address, Hex } from 'viem';
 import { keccak256, toBytes, toHex } from 'viem';
 import type { AttestationQuote, DID, MPCNode } from '../types/index';
@@ -111,7 +116,8 @@ export class MPCClient {
         { healthyCount, threshold: this.config.threshold },
         'MPCClient'
       );
-      throw new Error(
+      throw new ExternalServiceError(
+        'MPC Network',
         `Insufficient healthy nodes: ${healthyCount}/${this.config.threshold} required`
       );
     }
@@ -136,16 +142,27 @@ export class MPCClient {
   }
 
   private async probeNode(endpoint: string): Promise<MPCNode> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await retryIfRetryable(
+      async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(`${endpoint}/health`, {
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+        const res = await fetch(`${endpoint}/health`, {
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
 
-    if (!response.ok) {
-      throw new Error(`Node unhealthy: ${response.status}`);
-    }
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `Node unhealthy: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     const health = (await response.json()) as {
       nodeId: string;
@@ -226,7 +243,7 @@ export class MPCClient {
 
   private async devModeKeyGen(request: KeyGenRequest): Promise<KeyGenResponse> {
     if (!this.nodes[0]) {
-      throw new Error('No MPC nodes available');
+      throw new ExternalServiceError('MPC Network', 'No MPC nodes available');
     }
 
     const seedMaterial = toBytes(request.userId);
@@ -402,7 +419,9 @@ export class MPCClient {
     partials: Array<{ partialSignature: Hex; nodeId: string }>
   ): Hex {
     if (partials.length === 0) {
-      throw new Error('No partial signatures to combine');
+      throw new ValidationError('No partial signatures to combine', [
+        'partialSignatures',
+      ]);
     }
 
     // Single signature - no combination needed
@@ -417,10 +436,11 @@ export class MPCClient {
 
     // Threshold > 1 requires FROST aggregation - not yet implemented
     // This is a hard error to prevent silent security failures
-    throw new Error(
+    throw new ValidationError(
       `Threshold signature aggregation not implemented. ` +
         `Requested threshold=${this.config.threshold} but received ${partials.length} partial signatures. ` +
-        `Use threshold=1 for single-node mode, or implement FROST protocol for multi-party signing.`
+        `Use threshold=1 for single-node mode, or implement FROST protocol for multi-party signing.`,
+      ['threshold']
     );
   }
 
@@ -429,19 +449,33 @@ export class MPCClient {
     path: string,
     body: unknown
   ): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeout);
+    const response = await retryIfRetryable(
+      async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(
+          () => controller.abort(),
+          this.config.timeout
+        );
 
-    const response = await fetch(`${node.endpoint}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+        const res = await fetch(`${node.endpoint}${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
 
-    if (!response.ok) {
-      throw new Error(`Node ${node.nodeId} error: ${response.status}`);
-    }
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `Node ${node.nodeId} error: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     return response.json() as Promise<T>;
   }

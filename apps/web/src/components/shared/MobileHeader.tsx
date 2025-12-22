@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react';
 import { AirdropStatusWidget } from '@/components/airdrop';
 import { Avatar } from '@/components/shared/Avatar';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
@@ -39,13 +40,6 @@ interface ProfileResponse {
  */
 interface BalanceResponse {
   balance: number | string;
-}
-
-/**
- * Notifications API response.
- */
-interface NotificationsResponse {
-  unreadCount?: number;
 }
 
 /**
@@ -128,41 +122,13 @@ function MobileHeaderContent() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Fetch unread notifications count
-  const { data: notificationsData } = useQuery({
-    queryKey: ['mobileHeader', 'notifications'],
-    queryFn: async (): Promise<NotificationsResponse> => {
-      const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-      if (!token) {
-        return { unreadCount: 0 };
-      }
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        return { unreadCount: 0 };
-      }
-
-      return response.json() as Promise<NotificationsResponse>;
-    },
-    enabled: authenticated && !!user,
-    refetchInterval: 60000, // Refresh every 1 minute
-  });
+  // Use shared unread notifications hook for consistent caching
+  const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
   const pointsData = {
-    available: Number(balanceData?.balance || 0),
-    total: user?.reputationPoints || 0,
+    available: Number(balanceData?.balance ?? 0),
+    total: user?.reputationPoints ?? 0,
   };
-
-  const unreadNotifications = notificationsData?.unreadCount || 0;
 
   // Update user profile image from profile data if missing
   useEffect(() => {
@@ -264,11 +230,11 @@ function MobileHeaderContent() {
               >
                 <Avatar
                   id={user.id}
-                  name={user.displayName || user.email || 'User'}
+                  name={user.displayName ?? user.email ?? 'User'}
                   type="user"
                   size="sm"
-                  src={user.profileImageUrl || undefined}
-                  imageUrl={user.profileImageUrl || undefined}
+                  src={user.profileImageUrl}
+                  imageUrl={user.profileImageUrl}
                 />
               </button>
             ) : (
@@ -298,7 +264,7 @@ function MobileHeaderContent() {
       </header>
 
       {/* Side Menu */}
-      {showSideMenu && authenticated && (
+      {showSideMenu && authenticated && user && (
         <>
           {/* Backdrop */}
           <div
@@ -316,20 +282,20 @@ function MobileHeaderContent() {
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <Avatar
-                  id={user?.id}
-                  name={user?.displayName || user?.email || 'User'}
+                  id={user.id}
+                  name={user.displayName ?? user.email ?? 'User'}
                   type="user"
                   size="md"
-                  src={user?.profileImageUrl || undefined}
-                  imageUrl={user?.profileImageUrl || undefined}
+                  src={user.profileImageUrl}
+                  imageUrl={user.profileImageUrl}
                   className="shrink-0"
                 />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-bold text-foreground text-sm">
-                    {user?.displayName || user?.email || 'User'}
+                    {user.displayName ?? user.email ?? 'User'}
                   </div>
                   <div className="truncate text-muted-foreground text-xs">
-                    @{user?.username || `user${user?.id.slice(0, 8)}`}
+                    @{user.username ?? `user${user.id.slice(0, 8)}`}
                   </div>
                 </div>
               </div>
@@ -359,7 +325,7 @@ function MobileHeaderContent() {
                       Reputation
                     </div>
                     <div className="font-bold text-base text-foreground">
-                      {(user?.reputationPoints || 0).toLocaleString()}
+                      {(user.reputationPoints ?? 0).toLocaleString()}
                     </div>
                   </div>
                   <div className="mt-2 flex items-center justify-between">
@@ -367,7 +333,7 @@ function MobileHeaderContent() {
                       Trading Balance
                     </div>
                     <div className="font-semibold text-foreground text-sm">
-                      {(pointsData?.available || 0).toLocaleString()}
+                      {(pointsData.available ?? 0).toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -412,7 +378,7 @@ function MobileHeaderContent() {
             {/* Bottom Section - Referral & Logout */}
             <div className="shrink-0 border-border border-t bg-sidebar pb-20">
               {/* Referral Code Button */}
-              {user?.referralCode && (
+              {user.referralCode && (
                 <button
                   onClick={copyReferralCode}
                   className="flex w-full items-center gap-4 px-4 py-3 text-left font-semibold transition-colors hover:bg-sidebar-accent"
@@ -441,7 +407,7 @@ function MobileHeaderContent() {
               )}
 
               {/* Separator */}
-              {user?.referralCode && <div className="border-border border-t" />}
+              {user.referralCode && <div className="border-border border-t" />}
 
               {/* Logout Button */}
               <button

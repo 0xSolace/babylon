@@ -16,7 +16,7 @@
  *     summary: Create payment request for points
  *     description: Creates x402 payment request for points purchase
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

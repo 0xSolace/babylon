@@ -9,6 +9,7 @@ import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
 import { db, type JsonValue } from '@babylon/db';
 import { StaticDataRegistry, type StaticOrganization } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
+import { z } from 'zod';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
@@ -511,12 +512,27 @@ Your action plan (JSON only):`;
   }
 
   /**
-   * Parse action plan from LLM response
+   * Parse action plan from LLM response with Zod validation
    */
   private parseActionPlan(
     response: string,
     _context: PlanningContext
   ): ActionPlan {
+    // Zod schema for validation
+    const ActionPlanResponseSchema = z.object({
+      reasoning: z.string(),
+      actions: z.array(
+        z.object({
+          type: z.enum(['trade', 'post', 'comment', 'respond', 'message']),
+          priority: z.number().min(1).max(10),
+          goalId: z.string().optional().nullable(),
+          reasoning: z.string(),
+          estimatedImpact: z.number().min(0).max(1),
+          params: z.record(z.string(), z.unknown()).optional().default({}),
+        })
+      ),
+    });
+
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       logger.warn(
@@ -533,25 +549,34 @@ Your action plan (JSON only):`;
       };
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      reasoning: string;
-      actions: Array<{
-        type: string;
-        priority: number;
-        goalId?: string;
-        reasoning: string;
-        estimatedImpact: number;
-        params?: Record<string, JsonValue>;
-      }>;
-    };
+    const parseResult = ActionPlanResponseSchema.safeParse(
+      JSON.parse(jsonMatch[0])
+    );
+
+    if (!parseResult.success) {
+      logger.warn(
+        'Invalid action plan response from LLM',
+        { errors: parseResult.error.issues },
+        'PlanningCoordinator'
+      );
+      return {
+        actions: [],
+        totalActions: 0,
+        reasoning: 'Invalid plan format',
+        goalsAddressed: [],
+        estimatedCost: 0,
+      };
+    }
+
+    const parsed = parseResult.data;
 
     const actions: PlannedAction[] = parsed.actions.map((a) => ({
       type: a.type as PlannedAction['type'],
       priority: a.priority,
-      goalId: a.goalId,
+      goalId: a.goalId ?? undefined,
       reasoning: a.reasoning,
       estimatedImpact: a.estimatedImpact,
-      params: a.params || {},
+      params: (a.params || {}) as Record<string, JsonValue>,
     }));
 
     const goalsAddressed = [

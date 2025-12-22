@@ -17,7 +17,7 @@
  *     summary: Send chat message
  *     description: Sends a message to a group chat or DM with quality checks and rate limiting
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id

@@ -7,10 +7,10 @@
  * POST /api/airdrop/register
  */
 
-import { TokenService } from '@babylon/api/src/services/token-service';
-import { getServerSession } from '@babylon/auth';
+import { authenticate, TokenService } from '@babylon/api';
 import { airdropAllocations, db, eq, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 interface RegisterResponse {
@@ -24,21 +24,24 @@ interface RegisterResponse {
   message?: string;
 }
 
-export async function POST(): Promise<NextResponse> {
-  const session = await getServerSession();
-
-  if (!session?.user?.id) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  let authUser;
+  try {
+    authUser = await authenticate(request);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Unauthorized' },
       { status: 401 }
     );
   }
 
+  const userId = authUser.userId;
+
   // Check if already registered
   const existingResult = await db
     .select()
     .from(airdropAllocations)
-    .where(eq(airdropAllocations.userId, session.user.id))
+    .where(eq(airdropAllocations.userId, userId))
     .limit(1);
 
   if (existingResult[0]) {
@@ -52,7 +55,7 @@ export async function POST(): Promise<NextResponse> {
   const userResult = await db
     .select({ walletAddress: users.walletAddress })
     .from(users)
-    .where(eq(users.id, session.user.id))
+    .where(eq(users.id, userId))
     .limit(1);
 
   const user = userResult[0];
@@ -69,9 +72,7 @@ export async function POST(): Promise<NextResponse> {
   }
 
   // Calculate allocation
-  const allocation = await TokenService.calculateAirdropAllocation(
-    session.user.id
-  );
+  const allocation = await TokenService.calculateAirdropAllocation(userId);
 
   if (!allocation || allocation.finalAllocation === 0n) {
     return NextResponse.json({
@@ -83,7 +84,7 @@ export async function POST(): Promise<NextResponse> {
   // Store allocation
   await db.insert(airdropAllocations).values({
     id: await generateSnowflakeId(),
-    userId: session.user.id,
+    userId,
     walletAddress: user.walletAddress,
     totalAllocation: allocation.finalAllocation.toString(),
     bonusMultiplier: allocation.bonusMultiplier,

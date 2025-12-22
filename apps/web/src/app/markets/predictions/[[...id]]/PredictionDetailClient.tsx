@@ -23,10 +23,7 @@ import { toast } from 'sonner';
 import { AssetTradesFeed } from '@/components/markets/AssetTradesFeed';
 import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList';
 import { PredictionProbabilityChart } from '@/components/markets/PredictionProbabilityChart';
-import {
-  type BuyPredictionDetails,
-  TradeConfirmationDialog,
-} from '@/components/markets/TradeConfirmationDialog';
+import { TradeConfirmationDialog } from '@/components/markets/TradeConfirmationDialog';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -193,7 +190,8 @@ export default function PredictionDetailClient() {
       return {
         yesShares: yes,
         noShares: no,
-        liquidity: Number(market.liquidity ?? yes + no),
+        liquidity:
+          market.liquidity !== undefined ? Number(market.liquidity) : yes + no,
       };
     }
 
@@ -216,7 +214,7 @@ export default function PredictionDetailClient() {
         : undefined,
     [market, effectiveShares]
   );
-  const { history: priceHistory } = usePredictionHistory(marketId ?? null, {
+  const { history: _priceHistory } = usePredictionHistory(marketId || null, {
     seed: historySeed,
   });
   const amountNum = Number.parseFloat(amount) || 0;
@@ -302,7 +300,7 @@ export default function PredictionDetailClient() {
     [queryClient, marketId, user?.id, recalculatePositionMetrics]
   );
 
-  usePredictionMarketStream(marketId ?? null, {
+  usePredictionMarketStream(marketId || null, {
     onTrade: handleTradeEvent,
     onResolution: handleResolutionEvent,
   });
@@ -358,8 +356,11 @@ export default function PredictionDetailClient() {
       return data.calculation;
     },
     onSuccess: (calculation) => {
+      if (!calculation) {
+        throw new Error('Calculation data missing');
+      }
       toast.success(`Bought ${side.toUpperCase()} shares!`, {
-        description: `${calculation?.sharesBought?.toFixed(2) || ''} shares at ${(calculation?.avgPrice || 0).toFixed(3)} each`,
+        description: `${calculation.sharesBought.toFixed(2)} shares at ${calculation.avgPrice.toFixed(3)} each`,
       });
       // Refresh data
       fetchMarketData();
@@ -424,7 +425,7 @@ export default function PredictionDetailClient() {
   };
 
   const getTimeUntilResolution = () => {
-    if (!market?.resolutionDate) return null;
+    if (!market || !market.resolutionDate) return null;
     const now = Date.now();
     const resolutionTime = new Date(market.resolutionDate).getTime();
     const diff = resolutionTime - now;
@@ -563,11 +564,7 @@ export default function PredictionDetailClient() {
         <div className="lg:col-span-2">
           <div className="rounded-2xl border border-border bg-card/50 px-4 py-3 backdrop-blur">
             <h2 className="mb-4 font-bold text-lg">Probability Over Time</h2>
-            <PredictionProbabilityChart
-              data={priceHistory}
-              marketId={marketId}
-              showBrush={true}
-            />
+            <PredictionProbabilityChart marketId={marketId} />
           </div>
 
           {/* Market Info */}
@@ -809,31 +806,17 @@ export default function PredictionDetailClient() {
       </div>
 
       {/* Confirmation Dialog */}
-      <TradeConfirmationDialog
-        open={confirmDialogOpen}
-        onOpenChange={setConfirmDialogOpen}
-        onConfirm={handleConfirmBuy}
-        isSubmitting={submitting}
-        tradeDetails={
-          market && calculation
-            ? ({
-                type: 'buy-prediction',
-                question: market.text,
-                side: side.toUpperCase() as 'YES' | 'NO',
-                amount: amountNum,
-                sharesBought: calculation.sharesBought,
-                avgPrice: calculation.avgPrice,
-                newPrice:
-                  side === 'yes'
-                    ? calculation.newYesPrice
-                    : calculation.newNoPrice,
-                priceImpact: calculation.priceImpact,
-                expectedPayout,
-                expectedProfit,
-              } as BuyPredictionDetails)
-            : null
-        }
-      />
+      {market && calculation && (
+        <TradeConfirmationDialog
+          open={confirmDialogOpen}
+          onOpenChange={setConfirmDialogOpen}
+          onConfirm={handleConfirmBuy}
+          side={side.toUpperCase() as 'YES' | 'NO'}
+          shares={calculation.sharesBought}
+          cost={amountNum}
+          loading={submitting}
+        />
+      )}
     </PageContainer>
   );
 }

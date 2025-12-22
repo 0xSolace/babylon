@@ -50,6 +50,7 @@
 import {
   AuthorizationError,
   acquireGenerationLock,
+  recordCronExecution,
   relayCronToStaging,
   releaseGenerationLock,
   successResponse,
@@ -358,6 +359,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       'Cron'
     );
 
+    // Record metrics
+    recordCronExecution('game-tick', new Date(startTime), {
+      success: true,
+      duration,
+      postsCreated: result.postsCreated,
+      eventsCreated: result.eventsCreated,
+      marketsUpdated: result.marketsUpdated,
+    });
+
     return successResponse({
       success: true,
       duration,
@@ -389,7 +399,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   if (
     !verifyCronAuth(request, {
       jobName: 'GameTickCron',
-      allowVercelCronUserAgent: true,
     })
   ) {
     logger.warn('Unauthorized GET request to cron endpoint', undefined, 'Cron');

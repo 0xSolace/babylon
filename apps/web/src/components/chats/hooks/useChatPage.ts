@@ -261,7 +261,7 @@ export function useChatPage() {
       return data;
     },
     onSuccess: (data) => {
-      const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+      const warnings = Array.isArray(data.warnings) ? data.warnings : [];
       if (warnings.length > 0) {
         setSendWarning(warnings.join('. '));
         setTimeout(() => setSendWarning(null), 5000);
@@ -410,15 +410,15 @@ export function useChatPage() {
           {
             id: user!.id,
             displayName: user!.displayName || user!.username || 'You',
-            username: user!.username ?? undefined,
-            profileImageUrl: user!.profileImageUrl ?? undefined,
+            username: user!.username,
+            profileImageUrl: user!.profileImageUrl,
           },
           {
             id: targetUser.id,
             displayName:
               targetUser.displayName || targetUser.username || 'User',
-            username: targetUser.username ?? undefined,
-            profileImageUrl: targetUser.profileImageUrl ?? undefined,
+            username: targetUser.username,
+            profileImageUrl: targetUser.profileImageUrl,
           },
         ],
       });

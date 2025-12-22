@@ -13,6 +13,89 @@ import type {
 // Re-export JSON-RPC types from shared for consistency
 export type { JsonRpcParams, JsonRpcResult, JsonValue };
 
+// Re-export tool argument types derived from Zod schemas (single source of truth)
+export type {
+  AcceptGroupInviteArgs,
+  AppealBanArgs,
+  AppealBanWithEscrowArgs,
+  BlockUserArgs,
+  BuySharesArgs,
+  CheckBlockStatusArgs,
+  CheckMuteStatusArgs,
+  ClosePositionArgs,
+  CreateCommentArgs,
+  CreateEscrowPaymentArgs,
+  CreateGroupArgs,
+  CreatePostArgs,
+  DeclineGroupInviteArgs,
+  DeleteCommentArgs,
+  DeletePostArgs,
+  FavoriteProfileArgs,
+  FollowUserArgs,
+  GetBalanceArgs,
+  GetBlocksArgs,
+  GetChatMessagesArgs,
+  GetChatsArgs,
+  GetCommentsArgs,
+  GetFavoritePostsArgs,
+  GetFavoritesArgs,
+  GetFollowersArgs,
+  GetFollowingArgs,
+  GetGroupInvitesArgs,
+  GetLeaderboardArgs,
+  GetMarketDataArgs,
+  GetMarketPricesArgs,
+  GetMarketsArgs,
+  GetMutesArgs,
+  GetNotificationsArgs,
+  GetOrganizationsArgs,
+  GetPerpetualsArgs,
+  GetPositionsArgs,
+  GetPostsByTagArgs,
+  GetReferralCodeArgs,
+  GetReferralStatsArgs,
+  GetReferralsArgs,
+  GetReputationArgs,
+  GetReputationBreakdownArgs,
+  GetSystemStatsArgs,
+  GetTradeHistoryArgs,
+  GetTradesArgs,
+  GetTrendingTagsArgs,
+  GetUnreadCountArgs,
+  GetUserProfileArgs,
+  GetUserStatsArgs,
+  GetUserWalletArgs,
+  LeaveChatArgs,
+  LikeCommentArgs,
+  LikePostArgs,
+  ListEscrowPaymentsArgs,
+  MarkNotificationsReadArgs,
+  MuteUserArgs,
+  OpenPositionArgs,
+  PaymentReceiptArgs,
+  PaymentRequestArgs,
+  PlaceBetArgs,
+  QueryFeedArgs,
+  RefundEscrowPaymentArgs,
+  ReportPostArgs,
+  ReportUserArgs,
+  SearchUsersArgs,
+  SellSharesArgs,
+  SendMessageArgs,
+  SharePostArgs,
+  TransferPointsArgs,
+  UnblockUserArgs,
+  UnfavoriteProfileArgs,
+  UnfollowUserArgs,
+  UnlikePostArgs,
+  UnmuteUserArgs,
+  UpdateProfileArgs,
+  VerifyEscrowPaymentArgs,
+} from '../utils/tool-args-validation';
+
+// TODO: Consolidate JSON-RPC types into @babylon/shared when A2A types are migrated.
+// Currently @babylon/shared only exports JsonRpcParams. JsonRpcRequest, JsonRpcResponse,
+// and JsonRpcError should be moved to shared for cross-package consistency.
 // JSON-RPC 2.0 Base Types (matching A2A structure)
 export interface JsonRpcRequest {
   jsonrpc: '2.0';
@@ -200,385 +283,6 @@ export interface AuthenticatedAgent {
 export interface MCPAuthContext {
   apiKey?: string;
   userId?: string; // Set after authentication
-}
-
-// Tool-specific argument types
-export interface GetMarketsArgs {
-  type?: 'prediction' | 'perpetuals' | 'all';
-}
-
-export interface PlaceBetArgs {
-  marketId: string;
-  side: 'YES' | 'NO';
-  amount: number;
-}
-
-export interface GetBalanceArgs {
-  // No arguments - balance is always for the authenticated agent
-}
-
-export interface GetPositionsArgs {
-  marketId?: string; // Filter by specific market
-  limit?: number; // Limit number of results (default: all)
-  offset?: number; // Pagination offset
-}
-
-export interface ClosePositionArgs {
-  positionId: string;
-}
-
-export interface GetMarketDataArgs {
-  marketId: string;
-}
-
-export interface QueryFeedArgs {
-  limit?: number;
-  questionId?: string;
-}
-
-// Market Operations - Additional Args
-export interface BuySharesArgs {
-  marketId: string;
-  outcome: 'YES' | 'NO';
-  amount: number;
-}
-
-export interface SellSharesArgs {
-  positionId: string;
-  shares: number;
-}
-
-export interface OpenPositionArgs {
-  ticker: string;
-  side: 'LONG' | 'SHORT';
-  amount: number;
-  leverage: number;
-}
-
-export interface GetMarketPricesArgs {
-  marketId: string;
-}
-
-export interface GetPerpetualsArgs {
-  // No arguments
-}
-
-export interface GetTradesArgs {
-  limit?: number;
-  marketId?: string;
-}
-
-export interface GetTradeHistoryArgs {
-  userId: string;
-  limit?: number;
-}
-
-// Social Features - Args
-export interface CreatePostArgs {
-  content: string;
-  type?: 'post' | 'article';
-}
-
-export interface DeletePostArgs {
-  postId: string;
-}
-
-export interface LikePostArgs {
-  postId: string;
-}
-
-export interface UnlikePostArgs {
-  postId: string;
-}
-
-export interface SharePostArgs {
-  postId: string;
-  comment?: string;
-}
-
-export interface GetCommentsArgs {
-  postId: string;
-  limit?: number;
-}
-
-export interface CreateCommentArgs {
-  postId: string;
-  content: string;
-}
-
-export interface DeleteCommentArgs {
-  commentId: string;
-}
-
-export interface LikeCommentArgs {
-  commentId: string;
-}
-
-export interface GetPostsByTagArgs {
-  tag: string;
-  limit?: number;
-  offset?: number;
-}
-
-// User Management - Args
-export interface GetUserProfileArgs {
-  userId: string;
-}
-
-export interface UpdateProfileArgs {
-  displayName?: string;
-  bio?: string;
-  username?: string;
-  profileImageUrl?: string;
-}
-
-export interface FollowUserArgs {
-  userId: string;
-}
-
-export interface UnfollowUserArgs {
-  userId: string;
-}
-
-export interface GetFollowersArgs {
-  userId: string;
-  limit?: number;
-}
-
-export interface GetFollowingArgs {
-  userId: string;
-  limit?: number;
-}
-
-export interface SearchUsersArgs {
-  query: string;
-  limit?: number;
-}
-
-export interface GetUserWalletArgs {
-  userId: string;
-}
-
-export interface GetUserStatsArgs {
-  userId: string;
-}
-
-// Chats & Messaging - Args
-export interface GetChatsArgs {
-  filter?: 'all' | 'dms' | 'groups';
-}
-
-export interface GetChatMessagesArgs {
-  chatId: string;
-  limit?: number;
-  offset?: number;
-}
-
-export interface SendMessageArgs {
-  chatId: string;
-  content: string;
-}
-
-export interface CreateGroupArgs {
-  name: string;
-  description?: string;
-  memberIds: string[];
-}
-
-export interface LeaveChatArgs {
-  chatId: string;
-}
-
-export interface GetUnreadCountArgs {
-  // No arguments
-}
-
-// Notifications - Args
-export interface GetNotificationsArgs {
-  limit?: number;
-}
-
-export interface MarkNotificationsReadArgs {
-  notificationIds: string[];
-}
-
-export interface GetGroupInvitesArgs {
-  // No arguments
-}
-
-export interface AcceptGroupInviteArgs {
-  inviteId: string;
-}
-
-export interface DeclineGroupInviteArgs {
-  inviteId: string;
-}
-
-// Leaderboard & Stats - Args
-export interface GetLeaderboardArgs {
-  page?: number;
-  pageSize?: number;
-  pointsType?: 'all' | 'earned' | 'referral';
-  minPoints?: number;
-}
-
-export interface GetSystemStatsArgs {
-  // No arguments
-}
-
-// Referrals & Rewards - Args
-export interface GetReferralCodeArgs {
-  // No arguments
-}
-
-export interface GetReferralsArgs {
-  // No arguments
-}
-
-export interface GetReferralStatsArgs {
-  // No arguments
-}
-
-// Reputation - Args
-export interface GetReputationArgs {
-  userId?: string;
-}
-
-export interface GetReputationBreakdownArgs {
-  userId: string;
-}
-
-// Trending & Discovery - Args
-export interface GetTrendingTagsArgs {
-  limit?: number;
-}
-
-// Organizations - Args
-export interface GetOrganizationsArgs {
-  limit?: number;
-}
-
-// x402 Micropayments - Args
-export interface PaymentRequestArgs {
-  to: string;
-  amount: string;
-  service: string;
-  metadata?: StringRecord<JsonValue>;
-  from?: string;
-}
-
-export interface PaymentReceiptArgs {
-  requestId: string;
-  txHash: string;
-}
-
-// Moderation - Args
-export interface BlockUserArgs {
-  userId: string;
-}
-
-export interface UnblockUserArgs {
-  userId: string;
-}
-
-export interface MuteUserArgs {
-  userId: string;
-}
-
-export interface UnmuteUserArgs {
-  userId: string;
-}
-
-export interface ReportUserArgs {
-  userId: string;
-  reason: string;
-}
-
-export interface ReportPostArgs {
-  postId: string;
-  reason: string;
-}
-
-export interface GetBlocksArgs {
-  // No arguments
-}
-
-export interface GetMutesArgs {
-  // No arguments
-}
-
-export interface CheckBlockStatusArgs {
-  userId: string;
-}
-
-export interface CheckMuteStatusArgs {
-  userId: string;
-}
-
-// Moderation Escrow - Args
-export interface CreateEscrowPaymentArgs {
-  recipientId: string;
-  amountUSD: number;
-  reason?: string;
-  recipientWalletAddress: string;
-}
-
-export interface VerifyEscrowPaymentArgs {
-  escrowId: string;
-  txHash: string;
-  fromAddress: string;
-  toAddress: string;
-  amount: string;
-}
-
-export interface RefundEscrowPaymentArgs {
-  escrowId: string;
-  refundTxHash: string;
-  reason?: string;
-}
-
-export interface ListEscrowPaymentsArgs {
-  recipientId?: string;
-  adminId?: string;
-  status?: 'pending' | 'paid' | 'refunded' | 'expired';
-  limit?: number;
-  offset?: number;
-}
-
-// Ban Appeals - Args
-export interface AppealBanArgs {
-  reason: string;
-}
-
-export interface AppealBanWithEscrowArgs {
-  reason: string;
-  escrowPaymentTxHash: string;
-}
-
-// Favorites - Args
-export interface FavoriteProfileArgs {
-  userId: string;
-}
-
-export interface UnfavoriteProfileArgs {
-  userId: string;
-}
-
-export interface GetFavoritesArgs {
-  limit?: number;
-  offset?: number;
-}
-
-export interface GetFavoritePostsArgs {
-  limit?: number;
-  offset?: number;
-}
-
-// Points Transfer - Args
-export interface TransferPointsArgs {
-  recipientId: string;
-  amount: number;
-  message?: string;
 }
 
 // Tool-specific return types (internal, before conversion to MCP format)

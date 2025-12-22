@@ -3,17 +3,14 @@
  * These types are database-agnostic and can be used with any storage backend.
  */
 
+import type { JsonValue } from '@babylon/shared';
+
+// Re-export for convenience
+export type { JsonValue };
+
 // ============================================================================
 // Base Types
 // ============================================================================
-
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
 
 export interface Timestamped {
   createdAt: Date;

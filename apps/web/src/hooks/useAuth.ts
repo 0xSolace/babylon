@@ -1,7 +1,7 @@
 'use client';
 
 import { useJejuAuth, useJejuWallet } from '@babylon/auth/client';
-import { logger } from '@babylon/shared';
+import { logger, UserMeApiResponseSchema } from '@babylon/shared';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { type User, useAuthStore } from '@/stores/authStore';
@@ -200,14 +200,27 @@ export function useAuth(): UseAuthReturn {
           : '/api/users/me';
 
         const response = await apiFetch(url);
-        const data = await response.json();
 
-        const me = data as {
-          authenticated: boolean;
-          needsOnboarding: boolean;
-          needsOnchain: boolean;
-          user: (User & { createdAt?: string; updatedAt?: string }) | null;
-        };
+        // 401 is expected when not authenticated - exit early without error
+        if (response.status === 401) {
+          logger.debug(
+            'Not authenticated yet, skipping user fetch',
+            { userId },
+            'useAuth'
+          );
+          return;
+        }
+
+        // For other HTTP errors, fail fast - don't silently swallow
+        if (!response.ok) {
+          const errorBody = await response.text().catch(() => '');
+          throw new Error(
+            `Failed to fetch user profile: HTTP ${response.status}${errorBody ? ` - ${errorBody}` : ''}`
+          );
+        }
+
+        const json: unknown = await response.json();
+        const me = UserMeApiResponseSchema.parse(json);
 
         setNeedsOnboarding(me.needsOnboarding);
         setNeedsOnchain(me.needsOnchain);
@@ -218,44 +231,49 @@ export function useAuth(): UseAuthReturn {
         const fallbackCoverImageUrl = currentUser?.coverImageUrl;
 
         if (me.user) {
+          if (
+            !wallet?.address &&
+            !smartWalletAddress &&
+            !me.user.walletAddress
+          ) {
+            throw new Error('Wallet address is required but not available');
+          }
+
           const hydratedUser: User = {
             id: me.user.id,
             walletAddress:
-              me.user.walletAddress ?? smartWalletAddress ?? wallet?.address,
+              me.user.walletAddress ?? smartWalletAddress ?? wallet!.address,
             displayName:
               me.user.displayName && me.user.displayName.trim() !== ''
                 ? me.user.displayName
-                : wallet?.address || 'Anonymous',
+                : wallet!.address,
             email: me.user.email ?? undefined,
             username: me.user.username ?? undefined,
             bio: me.user.bio ?? undefined,
-            profileImageUrl:
-              me.user.profileImageUrl ?? fallbackProfileImageUrl ?? undefined,
-            coverImageUrl:
-              me.user.coverImageUrl ?? fallbackCoverImageUrl ?? undefined,
+            profileImageUrl: me.user.profileImageUrl ?? fallbackProfileImageUrl,
+            coverImageUrl: me.user.coverImageUrl ?? fallbackCoverImageUrl,
             profileComplete: me.user.profileComplete ?? false,
-            reputationPoints: me.user.reputationPoints ?? undefined,
+            reputationPoints: me.user.reputationPoints,
             referralCount: undefined,
             referralCode: me.user.referralCode ?? undefined,
-            hasFarcaster: me.user.hasFarcaster ?? undefined,
-            hasTwitter: me.user.hasTwitter ?? undefined,
-            hasDiscord: me.user.hasDiscord ?? undefined,
+            hasFarcaster: me.user.hasFarcaster,
+            hasTwitter: me.user.hasTwitter,
+            hasDiscord: me.user.hasDiscord,
             pointsAwardedForFarcasterFollow:
-              me.user.pointsAwardedForFarcasterFollow ?? undefined,
+              me.user.pointsAwardedForFarcasterFollow,
             pointsAwardedForTwitterFollow:
-              me.user.pointsAwardedForTwitterFollow ?? undefined,
-            pointsAwardedForDiscordJoin:
-              me.user.pointsAwardedForDiscordJoin ?? undefined,
+              me.user.pointsAwardedForTwitterFollow,
+            pointsAwardedForDiscordJoin: me.user.pointsAwardedForDiscordJoin,
             farcasterUsername: me.user.farcasterUsername ?? undefined,
             twitterUsername: me.user.twitterUsername ?? undefined,
             discordUsername: me.user.discordUsername ?? undefined,
-            showTwitterPublic: me.user.showTwitterPublic ?? undefined,
-            showFarcasterPublic: me.user.showFarcasterPublic ?? undefined,
-            showWalletPublic: me.user.showWalletPublic ?? undefined,
-            stats: me.user.stats ?? undefined,
-            nftTokenId: me.user.nftTokenId ?? undefined,
+            showTwitterPublic: me.user.showTwitterPublic,
+            showFarcasterPublic: me.user.showFarcasterPublic,
+            showWalletPublic: me.user.showWalletPublic,
+            stats: me.user.stats,
+            nftTokenId: me.user.nftTokenId,
             createdAt: me.user.createdAt,
-            onChainRegistered: me.user.onChainRegistered ?? undefined,
+            onChainRegistered: me.user.onChainRegistered,
           };
 
           // Only update if data has actually changed (prevent infinite re-render loop)
@@ -317,6 +335,7 @@ export function useAuth(): UseAuthReturn {
       setUser,
       smartWalletAddress,
       wallet?.address,
+      wallet,
     ]
   );
 
@@ -550,15 +569,17 @@ export function useAuth(): UseAuthReturn {
         return;
       }
 
-      linkedSocialUsers.delete(userId ?? '');
-      linkingInProgress.delete(userId ?? '');
-      // Clear failed link attempts for this user
-      const userPrefix = `${userId ?? ''}:`;
-      failedLinkAttempts.forEach((key) => {
-        if (key.startsWith(userPrefix)) {
-          failedLinkAttempts.delete(key);
-        }
-      });
+      if (userId) {
+        linkedSocialUsers.delete(userId);
+        linkingInProgress.delete(userId);
+        // Clear failed link attempts for this user
+        const userPrefix = `${userId}:`;
+        failedLinkAttempts.forEach((key) => {
+          if (key.startsWith(userPrefix)) {
+            failedLinkAttempts.delete(key);
+          }
+        });
+      }
       lastSyncedWalletAddress = null;
 
       // Use getState() to avoid dependency on clearAuth

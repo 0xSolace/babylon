@@ -10,15 +10,12 @@ import {
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
-import {
-  type PerpMarket,
-  usePerpMarkets,
-  usePerpMarketsPolling,
-} from '@/stores/perpMarketsStore';
+import { type PerpMarket, usePerpMarkets } from '@/hooks/usePerpMarkets';
 import {
   usePredictionMarkets,
   usePredictionMarketsPolling,
 } from '@/stores/predictionMarketsStore';
+import { MARKETS_CONFIG } from '@/types/markets';
 
 /**
  * Market overview statistics structure.
@@ -49,9 +46,10 @@ interface MarketOverview {
  * @returns Market overview panel element
  */
 export function MarketOverviewPanel() {
-  // Use shared perp markets store
-  const { markets: perpMarkets, loading: perpLoading } = usePerpMarkets();
-  usePerpMarketsPolling(30000); // Enable 30s polling
+  // Use react-query with polling for perp markets
+  const { markets: perpMarkets, loading: perpLoading } = usePerpMarkets({
+    pollingInterval: MARKETS_CONFIG.DEFAULT_POLLING_INTERVAL_MS,
+  });
 
   // Use shared prediction markets store
   const { markets: predictionMarkets, loading: predictionsLoading } =

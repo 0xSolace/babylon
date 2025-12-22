@@ -31,7 +31,7 @@ async function createTestUser(username: string) {
 
   return await prisma.user.create({
     data: {
-      privyId: `test-${Date.now()}-${Math.random()}`,
+      oauth3Id: `test-${Date.now()}-${Math.random()}`,
       username,
       displayName: `Test ${username}`,
     },

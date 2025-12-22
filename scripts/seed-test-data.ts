@@ -170,7 +170,7 @@ async function seedAutonomousAgents(): Promise<number> {
     // Create user record
     await db.insert(users).values({
       id: agentId,
-      privyId: `did:privy:test-${agentId}`,
+      oauth3Id: `oauth3:test-${agentId}`,
       username: config.username,
       displayName: config.displayName,
       bio: config.bio,
@@ -468,7 +468,7 @@ async function seedBenchmarkAgents(): Promise<number> {
     // Create user
     await db.insert(users).values({
       id: agentId,
-      privyId: `did:privy:test-${agentId}`,
+      oauth3Id: `oauth3:test-${agentId}`,
       username: config.username,
       displayName: config.displayName,
       walletAddress: wallet.address,

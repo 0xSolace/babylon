@@ -1,10 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { cn } from '@babylon/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { BouncingLogo } from '@/components/shared/BouncingLogo';
 import { useAuth } from '@/hooks/useAuth';
-import { cn } from '@/lib/utils';
 import type { UserPoolDeposit, UserPoolSummary } from '@/types/pools';
+
+interface PoolDepositsResponse {
+  activeDeposits?: UserPoolDeposit[];
+  summary?: UserPoolSummary;
+}
+
+interface WithdrawResponse {
+  withdrawalAmount: number;
+  pnl: number;
+  performanceFee: number;
+  reputationChange: number;
+  error?: string;
+}
 
 interface UserPoolPositionsProps {
   onWithdraw?: () => void;
@@ -12,31 +26,72 @@ interface UserPoolPositionsProps {
 
 export function UserPoolPositions({ onWithdraw }: UserPoolPositionsProps) {
   const { user, authenticated } = useAuth();
-  const [deposits, setDeposits] = useState<UserPoolDeposit[]>([]);
-  const [summary, setSummary] = useState<UserPoolSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchDeposits = async () => {
-      if (!user) return;
-
-      setLoading(true);
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['pool-deposits', user?.id],
+    queryFn: async (): Promise<{
+      deposits: UserPoolDeposit[];
+      summary: UserPoolSummary | null;
+    }> => {
       const res = await fetch(
-        `/api/pools/deposits/${encodeURIComponent(user.id)}`
+        `/api/pools/deposits/${encodeURIComponent(user!.id)}`
       );
-      const data = await res.json();
-      setDeposits(data.activeDeposits || []);
-      setSummary(data.summary);
-      setLoading(false);
-    };
+      if (!res.ok) {
+        throw new Error('Failed to fetch pool deposits');
+      }
+      const data: PoolDepositsResponse = await res.json();
+      return {
+        deposits: data.activeDeposits ?? [],
+        summary: data.summary ?? null,
+      };
+    },
+    enabled: authenticated && !!user,
+    staleTime: 30000, // 30 seconds
+  });
 
-    if (authenticated && user) {
-      fetchDeposits();
-    }
-  }, [authenticated, user]);
+  const deposits = data?.deposits ?? [];
+  const summary = data?.summary ?? null;
 
-  const handleWithdraw = async (depositId: string, poolId: string) => {
+  const withdrawMutation = useMutation({
+    mutationFn: async ({
+      depositId,
+      poolId,
+    }: {
+      depositId: string;
+      poolId: string;
+    }): Promise<WithdrawResponse> => {
+      const res = await fetch(`/api/pools/${poolId}/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user!.id,
+          depositId,
+        }),
+      });
+
+      const data: WithdrawResponse = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Withdrawal failed');
+      }
+
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(
+        `Withdrew $${data.withdrawalAmount.toFixed(2)}! Profit: $${data.pnl.toFixed(2)}, Fee: $${data.performanceFee.toFixed(2)}, Reputation: ${data.reputationChange >= 0 ? '+' : ''}${data.reputationChange}`
+      );
+      void queryClient.invalidateQueries({ queryKey: ['pool-deposits'] });
+      void queryClient.invalidateQueries({ queryKey: ['pools'] });
+      onWithdraw?.();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleWithdraw = (depositId: string, poolId: string) => {
     if (!user) return;
 
     const confirmed = confirm(
@@ -44,29 +99,7 @@ export function UserPoolPositions({ onWithdraw }: UserPoolPositionsProps) {
     );
     if (!confirmed) return;
 
-    setWithdrawing(depositId);
-    const res = await fetch(`/api/pools/${poolId}/withdraw`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: user.id,
-        depositId,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || 'Withdrawal failed');
-    }
-
-    alert(
-      `Withdrew $${data.withdrawalAmount.toFixed(2)}!\nProfit: $${data.pnl.toFixed(2)}\nFee: $${data.performanceFee.toFixed(2)}\nReputation: ${data.reputationChange >= 0 ? '+' : ''}${data.reputationChange}`
-    );
-
-    fetchDeposits();
-    onWithdraw?.();
-    setWithdrawing(null);
+    withdrawMutation.mutate({ depositId, poolId });
   };
 
   const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
@@ -204,10 +237,16 @@ export function UserPoolPositions({ onWithdraw }: UserPoolPositionsProps) {
 
             <button
               onClick={() => handleWithdraw(deposit.id, deposit.poolId)}
-              disabled={withdrawing === deposit.id}
+              disabled={
+                withdrawMutation.isPending &&
+                withdrawMutation.variables?.depositId === deposit.id
+              }
               className="w-full rounded-lg bg-primary px-3 py-2 font-medium text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50"
             >
-              {withdrawing === deposit.id ? 'Withdrawing...' : 'Withdraw'}
+              {withdrawMutation.isPending &&
+              withdrawMutation.variables?.depositId === deposit.id
+                ? 'Withdrawing...'
+                : 'Withdraw'}
             </button>
           </div>
         ))}

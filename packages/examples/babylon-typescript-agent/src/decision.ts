@@ -8,7 +8,36 @@
 import type { A2APerpPosition } from '@babylon/a2a';
 import type { JsonValue } from '@babylon/shared';
 import type { Address } from 'viem';
+import { z } from 'zod';
 import type { MemoryEntry } from './memory';
+
+// ============================================================================
+// LLM Response Validation Schemas
+// ============================================================================
+
+/**
+ * Action types for agent decisions
+ */
+const ActionTypeSchema = z.enum([
+  'BUY_YES',
+  'BUY_NO',
+  'SELL',
+  'OPEN_LONG',
+  'OPEN_SHORT',
+  'CLOSE_POSITION',
+  'CREATE_POST',
+  'CREATE_COMMENT',
+  'HOLD',
+]);
+
+/**
+ * Decision response schema for LLM outputs
+ */
+const DecisionResponseSchema = z.object({
+  action: ActionTypeSchema,
+  params: z.record(z.string(), z.unknown()).optional(),
+  reasoning: z.string().optional(),
+});
 
 export interface PredictionMarket {
   id?: string;
@@ -215,23 +244,44 @@ Your decision (JSON only):`;
 
   /**
    * Parse LLM response into Decision
+   * Uses Zod schema validation with HOLD fallback for malformed responses
    */
   private parseDecision(text: string): Decision {
     // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      throw new Error('No JSON found in LLM response');
+      console.warn('No JSON found in LLM response, defaulting to HOLD');
+      return {
+        action: 'HOLD',
+        reasoning: 'Failed to parse LLM response: no JSON found',
+      };
     }
 
-    const decision = JSON.parse(jsonMatch[0]) as {
-      action?: Decision['action'];
-      params?: Record<string, JsonValue>;
-      reasoning?: string;
-    };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (parseError) {
+      console.warn('Failed to parse JSON from LLM response:', parseError);
+      return {
+        action: 'HOLD',
+        reasoning: 'Failed to parse LLM response: invalid JSON',
+      };
+    }
+
+    // Validate with Zod schema
+    const result = DecisionResponseSchema.safeParse(parsed);
+    if (!result.success) {
+      console.warn('LLM response failed validation:', result.error.format());
+      return {
+        action: 'HOLD',
+        reasoning: `Failed to validate LLM response: ${result.error.issues.map((i) => i.message).join(', ')}`,
+      };
+    }
+
     return {
-      action: decision.action ?? 'HOLD',
-      params: decision.params,
-      reasoning: decision.reasoning,
+      action: result.data.action,
+      params: result.data.params as Record<string, JsonValue> | undefined,
+      reasoning: result.data.reasoning,
     };
   }
 }

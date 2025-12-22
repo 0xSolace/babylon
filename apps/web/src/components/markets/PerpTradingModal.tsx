@@ -3,6 +3,7 @@
 import { FEE_CONFIG } from '@babylon/engine/client';
 import { cn } from '@babylon/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+
 import {
   AlertTriangle,
   TrendingDown,
@@ -13,24 +14,10 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
-
-/**
- * Perpetual market structure for trading modal.
- */
-interface PerpMarket {
-  ticker: string;
-  organizationId: string;
-  name: string;
-  currentPrice: number;
-  fundingRate: {
-    rate: number;
-    nextFundingTime: string;
-  };
-  maxLeverage: number;
-  minOrderSize: number;
-}
+import type { PerpMarket, TradeSide } from '@/types/markets';
 
 /**
  * Perpetual trading modal component for opening new positions.
@@ -88,7 +75,7 @@ export function PerpTradingModal({
   onSuccess,
 }: PerpTradingModalProps) {
   const { user, authenticated, login, getAccessToken } = useAuth();
-  const [side, setSide] = useState<'long' | 'short'>('long');
+  const [side, setSide] = useState<TradeSide>('long');
   const [size, setSize] = useState('100');
   const [leverage, setLeverage] = useState(10);
   const { openPosition } = usePerpTrade({ getAccessToken });
@@ -99,11 +86,33 @@ export function PerpTradingModal({
     refresh: refreshBalance,
   } = useWalletBalance(user?.id, { enabled: Boolean(user?.id) && isOpen });
 
+  // Mutation for opening perpetual position
+  const openMutation = useMutation({
+    mutationFn: async (payload: OpenPerpPayload) => {
+      return openPosition(payload);
+    },
+    onSuccess: () => {
+      toast.success('Position opened!', {
+        description: `Opened ${leverage}x ${side} on ${market.ticker} at $${market.currentPrice.toFixed(2)}`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ['markets', 'perps'] });
+      void queryClient.invalidateQueries({ queryKey: ['positions'] });
+      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
+      refreshBalance();
+      onSuccess?.();
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // Body scroll lock using counter-based approach for multi-modal safety
+  useBodyScrollLock(isOpen);
+
+  // Handle escape key
   useEffect(() => {
-    if (!isOpen) {
-      document.body.style.overflow = '';
-      return;
-    }
+    if (!isOpen) return;
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !openMutation.isPending) {
@@ -112,19 +121,11 @@ export function PerpTradingModal({
     };
 
     document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
     };
   }, [isOpen, openMutation.isPending, onClose]);
-
-  useEffect(() => {
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
 
   if (!isOpen) return null;
 
@@ -153,27 +154,6 @@ export function PerpTradingModal({
 
   const showBalanceWarning =
     authenticated && sizeNum > 0 && balance < totalRequired;
-
-  // Mutation for opening perpetual position
-  const openMutation = useMutation({
-    mutationFn: async (payload: OpenPerpPayload) => {
-      return openPosition(payload);
-    },
-    onSuccess: () => {
-      toast.success('Position opened!', {
-        description: `Opened ${leverage}x ${side} on ${market.ticker} at $${market.currentPrice.toFixed(2)}`,
-      });
-      void queryClient.invalidateQueries({ queryKey: ['markets', 'perps'] });
-      void queryClient.invalidateQueries({ queryKey: ['positions'] });
-      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
-      refreshBalance();
-      onSuccess?.();
-      onClose();
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
 
   const handleSubmit = () => {
     if (!authenticated) {
@@ -259,24 +239,30 @@ export function PerpTradingModal({
 
           <div className="mb-6 flex gap-2">
             <button
+              type="button"
               onClick={() => setSide('long')}
+              disabled={openMutation.isPending}
               className={cn(
                 'flex flex-1 cursor-pointer items-center justify-center gap-2 rounded py-3 font-bold text-sm transition-all sm:text-base',
                 side === 'long'
                   ? 'bg-green-600 text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted'
+                  : 'bg-muted text-muted-foreground hover:bg-muted',
+                openMutation.isPending && 'cursor-not-allowed opacity-50'
               )}
             >
               <TrendingUp size={18} />
               LONG
             </button>
             <button
+              type="button"
               onClick={() => setSide('short')}
+              disabled={openMutation.isPending}
               className={cn(
                 'flex flex-1 cursor-pointer items-center justify-center gap-2 rounded py-3 font-bold text-sm transition-all sm:text-base',
                 side === 'short'
                   ? 'bg-red-600 text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted'
+                  : 'bg-muted text-muted-foreground hover:bg-muted',
+                openMutation.isPending && 'cursor-not-allowed opacity-50'
               )}
             >
               <TrendingDown size={18} />
@@ -295,7 +281,11 @@ export function PerpTradingModal({
                 onChange={(event) => setSize(event.target.value)}
                 min={market.minOrderSize}
                 step="10"
-                className="w-32 rounded bg-background/50 px-3 py-1.5 text-right font-medium text-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
+                disabled={openMutation.isPending}
+                className={cn(
+                  'w-32 rounded bg-background/50 px-3 py-1.5 text-right font-medium text-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30',
+                  openMutation.isPending && 'cursor-not-allowed opacity-50'
+                )}
                 placeholder={`Min: $${market.minOrderSize}`}
               />
             </div>
@@ -316,7 +306,11 @@ export function PerpTradingModal({
                 onChange={(event) =>
                   setLeverage(Number.parseInt(event.target.value))
                 }
-                className="mt-2 h-2 w-full cursor-pointer appearance-none rounded bg-background"
+                disabled={openMutation.isPending}
+                className={cn(
+                  'mt-2 h-2 w-full cursor-pointer appearance-none rounded bg-background',
+                  openMutation.isPending && 'cursor-not-allowed opacity-50'
+                )}
               />
               <div className="mt-1 flex justify-between text-muted-foreground text-xs">
                 <span>1x</span>
@@ -410,6 +404,7 @@ export function PerpTradingModal({
           )}
 
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={
               openMutation.isPending ||

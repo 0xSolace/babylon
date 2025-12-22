@@ -7,7 +7,7 @@
  * @description
  * Completes off-chain user onboarding with profile creation, referral handling,
  * social account linking, and points awards. Supports waitlist users, legal
- * acceptance tracking, and identity token verification from Privy.
+ * acceptance tracking, and OAuth3 authentication.
  *
  * @openapi
  * /api/users/signup:
@@ -17,7 +17,7 @@
  *     summary: Complete user signup
  *     description: Completes off-chain onboarding with profile creation and points awards
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -42,7 +42,7 @@
  *                 type: string
  *               identityToken:
  *                 type: string
- *                 description: Privy identity token for social account linking
+ *                 description: Deprecated - was used for Privy identity token, now handled via OAuth3
  *               isWaitlist:
  *                 type: boolean
  *                 default: false
@@ -157,7 +157,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     ...profileData
   } = parsedBody;
   const parsedProfile = profileData as OnboardingProfilePayload;
-  const referralCode = rawReferralCode?.trim() || null;
+  const referralCode = rawReferralCode ? rawReferralCode.trim() : null;
 
   if (!authUser.dbUserId && !authUser.userId) {
     throw new Error('Database user ID not found in authentication');
@@ -228,7 +228,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           .limit(1);
 
         // Only resolve referral if not already set
-        if (!existingUser?.referredBy && normalizedCode) {
+        if (existingUser && !existingUser.referredBy && normalizedCode) {
           // First, try to find referrer by username (legacy system)
           const [referrerByUsername] = await tx
             .select({ id: users.id })
@@ -269,9 +269,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           username: parsedProfile.username,
           displayName: parsedProfile.displayName,
           email: parsedProfile.email || null,
-          bio: parsedProfile.bio ?? '',
-          profileImageUrl: parsedProfile.profileImageUrl ?? null,
-          coverImageUrl: parsedProfile.coverImageUrl ?? null,
+          bio: parsedProfile.bio || '',
+          profileImageUrl: parsedProfile.profileImageUrl || null,
+          coverImageUrl: parsedProfile.coverImageUrl || null,
           walletAddress,
           profileComplete: true,
           profileSetupCompletedAt: new Date(), // Track when profile was completed
@@ -301,7 +301,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
             : {}),
         };
 
-        // Handle Farcaster from Privy identity or onboarding import
+        // Handle Farcaster from OAuth3 or onboarding import
         if (identityFarcasterUsername || importedFarcaster) {
           baseUserData.hasFarcaster = true;
           baseUserData.farcasterUsername =
@@ -311,7 +311,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           }
         }
 
-        // Handle Twitter from Privy identity or onboarding import
+        // Handle Twitter from OAuth3 or onboarding import
         if (identityTwitterUsername || importedTwitter) {
           baseUserData.hasTwitter = true;
           baseUserData.twitterUsername =

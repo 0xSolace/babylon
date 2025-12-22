@@ -60,7 +60,8 @@ export function TrendingPanel() {
       const cached = getTrending();
       return cached && cached.length > 0 ? cached : undefined;
     },
-    staleTime: (cached) => (cached && cached.length > 0 ? 30000 : 0),
+    staleTime: (cached) =>
+      Array.isArray(cached) && cached.length > 0 ? 30000 : 0,
   });
 
   const refetch = useCallback(() => {

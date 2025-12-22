@@ -17,7 +17,7 @@
  *     summary: Ban or unban user
  *     description: Bans or unbans a user with moderation flags and reputation sync (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -99,16 +99,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { BanUserSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const BanUserSchema = z.object({
-  action: z.enum(['ban', 'unban']),
-  reason: z.string().min(1).max(500).optional(),
-  isScammer: z.boolean().optional(),
-  isCSAM: z.boolean().optional(),
-});
 
 export const POST = withErrorHandling(
   async (

@@ -17,7 +17,7 @@
  *     summary: Get fee statistics
  *     description: Returns comprehensive fee statistics and analytics (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: startDate
@@ -158,12 +158,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   );
 
   // Get NPC fees from Pool.totalFeesCollected
-  const poolFeesResult = await db
+  const poolFeesResult = (await db
     .select({
-      _sum: sum(pools.totalFeesCollected),
+      totalFees: sum(pools.totalFeesCollected),
     })
-    .from(pools);
-  const totalNPCFees = Number(poolFeesResult[0]?._sum || 0);
+    .from(pools)) as unknown as Array<{ totalFees: string | null }>;
+  const totalNPCFees = Number(poolFeesResult[0]?.totalFees || 0);
 
   // Combine user and NPC fees for total
   const totalFeesCollected = platformStats.totalFeesCollected + totalNPCFees;
@@ -175,31 +175,41 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const whereClause =
     whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
-  const feesByType = await db
+  const feesByType = (await db
     .select({
       tradeType: tradingFees.tradeType,
       feeAmountSum: sum(tradingFees.feeAmount),
       platformFeeSum: sum(tradingFees.platformFee),
       referrerFeeSum: sum(tradingFees.referrerFee),
-      _count: count(),
+      tradeCount: count(),
     })
     .from(tradingFees)
     .where(whereClause)
     .groupBy(tradingFees.tradeType)
-    .orderBy(desc(sum(tradingFees.feeAmount)));
+    .orderBy(desc(sum(tradingFees.feeAmount)))) as unknown as Array<{
+    tradeType: string;
+    feeAmountSum: string | null;
+    platformFeeSum: string | null;
+    referrerFeeSum: string | null;
+    tradeCount: number;
+  }>;
 
   // Get top fee payers (users who paid the most fees)
-  const topFeePayers = await db
+  const topFeePayers = (await db
     .select({
       userId: tradingFees.userId,
       feeAmountSum: sum(tradingFees.feeAmount),
-      _count: count(),
+      tradeCount: count(),
     })
     .from(tradingFees)
     .where(whereClause)
     .groupBy(tradingFees.userId)
     .orderBy(desc(sum(tradingFees.feeAmount)))
-    .limit(limit);
+    .limit(limit)) as unknown as Array<{
+    userId: string;
+    feeAmountSum: string | null;
+    tradeCount: number;
+  }>;
 
   // Enrich with user/actor data
   const enrichedTopFeePayers = await Promise.all(
@@ -224,7 +234,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           profileImageUrl: user.profileImageUrl || null,
           isNPC: user.isActor,
           totalFees: Number(item.feeAmountSum || 0),
-          tradeCount: Number(item._count),
+          tradeCount: item.tradeCount,
         };
       }
 
@@ -237,7 +247,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         profileImageUrl: actor?.profileImageUrl || null,
         isNPC: true,
         totalFees: Number(item.feeAmountSum || 0),
-        tradeCount: item._count,
+        tradeCount: item.tradeCount,
       };
     })
   );
@@ -251,17 +261,21 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   referralWhereConditions.push(isNotNull(tradingFees.referrerId));
   const referralWhereClause = and(...referralWhereConditions);
 
-  const topReferralEarners = await db
+  const topReferralEarners = (await db
     .select({
       referrerId: tradingFees.referrerId,
       referrerFeeSum: sum(tradingFees.referrerFee),
-      _count: count(),
+      referralCount: count(),
     })
     .from(tradingFees)
     .where(referralWhereClause)
     .groupBy(tradingFees.referrerId)
     .orderBy(desc(sum(tradingFees.referrerFee)))
-    .limit(limit);
+    .limit(limit)) as unknown as Array<{
+    referrerId: string | null;
+    referrerFeeSum: string | null;
+    referralCount: number;
+  }>;
 
   // Enrich with user data
   const enrichedTopReferralEarners = await Promise.all(
@@ -282,7 +296,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         displayName: user?.displayName || 'Unknown User',
         profileImageUrl: user?.profileImageUrl || null,
         totalEarned: Number(item.referrerFeeSum || 0),
-        referralCount: Number(item._count),
+        referralCount: item.referralCount,
       };
     })
   );
@@ -381,12 +395,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   for (const record of dailyFeeRecords) {
     const dayKey = record.createdAt.toISOString().split('T')[0];
-    const existing = trendMap.get(dayKey) || { totalFees: 0, tradeCount: 0 };
+    if (!dayKey) continue;
+    const existing = trendMap.get(dayKey);
+    const updated = existing
+      ? {
+          totalFees: existing.totalFees + Number(record.feeAmount || 0),
+          tradeCount: existing.tradeCount + 1,
+        }
+      : { totalFees: Number(record.feeAmount || 0), tradeCount: 1 };
 
-    existing.totalFees += Number(record.feeAmount || 0);
-    existing.tradeCount += 1;
-
-    trendMap.set(dayKey, existing);
+    trendMap.set(dayKey, updated);
   }
 
   const feeTrend = Array.from(trendMap.entries())
@@ -411,7 +429,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       totalFees: Number(item.feeAmountSum || 0),
       platformFees: Number(item.platformFeeSum || 0),
       referrerFees: Number(item.referrerFeeSum || 0),
-      tradeCount: Number(item._count),
+      tradeCount: item.tradeCount,
     })),
     topFeePayers: enrichedTopFeePayers,
     topReferralEarners: enrichedTopReferralEarners,

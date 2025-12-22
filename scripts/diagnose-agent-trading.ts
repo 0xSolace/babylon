@@ -4,11 +4,32 @@
  * Diagnose why agents aren't trading
  */
 
-import { db } from '@babylon/db';
-import { agentRegistries, users } from '@babylon/db/schema';
-import { eq } from 'drizzle-orm';
+import { db, initializeDB } from '@babylon/db';
+
+interface AgentData {
+  id: string;
+  username: string | null;
+  isAgent: boolean;
+  autonomousTrading: boolean;
+  autonomousPosting: boolean;
+  autonomousCommenting: boolean;
+  autonomousDMs: boolean;
+  autonomousGroupChats: boolean;
+  agentGoals: string | null;
+  agentPlanningHorizon: string | null;
+  virtualBalance: string;
+  agentPointsBalance: number;
+  agentStatus: string | null;
+}
+
+interface RegistryData {
+  agentId: string;
+  status: string;
+  type: string;
+}
 
 async function diagnose() {
+  await initializeDB();
   console.log('🔍 Diagnosing agent trading issue...\n');
 
   const tickingAgents = [
@@ -18,38 +39,27 @@ async function diagnose() {
   ];
 
   for (const agentId of tickingAgents) {
-    const agent = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        isAgent: users.isAgent,
-        autonomousTrading: users.autonomousTrading,
-        autonomousPosting: users.autonomousPosting,
-        autonomousCommenting: users.autonomousCommenting,
-        autonomousDMs: users.autonomousDMs,
-        autonomousGroupChats: users.autonomousGroupChats,
-        agentGoals: users.agentGoals,
-        agentPlanningHorizon: users.agentPlanningHorizon,
-        virtualBalance: users.virtualBalance,
-        agentPointsBalance: users.agentPointsBalance,
-        agentStatus: users.agentStatus,
-      })
-      .from(users)
-      .where(eq(users.id, agentId))
-      .limit(1);
+    const agent = await db.query<AgentData>(
+      `SELECT id, username, "isAgent", "autonomousTrading", "autonomousPosting",
+              "autonomousCommenting", "autonomousDMs", "autonomousGroupChats",
+              "agentGoals", "agentPlanningHorizon", "virtualBalance",
+              "agentPointsBalance", "agentStatus"
+       FROM "User"
+       WHERE id = $1
+       LIMIT 1`,
+      [agentId]
+    );
 
     const agentData = agent[0];
     if (!agentData) continue;
 
-    const registry = await db
-      .select({
-        agentId: agentRegistries.agentId,
-        status: agentRegistries.status,
-        type: agentRegistries.type,
-      })
-      .from(agentRegistries)
-      .where(eq(agentRegistries.userId, agentId))
-      .limit(1);
+    const registry = await db.query<RegistryData>(
+      `SELECT "agentId", status, type
+       FROM "AgentRegistry"
+       WHERE "userId" = $1
+       LIMIT 1`,
+      [agentId]
+    );
 
     console.log('═'.repeat(80));
     console.log(`Agent: ${agentData.username}`);
@@ -139,7 +149,7 @@ diagnose()
     console.log('\n✅ Diagnosis complete');
     process.exit(0);
   })
-  .catch((error) => {
+  .catch((error: Error) => {
     console.error('\n❌ Diagnosis failed:', error);
     process.exit(1);
   });

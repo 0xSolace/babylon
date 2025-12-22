@@ -104,7 +104,7 @@ export function generateOpenApiSpec() {
           description:
             'Returns all agents owned by the authenticated user with performance statistics and autonomous action status.',
           tags: ['Agents'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'autonomousTrading',
@@ -136,7 +136,7 @@ export function generateOpenApiSpec() {
           description:
             'Creates a new autonomous agent with AI capabilities, trading permissions, and points-based resource management.',
           tags: ['Agents'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -192,7 +192,7 @@ export function generateOpenApiSpec() {
           description:
             'Returns complete agent profile with real-time performance statistics, points balance, and operational status.',
           tags: ['Agents'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'agentId',
@@ -226,7 +226,7 @@ export function generateOpenApiSpec() {
           description:
             'Updates agent settings, permissions, and configuration. Supports partial updates.',
           tags: ['Agents'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'agentId',
@@ -265,7 +265,7 @@ export function generateOpenApiSpec() {
           description:
             'Permanently deletes agent and all associated data. This action cannot be undone.',
           tags: ['Agents'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'agentId',
@@ -287,7 +287,7 @@ export function generateOpenApiSpec() {
           description:
             'Initiates a chat interaction with the agent. Agent responds using configured personality and conversation context.',
           tags: ['Agents'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'agentId',
@@ -340,7 +340,7 @@ export function generateOpenApiSpec() {
           description:
             'Fetches conversation history with the agent, ordered chronologically.',
           tags: ['Agents'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'agentId',
@@ -378,7 +378,7 @@ export function generateOpenApiSpec() {
           description:
             'Returns complete wallet details including current balance, lifetime totals, and transaction history.',
           tags: ['Agents'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'agentId',
@@ -412,7 +412,7 @@ export function generateOpenApiSpec() {
           summary: 'Deposit or withdraw points',
           description: 'Add points to or remove points from agent wallet.',
           tags: ['Agents'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'agentId',
@@ -582,7 +582,7 @@ export function generateOpenApiSpec() {
           description:
             'Creates a new post with automatic mention notifications, rate limiting, and real-time SSE broadcasting.',
           tags: ['Posts'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -625,7 +625,7 @@ export function generateOpenApiSpec() {
           description:
             'Returns all chats (group and DMs) the authenticated user participates in.',
           tags: ['Chats'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'all',
@@ -657,7 +657,7 @@ export function generateOpenApiSpec() {
           description:
             'Creates a new chat (group or DM) and adds participants.',
           tags: ['Chats'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           requestBody: {
             content: {
               'application/json': {
@@ -687,7 +687,7 @@ export function generateOpenApiSpec() {
           description:
             'Creates or retrieves a direct message chat between two users. Idempotent - same chat returned for same participants.',
           tags: ['Chats'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -734,7 +734,7 @@ export function generateOpenApiSpec() {
           description:
             'Returns the authenticated user complete profile including onboarding status, social connections, and reputation.',
           tags: ['Users'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           responses: {
             200: {
               description: 'User profile',
@@ -807,7 +807,7 @@ export function generateOpenApiSpec() {
           description:
             'Follow a user or NPC actor. Creates a follow relationship and sends notification.',
           tags: ['Users'],
-          security: [{ PrivyAuth: [] }, { BearerAuth: [] }],
+          security: [{ OAuth3Auth: [] }, { BearerAuth: [] }],
           parameters: [
             {
               name: 'userId',
@@ -828,7 +828,7 @@ export function generateOpenApiSpec() {
           summary: 'Unfollow user or actor',
           description: 'Remove a follow relationship with a user or actor',
           tags: ['Users'],
-          security: [{ PrivyAuth: [] }, { BearerAuth: [] }],
+          security: [{ OAuth3Auth: [] }, { BearerAuth: [] }],
           parameters: [
             {
               name: 'userId',
@@ -849,7 +849,7 @@ export function generateOpenApiSpec() {
           description:
             'Check if authenticated user is following the specified user or actor',
           tags: ['Users'],
-          security: [{ PrivyAuth: [] }, { BearerAuth: [] }],
+          security: [{ OAuth3Auth: [] }, { BearerAuth: [] }],
           parameters: [
             {
               name: 'userId',
@@ -960,7 +960,7 @@ export function generateOpenApiSpec() {
           description:
             'Returns paginated notifications with filtering support. Cached for 10 seconds.',
           tags: ['Notifications'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           parameters: [
             {
               name: 'limit',
@@ -1009,7 +1009,7 @@ export function generateOpenApiSpec() {
           description:
             'Marks specific notifications or all notifications as read.',
           tags: ['Notifications'],
-          security: [{ PrivyAuth: [] }],
+          security: [{ OAuth3Auth: [] }],
           requestBody: {
             content: {
               'application/json': {

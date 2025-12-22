@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Auto-seed script for Babylon development
  *
@@ -15,6 +16,7 @@
  *   bun run packages/contracts/script/auto-seed.ts --network testnet
  */
 
+import { AuthenticationError, logger } from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -49,7 +51,10 @@ function getConfig(): SeedConfig {
       : (process.env.TESTNET_RPC ?? ''));
 
   if (!process.env.DEPLOYER_KEY) {
-    throw new Error('DEPLOYER_KEY environment variable required');
+    throw new AuthenticationError(
+      'DEPLOYER_KEY environment variable required',
+      'NO_TOKEN'
+    );
   }
 
   return {
@@ -80,12 +85,12 @@ const _TrainingOrchestratorBytecode = '0x';
 // ============================================================================
 
 async function main() {
-  console.log('🐵 Babylon Auto-Seed Script');
-  console.log('='.repeat(50));
+  logger.info('🐵 Babylon Auto-Seed Script');
+  logger.info('='.repeat(50));
 
   const config = getConfig();
-  console.log(`Network: ${config.network}`);
-  console.log(`RPC: ${config.rpcUrl}`);
+  logger.info(`Network: ${config.network}`);
+  logger.info(`RPC: ${config.rpcUrl}`);
 
   // Create clients
   const chain = config.network === 'localnet' ? hardhat : sepolia;
@@ -102,14 +107,14 @@ async function main() {
     transport: http(config.rpcUrl),
   });
 
-  console.log(`Deployer: ${account.address}`);
+  logger.info(`Deployer: ${account.address}`);
 
   // Check deployer balance
   const balance = await publicClient.getBalance({ address: account.address });
-  console.log(`Balance: ${formatEther(balance)} ETH`);
+  logger.info(`Balance: ${formatEther(balance)} ETH`);
 
   if (balance < parseEther('0.1')) {
-    console.error(
+    logger.error(
       '❌ Insufficient balance. Need at least 0.1 ETH for deployment.'
     );
     process.exit(1);
@@ -118,7 +123,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // Step 1: Check existing deployments
   // -------------------------------------------------------------------------
-  console.log('\n📦 Checking existing deployments...');
+  logger.info('\n📦 Checking existing deployments...');
 
   const existingAddresses = {
     dao: process.env.BABYLON_DAO_ADDRESS as Address | undefined,
@@ -132,10 +137,10 @@ async function main() {
   let needsDeploy = false;
   for (const [name, address] of Object.entries(existingAddresses)) {
     if (!address || address === '0x0000000000000000000000000000000000000000') {
-      console.log(`  ${name}: Not deployed`);
+      logger.info(`  ${name}: Not deployed`);
       needsDeploy = true;
     } else {
-      console.log(`  ${name}: ${address}`);
+      logger.info(`  ${name}: ${address}`);
     }
   }
 
@@ -143,11 +148,11 @@ async function main() {
   // Step 2: Deploy contracts if needed
   // -------------------------------------------------------------------------
   if (needsDeploy) {
-    console.log('\n🚀 Deploying contracts...');
-    console.log('  Run: forge script script/DeployDAO.s.sol --broadcast');
-    console.log('  Then set environment variables and re-run this script.');
-    console.log('\nExample .env additions:');
-    console.log(`
+    logger.info('\n🚀 Deploying contracts...');
+    logger.info('  Run: forge script script/DeployDAO.s.sol --broadcast');
+    logger.info('  Then set environment variables and re-run this script.');
+    logger.info('\nExample .env additions:');
+    logger.info(`
 BABYLON_DAO_ADDRESS=0x...
 BABYLON_TREASURY_ADDRESS=0x...
 BABYLON_AGENT_VAULT_ADDRESS=0x...
@@ -159,13 +164,13 @@ TRAINING_ORCHESTRATOR_ADDRESS=0x...
   // -------------------------------------------------------------------------
   // Step 3: Create AI CEO if needed
   // -------------------------------------------------------------------------
-  console.log('\n🐵 Setting up MonkeyKing AI CEO...');
+  logger.info('\n🐵 Setting up MonkeyKing AI CEO...');
 
   const aiCEOAddress = config.aiCEOKey
     ? privateKeyToAccount(config.aiCEOKey).address
     : account.address;
 
-  console.log(`  AI CEO Address: ${aiCEOAddress}`);
+  logger.info(`  AI CEO Address: ${aiCEOAddress}`);
 
   // Check if AI CEO is set in DAO
   // const currentCEO = await publicClient.readContract({
@@ -177,108 +182,108 @@ TRAINING_ORCHESTRATOR_ADDRESS=0x...
   // -------------------------------------------------------------------------
   // Step 4: Add council members
   // -------------------------------------------------------------------------
-  console.log('\n👥 Adding council members...');
+  logger.info('\n👥 Adding council members...');
 
   if (config.councilAddresses.length === 0) {
-    console.log('  Using deployer as initial council member');
+    logger.info('  Using deployer as initial council member');
     config.councilAddresses.push(account.address);
   }
 
   for (const member of config.councilAddresses) {
-    console.log(`  Adding: ${member}`);
+    logger.info(`  Adding: ${member}`);
     // In production: call dao.addCouncilMember(member, "Council")
   }
 
   // -------------------------------------------------------------------------
   // Step 5: Fund treasury
   // -------------------------------------------------------------------------
-  console.log('\n💰 Funding treasury...');
+  logger.info('\n💰 Funding treasury...');
 
   if (existingAddresses.treasury) {
     const treasuryBalance = await publicClient.getBalance({
       address: existingAddresses.treasury,
     });
-    console.log(`  Current balance: ${formatEther(treasuryBalance)} ETH`);
+    logger.info(`  Current balance: ${formatEther(treasuryBalance)} ETH`);
 
     if (treasuryBalance < config.treasuryFunding) {
       const toFund = config.treasuryFunding - treasuryBalance;
-      console.log(`  Funding with: ${formatEther(toFund)} ETH`);
+      logger.info(`  Funding with: ${formatEther(toFund)} ETH`);
 
       const hash = await walletClient.sendTransaction({
         to: existingAddresses.treasury,
         value: toFund,
       });
-      console.log(`  TX: ${hash}`);
+      logger.info(`  TX: ${hash}`);
 
       await publicClient.waitForTransactionReceipt({ hash });
-      console.log(`  ✅ Treasury funded`);
+      logger.info(`  ✅ Treasury funded`);
     } else {
-      console.log(`  ✅ Treasury already funded`);
+      logger.info(`  ✅ Treasury already funded`);
     }
   }
 
   // -------------------------------------------------------------------------
   // Step 6: Fund agent vault
   // -------------------------------------------------------------------------
-  console.log('\n💰 Funding agent vault...');
+  logger.info('\n💰 Funding agent vault...');
 
   if (existingAddresses.agentVault) {
     const vaultBalance = await publicClient.getBalance({
       address: existingAddresses.agentVault,
     });
-    console.log(`  Current balance: ${formatEther(vaultBalance)} ETH`);
+    logger.info(`  Current balance: ${formatEther(vaultBalance)} ETH`);
 
     if (vaultBalance < config.vaultFunding) {
       const toFund = config.vaultFunding - vaultBalance;
-      console.log(`  Funding with: ${formatEther(toFund)} ETH`);
+      logger.info(`  Funding with: ${formatEther(toFund)} ETH`);
 
       const hash = await walletClient.sendTransaction({
         to: existingAddresses.agentVault,
         value: toFund,
       });
-      console.log(`  TX: ${hash}`);
+      logger.info(`  TX: ${hash}`);
 
       await publicClient.waitForTransactionReceipt({ hash });
-      console.log(`  ✅ Agent vault funded`);
+      logger.info(`  ✅ Agent vault funded`);
     } else {
-      console.log(`  ✅ Agent vault already funded`);
+      logger.info(`  ✅ Agent vault already funded`);
     }
   }
 
   // -------------------------------------------------------------------------
   // Step 7: Register JNS names (if available)
   // -------------------------------------------------------------------------
-  console.log('\n📛 Registering JNS names...');
+  logger.info('\n📛 Registering JNS names...');
 
   const jnsRegistry = process.env.JNS_REGISTRY_ADDRESS as Address | undefined;
   if (jnsRegistry) {
-    console.log('  JNS Registry:', jnsRegistry);
+    logger.info('  JNS Registry:', jnsRegistry);
     // Register babylon.jeju
     // Register monkeyking.babylon.jeju
     // Register api.babylon.jeju
-    console.log('  TODO: Implement JNS registration');
+    logger.info('  TODO: Implement JNS registration');
   } else {
-    console.log('  JNS Registry not configured, skipping');
+    logger.info('  JNS Registry not configured, skipping');
   }
 
   // -------------------------------------------------------------------------
   // Step 8: Configure training orchestrator
   // -------------------------------------------------------------------------
-  console.log('\n🎓 Configuring training orchestrator...');
+  logger.info('\n🎓 Configuring training orchestrator...');
 
   if (existingAddresses.trainingOrchestrator) {
     // Set authorized workers
     // Set config
-    console.log('  TODO: Configure training workers');
+    logger.info('  TODO: Configure training workers');
   }
 
   // -------------------------------------------------------------------------
   // Summary
   // -------------------------------------------------------------------------
-  console.log('\n' + '='.repeat(50));
-  console.log('✅ Babylon Auto-Seed Complete');
-  console.log('='.repeat(50));
-  console.log(`
+  logger.info('\n' + '='.repeat(50));
+  logger.info('✅ Babylon Auto-Seed Complete');
+  logger.info('='.repeat(50));
+  logger.info(`
 Addresses:
   DAO:                  ${existingAddresses.dao}
   Treasury:             ${existingAddresses.treasury}
@@ -300,6 +305,6 @@ Next Steps:
 
 // Run
 main().catch((err) => {
-  console.error('❌ Auto-seed failed:', err);
+  logger.error('❌ Auto-seed failed:', err);
   process.exit(1);
 });

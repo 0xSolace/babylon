@@ -105,6 +105,19 @@ async function spawnAgents(args: ReturnType<typeof parseArgs>): Promise<void> {
   }
 }
 
+interface AgentWithConfig {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  createdAt: Date;
+  pointsBalance: number | null;
+  autonomousTrading: boolean | null;
+  autonomousPosting: boolean | null;
+  autonomousCommenting: boolean | null;
+  autonomousDMs: boolean | null;
+  autonomousGroupChats: boolean | null;
+}
+
 async function listAgents(args: ReturnType<typeof parseArgs>): Promise<void> {
   const activeOnly = getFlag(args, 'active');
   const limit = parseInt(getOption(args, 'limit') || '20', 10);
@@ -131,7 +144,7 @@ async function listAgents(args: ReturnType<typeof parseArgs>): Promise<void> {
     .orderBy(desc(users.createdAt))
     .limit(limit);
 
-  const agents = await baseQuery;
+  const agents = (await baseQuery) as unknown as AgentWithConfig[];
 
   // Filter for active agents if requested
   const filteredAgents = activeOnly
@@ -195,7 +208,7 @@ async function configureAgent0(): Promise<void> {
   const currentConfig = {
     enabled: getEnvValue(envContent, 'AGENT0_ENABLED'),
     network: getEnvValue(envContent, 'AGENT0_NETWORK'),
-    rpcUrl: getEnvValue(envContent, 'BASE_SEPOLIA_RPC_URL'),
+    rpcUrl: getEnvValue(envContent, 'AGENT0_RPC_URL'),
     privateKey: getEnvValue(envContent, 'BABYLON_GAME_PRIVATE_KEY'),
     subgraphUrl: getEnvValue(envContent, 'AGENT0_SUBGRAPH_URL'),
     ipfsProvider: getEnvValue(envContent, 'AGENT0_IPFS_PROVIDER'),
@@ -209,7 +222,7 @@ async function configureAgent0(): Promise<void> {
     `  AGENT0_NETWORK:         ${currentConfig.network || 'not set'}`
   );
   console.log(
-    `  BASE_SEPOLIA_RPC_URL:   ${currentConfig.rpcUrl ? '✅ set' : '❌ not set'}`
+    `  AGENT0_RPC_URL:         ${currentConfig.rpcUrl ? '✅ set' : '❌ not set'}`
   );
   console.log(
     `  BABYLON_GAME_PRIVATE_KEY: ${currentConfig.privateKey ? '✅ set' : '❌ not set'}`
@@ -343,7 +356,23 @@ async function toggleAgentFeatures(
     process.exit(1);
   }
 
-  await db.update(users).set(updates).where(eq(users.id, agentId));
+  // Check if agent config exists
+  const configResult = await db
+    .select()
+    .from(userAgentConfigs)
+    .where(eq(userAgentConfigs.userId, agentId))
+    .limit(1);
+
+  if (!configResult[0]) {
+    logger.fail(`Agent config not found for: ${agentId}`);
+    console.log('\nThe agent may not have been properly initialized.');
+    process.exit(1);
+  }
+
+  await db
+    .update(userAgentConfigs)
+    .set(updates)
+    .where(eq(userAgentConfigs.userId, agentId));
 
   const action = enable ? 'Enabled' : 'Disabled';
   logger.success(`${action} features for ${agent.username || agentId}`);

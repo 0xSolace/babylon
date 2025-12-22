@@ -17,7 +17,7 @@
  *     summary: Get training readiness
  *     description: Returns training readiness status (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Readiness status retrieved successfully
@@ -35,7 +35,7 @@
  *     summary: Trigger training job
  *     description: Manually triggers a training job (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       content:
  *         application/json:

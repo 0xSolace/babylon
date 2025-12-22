@@ -4,27 +4,29 @@
  * Give all agents starting virtual balance for trading
  */
 
-import { db } from '@babylon/db';
-import { users } from '@babylon/db/schema';
-import { eq } from 'drizzle-orm';
+import { db, initializeDB } from '@babylon/db';
 
 const STARTING_BALANCE = '1000.00'; // $1000 starting balance
 
+interface Agent {
+  id: string;
+  username: string | null;
+  virtualBalance: string;
+  autonomousTrading: boolean;
+}
+
 async function fundAllAgents() {
+  await initializeDB();
   console.log(
     `💰 Funding all agents with $${STARTING_BALANCE} starting balance...\n`
   );
 
   // 1. Get all agents
-  const allAgents = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      virtualBalance: users.virtualBalance,
-      autonomousTrading: users.autonomousTrading,
-    })
-    .from(users)
-    .where(eq(users.isAgent, true));
+  const allAgents = await db.query<Agent>(
+    `SELECT id, username, "virtualBalance", "autonomousTrading"
+     FROM "User"
+     WHERE "isAgent" = true`
+  );
 
   console.log(`Found ${allAgents.length} total agents\n`);
 
@@ -62,25 +64,25 @@ async function fundAllAgents() {
   const errors: Array<{ agent: string; error: string }> = [];
 
   for (const agent of agentsToFund) {
-    try {
-      await db
-        .update(users)
-        .set({
-          virtualBalance: STARTING_BALANCE,
-          totalDeposited: STARTING_BALANCE, // Track initial deposit
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, agent.id));
+    const result = await db.exec(
+      `UPDATE "User"
+       SET "virtualBalance" = $1, "totalDeposited" = $1, "updatedAt" = NOW()
+       WHERE id = $2`,
+      [STARTING_BALANCE, agent.id]
+    );
 
+    if (result.rowsAffected > 0) {
       successCount++;
       console.log(
         `✅ ${successCount}/${agentsToFund.length} - Funded: ${agent.username}`
       );
-    } catch (error) {
+    } else {
       errorCount++;
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      errors.push({ agent: agent.username || agent.id, error: errorMsg });
-      console.error(`❌ Failed for ${agent.username}:`, errorMsg);
+      errors.push({
+        agent: agent.username || agent.id,
+        error: 'No rows updated',
+      });
+      console.error(`❌ Failed for ${agent.username}: No rows updated`);
     }
   }
 
@@ -119,7 +121,7 @@ fundAllAgents()
     console.log('\n✅ Script complete');
     process.exit(0);
   })
-  .catch((error) => {
+  .catch((error: Error) => {
     console.error('\n❌ Script failed:', error);
     process.exit(1);
   });

@@ -7,10 +7,10 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { logger } from '@babylon/shared';
 import * as hubModule from '@huggingface/hub';
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { logger } from '../../utils/logger';
 
 export interface UploadFileOptions {
   repo: { type: 'model' | 'dataset'; name: string };

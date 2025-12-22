@@ -13,23 +13,21 @@ interface MockNextRequest {
 
 const mockVerifyAgentSession = mock();
 const mockValidateSession = mock();
-const mockSelect = mock();
+const mockUserFindFirst = mock();
+const mockUserUpdate = mock();
 
 // Mock the local agent-auth module
 mock.module('../agent-auth', () => ({
   verifyAgentSession: mockVerifyAgentSession,
 }));
 
-// Mock @babylon/db with Drizzle-style API
+// Mock @babylon/db with CQL repository API
 mock.module('@babylon/db', () => ({
   db: {
-    select: mockSelect,
-  },
-  eq: (field: unknown, value: unknown) => ({ field, value }),
-  users: {
-    id: 'id',
-    oauth3Id: 'oauth3Id',
-    walletAddress: 'walletAddress',
+    user: {
+      findFirst: mockUserFindFirst,
+      update: mockUserUpdate,
+    },
   },
 }));
 
@@ -58,16 +56,12 @@ describe('authenticate middleware', () => {
   beforeEach(() => {
     mockVerifyAgentSession.mockReset();
     mockValidateSession.mockReset();
-    mockSelect.mockReset();
+    mockUserFindFirst.mockReset();
+    mockUserUpdate.mockReset();
 
-    // Default mock chain for db.select().from().where().limit()
-    mockSelect.mockReturnValue({
-      from: () => ({
-        where: () => ({
-          limit: () => Promise.resolve([]),
-        }),
-      }),
-    });
+    // Default mock: no user found
+    mockUserFindFirst.mockResolvedValue(null);
+    mockUserUpdate.mockResolvedValue({ id: 'db-user-id' });
   });
 
   it('returns agent user when session token is valid', async () => {
@@ -87,15 +81,7 @@ describe('authenticate middleware', () => {
   it('falls back to oauth3 session when agent session missing and db user absent', async () => {
     mockVerifyAgentSession.mockReturnValueOnce(null);
     mockValidateSession.mockResolvedValueOnce({ identityId: 'oauth3-user' });
-
-    // Mock empty db result
-    mockSelect.mockReturnValue({
-      from: () => ({
-        where: () => ({
-          limit: () => Promise.resolve([]),
-        }),
-      }),
-    });
+    mockUserFindFirst.mockResolvedValue(null);
 
     const request = createRequest('oauth3-token');
     const result = await authenticate(request);
@@ -113,18 +99,9 @@ describe('authenticate middleware', () => {
     mockValidateSession.mockResolvedValueOnce({ identityId: 'oauth3-user' });
 
     // Mock db user found
-    mockSelect.mockReturnValue({
-      from: () => ({
-        where: () => ({
-          limit: () =>
-            Promise.resolve([
-              {
-                id: 'db-user-id',
-                walletAddress: '0xabc',
-              },
-            ]),
-        }),
-      }),
+    mockUserFindFirst.mockResolvedValue({
+      id: 'db-user-id',
+      walletAddress: '0xabc',
     });
 
     const request = createRequest('oauth3-token');
@@ -146,9 +123,17 @@ describe('authenticate middleware', () => {
 
     const request = createRequest('expired-token');
 
-    await expect(authenticate(request)).rejects.toMatchObject({
-      message: 'Authentication token has expired. Please refresh your session.',
-      code: 'AUTH_FAILED',
-    });
+    let caughtError: Error | null = null;
+    try {
+      await authenticate(request);
+    } catch (e) {
+      caughtError = e as Error;
+    }
+
+    expect(caughtError).not.toBeNull();
+    expect(caughtError?.message).toBe(
+      'Authentication token has expired. Please refresh your session.'
+    );
+    expect((caughtError as { code?: string }).code).toBe('AUTH_EXPIRED_TOKEN');
   });
 });

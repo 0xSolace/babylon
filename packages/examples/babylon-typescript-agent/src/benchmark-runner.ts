@@ -9,8 +9,8 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local' });
 
+import { logger } from '@babylon/shared';
 import fs from 'fs';
-import path from 'path';
 
 // Benchmark types (defined locally for examples)
 // NOTE: Benchmark runner is disabled until simulation modules are available as packages
@@ -36,21 +36,6 @@ interface SimulationResult {
   };
 }
 
-const LOG_DIR = './logs';
-const LOG_FILE = path.join(LOG_DIR, 'benchmark.log');
-
-function log(message: string, level: 'info' | 'warn' | 'error' = 'info') {
-  const timestamp = new Date().toISOString();
-  const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message}\n`;
-
-  console.log(logLine.trim());
-
-  if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-  }
-  fs.appendFileSync(LOG_FILE, logLine);
-}
-
 async function loadBenchmark(
   benchmarkFile: string
 ): Promise<BenchmarkGameSnapshot> {
@@ -62,17 +47,17 @@ async function runBenchmark(
   benchmarkFile: string,
   outputDir: string
 ): Promise<SimulationResult> {
-  log('🎯 Starting Autonomous Agent Benchmark');
-  log(`Benchmark: ${benchmarkFile}`);
-  log(`Output: ${outputDir}`);
+  logger.info('🎯 Starting Autonomous Agent Benchmark');
+  logger.info(`Benchmark: ${benchmarkFile}`);
+  logger.info(`Output: ${outputDir}`);
 
   // 1. Load benchmark
-  log('📊 Loading benchmark data...');
+  logger.info('📊 Loading benchmark data...');
   const snapshot = await loadBenchmark(benchmarkFile);
-  log(`  Loaded: ${snapshot.ticks.length} ticks`);
+  logger.info(`  Loaded: ${snapshot.ticks.length} ticks`);
 
   // 2. Dynamic import of benchmark modules
-  log('🔧 Loading simulation modules...');
+  logger.info('🔧 Loading simulation modules...');
 
   // TODO: Benchmark simulation modules not yet available as packages
   // These would need to be migrated to @babylon/testing or similar

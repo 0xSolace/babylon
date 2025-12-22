@@ -75,6 +75,7 @@
 
 import { submitFeedbackToAgent0 } from '@babylon/agents';
 import {
+  InternalServerError,
   requireCronAuth,
   requireUserByIdentifier,
   withErrorHandling,
@@ -83,49 +84,9 @@ import {
   generateGameCompletionFeedback,
   generateTradeCompletionFeedback,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { AutoGenerateFeedbackRequestSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const GameMetricsSchema = z.object({
-  won: z.boolean(),
-  pnl: z.number(),
-  positionsClosed: z.number(),
-  finalBalance: z.number(),
-  startingBalance: z.number(),
-  decisionsCorrect: z.number(),
-  decisionsTotal: z.number(),
-  timeToComplete: z.number().optional(),
-  riskManagement: z.number().optional(),
-});
-
-const TradeMetricsSchema = z.object({
-  profitable: z.boolean(),
-  roi: z.number(),
-  holdingPeriod: z.number(),
-  timingScore: z.number(),
-  riskScore: z.number(),
-});
-
-const GameFeedbackRequestSchema = z.object({
-  type: z.literal('game'),
-  agentId: z.string().min(1),
-  gameId: z.string().min(1),
-  metrics: GameMetricsSchema,
-});
-
-const TradeFeedbackRequestSchema = z.object({
-  type: z.literal('trade'),
-  agentId: z.string().min(1),
-  tradeId: z.string().min(1),
-  metrics: TradeMetricsSchema,
-});
-
-const AutoGenerateFeedbackRequestSchema = z.discriminatedUnion('type', [
-  GameFeedbackRequestSchema,
-  TradeFeedbackRequestSchema,
-]);
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   requireCronAuth(request, { jobName: 'AutoGenerateFeedback' });
@@ -145,7 +106,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
 
     if (!feedback) {
-      throw new Error('Failed to create game feedback');
+      throw new InternalServerError('Failed to create game feedback');
     }
 
     // Submit to Agent0 network (fire-and-forget with error handling)
@@ -176,7 +137,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   );
 
   if (!feedback) {
-    throw new Error('Failed to create trade feedback');
+    throw new InternalServerError('Failed to create trade feedback');
   }
 
   // Submit to Agent0 network (fire-and-forget with error handling)

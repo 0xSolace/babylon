@@ -1,4 +1,5 @@
 import { useJejuAuth } from '@babylon/auth/client';
+import { UnreadMessagesApiResponseSchema } from '@babylon/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -9,11 +10,6 @@ interface UnreadCounts {
   /** Number of pending DM requests from anonymous users */
   pendingDMs: number;
   /** Whether there are new messages in existing chats */
-  hasNewMessages: boolean;
-}
-
-interface UnreadApiResponse {
-  pendingDMs: number;
   hasNewMessages: boolean;
 }
 
@@ -68,16 +64,8 @@ export function useUnreadMessages() {
           throw new Error(`Failed to fetch unread count: ${response.status}`);
         }
 
-        const data = (await response.json()) as UnreadApiResponse;
-
-        if (
-          typeof data.pendingDMs !== 'number' ||
-          typeof data.hasNewMessages !== 'boolean'
-        ) {
-          throw new Error(
-            'Invalid unread count response: missing required fields'
-          );
-        }
+        const json: unknown = await response.json();
+        const data = UnreadMessagesApiResponseSchema.parse(json);
 
         return {
           pendingDMs: data.pendingDMs,

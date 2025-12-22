@@ -35,35 +35,47 @@ if (PAYMENT_RECEIVER === '0x0000000000000000000000000000000000000000') {
   );
 }
 
-// Validation schemas
-const CreateEscrowPaymentParamsSchema = z.object({
+// Validation schemas - exported for reuse
+export const CreateEscrowPaymentParamsSchema = z.object({
   recipientId: z.string().min(1),
   amountUSD: z.number().positive(),
   reason: z.string().optional(),
   recipientWalletAddress: z.string().min(1),
 });
+export type CreateEscrowPaymentParams = z.infer<
+  typeof CreateEscrowPaymentParamsSchema
+>;
 
-const VerifyEscrowPaymentParamsSchema = z.object({
+export const VerifyEscrowPaymentParamsSchema = z.object({
   escrowId: z.string().min(1),
   txHash: z.string().min(1),
   fromAddress: z.string().min(1),
   toAddress: z.string().min(1),
   amount: z.string().min(1),
 });
+export type VerifyEscrowPaymentParams = z.infer<
+  typeof VerifyEscrowPaymentParamsSchema
+>;
 
-const RefundEscrowPaymentParamsSchema = z.object({
+export const RefundEscrowPaymentParamsSchema = z.object({
   escrowId: z.string().min(1),
   refundTxHash: z.string().min(1),
   reason: z.string().optional(),
 });
+export type RefundEscrowPaymentParams = z.infer<
+  typeof RefundEscrowPaymentParamsSchema
+>;
 
-const ListEscrowPaymentsParamsSchema = z.object({
+export const ListEscrowPaymentsParamsSchema = z.object({
   recipientId: z.string().optional(),
   adminId: z.string().optional(),
   status: z.enum(['pending', 'paid', 'refunded', 'expired']).optional(),
   limit: z.number().min(1).max(100).optional().default(50),
   offset: z.number().min(0).optional().default(0),
 });
+export type ListEscrowPaymentsParams = z.infer<
+  typeof ListEscrowPaymentsParamsSchema
+>;
 
 /**
  * Handle create escrow payment request (Admin only)

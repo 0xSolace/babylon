@@ -2,6 +2,29 @@
 declare module 'swagger-ui-react' {
   import type { ComponentType } from 'react';
 
+  // swagger-ui uses its own internal Request/Response types, not DOM types
+  interface SwaggerRequest {
+    url: string;
+    method: string;
+    body?: string | FormData;
+    headers?: Record<string, string>;
+    credentials?: 'omit' | 'same-origin' | 'include';
+    [key: string]: string | FormData | Record<string, string> | undefined;
+  }
+
+  interface SwaggerResponse {
+    ok: boolean;
+    url: string;
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    text: string;
+    data: string;
+    body?: Record<string, unknown>;
+    obj?: Record<string, unknown>;
+    [key: string]: unknown;
+  }
+
   interface SwaggerUIProps {
     spec?: object;
     url?: string;
@@ -17,8 +40,8 @@ declare module 'swagger-ui-react' {
     persistAuthorization?: boolean;
     displayRequestDuration?: boolean;
     showMutatedRequest?: boolean;
-    requestInterceptor?: (request: Request) => Request;
-    responseInterceptor?: (response: Response) => Response;
+    requestInterceptor?: (request: SwaggerRequest) => SwaggerRequest | Promise<SwaggerRequest>;
+    responseInterceptor?: (response: SwaggerResponse) => SwaggerResponse | Promise<SwaggerResponse>;
   }
 
   const SwaggerUI: ComponentType<SwaggerUIProps>;

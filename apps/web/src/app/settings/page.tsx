@@ -1,6 +1,7 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
+import { useMutation } from '@tanstack/react-query';
 import { ArrowLeft, Key, Palette, Save, Shield, User } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -13,6 +14,23 @@ import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+
+interface ProfileUpdatePayload {
+  displayName: string;
+  username: string;
+  bio: string;
+}
+
+interface ProfileUpdateResponse {
+  user: {
+    username: string;
+    displayName: string;
+    bio: string;
+    usernameChangedAt: string | null;
+    referralCode: string | null;
+    onChainRegistered: boolean | null;
+  };
+}
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -33,20 +51,70 @@ export default function SettingsPage() {
 
   // Sync tab when URL changes (e.g., browser back/forward)
   useEffect(() => {
-    const tab = searchParams?.get('tab');
+    const tab = searchParams.get('tab');
     if (tab && tab !== activeTab) {
       setActiveTab(tab);
     }
   }, [searchParams, activeTab]);
 
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
   // Profile settings state
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [username, setUsername] = useState(user?.username || '');
   const [bio, setBio] = useState(user?.bio || '');
+
+  // Profile update mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async (
+      payload: ProfileUpdatePayload
+    ): Promise<ProfileUpdateResponse> => {
+      const token = await getAccessToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(
+        `/api/users/${encodeURIComponent(user?.id ?? '')}/update-profile`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        const message = data?.error || 'Unable to save your changes.';
+        throw new Error(message);
+      }
+
+      return data as ProfileUpdateResponse;
+    },
+    onSuccess: (data) => {
+      if (data.user && user) {
+        setUser({
+          ...user,
+          username: data.user.username,
+          displayName: data.user.displayName,
+          bio: data.user.bio ?? undefined,
+          usernameChangedAt: data.user.usernameChangedAt,
+          referralCode: data.user.referralCode ?? undefined,
+          onChainRegistered:
+            data.user.onChainRegistered ?? user.onChainRegistered,
+        });
+      }
+      refresh().catch(() => undefined);
+    },
+    onError: (error: Error) => {
+      logger.error(
+        'Failed to save profile settings',
+        { error: error.message },
+        'SettingsPage'
+      );
+    },
+  });
 
   // Theme settings - connected to next-themes
   const { theme, setTheme } = useTheme();
@@ -91,78 +159,18 @@ export default function SettingsPage() {
     setBio(user?.bio ?? '');
   }, [user?.displayName, user?.username, user?.bio]);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!user?.id) return;
-    if (user.onChainRegistered !== true) {
-      setErrorMessage(
-        'Complete your on-chain registration before editing your profile.'
-      );
-      return;
-    }
-
-    setSaving(true);
-    setSaved(false);
-    setErrorMessage(null);
-
-    const trimmedDisplayName = (displayName ?? '').trim();
-    const trimmedUsername = (username ?? '').trim();
-    const trimmedBio = (bio ?? '').trim();
 
     // Backend now handles ALL signing automatically - no user popups!
     // This includes username changes, bio updates, display name changes.
     // The server signs the transaction on-chain for a seamless UX.
 
-    const token = await getAccessToken();
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(
-      `/api/users/${encodeURIComponent(user.id)}/update-profile`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          displayName: trimmedDisplayName,
-          username: trimmedUsername,
-          bio: trimmedBio,
-        }),
-      }
-    );
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = payload?.error || 'Unable to save your changes.';
-      setErrorMessage(message);
-      logger.error(
-        'Failed to save profile settings',
-        { error: message },
-        'SettingsPage'
-      );
-      setSaving(false);
-      return;
-    }
-
-    if (payload.user) {
-      setUser({
-        ...user,
-        username: payload.user.username,
-        displayName: payload.user.displayName,
-        bio: payload.user.bio,
-        usernameChangedAt: payload.user.usernameChangedAt,
-        referralCode: payload.user.referralCode,
-        onChainRegistered:
-          payload.user.onChainRegistered ?? user.onChainRegistered,
-      });
-    }
-
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-    await refresh().catch(() => undefined);
-    setSaving(false);
+    updateProfileMutation.mutate({
+      displayName: displayName.trim(),
+      username: username.trim(),
+      bio: bio.trim(),
+    });
   };
 
   if (!ready) {
@@ -382,18 +390,24 @@ export default function SettingsPage() {
           {/* Save Button - Only show for profile tab (theme saves automatically) */}
           {activeTab === 'profile' && (
             <div className="border-border border-t pt-6">
-              {errorMessage && (
-                <p className="mb-4 text-red-500 text-sm">{errorMessage}</p>
-              )}
-              {user?.onChainRegistered !== true && !errorMessage && (
-                <p className="mb-4 text-sm text-yellow-500">
-                  Complete your on-chain registration before editing your
-                  profile.
+              {updateProfileMutation.error && (
+                <p className="mb-4 text-red-500 text-sm">
+                  {updateProfileMutation.error.message}
                 </p>
               )}
+              {user?.onChainRegistered !== true &&
+                !updateProfileMutation.error && (
+                  <p className="mb-4 text-sm text-yellow-500">
+                    Complete your on-chain registration before editing your
+                    profile.
+                  </p>
+                )}
               <button
                 onClick={handleSave}
-                disabled={saving || user?.onChainRegistered !== true}
+                disabled={
+                  updateProfileMutation.isPending ||
+                  user?.onChainRegistered !== true
+                }
                 className={cn(
                   'flex items-center gap-2 rounded-lg px-6 py-3 font-medium transition-all',
                   'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
@@ -402,7 +416,11 @@ export default function SettingsPage() {
               >
                 <Save className="h-4 w-4" />
                 <span>
-                  {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Changes'}
+                  {updateProfileMutation.isPending
+                    ? 'Saving...'
+                    : updateProfileMutation.isSuccess
+                      ? 'Saved!'
+                      : 'Save Changes'}
                 </span>
               </button>
             </div>

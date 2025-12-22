@@ -129,16 +129,13 @@ async function findOllamaPath(): Promise<string | null> {
   ];
 
   // First try 'which'
-  try {
-    const whichResult = spawn(['which', 'ollama']);
-    const output = await new Response(whichResult.stdout).text();
-    await whichResult.exited;
-    if (whichResult.exitCode === 0 && output.trim()) {
-      return output.trim();
-    }
-  } catch {
-    // which failed, try known paths
+  const whichResult = spawn(['which', 'ollama']);
+  const output = await new Response(whichResult.stdout).text();
+  await whichResult.exited;
+  if (whichResult.exitCode === 0 && output.trim()) {
+    return output.trim();
   }
+  // which failed or returned empty, try known paths
 
   // Check known paths
   for (const path of possiblePaths) {
@@ -224,13 +221,9 @@ async function stopOllama(): Promise<void> {
   }
 
   console.log('🛑 Stopping Ollama server...');
-  try {
-    ollamaProcess.kill();
-    await ollamaProcess.exited;
-    console.log('   ✅ Ollama stopped');
-  } catch {
-    // Process may already be dead
-  }
+  ollamaProcess.kill();
+  await ollamaProcess.exited;
+  console.log('   ✅ Ollama stopped');
   ollamaProcess = null;
   ollamaStartedByUs = false;
 }

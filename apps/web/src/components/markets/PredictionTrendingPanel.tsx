@@ -51,13 +51,17 @@ export function PredictionTrendingPanel({
   const sortedMarkets = useMemo(() => {
     return rawMarkets
       .filter((m) => (m.yesShares ?? 0) + (m.noShares ?? 0) > 0)
-      .map((m) => ({
-        id: m.id.toString(),
-        text: m.text,
-        yesShares: m.yesShares ?? 0,
-        noShares: m.noShares ?? 0,
-        resolutionDate: m.resolutionDate,
-      }))
+      .map((m) => {
+        const yesShares = m.yesShares ?? 0;
+        const noShares = m.noShares ?? 0;
+        return {
+          id: m.id.toString(),
+          text: m.text,
+          yesShares,
+          noShares,
+          resolutionDate: m.resolutionDate,
+        };
+      })
       .sort((a, b) => b.yesShares + b.noShares - (a.yesShares + a.noShares))
       .slice(0, 4);
   }, [rawMarkets]);

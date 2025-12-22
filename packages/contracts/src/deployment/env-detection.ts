@@ -5,7 +5,9 @@
  * if required Jeju variables are absent.
  */
 
-export type DeploymentEnv = 'localnet' | 'testnet' | 'mainnet';
+import { type DeploymentEnv, DeploymentEnvSchema } from '../schemas';
+
+export type { DeploymentEnv };
 
 export interface EnvValidationResult {
   valid: boolean;
@@ -52,16 +54,11 @@ const REQUIRED_BY_ENV: Record<DeploymentEnv, string[]> = {
 };
 
 export function detectEnvironment(): DeploymentEnv {
-  const explicit =
-    (process.env.DEPLOYMENT_ENV as DeploymentEnv | undefined) ||
-    (process.env.JEJU_NETWORK as DeploymentEnv | undefined);
+  const envValue = process.env.DEPLOYMENT_ENV ?? process.env.JEJU_NETWORK;
+  const result = DeploymentEnvSchema.safeParse(envValue);
 
-  if (
-    explicit === 'localnet' ||
-    explicit === 'testnet' ||
-    explicit === 'mainnet'
-  ) {
-    return explicit;
+  if (result.success) {
+    return result.data;
   }
 
   return 'localnet';

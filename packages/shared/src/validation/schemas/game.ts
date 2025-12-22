@@ -127,7 +127,7 @@ export const UsernameParamSchema = z.object({
 });
 
 /**
- * User ID param schema (accepts both UUID and Privy DID)
+ * User ID param schema (accepts both UUID and OAuth3 DID)
  * Uses UserIdSchema from common for consistency
  */
 export const UserIdParamSchema = z.object({
@@ -181,3 +181,20 @@ export const StatsQuerySchema = z.object({
   includePools: z.coerce.boolean().default(true),
   includeVolume: z.coerce.boolean().default(true),
 });
+
+// Type exports
+export type GameTickCron = z.infer<typeof GameTickCronSchema>;
+export type ImageUpload = z.infer<typeof ImageUploadSchema>;
+export type ImageUploadBody = z.infer<typeof ImageUploadBodySchema>;
+export type RegistryQuery = z.infer<typeof RegistryQuerySchema>;
+export type AwardPoints = z.infer<typeof AwardPointsSchema>;
+export type ReferralQuery = z.infer<typeof ReferralQuerySchema>;
+export type LinkSocialAccount = z.infer<typeof LinkSocialAccountSchema>;
+export type UpdateVisibility = z.infer<typeof UpdateVisibilitySchema>;
+export type ShareCount = z.infer<typeof ShareCountSchema>;
+export type UsernameParam = z.infer<typeof UsernameParamSchema>;
+export type UserIdParam = z.infer<typeof UserIdParamSchema>;
+export type BreakingNewsQuery = z.infer<typeof BreakingNewsQuerySchema>;
+export type UpcomingEventsQuery = z.infer<typeof UpcomingEventsQuerySchema>;
+export type TrendingPostsQuery = z.infer<typeof TrendingPostsQuerySchema>;
+export type StatsQuery = z.infer<typeof StatsQuerySchema>;

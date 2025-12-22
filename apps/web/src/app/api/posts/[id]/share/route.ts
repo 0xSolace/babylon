@@ -18,7 +18,7 @@
  *     summary: Share/repost a post
  *     description: Creates a share/repost of a post. Optionally includes quote commentary. Creates repost post in user's feed.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -66,7 +66,7 @@
  *     summary: Unshare a post
  *     description: Removes share and deletes associated repost post
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -396,10 +396,14 @@ export const POST = withErrorHandling(
       }
     }
 
-    const [shareCountResult] = await db
+    const shareCountResults = await db
       .select({ count: count() })
       .from(shares)
       .where(eq(shares.postId, postId));
+    // Type assertion for aggregate query result
+    const shareCountResult = (
+      shareCountResults as unknown as Array<{ count: number }>
+    )[0];
     const shareCount = Number(shareCountResult?.count ?? 0);
 
     logger.info(
@@ -496,11 +500,15 @@ export const DELETE = withErrorHandling(
 
     await db.delete(shares).where(eq(shares.id, share.id));
 
-    const [shareCountResult] = await db
+    const shareCountResults2 = await db
       .select({ count: count() })
       .from(shares)
       .where(eq(shares.postId, postId));
-    const shareCount = Number(shareCountResult?.count ?? 0);
+    // Type assertion for aggregate query result
+    const shareCountResult2 = (
+      shareCountResults2 as unknown as Array<{ count: number }>
+    )[0];
+    const shareCount = Number(shareCountResult2?.count ?? 0);
 
     await cachedDb.invalidatePostsCache();
     await cachedDb.invalidateActorPostsCache(canonicalUserId);

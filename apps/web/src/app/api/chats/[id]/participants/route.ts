@@ -17,7 +17,7 @@
  *     summary: Get chat participants
  *     description: Returns list of users participating in the chat
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -59,7 +59,7 @@
  *     summary: Add users to chat
  *     description: Adds one or more users to a group chat
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id

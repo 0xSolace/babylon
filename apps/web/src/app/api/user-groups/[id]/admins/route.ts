@@ -18,7 +18,7 @@
  *     summary: Get group admins
  *     description: Returns list of group admins
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -44,7 +44,7 @@
  *     summary: Grant admin privileges
  *     description: Grants admin privileges to a group member (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -86,14 +86,9 @@
 
 import { authenticate, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+import { AddAdminSchema, generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const addAdminSchema = z.object({
-  userId: z.string(),
-});
 
 /**
  * POST /api/user-groups/[id]/admins
@@ -111,7 +106,7 @@ export const POST = withErrorHandling(
 
     const { id: groupId } = await context.params;
     const body = await request.json();
-    const { userId: targetUserId } = addAdminSchema.parse(body);
+    const { userId: targetUserId } = AddAdminSchema.parse(body);
 
     // Check if requester is admin
     const isAdmin = await db.userGroupAdmin.findFirst({

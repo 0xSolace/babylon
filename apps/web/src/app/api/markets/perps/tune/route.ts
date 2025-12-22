@@ -18,7 +18,7 @@
  *     summary: Get tuning parameters
  *     description: Returns current tuning parameters for specified ticker or all tickers
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: ticker
@@ -56,7 +56,7 @@
  *     summary: Update tuning parameters
  *     description: Updates AI agent tuning parameters for perpetual futures trading
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       content:
  *         application/json:

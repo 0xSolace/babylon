@@ -2,6 +2,7 @@
 
 import { getReferralUrl, trackExternalShare } from '@babylon/shared';
 import { useMutation } from '@tanstack/react-query';
+
 import { Download, LogOut, Twitter, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -10,11 +11,7 @@ import { PortfolioPnLShareCard } from '@/components/markets/PortfolioPnLShareCar
 import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL';
 import { useTwitterAuth } from '@/hooks/useTwitterAuth';
 import type { User } from '@/stores/authStore';
-
-/**
- * Market category type for PnL share modal.
- */
-type MarketCategory = 'perps' | 'predictions';
+import type { MarketCategory } from '@/types/markets';
 
 /**
  * Category PnL data structure for PnL share modal.

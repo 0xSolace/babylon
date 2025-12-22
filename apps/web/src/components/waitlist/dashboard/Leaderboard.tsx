@@ -144,7 +144,7 @@ export function Leaderboard({
 
         {/* Show current user if not on current page */}
         {!currentUserInPage &&
-          waitlistData?.leaderboardRank &&
+          waitlistData.leaderboardRank &&
           waitlistData.leaderboardRank > 0 && (
             <div className="mb-6 border-border/50 border-t pt-4">
               <div className="flex items-center justify-between rounded-xl border border-primary bg-primary/20 p-4 shadow-md lg:p-5">

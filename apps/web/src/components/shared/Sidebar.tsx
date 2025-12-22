@@ -27,6 +27,7 @@ import { Avatar } from '@/components/shared/Avatar';
 import { Separator } from '@/components/shared/Separator';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 
 /**
  * Main sidebar content component with navigation and user menu.
@@ -40,11 +41,11 @@ import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 function SidebarContent() {
   const [showMdMenu, setShowMdMenu] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const mdMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const { ready, authenticated, user, logout } = useAuth();
   const { totalUnread: unreadMessages } = useUnreadMessages();
+  const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
   // Hide sidebar when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -73,46 +74,6 @@ function SidebarContent() {
     }
     return undefined;
   }, [showMdMenu]);
-
-  // Poll for unread notifications
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadNotifications(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-
-      if (!token) {
-        return;
-      }
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (typeof data.unreadCount !== 'number') {
-          throw new Error('Invalid unreadCount in notifications response');
-        }
-        setUnreadNotifications(data.unreadCount);
-      }
-    };
-
-    fetchUnreadCount();
-
-    // Refresh every 1 minute
-    const interval = setInterval(fetchUnreadCount, 60000); // 60 seconds = 1 minute
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
 
   const copyReferralCode = async () => {
     if (!user?.referralCode) return;
@@ -211,7 +172,7 @@ function SidebarContent() {
       {/* Responsive sidebar: icons only on tablet (md), icons + names on desktop (lg+) */}
       <aside
         className={cn(
-          'sticky top-0 hidden h-screen md:flex md:flex-col',
+          'sticky top-0 isolate z-40 hidden h-screen md:flex md:flex-col',
           'bg-sidebar',
           'transition-all duration-300',
           'md:w-20 lg:w-64'
@@ -244,7 +205,7 @@ function SidebarContent() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1">
+        <nav className="pointer-events-auto relative z-20 flex-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const hasNotificationBadge =
@@ -256,7 +217,7 @@ function SidebarContent() {
                 href={item.href}
                 prefetch={true}
                 className={cn(
-                  'group relative flex items-center px-4 py-3',
+                  'group pointer-events-auto relative z-10 flex items-center px-4 py-3',
                   'transition-colors duration-200',
                   'md:justify-center lg:justify-start',
                   !item.active && 'bg-transparent hover:bg-sidebar-accent'

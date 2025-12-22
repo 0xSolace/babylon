@@ -84,17 +84,20 @@ Options:
 
 Authentication:
   Agents authenticate automatically using BABYLON_AGENT_ID and BABYLON_AGENT_SECRET
-  from environment variables. No manual Privy tokens required.
+  from environment variables. No manual tokens required.
 
   Set in .env file:
     BABYLON_AGENT_ID=babylon-agent-alice
     BABYLON_AGENT_SECRET=<generate with: openssl rand -hex 32>
 
-Database Configuration:
-  PostgreSQL (Production - Recommended):
-    POSTGRES_URL=postgresql://user:password@localhost:5432/babylon
+Database Configuration (ElizaOS State):
+  NOTE: This is for ElizaOS agent state storage, NOT Babylon's main database.
+  Babylon uses CovenantQL (CQL) for its primary data store.
 
-  PGlite (Development - Embedded Database):
+  PostgreSQL (For ElizaOS state - Production):
+    POSTGRES_URL=postgresql://user:password@localhost:5432/eliza_state
+
+  PGlite (Development - Embedded Database for ElizaOS):
     If POSTGRES_URL is not set, PGlite will be used automatically
     Optional: PGLITE_DATA_DIR=./data/pglite (default)
 
@@ -323,14 +326,14 @@ async function main() {
       logger.info(
         'Agent authentication: Using BABYLON_AGENT_SECRET from environment'
       );
-      logger.info('Agent will authenticate automatically without Privy tokens');
+      logger.info('Agent will authenticate automatically via OAuth3');
     } else {
       logger.warn(
         'No authentication configured. Agent will not be able to trade.'
       );
       logger.warn('Option 1: Set BABYLON_AGENT_SECRET in .env (recommended)');
       logger.warn(
-        'Option 2: Provide token with: --auth-token <your-privy-token>'
+        'Option 2: Provide token with: --auth-token <your-oauth3-token>'
       );
     }
   } else {

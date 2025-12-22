@@ -10,7 +10,7 @@ import type { Address, Hex } from 'viem';
 // Game Management Contract Types
 // ============================================================================
 
-export interface GameState {
+export interface ContractGameState {
   // Current state CID (IPFS content identifier)
   currentStateCID: string;
   // Hash of the encrypted state for integrity
@@ -73,13 +73,19 @@ export type StakingEvent =
 // Governance Contract Types
 // ============================================================================
 
+/** Proposal action parameters - key-value pairs for governance actions */
+export type ProposalParams = Record<
+  string,
+  string | number | boolean | bigint | null
+>;
+
 export interface Proposal {
   id: number;
   proposer: Address;
   description: string;
   targetContract: string;
   action: string;
-  params: unknown;
+  params: ProposalParams;
   votesFor: bigint;
   votesAgainst: bigint;
   createdAt: number;
@@ -155,7 +161,7 @@ export type SecurityCouncilEvent =
 // ============================================================================
 
 export interface ContractSystem {
-  game: GameState;
+  game: ContractGameState;
   gameConfig: GameConfig;
   staking: StakingState;
   governance: GovernanceState;

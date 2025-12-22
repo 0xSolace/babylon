@@ -52,24 +52,30 @@ if (existsSync(envPath)) {
   }
 }
 
+import {
+  DEPLOYED_NETWORKS,
+  HYPERLANE_TESTNETS,
+  SOLANA_DEVNET,
+} from '../src/config/networks';
+
 // =============================================================================
-// CONFIGURATION
+// CONFIGURATION (using consolidated config)
 // =============================================================================
 
 const SOLANA_CONFIG = {
-  rpc: 'https://api.devnet.solana.com',
-  domainId: 1399811150,
-  mailbox: 'E588QtVUvresuXq2KoNEwAmoifCzYGpRBdHByN9KQMbi',
-  igp: '3TJMcAhHRE7JN98URK7s5eeGfmVSvL4GAgegPq5K2nYg',
+  rpc: SOLANA_DEVNET.rpc ?? 'https://api.devnet.solana.com',
+  domainId: SOLANA_DEVNET.domainId,
+  mailbox: SOLANA_DEVNET.mailbox,
+  igp: SOLANA_DEVNET.igp ?? '3TJMcAhHRE7JN98URK7s5eeGfmVSvL4GAgegPq5K2nYg',
 };
 
 const EVM_CONFIG = {
-  chainId: 84532,
-  domainId: 84532,
+  chainId: HYPERLANE_TESTNETS.baseSepolia.chainId,
+  domainId: HYPERLANE_TESTNETS.baseSepolia.domainId,
   name: 'Base Sepolia',
-  rpc: 'https://sepolia.base.org',
-  mailbox: '0x6966b0E55883d49BFB24539356a2f8A673E02039' as Address,
-  igp: '0x28B02B97a850872C4D33C3E024fab6499ad96564' as Address,
+  rpc: DEPLOYED_NETWORKS.baseSepolia.rpc,
+  mailbox: HYPERLANE_TESTNETS.baseSepolia.mailbox,
+  igp: HYPERLANE_TESTNETS.baseSepolia.igp,
 };
 
 // Test amount: 10 BBLN

@@ -2,6 +2,7 @@
  * Unit Tests for AutomationPipeline
  *
  * Tests core functionality without external dependencies
+ * Uses CQL (CovenantSQL) mocks for database operations
  */
 
 import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -44,7 +45,7 @@ let mockSelectResultsQueue: unknown[][] = [];
 let mockGroupByResults: unknown[] = [];
 let mockFindManyResults: unknown[] = [];
 
-// Create a chainable query builder mock
+// Create a chainable CQL query builder mock
 const createQueryChain = (isGroupBy = false) => {
   const chain = {
     from: () => chain,
@@ -74,8 +75,9 @@ const createQueryChain = (isGroupBy = false) => {
   });
 };
 
-// Define mocks for db (Drizzle query builder style)
+// Define mocks for CQL db client
 const mockDb = {
+  // CQL query builder methods
   select: mock(() => createQueryChain()),
   insert: mock(() => ({
     values: () => ({
@@ -95,8 +97,13 @@ const mockDb = {
       returning: () => Promise.resolve([]),
     }),
   })),
-  // Repository-style methods for compatibility
-  // Use permissive return types to allow mockResolvedValue with different values
+  // Raw CQL query methods
+  query: mock(async () => []),
+  queryOne: mock(async () => null),
+  exec: mock(async () => ({ rowsAffected: 0 })),
+  $queryRaw: mock(() => Promise.resolve([{ result: 1 }])),
+  $executeRaw: mock(() => Promise.resolve(0)),
+  // CQL table repositories
   trajectory: {
     count: mock(),
     groupBy: mock(),
@@ -120,7 +127,6 @@ const mockDb = {
   user: {
     count: mock(() => Promise.resolve(1)),
   },
-  $queryRaw: mock(() => Promise.resolve([{ result: 1 }])),
 };
 
 const mockLogger = {
@@ -134,10 +140,14 @@ const mockLogger = {
 // Include all exports that may be imported by AutomationPipeline and its dependencies
 mock.module('@babylon/db', () => ({
   db: mockDb,
+  // CQL initialization functions
+  initializeDB: mock(async () => {}),
+  resetDB: mock(() => {}),
+  getDB: mock(() => mockDb),
   // Tables (as empty objects since we're mocking db methods)
   // Core tables
   users: {},
-  actors: {},
+  actorState: {},
   posts: {},
   comments: {},
   reactions: {},
@@ -179,7 +189,7 @@ mock.module('@babylon/db', () => ({
   pools: {},
   poolPositions: {},
   poolDeposits: {},
-  organizations: {},
+  organizationState: {},
   stockPrices: {},
   questions: {},
   predictionPriceHistories: {},
@@ -197,7 +207,7 @@ mock.module('@babylon/db', () => ({
   feedbacks: {},
   reports: {},
   moderationEscrows: {},
-  // Operators (as no-op functions)
+  // Operators (re-exported from drizzle-orm via CQL)
   eq: () => ({}),
   and: () => ({}),
   or: () => ({}),
@@ -264,10 +274,10 @@ describeTests('AutomationPipeline - Unit Tests', () => {
   let mockConfig: Partial<AutomationConfig>;
 
   beforeAll(async () => {
-    // Set dummy DATABASE_URL to prevent database from complaining
+    // Set CQL endpoint to prevent database from complaining
     // This must be done before importing the module
-    process.env.DATABASE_URL =
-      process.env.DATABASE_URL || 'postgresql://mock:mock@localhost:5432/mock';
+    process.env.CQL_BLOCK_PRODUCER_ENDPOINT =
+      process.env.CQL_BLOCK_PRODUCER_ENDPOINT || 'http://localhost:4300';
 
     // Dynamic import to ensure env var is set and mocks are applied
     const module = await import('@babylon/training/training');

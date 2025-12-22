@@ -16,10 +16,10 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
+import { FEE_CONFIG, FeeService, WalletService } from '@babylon/engine';
 import { PerpOpenPositionSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
-import { createWalletAdapter, perpFeeConfig } from '../_adapters';
 
 /**
  * POST /api/markets/perps/open
@@ -29,16 +29,51 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const user = await authenticate(request);
 
   const body = await request.json();
-  const { ticker, side, size, leverage, maxSlippage } =
-    PerpOpenPositionSchema.parse(body);
+  const { ticker, side, size, leverage } = PerpOpenPositionSchema.parse(body);
 
   const normalizedSide = side.toLowerCase() as 'long' | 'short';
   const numericSize = typeof size === 'string' ? Number(size) : size;
 
   const service = new PerpMarketService({
     db: new PerpDbAdapter(),
-    wallet: createWalletAdapter(),
-    fees: perpFeeConfig,
+    wallet: {
+      debit: ({ userId, amount, reason, description, relatedId }) =>
+        WalletService.debit(
+          userId,
+          amount,
+          reason,
+          description ?? '',
+          relatedId
+        ),
+      credit: ({ userId, amount, reason, description, relatedId }) =>
+        WalletService.credit(
+          userId,
+          amount,
+          reason,
+          description ?? '',
+          relatedId
+        ),
+      recordPnL: async ({ userId, pnl, reason, relatedId }) => {
+        await WalletService.recordPnL(userId, pnl, reason, relatedId);
+      },
+      getBalance: (userId: string) => WalletService.getBalance(userId),
+    },
+    fees: {
+      tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
+      platformShare: FEE_CONFIG.PLATFORM_SHARE,
+      referrerShare: FEE_CONFIG.REFERRER_SHARE,
+      minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
+    },
+    feeProcessor: {
+      processTradingFee: ({ userId, amount, type, relatedId, positionId }) =>
+        FeeService.processTradingFee(
+          userId,
+          type as (typeof FEE_CONFIG.FEE_TYPES)[keyof typeof FEE_CONFIG.FEE_TYPES],
+          amount,
+          positionId,
+          relatedId
+        ),
+    },
   });
 
   const result = await service.openPosition({
@@ -47,7 +82,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     side: normalizedSide,
     size: numericSize,
     leverage,
-    maxSlippage,
   });
 
   // Validate required field exists after open operation
@@ -71,6 +105,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     marginPaid,
     feeCharged: result.feePaid,
     positionId: result.positionId,
+  }).catch((error) => {
+    console.warn('Failed to track trade_opened event', { error });
   });
 
   // Record engagement for airdrop qualification

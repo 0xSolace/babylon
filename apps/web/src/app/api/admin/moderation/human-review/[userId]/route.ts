@@ -17,7 +17,7 @@
  *     summary: Process user appeal
  *     description: Approves or denies user appeal (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -76,14 +76,8 @@ import {
 import type { JsonValue } from '@babylon/db';
 import { db } from '@babylon/db';
 import { WalletService } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { HumanReviewActionSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const HumanReviewActionSchema = z.object({
-  action: z.enum(['approve', 'deny']),
-  reasoning: z.string().min(10).max(2000),
-});
 
 export const POST = withErrorHandling(
   async (

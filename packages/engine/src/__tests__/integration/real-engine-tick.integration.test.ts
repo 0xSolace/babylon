@@ -18,7 +18,7 @@
  * - All time modes: realtime, simulated, fed-in time
  *
  * **Requirements:**
- * - Database must be running (PostgreSQL)
+ * - CQL database must be running (CovenantSQL via Jeju)
  * - LLM API key must be set (GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY)
  * - Run with: RUN_REAL_ENGINE_TESTS=true bun test real-engine-tick
  *
@@ -33,7 +33,7 @@ import {
   setDefaultTimeout,
   test,
 } from 'bun:test';
-import { asSystem, sql } from '@babylon/db';
+import { asSystem, db, initializeDB } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import { existsSync, readFileSync } from 'fs';
 
@@ -111,6 +111,9 @@ describe('Engine Integration Tests (No Mocks)', () => {
     console.log('This test uses LLM calls - no mocks');
     console.log('');
 
+    // Initialize CQL database
+    await initializeDB();
+
     // Detect which LLM provider is available
     const provider = process.env.GROQ_API_KEY
       ? 'Groq'
@@ -132,39 +135,35 @@ describe('Engine Integration Tests (No Mocks)', () => {
       trendingCalculated: false,
     };
 
-    // Get baseline counts using raw Drizzle query
-    const { getRawDrizzle } = await import('@babylon/db');
-    const rawDb = getRawDrizzle();
-
-    // Verify database tables exist before running tests
-    try {
-      await rawDb.execute(sql`SELECT 1 FROM questions LIMIT 1`);
-    } catch (dbError) {
+    // Verify database tables exist before running tests using CQL
+    const tableCheck = await db.query<{ count: number }>(
+      'SELECT COUNT(*) as count FROM questions LIMIT 1'
+    );
+    if (!tableCheck || tableCheck.length === 0) {
       throw new Error(
         `DATABASE NOT READY: The 'questions' table does not exist. ` +
-          `Run 'bun run db:push' or 'bun run db:migrate' to set up the schema before running integration tests. ` +
-          `Original error: ${dbError instanceof Error ? dbError.message : String(dbError)}`
+          `Run 'bun run db:push' or 'bun run db:migrate' to set up the schema before running integration tests.`
       );
     }
 
-    // Use raw SQL count to avoid Drizzle count() compatibility issues
-    const questionCountResult = await rawDb.execute(
-      sql`SELECT COUNT(*) as count FROM questions WHERE status = 'active'`
+    // Get baseline counts using CQL raw query
+    const questionCountResult = await db.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM questions WHERE status = 'active'`
     );
     initialQuestionCount = Number(questionCountResult[0]?.count ?? 0);
 
-    const marketCountResult = await rawDb.execute(
-      sql`SELECT COUNT(*) as count FROM markets WHERE resolved = false`
+    const marketCountResult = await db.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM markets WHERE resolved = false`
     );
     initialMarketCount = Number(marketCountResult[0]?.count ?? 0);
 
-    const postCountResult = await rawDb.execute(
-      sql`SELECT COUNT(*) as count FROM posts`
+    const postCountResult = await db.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM posts`
     );
     initialPostCount = Number(postCountResult[0]?.count ?? 0);
 
-    const eventCountResult = await rawDb.execute(
-      sql`SELECT COUNT(*) as count FROM world_events`
+    const eventCountResult = await db.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM world_events`
     );
     initialEventCount = Number(eventCountResult[0]?.count ?? 0);
 
@@ -175,16 +174,16 @@ describe('Engine Integration Tests (No Mocks)', () => {
     console.log(`   - Total Events: ${initialEventCount}`);
     console.log('');
 
-    const gameState = await asSystem(async (db) => {
-      return await db.game.findFirst({
+    const gameState = await asSystem(async (database) => {
+      return await database.game.findFirst({
         where: { isContinuous: true },
       });
     }, 'real-engine-test-get-game');
 
     if (!gameState?.isRunning) {
-      await asSystem(async (db) => {
+      await asSystem(async (database) => {
         if (!gameState) {
-          await db.game.create({
+          await database.game.create({
             data: {
               id: await generateSnowflakeId(),
               isContinuous: true,
@@ -194,7 +193,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
             },
           });
         } else {
-          await db.game.updateMany({
+          await database.game.updateMany({
             where: { isContinuous: true },
             data: { isRunning: true },
           });
@@ -285,9 +284,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should have generated news articles (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
-
-    // Get articles created after test start
+    // Get articles created after test start using CQL repository
     const newArticles = await db.post.findMany({
       where: {
         type: 'article',
@@ -327,8 +324,6 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should have executed NPC trading decisions (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
-
     const newPositions = await db.poolPosition.findMany({
       where: {
         createdAt: { gte: testStartTime },
@@ -345,7 +340,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
       );
     }
 
-    const recentPriceUpdates = await db.priceHistory.findMany({
+    const recentPriceUpdates = await db.predictionPriceHistory.findMany({
       where: {
         timestamp: { gte: testStartTime },
       },
@@ -365,9 +360,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should have created prediction market questions (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
-
-    // Get questions created after test start
+    // Get questions created after test start using CQL repository
     const newQuestions = await db.question.findMany({
       where: {
         createdAt: { gte: testStartTime },
@@ -418,9 +411,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should have generated world events (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
-
-    // Get events created after test start
+    // Get events created after test start using CQL repository
     const newEvents = await db.worldEvent.findMany({
       where: {
         timestamp: { gte: testStartTime },
@@ -456,8 +447,6 @@ describe('Engine Integration Tests (No Mocks)', () => {
 
   test('market prices should be reasonable (0-100% for predictions)', async () => {
     expect(results.tickExecuted).toBe(true);
-
-    const { db } = await import('@babylon/db');
 
     const activeMarkets = await db.market.findMany({
       where: {
@@ -619,47 +608,43 @@ describe('Engine Integration Tests (No Mocks)', () => {
   test('should verify engine produces valid outputs for training', async () => {
     expect(results.tickExecuted).toBe(true);
 
-    const { db } = await import('@babylon/db');
-
     console.log('\n🎓 Validating outputs for training readiness...');
 
-    const postsByType = await db.post.groupBy({
-      by: ['type'],
-      _count: { id: true },
-      where: {
-        timestamp: { gte: testStartTime },
-      },
-    });
+    // Use CQL raw query for groupBy aggregation
+    const postsByType = await db.query<{ type: string; count: number }>(
+      `SELECT type, COUNT(*) as count FROM posts WHERE timestamp >= $1 GROUP BY type`,
+      [testStartTime.toISOString()]
+    );
 
     console.log('   Content types generated:');
     for (const group of postsByType) {
-      console.log(`   - ${group.type}: ${group._count.id}`);
+      console.log(`   - ${group.type}: ${group.count}`);
     }
 
-    // Use raw Drizzle for complex queries
-    const { getRawDrizzle, sql: dbSql } = await import('@babylon/db');
-    const rawDbCheck = getRawDrizzle();
-
-    // Use raw SQL to avoid Drizzle count() compatibility issues
-    const eventsWithActorsResult = await rawDbCheck.execute(
-      dbSql`SELECT COUNT(*) as count FROM world_events WHERE timestamp >= ${testStartTime} AND actors IS NOT NULL AND array_length(actors, 1) > 0`
+    // Use raw CQL for complex queries
+    const eventsWithActorsResult = await db.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM world_events WHERE timestamp >= $1 AND actors IS NOT NULL`,
+      [testStartTime.toISOString()]
     );
     const eventsWithActors = Number(eventsWithActorsResult[0]?.count ?? 0);
 
-    const totalEventsResult = await rawDbCheck.execute(
-      dbSql`SELECT COUNT(*) as count FROM world_events WHERE timestamp >= ${testStartTime}`
+    const totalEventsResult = await db.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM world_events WHERE timestamp >= $1`,
+      [testStartTime.toISOString()]
     );
     const totalEvents = Number(totalEventsResult[0]?.count ?? 0);
 
     console.log(`   Events with actors: ${eventsWithActors}/${totalEvents}`);
 
-    const questionsWithDatesResult = await rawDbCheck.execute(
-      dbSql`SELECT COUNT(*) as count FROM questions WHERE created_at >= ${testStartTime} AND resolution_date IS NOT NULL`
+    const questionsWithDatesResult = await db.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM questions WHERE created_at >= $1 AND resolution_date IS NOT NULL`,
+      [testStartTime.toISOString()]
     );
     const questionsWithDates = Number(questionsWithDatesResult[0]?.count ?? 0);
 
-    const totalQuestionsResult = await rawDbCheck.execute(
-      dbSql`SELECT COUNT(*) as count FROM questions WHERE created_at >= ${testStartTime}`
+    const totalQuestionsResult = await db.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM questions WHERE created_at >= $1`,
+      [testStartTime.toISOString()]
     );
     const totalQuestions = Number(totalQuestionsResult[0]?.count ?? 0);
 

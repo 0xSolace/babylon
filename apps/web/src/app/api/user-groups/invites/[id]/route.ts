@@ -19,7 +19,7 @@
  *     summary: Get invite details
  *     description: Returns invite details with group and inviter info
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -53,7 +53,7 @@
  *     summary: Accept group invite
  *     description: Accepts invite and adds user to group and chat
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -89,7 +89,7 @@
  *     summary: Decline group invite
  *     description: Declines invite and marks notification as read
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id

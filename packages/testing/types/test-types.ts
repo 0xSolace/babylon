@@ -237,12 +237,12 @@ export interface FindUniqueArgs<T = Record<string, unknown>> {
 }
 
 /**
- * User find unique args (for user lookup by privyId)
+ * User find unique args (for user lookup by oauth3Id)
  */
 export interface UserFindUniqueArgs {
   where: {
     id?: string;
-    privyId?: string;
+    oauth3Id?: string;
     walletAddress?: string;
     username?: string;
   };
@@ -256,7 +256,7 @@ export interface UserFindUniqueArgs {
 export interface MockUserRecord {
   id: string;
   walletAddress: string;
-  privyId?: string;
+  oauth3Id?: string;
   username?: string;
   displayName?: string | null;
   isAgent?: boolean;

@@ -18,7 +18,7 @@
  *     summary: List user agents
  *     description: Returns all agents owned by the authenticated user with performance statistics and autonomous action status.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: query
  *         name: autonomousTrading
@@ -47,7 +47,7 @@
  *     summary: Create new agent
  *     description: Creates a new autonomous agent with AI capabilities, trading permissions, and points-based resource management.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:

@@ -55,3 +55,10 @@ export const MarkNotificationsReadSchema = z
         'Either markAllAsRead must be true or notificationIds array must be provided',
     }
   );
+
+// Type exports
+export type SSEChannel = z.infer<typeof SSEChannelSchema>;
+export type SSEChannelsQuery = z.infer<typeof SSEChannelsQuerySchema>;
+export type CacheMonitoringQuery = z.infer<typeof CacheMonitoringQuerySchema>;
+export type NotificationsQuery = z.infer<typeof NotificationsQuerySchema>;
+export type MarkNotificationsRead = z.infer<typeof MarkNotificationsReadSchema>;

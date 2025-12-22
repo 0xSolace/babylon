@@ -30,8 +30,11 @@
 import { Ban, Flag, MoreHorizontal, VolumeX } from 'lucide-react';
 import { useState } from 'react';
 import { BlockUserModal } from './BlockUserModal';
-import { MuteUserModal } from './MuteUserModal';
-import { ReportModal } from './ReportModal';
+
+// TODO: MuteUserModal component needs to be created
+// import { MuteUserModal } from './MuteUserModal';
+// TODO: ReportModal component needs to be created
+// import { ReportModal } from './ReportModal';
 
 interface ModerationMenuProps {
   targetUserId: string;
@@ -47,7 +50,6 @@ export function ModerationMenu({
   targetUserId,
   targetUsername,
   targetDisplayName,
-  targetProfileImageUrl,
   postId,
   isNPC = false,
   onActionComplete,
@@ -141,27 +143,34 @@ export function ModerationMenu({
         onSuccess={handleAction}
       />
 
-      <MuteUserModal
-        isOpen={showMuteModal}
-        onClose={() => setShowMuteModal(false)}
-        targetUserId={targetUserId}
-        targetDisplayName={displayName}
-        isNPC={isNPC}
-        onSuccess={handleAction}
-      />
+      {/* TODO: MuteUserModal component needs to be created */}
+      {showMuteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="rounded-lg bg-card p-6">
+            <p className="mb-4">Mute functionality coming soon</p>
+            <button
+              onClick={() => setShowMuteModal(false)}
+              className="rounded bg-primary px-4 py-2 text-primary-foreground"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
-      {/* Only show report modal for real users, not NPCs */}
-      {!isNPC && (
-        <ReportModal
-          isOpen={showReportModal}
-          onClose={() => setShowReportModal(false)}
-          targetUserId={targetUserId}
-          targetUsername={targetUsername}
-          targetDisplayName={displayName}
-          targetProfileImageUrl={targetProfileImageUrl}
-          postId={postId}
-          onSuccess={handleAction}
-        />
+      {/* TODO: ReportModal component needs to be created */}
+      {!isNPC && showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="rounded-lg bg-card p-6">
+            <p className="mb-4">Report functionality coming soon</p>
+            <button
+              onClick={() => setShowReportModal(false)}
+              className="rounded bg-primary px-4 py-2 text-primary-foreground"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

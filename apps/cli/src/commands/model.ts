@@ -11,12 +11,46 @@
  *   ollama         - Manage Ollama local models (list, pull, delete)
  */
 
-import { closeDatabase, db } from '@babylon/db';
+import {
+  benchmarkResults,
+  closeDatabase,
+  db,
+  desc,
+  eq,
+  gte,
+  trainedModels,
+  trajectories,
+} from '@babylon/db';
 import { HuggingFaceModelUploader } from '@babylon/training';
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import { z } from 'zod';
 import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';
+
+// Zod schemas for Ollama API responses
+const OllamaModelDetailsSchema = z.object({
+  format: z.string().optional(),
+  family: z.string().optional(),
+  parameter_size: z.string().optional(),
+  quantization_level: z.string().optional(),
+});
+
+const OllamaModelSchema = z.object({
+  name: z.string(),
+  size: z.number(),
+  digest: z.string(),
+  modified_at: z.string(),
+  details: OllamaModelDetailsSchema.optional(),
+});
+
+const OllamaListResponseSchema = z.object({
+  models: z.array(OllamaModelSchema).optional(),
+});
+
+const OllamaPullResponseSchema = z.object({
+  status: z.string().optional(),
+});
 
 function printHelp(): void {
   console.log(`
@@ -82,10 +116,11 @@ ADVANCED:
 async function listModels(): Promise<void> {
   logger.header('Trained Models');
 
-  const models = await db.trainedModel.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-  });
+  const models = await db
+    .select()
+    .from(trainedModels)
+    .orderBy(desc(trainedModels.createdAt))
+    .limit(20);
 
   if (models.length === 0) {
     console.log('No trained models found in database.');
@@ -139,30 +174,27 @@ async function collectGameData(
   cutoffDate.setDate(cutoffDate.getDate() - days);
 
   logger.step('Collecting trajectories...');
-  const trajectories = await db.trajectory.findMany({
-    where: {
-      createdAt: { gte: cutoffDate },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-  console.log(`  Found ${trajectories.length} trajectories`);
+  const trajectoryResults = await db
+    .select()
+    .from(trajectories)
+    .where(gte(trajectories.createdAt, cutoffDate))
+    .orderBy(desc(trajectories.createdAt));
+  console.log(`  Found ${trajectoryResults.length} trajectories`);
 
   logger.step('Collecting benchmark results...');
-  const benchmarks = await db.benchmarkResult.findMany({
-    where: {
-      runAt: { gte: cutoffDate },
-    },
-    orderBy: { runAt: 'desc' },
-  });
+  const benchmarks = await db
+    .select()
+    .from(benchmarkResults)
+    .where(gte(benchmarkResults.runAt, cutoffDate))
+    .orderBy(desc(benchmarkResults.runAt));
   console.log(`  Found ${benchmarks.length} benchmark results`);
 
   logger.step('Collecting trained models...');
-  const models = await db.trainedModel.findMany({
-    where: {
-      createdAt: { gte: cutoffDate },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const models = await db
+    .select()
+    .from(trainedModels)
+    .where(gte(trainedModels.createdAt, cutoffDate))
+    .orderBy(desc(trainedModels.createdAt));
   console.log(`  Found ${models.length} trained models`);
 
   // Write data files
@@ -174,7 +206,10 @@ async function collectGameData(
     outputDir,
     `trajectories-${timestamp}.json`
   );
-  await fs.writeFile(trajectoriesPath, JSON.stringify(trajectories, null, 2));
+  await fs.writeFile(
+    trajectoriesPath,
+    JSON.stringify(trajectoryResults, null, 2)
+  );
   console.log(`  Wrote ${trajectoriesPath}`);
 
   const benchmarksPath = path.join(outputDir, `benchmarks-${timestamp}.json`);
@@ -190,7 +225,7 @@ async function collectGameData(
     collectedAt: new Date().toISOString(),
     cutoffDate: cutoffDate.toISOString(),
     counts: {
-      trajectories: trajectories.length,
+      trajectories: trajectoryResults.length,
       benchmarks: benchmarks.length,
       models: models.length,
     },
@@ -201,7 +236,7 @@ async function collectGameData(
   logger.success('Data collection complete!');
   console.log(`\nTotal files: 4`);
   console.log(
-    `Total records: ${trajectories.length + benchmarks.length + models.length}`
+    `Total records: ${trajectoryResults.length + benchmarks.length + models.length}`
   );
   console.log(`\nTo upload to HuggingFace:`);
   console.log(
@@ -250,7 +285,16 @@ async function uploadDataset(
   console.log(`Private: ${isPrivate ? 'yes' : 'no'}\n`);
 
   // Check source directory exists
-  await fs.access(sourceDir);
+  const dirExists = await fs.access(sourceDir).then(
+    () => true,
+    () => false
+  );
+  if (!dirExists) {
+    logger.fail(`Source directory not found: ${sourceDir}`);
+    console.log('\nCollect data first with:');
+    console.log(`  babylon model collect-data --output=${sourceDir}`);
+    process.exit(1);
+  }
 
   // Get all JSON files in source directory
   const files = await fs.readdir(sourceDir);
@@ -370,18 +414,22 @@ async function uploadModel(args: ReturnType<typeof parseArgs>): Promise<void> {
   console.log(`Include Weights: ${includeWeights ? 'yes' : 'no'}\n`);
 
   // Check if model exists
-  const model = await db.trainedModel.findUnique({
-    where: { modelId },
-  });
+  const modelResults = await db
+    .select()
+    .from(trainedModels)
+    .where(eq(trainedModels.modelId, modelId))
+    .limit(1);
+  const model = modelResults[0];
 
   if (!model) {
     logger.fail(`Model not found: ${modelId}`);
     console.log('\nAvailable models:');
-    const models = await db.trainedModel.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
-    for (const m of models) {
+    const availableModels = await db
+      .select()
+      .from(trainedModels)
+      .orderBy(desc(trainedModels.createdAt))
+      .limit(5);
+    for (const m of availableModels) {
       console.log(`  - ${m.modelId}`);
     }
     process.exit(1);
@@ -410,10 +458,10 @@ async function uploadModel(args: ReturnType<typeof parseArgs>): Promise<void> {
     console.log(`\n🔗 Model URL: ${result.modelUrl}`);
 
     // Update database with HuggingFace repo
-    await db.trainedModel.update({
-      where: { modelId },
-      data: { huggingFaceRepo: hfModelName },
-    });
+    await db
+      .update(trainedModels)
+      .set({ huggingFaceRepo: hfModelName })
+      .where(eq(trainedModels.modelId, modelId));
   } else {
     logger.fail(`Upload failed: ${result.error || 'Unknown error'}`);
     process.exit(1);
@@ -425,19 +473,6 @@ async function uploadModel(args: ReturnType<typeof parseArgs>): Promise<void> {
 // ============================================================================
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-
-interface OllamaModel {
-  name: string;
-  size: number;
-  digest: string;
-  modified_at: string;
-  details?: {
-    format?: string;
-    family?: string;
-    parameter_size?: string;
-    quantization_level?: string;
-  };
-}
 
 /**
  * Lists all Ollama models installed locally.
@@ -456,7 +491,8 @@ async function ollamaList(): Promise<void> {
     process.exit(1);
   }
 
-  const data = (await response.json()) as { models?: OllamaModel[] };
+  const rawData = await response.json();
+  const data = OllamaListResponseSchema.parse(rawData);
 
   if (!data.models) {
     throw new Error(
@@ -541,7 +577,8 @@ async function ollamaPull(args: ReturnType<typeof parseArgs>): Promise<void> {
     process.exit(1);
   }
 
-  const result = (await response.json()) as { status?: string };
+  const rawResult = await response.json();
+  const result = OllamaPullResponseSchema.parse(rawResult);
   logger.success(`Model ${modelName} pulled successfully`);
   console.log(`Status: ${result.status || 'completed'}`);
 
@@ -599,7 +636,8 @@ async function ollamaStatus(): Promise<void> {
   });
 
   if (response.ok) {
-    const data = (await response.json()) as { models?: OllamaModel[] };
+    const rawData = await response.json();
+    const data = OllamaListResponseSchema.parse(rawData);
 
     if (!data.models) {
       throw new Error(
@@ -623,7 +661,7 @@ async function ollamaStatus(): Promise<void> {
     console.log('\n  Recommended models:');
     for (const model of recommendedModels) {
       const installed = modelNames.some((m) =>
-        m.includes(model.split(':')[0] ?? '')
+        m.includes(model.split(':')[0]!)
       );
       console.log(`    ${installed ? '✅' : '❌'} ${model}`);
     }
@@ -684,38 +722,42 @@ export async function runModelCommand(args: string[]): Promise<void> {
   }
 
   // Commands that don't need database
-  const noDatabaseCommands = ['ollama'];
+  const noDatabaseCommands = ['ollama', 'upload-dataset'];
 
-  switch (parsed.command) {
-    case 'list':
-      await listModels();
-      break;
+  const needsDatabase = !noDatabaseCommands.includes(parsed.command || '');
 
-    case 'upload':
-      await uploadModel(parsed);
-      break;
+  try {
+    switch (parsed.command) {
+      case 'list':
+        await listModels();
+        break;
 
-    case 'collect-data':
-      await collectGameData(parsed);
-      break;
+      case 'upload':
+        await uploadModel(parsed);
+        break;
 
-    case 'upload-dataset':
-      await uploadDataset(parsed);
-      break;
+      case 'collect-data':
+        await collectGameData(parsed);
+        break;
 
-    case 'ollama':
-      await runOllamaCommand(parsed);
-      break;
+      case 'upload-dataset':
+        await uploadDataset(parsed);
+        break;
 
-    default:
-      if (parsed.command) {
-        logger.fail(`Unknown command: ${parsed.command}`);
-      }
-      printHelp();
-      process.exit(parsed.command ? 1 : 0);
-  }
+      case 'ollama':
+        await runOllamaCommand(parsed);
+        break;
 
-  if (!noDatabaseCommands.includes(parsed.command || '')) {
-    await closeDatabase();
+      default:
+        if (parsed.command) {
+          logger.fail(`Unknown command: ${parsed.command}`);
+        }
+        printHelp();
+        process.exit(parsed.command ? 1 : 0);
+    }
+  } finally {
+    if (needsDatabase) {
+      await closeDatabase();
+    }
   }
 }

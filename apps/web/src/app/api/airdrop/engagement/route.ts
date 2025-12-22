@@ -7,25 +7,26 @@
  * Returns current day's engagement status
  */
 
-import { EngagementService } from '@babylon/api';
-import { getServerSession } from '@babylon/auth';
+import { authenticate, EngagementService } from '@babylon/api';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 /**
  * GET /api/airdrop/engagement
  * Get user's daily engagement status
  */
-export async function GET(): Promise<NextResponse> {
-  const session = await getServerSession();
-
-  if (!session?.user?.id) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  let authUser;
+  try {
+    authUser = await authenticate(request);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Unauthorized' },
       { status: 401 }
     );
   }
 
-  const status = await EngagementService.getEngagementStatus(session.user.id);
+  const status = await EngagementService.getEngagementStatus(authUser.userId);
 
   return NextResponse.json({
     success: true,

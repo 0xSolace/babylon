@@ -15,7 +15,7 @@ export const swaggerDefinition = {
     description: 'API documentation for Babylon social conspiracy game',
     contact: {
       name: 'API Support',
-      url: 'https://github.com/elizaos/babylon',
+      url: 'https://github.com/BabylonSocial/babylon',
     },
   },
   servers: [
@@ -35,17 +35,17 @@ export const swaggerDefinition = {
   ],
   components: {
     securitySchemes: {
-      PrivyAuth: {
+      OAuth3Auth: {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: 'Privy authentication token',
+        description: 'OAuth3 authentication token (Jeju decentralized auth)',
       },
       BearerAuth: {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: 'Bearer authentication token (alias for PrivyAuth)',
+        description: 'Bearer authentication token (alias for OAuth3Auth)',
       },
       CronSecret: {
         type: 'http',

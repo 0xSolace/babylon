@@ -44,8 +44,6 @@ export * from './utils/assets';
 export * from './utils/content-analysis';
 // Content safety (pure functions, no external deps)
 export * from './utils/content-safety';
-// Decimal converter (pure functions)
-export * from './utils/decimal-converter';
 // Formatting utilities (pure functions)
 export * from './utils/format';
 // JSON parser (pure functions)

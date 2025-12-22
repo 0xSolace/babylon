@@ -3,9 +3,13 @@
  *
  * Replaces useWebSocket for Server-Sent Events (SSE)
  * Provides automatic reconnection and channel subscription
+ *
+ * Uses OAuth3 for authentication.
  */
 
-import { usePrivy } from '@privy-io/react-auth';
+'use client';
+
+import { useJejuAuth } from '@babylon/auth/client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { logger } from '@/lib/logger';
 
@@ -57,7 +61,7 @@ export function useSSE(options: SSEHookOptions = {}): SSEHookReturn {
     maxReconnectAttempts = 5,
   } = options;
 
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken } = useJejuAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

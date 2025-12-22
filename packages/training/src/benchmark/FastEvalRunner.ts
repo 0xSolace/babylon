@@ -8,7 +8,7 @@
  * - Progress tracking
  */
 
-import { logger } from '../utils/logger';
+import { logger } from '@babylon/shared';
 import { type BenchmarkRunConfig, BenchmarkRunner } from './BenchmarkRunner';
 import type { SimulationResult } from './SimulationEngine';
 

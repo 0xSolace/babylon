@@ -70,7 +70,7 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
     hasNextPage: hasMore,
     fetchNextPage,
     error,
-    refetch: _refetch,
+    refetch,
   } = useInfiniteQuery({
     queryKey: ['trades', 'feed', userId],
     queryFn: async ({ pageParam = 0 }): Promise<TradesResponse> => {
@@ -159,7 +159,7 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
           {error instanceof Error ? error.message : 'An error occurred'}
         </p>
         <button
-          onClick={() => retryTrades()}
+          onClick={() => void refetch()}
           className="rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
         >
           Try Again

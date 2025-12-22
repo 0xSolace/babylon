@@ -3,10 +3,32 @@ import type {
   CachePort,
   ClockPort,
   FeeConfig,
+  FeeProcessor,
   WalletPort,
 } from '../shared/common';
 
-export type PredictionSide = 'yes' | 'no';
+// Import types from schemas (single source of truth)
+import type {
+  PredictionBuyInput,
+  PredictionResolveInput,
+  PredictionSellInput,
+  PredictionSide,
+} from './schemas';
+// Re-export for consumers
+export type {
+  PredictionBuyInput,
+  PredictionResolveInput,
+  PredictionSellInput,
+  PredictionSide,
+};
+
+// Re-export schemas for runtime validation
+export {
+  PredictionBuyInputSchema,
+  PredictionResolveInputSchema,
+  PredictionSellInputSchema,
+  PredictionSideSchema,
+} from './schemas';
 
 // Domain records (DB-facing)
 export interface QuestionRecord {
@@ -33,6 +55,8 @@ export interface PredictionMarketRecord {
   onChainResolved?: boolean;
   oracleCommitTxHash?: string | null;
   oracleRevealTxHash?: string | null;
+  resolutionProofUrl?: string | null;
+  resolutionDescription?: string | null;
   status?: 'active' | 'resolved' | 'cancelled';
   createdAt?: Date;
   updatedAt?: Date;
@@ -69,9 +93,13 @@ export interface PredictionPriceSnapshotRecord {
 export interface PredictionDbPort {
   getMarketById(id: string): Promise<PredictionMarketRecord | null>;
   getMarketsByIds(ids: string[]): Promise<PredictionMarketRecord[]>;
+  listMarkets?(): Promise<PredictionMarketRecord[]>;
+  listUserPositions?(userId: string): Promise<PredictionPositionRecord[]>;
+  getQuestion?(idOrNumber: string): Promise<QuestionRecord | null>;
   createMarketFromQuestion(
     question: QuestionRecord,
-    initialLiquidity: number
+    initialLiquidity: number,
+    options?: { description?: string | null }
   ): Promise<PredictionMarketRecord>;
   updateMarketState(
     marketId: string,
@@ -85,6 +113,8 @@ export interface PredictionDbPort {
         | 'resolution'
         | 'onChainMarketId'
         | 'onChainResolved'
+        | 'resolutionProofUrl'
+        | 'resolutionDescription'
       >
     >
   ): Promise<PredictionMarketRecord>;
@@ -101,28 +131,7 @@ export interface PredictionDbPort {
   insertPriceSnapshot(snapshot: PredictionPriceSnapshotRecord): Promise<void>;
 }
 
-// DTOs
-export interface PredictionBuyInput {
-  userId: string;
-  marketId: string;
-  side: PredictionSide;
-  amount: number; // total spent (includes fee)
-}
-
-export interface PredictionSellInput {
-  userId: string;
-  marketId: string;
-  shares: number;
-  positionId?: string;
-}
-
-export interface PredictionResolveInput {
-  marketId: string;
-  winningSide: PredictionSide;
-  resolvedAt?: Date;
-  resolutionProofUrl?: string;
-  resolutionDescription?: string;
-}
+// DTOs are now defined via Zod schemas in ./schemas.ts and re-exported above
 
 export interface PredictionTradeResult {
   positionId: string;
@@ -131,8 +140,12 @@ export interface PredictionTradeResult {
   shares: number;
   avgPrice: number;
   totalCost?: number; // buy
-  netProceeds?: number; // sell
+  totalProceeds?: number; // gross proceeds (sell)
+  netProceeds?: number; // sell (after fee)
   feePaid: number;
+  pnl?: number;
+  remainingShares?: number;
+  positionClosed?: boolean;
   balance?: number;
   market: {
     yesPrice: number;
@@ -152,4 +165,5 @@ export interface PredictionServiceDeps {
   cache?: CachePort;
   clock?: ClockPort;
   fees: FeeConfig;
+  feeProcessor?: FeeProcessor;
 }

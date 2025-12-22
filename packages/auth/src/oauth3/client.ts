@@ -2,7 +2,7 @@
  * OAuth3 Client for Babylon
  *
  * Decentralized authentication using Jeju's OAuth3 protocol.
- * Replaces Privy with TEE-backed MPC authentication.
+ * TEE-backed MPC authentication for decentralized identity.
  *
  * Features:
  * - Multi-provider auth (Farcaster, Google, Twitter, GitHub, Discord, Wallet)
@@ -12,7 +12,13 @@
  * - Verifiable credentials
  */
 
-import { logger } from '@babylon/shared';
+import {
+  AuthenticationError,
+  ExternalServiceError,
+  logger,
+  retryIfRetryable,
+  ValidationError,
+} from '@babylon/shared';
 import type { Address, Hex } from 'viem';
 
 // ============================================================================
@@ -89,9 +95,10 @@ class OAuth3Client {
   constructor() {
     const serviceUrl = process.env.JEJU_OAUTH3_SERVICE_URL;
     if (!serviceUrl) {
-      throw new Error(
+      throw new ValidationError(
         '[OAuth3] JEJU_OAUTH3_SERVICE_URL is required. ' +
-          'Decentralized auth is mandatory - no Privy fallback.'
+          'Decentralized auth is mandatory.',
+        ['JEJU_OAUTH3_SERVICE_URL']
       );
     }
 
@@ -110,8 +117,9 @@ class OAuth3Client {
 
     const healthy = await this.healthCheck();
     if (!healthy) {
-      throw new Error(
-        `[OAuth3] OAuth3 service at ${this.config.serviceUrl} is not healthy. ` +
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Service at ${this.config.serviceUrl} is not healthy. ` +
           'Start Jeju services: cd /path/to/jeju && bun run dev'
       );
     }
@@ -126,8 +134,9 @@ class OAuth3Client {
 
   private requireInitialized(): void {
     if (!this.initialized) {
-      throw new Error(
-        '[OAuth3] Client not initialized. Call initialize() first.'
+      throw new ValidationError(
+        '[OAuth3] Client not initialized. Call initialize() first.',
+        ['initialized']
       );
     }
   }
@@ -137,14 +146,17 @@ class OAuth3Client {
   // ============================================================================
 
   async healthCheck(): Promise<boolean> {
-    try {
-      const response = await fetch(`${this.config.serviceUrl}/health`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/health`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    ).catch(() => null);
+
+    return response?.ok ?? false;
   }
 
   // ============================================================================
@@ -165,23 +177,40 @@ class OAuth3Client {
   async handleCallback(code: string, state?: string): Promise<AuthResult> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: this.config.redirectUri,
-        app_id: this.config.appId,
-        state,
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/auth/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: this.config.redirectUri,
+            app_id: this.config.appId,
+            state,
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 token exchange failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Token exchange failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Token exchange failed: ${text}`,
+        response.status
       );
     }
 
@@ -193,21 +222,37 @@ class OAuth3Client {
   async refreshSession(refreshToken: string): Promise<AuthResult> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        app_id: this.config.appId,
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/auth/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+            app_id: this.config.appId,
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 token refresh failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Token refresh failed (${response.status}): ${text}`
+      throw new AuthenticationError(
+        `Token refresh failed: ${text}`,
+        'EXPIRED_TOKEN'
       );
     }
 
@@ -227,23 +272,39 @@ class OAuth3Client {
   ): Promise<AuthResult> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/auth/wallet`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        address,
-        signature,
-        message,
-        app_id: this.config.appId,
-        chain_id: this.config.chainId,
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/auth/wallet`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            address,
+            signature,
+            message,
+            app_id: this.config.appId,
+            chain_id: this.config.chainId,
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 wallet login failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Wallet login failed (${response.status}): ${text}`
+      throw new AuthenticationError(
+        `Wallet login failed: ${text}`,
+        'INVALID_CREDENTIALS'
       );
     }
 
@@ -259,17 +320,34 @@ class OAuth3Client {
   async getWalletNonce(address: Address): Promise<string> {
     this.requireInitialized();
 
-    const response = await fetch(
-      `${this.config.serviceUrl}/auth/nonce?address=${address}`,
-      {
-        signal: AbortSignal.timeout(5000),
-      }
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(
+          `${this.config.serviceUrl}/auth/nonce?address=${address}`,
+          {
+            signal: AbortSignal.timeout(5000),
+          }
+        );
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 get nonce failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
     );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Get nonce failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Get nonce failed: ${text}`,
+        response.status
       );
     }
 
@@ -284,15 +362,32 @@ class OAuth3Client {
   async getIdentity(accessToken: string): Promise<OAuth3Identity> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/identity`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(10000),
-    });
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/identity`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 get identity failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Get identity failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Get identity failed: ${text}`,
+        response.status
       );
     }
 
@@ -306,20 +401,37 @@ class OAuth3Client {
   ): Promise<OAuth3Identity> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/identity/link`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/identity/link`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ provider, provider_token: providerToken }),
+          signal: AbortSignal.timeout(30000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 link provider failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
       },
-      body: JSON.stringify({ provider, provider_token: providerToken }),
-      signal: AbortSignal.timeout(30000),
-    });
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Link provider failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Link provider failed: ${text}`,
+        response.status
       );
     }
 
@@ -332,20 +444,37 @@ class OAuth3Client {
   ): Promise<OAuth3Identity> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/identity/unlink`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/identity/unlink`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ provider }),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 unlink provider failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
       },
-      body: JSON.stringify({ provider }),
-      signal: AbortSignal.timeout(10000),
-    });
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Unlink provider failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Unlink provider failed: ${text}`,
+        response.status
       );
     }
 
@@ -358,23 +487,37 @@ class OAuth3Client {
   ): Promise<OAuth3Identity> {
     this.requireInitialized();
 
-    const response = await fetch(
-      `${this.config.serviceUrl}/identity/metadata`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(metadata),
-        signal: AbortSignal.timeout(10000),
-      }
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/identity/metadata`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(metadata),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 update metadata failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
     );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Update metadata failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Update metadata failed: ${text}`,
+        response.status
       );
     }
 
@@ -388,16 +531,36 @@ class OAuth3Client {
   async validateSession(accessToken: string): Promise<OAuth3Session | null> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/session/validate`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(5000),
-    });
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/session/validate`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        // 401 is not retryable - it means session is invalid
+        if (res.status === 401) return res;
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 validate session failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (response.status === 401) return null;
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Validate session failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Validate session failed: ${text}`,
+        response.status
       );
     }
 
@@ -409,16 +572,33 @@ class OAuth3Client {
   async revokeSession(accessToken: string): Promise<void> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/session/revoke`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(5000),
-    });
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/session/revoke`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 revoke session failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
+      },
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Revoke session failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Revoke session failed: ${text}`,
+        response.status
       );
     }
 
@@ -436,20 +616,37 @@ class OAuth3Client {
   async signMessage(accessToken: string, message: string): Promise<Hex> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/sign/message`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/sign/message`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ message }),
+          signal: AbortSignal.timeout(30000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 sign message failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
       },
-      body: JSON.stringify({ message }),
-      signal: AbortSignal.timeout(30000),
-    });
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Sign message failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Sign message failed: ${text}`,
+        response.status
       );
     }
 
@@ -460,20 +657,37 @@ class OAuth3Client {
   async signTypedData(accessToken: string, typedData: unknown): Promise<Hex> {
     this.requireInitialized();
 
-    const response = await fetch(`${this.config.serviceUrl}/sign/typed-data`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
+    const response = await retryIfRetryable(
+      async () => {
+        const res = await fetch(`${this.config.serviceUrl}/sign/typed-data`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ typed_data: typedData }),
+          signal: AbortSignal.timeout(30000),
+        });
+
+        if (!res.ok) {
+          const errorWithStatus = new Error(
+            `OAuth3 sign typed data failed: ${res.status}`
+          ) as Error & { status: number };
+          errorWithStatus.status = res.status;
+          throw errorWithStatus;
+        }
+
+        return res;
       },
-      body: JSON.stringify({ typed_data: typedData }),
-      signal: AbortSignal.timeout(30000),
-    });
+      { maxAttempts: 3, initialDelayMs: 100 }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `[OAuth3] Sign typed data failed (${response.status}): ${text}`
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        `Sign typed data failed: ${text}`,
+        response.status
       );
     }
 

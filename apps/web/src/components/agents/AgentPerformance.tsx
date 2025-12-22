@@ -196,7 +196,9 @@ export function AgentPerformance({ agent, agentId }: AgentPerformanceProps) {
                     Accuracy
                   </div>
                   <div className="font-bold text-[#0066FF] text-xl">
-                    {agent0Profile.reputation?.accuracyScore.toFixed(1) ?? '—'}%
+                    {agent0Profile.reputation?.accuracyScore != null
+                      ? `${agent0Profile.reputation.accuracyScore.toFixed(1)}%`
+                      : '—'}
                   </div>
                 </div>
 
@@ -206,7 +208,9 @@ export function AgentPerformance({ agent, agentId }: AgentPerformanceProps) {
                     Trust Score
                   </div>
                   <div className="font-bold text-green-600 text-xl">
-                    {agent0Profile.reputation?.trustScore.toFixed(1) ?? '—'}%
+                    {agent0Profile.reputation?.trustScore != null
+                      ? `${agent0Profile.reputation.trustScore.toFixed(1)}%`
+                      : '—'}
                   </div>
                 </div>
 

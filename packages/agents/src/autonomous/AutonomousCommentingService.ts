@@ -1,7 +1,11 @@
 /**
  * Autonomous Commenting Service
  *
- * Handles agents commenting on posts autonomously
+ * Handles agents commenting on posts autonomously.
+ * Uses LLM to intelligently select which post to comment on based on:
+ * - Agent's trading positions and strategy
+ * - Post relevance to agent's expertise
+ * - Existing comment threads
  */
 
 import { db } from '@babylon/db';
@@ -9,11 +13,16 @@ import type { IAgentRuntime } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
+import { executeDirectComment } from './DirectExecutors';
+
+// Max characters for comment content in prompts
+const MAX_COMMENT_CHARS = 200;
 
 export class AutonomousCommentingService {
   /**
-   * Find relevant posts and create comments
+   * Find relevant posts and create comments using LLM evaluation
+   *
+   * Supports both USER_CONTROLLED agents (User table) and NPCs (StaticDataRegistry)
    */
   async createAgentComment(
     agentUserId: string,
@@ -57,30 +66,35 @@ export class AutonomousCommentingService {
     );
 
     if (uncommentedPosts.length === 0) {
-      return null; // Nothing to comment on
-    }
-
-    // Pick the first relevant post
-    const post = uncommentedPosts[0];
-
-    if (!post) {
+      const displayName = agent.displayName
+        ? String(agent.displayName)
+        : 'Agent';
+      logger.info(
+        `No uncommented posts for agent ${displayName}`,
+        undefined,
+        'AutonomousCommenting'
+      );
       return null;
     }
+
+    // Get a random post to comment on
+    const randomIndex = Math.floor(Math.random() * uncommentedPosts.length);
+    const post = uncommentedPosts[randomIndex];
+    if (!post) return null;
 
     const config = await getAgentConfig(agentUserId);
     const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
     const postContent = post.content ? String(post.content) : '';
 
-    // Generate comment
     const prompt = `${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
 You are ${displayName}, viewing this post:
 
 "${postContent}"
 
-Task: Write a brief, insightful comment (1-2 sentences) that adds value to the discussion.
-Be authentic to your personality and expertise.
-Keep it under 200 characters.
+Task: Write a brief, engaging comment (1-2 sentences, under ${MAX_COMMENT_CHARS} characters).
+Be authentic to your personality and trading expertise.
+If mentioning markets, use SHORT SUMMARIES (e.g., "the TeslAI bet") not full questions.
 
 Generate ONLY the comment text, nothing else.`;
 
@@ -102,18 +116,21 @@ Generate ONLY the comment text, nothing else.`;
       return null;
     }
 
-    // Create the comment
-    const commentId = await generateSnowflakeId();
-    await db.comment.create({
-      data: {
-        id: commentId,
-        content: cleanContent,
-        postId: String(post.id),
-        authorId: agentUserId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
+    // Create the comment via DirectExecutors
+    const result = await executeDirectComment({
+      agentUserId,
+      postId: String(post.id),
+      content: cleanContent,
     });
+
+    if (!result.success) {
+      logger.warn(
+        `Failed to create comment: ${result.error}`,
+        { agentUserId },
+        'AutonomousCommenting'
+      );
+      return null;
+    }
 
     logger.info(
       `Agent ${displayName} commented on post ${post.id}`,
@@ -121,7 +138,7 @@ Generate ONLY the comment text, nothing else.`;
       'AutonomousCommenting'
     );
 
-    return commentId;
+    return result.commentId ?? null;
   }
 }
 

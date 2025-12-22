@@ -16,9 +16,18 @@ import {
   getNPCRiskManagementService,
   StaticDataRegistry,
 } from '@babylon/engine';
+import { formatUnits, WalletAddressSchema } from '@babylon/shared';
 import { Command } from 'commander';
 import type { Hex } from 'viem';
-import { formatUnits } from 'viem';
+import { z } from 'zod';
+
+// Zod schema for wallet JSON file entries
+const WalletEntrySchema = z.object({
+  evmAddress: WalletAddressSchema,
+  solanaAddress: z.string().optional(),
+});
+
+const WalletFileSchema = z.array(WalletEntrySchema);
 
 export const tokenCommand = new Command('token').description(
   'BBLN token management commands'
@@ -57,7 +66,12 @@ tokenCommand
     for (const actor of actors) {
       try {
         const identity = await identityService.getNPCIdentity(actor.id);
-        if (!identity?.walletAddress) {
+        if (!identity) {
+          console.log(`⚠️  ${actor.name}: No identity found - initializing...`);
+          await identityService.initializeNPCIdentity(actor.id);
+          continue;
+        }
+        if (!identity.walletAddress) {
           console.log(`⚠️  ${actor.name}: No wallet - initializing...`);
           await identityService.initializeNPCIdentity(actor.id);
         }
@@ -259,7 +273,12 @@ tokenCommand
 
     for (const status of statuses) {
       const actor = StaticDataRegistry.getActor(status.actorId);
-      const name = actor?.name ?? status.actorId;
+      if (!actor) {
+        throw new Error(
+          `Actor ${status.actorId} not found in StaticDataRegistry`
+        );
+      }
+      const name = actor.name;
       const scoreBar =
         '█'.repeat(Math.floor(status.riskScore / 10)) +
         '░'.repeat(10 - Math.floor(status.riskScore / 10));
@@ -382,9 +401,8 @@ tokenCommand
       if (options.wallets) {
         // Batch snapshot from file
         const fs = await import('fs');
-        const walletData = JSON.parse(
-          fs.readFileSync(options.wallets, 'utf-8')
-        ) as Array<{ evmAddress: string; solanaAddress?: string }>;
+        const rawData = JSON.parse(fs.readFileSync(options.wallets, 'utf-8'));
+        const walletData = WalletFileSchema.parse(rawData);
 
         console.log(`Processing ${walletData.length} wallets...\n`);
 

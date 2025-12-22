@@ -1,5 +1,6 @@
 'use client';
 
+import type { UserPredictionPosition } from '@babylon/shared';
 import { cn } from '@babylon/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, XCircle } from 'lucide-react';
@@ -11,22 +12,9 @@ import {
 } from './TradeConfirmationDialog';
 
 /**
- * Prediction position structure for positions list.
+ * Alias for UserPredictionPosition for local usage.
  */
-interface PredictionPosition {
-  id: string;
-  marketId: string;
-  question: string;
-  side: 'YES' | 'NO';
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-  currentValue: number;
-  costBasis: number;
-  unrealizedPnL: number;
-  resolved: boolean;
-  resolution?: boolean | null;
-}
+type PredictionPosition = UserPredictionPosition;
 
 /**
  * Prediction positions list component for displaying and managing prediction positions.
@@ -278,10 +266,14 @@ export function PredictionPositionsList({
                     pnlPercent
                   )
                 }
-                disabled={isSelling}
+                disabled={isSelling || position.shares < 0.01}
                 className="w-full cursor-pointer rounded bg-muted py-2 font-medium text-foreground transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSelling ? 'Selling...' : 'Sell Shares'}
+                {isSelling
+                  ? 'Selling...'
+                  : position.shares < 0.01
+                    ? 'Position Too Small'
+                    : 'Sell Shares'}
               </button>
             ) : (
               <div className="py-2 text-center font-medium text-sm">

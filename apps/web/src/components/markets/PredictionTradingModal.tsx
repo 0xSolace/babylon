@@ -4,27 +4,17 @@ import {
   calculateExpectedPayout,
   PredictionPricing,
 } from '@babylon/engine/client';
+
 import { cn } from '@babylon/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, Clock, X, XCircle } from 'lucide-react';
+import { CheckCircle, Clock, Wallet, X, XCircle } from 'lucide-react';
+
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-
-/**
- * Represents a prediction market question.
- */
-interface PredictionMarket {
-  id: number | string;
-  text: string;
-  status: 'active' | 'resolved' | 'cancelled';
-  createdDate?: string;
-  resolutionDate?: string;
-  resolvedOutcome?: boolean;
-  scenario: number;
-  yesShares?: number;
-  noShares?: number;
-}
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useWalletBalance } from '@/hooks/useWalletBalance';
+import type { PredictionMarket } from '@/types/markets';
 
 /**
  * Props for the PredictionTradingModal component.
@@ -84,81 +74,15 @@ export function PredictionTradingModal({
   onClose,
   onSuccess,
 }: PredictionTradingModalProps) {
-  const { user } = useAuth();
+  const { user, authenticated } = useAuth();
   const [side, setSide] = useState<'yes' | 'no'>('yes');
   const [amount, setAmount] = useState('10');
   const queryClient = useQueryClient();
-
-  // Handle escape key and body scroll lock
-  useEffect(() => {
-    if (!isOpen) {
-      document.body.style.overflow = '';
-      return;
-    }
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !buyMutation.isPending) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [isOpen, onClose, buyMutation.isPending]);
-
-  // Cleanup on unmount (for HMR)
-  useEffect(() => {
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
-
-  if (!isOpen) return null;
-
-  const amountNum = Number.parseFloat(amount) || 0;
-
-  // Use AMM to calculate current prices and shares
-  const yesShares = question.yesShares || 500;
-  const noShares = question.noShares || 500;
-
-  const currentYesPrice = PredictionPricing.getCurrentPrice(
-    yesShares,
-    noShares,
-    'yes'
-  );
-  const currentNoPrice = PredictionPricing.getCurrentPrice(
-    yesShares,
-    noShares,
-    'no'
-  );
-
-  // Calculate what would happen if user buys
-  const calculation =
-    amountNum > 0
-      ? PredictionPricing.calculateBuy(yesShares, noShares, side, amountNum)
-      : null;
-
-  const expectedPayout = calculation
-    ? calculateExpectedPayout(calculation.sharesBought, calculation.avgPrice)
-    : 0;
-  const expectedProfit = expectedPayout - amountNum;
-
-  const getDaysUntilResolution = () => {
-    if (!question.resolutionDate) return null;
-    const now = new Date();
-    const resolution = new Date(question.resolutionDate);
-    const diffDays = Math.ceil(
-      (resolution.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return Math.max(0, diffDays);
-  };
-
-  const daysLeft = getDaysUntilResolution();
+  const {
+    balance,
+    loading: balanceLoading,
+    refresh: refreshBalance,
+  } = useWalletBalance(user?.id, { enabled: Boolean(user?.id) && isOpen });
 
   // Mutation for buying prediction shares
   const buyMutation = useMutation({
@@ -196,14 +120,17 @@ export function PredictionTradingModal({
       return response.json() as Promise<BuyPredictionResponse>;
     },
     onSuccess: () => {
+      const sharesBought = calculation?.sharesBought.toFixed(2) ?? '0.00';
+      const avgPrice = calculation?.avgPrice.toFixed(3) ?? '0.000';
       toast.success(`Bought ${side.toUpperCase()} shares!`, {
-        description: `${calculation?.sharesBought.toFixed(2)} shares at ${(calculation?.avgPrice || 0).toFixed(3)} each`,
+        description: `${sharesBought} shares at ${avgPrice} each`,
       });
       void queryClient.invalidateQueries({
         queryKey: ['markets', 'predictions'],
       });
       void queryClient.invalidateQueries({ queryKey: ['positions'] });
       void queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
+      refreshBalance();
       onClose();
       onSuccess?.();
     },
@@ -212,11 +139,81 @@ export function PredictionTradingModal({
     },
   });
 
+  // Body scroll lock using counter-based approach for multi-modal safety
+  useBodyScrollLock(isOpen);
+
+  // Handle escape key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !buyMutation.isPending) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen, onClose, buyMutation.isPending]);
+
+  if (!isOpen) return null;
+
+  const amountNum = Number.parseFloat(amount) || 0;
+
+  // Use AMM to calculate current prices and shares
+  const yesShares = question.yesShares || 500;
+  const noShares = question.noShares || 500;
+
+  const currentYesPrice = PredictionPricing.getCurrentPrice(
+    yesShares,
+    noShares,
+    'yes'
+  );
+  const currentNoPrice = PredictionPricing.getCurrentPrice(
+    yesShares,
+    noShares,
+    'no'
+  );
+
+  // Calculate what would happen if user buys
+  const calculation =
+    amountNum > 0
+      ? PredictionPricing.calculateBuy(yesShares, noShares, side, amountNum)
+      : null;
+
+  const expectedPayout = calculation
+    ? calculateExpectedPayout(calculation.sharesBought, calculation.avgPrice)
+    : 0;
+  const expectedProfit = expectedPayout - amountNum;
+
+  const showBalanceWarning =
+    authenticated && amountNum > 0 && balance < amountNum;
+
+  const getDaysUntilResolution = () => {
+    if (!question.resolutionDate) return null;
+    const now = new Date();
+    const resolution = new Date(question.resolutionDate);
+    const diffDays = Math.ceil(
+      (resolution.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return Math.max(0, diffDays);
+  };
+
+  const daysLeft = getDaysUntilResolution();
+
   const handleSubmit = () => {
     if (!user) return;
 
     if (amountNum < 1) {
       toast.error('Minimum bet is $1');
+      return;
+    }
+
+    if (showBalanceWarning) {
+      toast.error('Insufficient balance');
       return;
     }
 
@@ -272,6 +269,18 @@ export function PredictionTradingModal({
             </p>
           </div>
 
+          {/* Balance Display */}
+          {authenticated && (
+            <div className="mb-4 flex items-center justify-between rounded bg-muted/40 p-3 text-sm">
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <Wallet className="h-4 w-4" /> Balance
+              </span>
+              <span className="font-semibold text-foreground">
+                {balanceLoading ? '...' : formatPrice(balance)}
+              </span>
+            </div>
+          )}
+
           {/* Current Odds */}
           <div className="mb-6 grid grid-cols-2 gap-3">
             <div className="rounded bg-green-600/15 p-3">
@@ -291,24 +300,30 @@ export function PredictionTradingModal({
           {/* YES/NO Tabs */}
           <div className="mb-6 flex gap-3">
             <button
+              type="button"
               onClick={() => setSide('yes')}
+              disabled={buyMutation.isPending}
               className={cn(
                 'flex flex-1 cursor-pointer items-center justify-center gap-3 rounded py-3 font-bold text-sm transition-all sm:text-base',
                 side === 'yes'
                   ? 'bg-green-600 text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted'
+                  : 'bg-muted text-muted-foreground hover:bg-muted',
+                buyMutation.isPending && 'cursor-not-allowed opacity-50'
               )}
             >
               <CheckCircle size={18} />
               BUY YES
             </button>
             <button
+              type="button"
               onClick={() => setSide('no')}
+              disabled={buyMutation.isPending}
               className={cn(
                 'flex flex-1 cursor-pointer items-center justify-center gap-3 rounded py-3 font-bold text-sm transition-all sm:text-base',
                 side === 'no'
                   ? 'bg-red-600 text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted'
+                  : 'bg-muted text-muted-foreground hover:bg-muted',
+                buyMutation.isPending && 'cursor-not-allowed opacity-50'
               )}
             >
               <XCircle size={18} />
@@ -327,7 +342,11 @@ export function PredictionTradingModal({
               onChange={(e) => setAmount(e.target.value)}
               min="1"
               step="1"
-              className="w-full rounded bg-muted/50 px-4 py-3 font-medium text-base text-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 sm:text-lg"
+              disabled={buyMutation.isPending}
+              className={cn(
+                'w-full rounded bg-muted/50 px-4 py-3 font-medium text-base text-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 sm:text-lg',
+                buyMutation.isPending && 'cursor-not-allowed opacity-50'
+              )}
               placeholder="Min: $1"
             />
           </div>
@@ -398,16 +417,36 @@ export function PredictionTradingModal({
             </div>
           )}
 
+          {/* Balance Warning */}
+          {authenticated && amountNum > 0 && (
+            <div className="mb-4 text-muted-foreground text-xs">
+              {showBalanceWarning && (
+                <span className="font-semibold text-red-500">
+                  Insufficient balance for this trade.
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Submit Button */}
           <button
+            type="button"
             onClick={handleSubmit}
-            disabled={buyMutation.isPending || amountNum < 1}
+            disabled={
+              buyMutation.isPending ||
+              amountNum < 1 ||
+              showBalanceWarning ||
+              balanceLoading
+            }
             className={cn(
               'w-full cursor-pointer rounded py-3 font-bold text-base text-foreground transition-all sm:py-4 sm:text-lg',
               side === 'yes'
                 ? 'bg-green-600 hover:bg-green-700'
                 : 'bg-red-600 hover:bg-red-700',
-              (buyMutation.isPending || amountNum < 1) &&
+              (buyMutation.isPending ||
+                amountNum < 1 ||
+                showBalanceWarning ||
+                balanceLoading) &&
                 'cursor-not-allowed opacity-50'
             )}
           >
@@ -422,6 +461,7 @@ export function PredictionTradingModal({
 
           {/* Cancel */}
           <button
+            type="button"
             onClick={onClose}
             disabled={buyMutation.isPending}
             className="mt-3 w-full cursor-pointer rounded py-2.5 font-medium text-muted-foreground transition-all hover:bg-muted disabled:cursor-not-allowed sm:py-3"

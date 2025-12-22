@@ -95,8 +95,7 @@
  */
 
 import { errorResponse, optionalAuth, successResponse } from '@babylon/api';
-import type { DrizzleClient } from '@babylon/db';
-import { asPublic, asUser } from '@babylon/db';
+import { asPublic, asUser, type DbClient } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -111,7 +110,7 @@ interface UsernameCheckResult {
  */
 async function checkUsernameAvailability(
   baseUsername: string,
-  db: DrizzleClient
+  db: DbClient
 ): Promise<UsernameCheckResult> {
   // Sanitize username
   const cleanUsername = baseUsername
@@ -123,7 +122,6 @@ async function checkUsernameAvailability(
   // Check if base username is available
   const existingUser = await db.user.findUnique({
     where: { username: cleanUsername },
-    select: { id: true },
   });
 
   if (!existingUser) {
@@ -141,7 +139,6 @@ async function checkUsernameAvailability(
   while (attempt < 9999) {
     const exists = await db.user.findUnique({
       where: { username: suggestedUsername },
-      select: { id: true },
     });
 
     if (!exists) {

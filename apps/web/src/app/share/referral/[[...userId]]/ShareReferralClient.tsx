@@ -5,10 +5,33 @@
 
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
+
+interface ReferralCodeResponse {
+  referralCode: string | null;
+}
+
+async function fetchReferralCode(
+  userId: string
+): Promise<ReferralCodeResponse> {
+  const apiBaseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
+    (typeof window !== 'undefined' ? `${window.location.origin}/api` : '/api');
+
+  const response = await fetch(
+    `${apiBaseUrl}/users/${encodeURIComponent(userId)}/referral-code`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch referral code: ${response.status}`);
+  }
+
+  return response.json() as Promise<ReferralCodeResponse>;
+}
 
 export default function ShareReferralClient() {
   const params = useParams();
@@ -18,35 +41,29 @@ export default function ShareReferralClient() {
   const rawUserId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
   const userId = rawUserId ? decodeURIComponent(rawUserId) : null;
 
+  const { data, isSuccess, isError } = useQuery({
+    queryKey: ['referralCode', userId],
+    queryFn: () => fetchReferralCode(userId!),
+    enabled: !!userId,
+    retry: false,
+    staleTime: 0,
+  });
+
+  // Handle redirect based on query result
   useEffect(() => {
     if (!userId) {
       router.replace('/');
       return;
     }
-    const fetchAndRedirect = async () => {
-      const apiBaseUrl =
-        process.env.NEXT_PUBLIC_API_BASE_URL ??
-        (typeof window !== 'undefined'
-          ? `${window.location.origin}/api`
-          : '/api');
 
-      const response = await fetch(
-        `${apiBaseUrl}/users/${encodeURIComponent(userId)}/referral-code`
-      ).catch(() => null);
-
-      if (response?.ok) {
-        const data = await response.json();
-        if (data.referralCode) {
-          router.replace(`/?ref=${data.referralCode}`);
-          return;
-        }
-      }
-
+    if (isSuccess && data?.referralCode) {
+      router.replace(`/?ref=${data.referralCode}`);
+    } else if (isSuccess && !data?.referralCode) {
       router.replace('/');
-    };
-
-    fetchAndRedirect();
-  }, [userId, router]);
+    } else if (isError) {
+      router.replace('/');
+    }
+  }, [userId, isSuccess, isError, data, router]);
 
   // Don't render with missing userId - redirect will happen via useEffect
   if (!userId) {

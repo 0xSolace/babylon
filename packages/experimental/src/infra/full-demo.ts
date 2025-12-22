@@ -22,6 +22,7 @@
  *   SKIP_DEPLOY=true        # Use existing contract
  */
 
+import { sleep } from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -113,10 +114,6 @@ function info(text: string) {
 
 function detail(text: string) {
   console.log(`${CONFIG.DIM}  ${text}${CONFIG.RESET}`);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -2,38 +2,61 @@
 
 /**
  * Check recent agent trading activity
- * Uses safe parameterized queries via Drizzle ORM
+ * Uses CQL raw queries
  */
 
-import { db } from '@babylon/db';
-import { agentTrades, users } from '@babylon/db/schema';
-import { desc, eq, sql } from 'drizzle-orm';
+import { db, initializeDB } from '@babylon/db';
+
+interface AgentTrade {
+  id: string;
+  agentUserId: string;
+  username: string | null;
+  displayName: string | null;
+  marketType: string;
+  ticker: string | null;
+  action: string;
+  side: string | null;
+  amount: string;
+  price: string;
+  pnl: string | null;
+  reasoning: string | null;
+  executedAt: Date;
+}
+
+interface TradeStats {
+  totalTrades: number;
+  uniqueAgents: number;
+  tradesLast24h: number;
+  tradesLastHour: number;
+  avgTradeAmount: number | null;
+  totalVolume: number | null;
+}
+
+interface ActiveAgent {
+  agentUserId: string;
+  username: string | null;
+  displayName: string | null;
+  tradeCount: number;
+  lastTradeAt: Date;
+  totalVolume: number | null;
+}
 
 async function checkAgentTrades() {
+  await initializeDB();
   console.log('🔍 Checking recent agent trading activity...\n');
 
-  // Get recent trades (last 50)
-  const recentTrades = await db
-    .select({
-      id: agentTrades.id,
-      agentUserId: agentTrades.agentUserId,
-      username: users.username,
-      displayName: users.displayName,
-      marketType: agentTrades.marketType,
-      ticker: agentTrades.ticker,
-      action: agentTrades.action,
-      side: agentTrades.side,
-      amount: agentTrades.amount,
-      price: agentTrades.price,
-      pnl: agentTrades.pnl,
-      reasoning: agentTrades.reasoning,
-      executedAt: agentTrades.executedAt,
-    })
-    .from(agentTrades)
-    .leftJoin(users, eq(agentTrades.agentUserId, users.id))
-    .where(eq(users.isAgent, true))
-    .orderBy(desc(agentTrades.executedAt))
-    .limit(50);
+  // Get recent trades (last 50) with user join
+  const recentTrades = await db.query<AgentTrade>(
+    `SELECT 
+       at.id, at."agentUserId", u.username, u."displayName",
+       at."marketType", at.ticker, at.action, at.side,
+       at.amount, at.price, at.pnl, at.reasoning, at."executedAt"
+     FROM "AgentTrade" at
+     LEFT JOIN "User" u ON at."agentUserId" = u.id
+     WHERE u."isAgent" = true
+     ORDER BY at."executedAt" DESC
+     LIMIT 50`
+  );
 
   console.log(`📊 Found ${recentTrades.length} recent trades\n`);
 
@@ -49,7 +72,7 @@ async function checkAgentTrades() {
   console.log('='.repeat(120));
   recentTrades.slice(0, 10).forEach((trade, idx) => {
     const agentName = trade.username || trade.displayName || trade.agentUserId;
-    const timeAgo = getTimeAgo(trade.executedAt);
+    const timeAgo = getTimeAgo(new Date(trade.executedAt));
 
     console.log(
       `${idx + 1}. ${agentName} | ${trade.action} ${trade.side || ''} | ` +
@@ -65,18 +88,18 @@ async function checkAgentTrades() {
   });
 
   // Get trading statistics
-  const stats = await db
-    .select({
-      totalTrades: sql<number>`count(*)::int`,
-      uniqueAgents: sql<number>`count(distinct ${agentTrades.agentUserId})::int`,
-      tradesLast24h: sql<number>`count(*) filter (where ${agentTrades.executedAt} > now() - interval '24 hours')::int`,
-      tradesLastHour: sql<number>`count(*) filter (where ${agentTrades.executedAt} > now() - interval '1 hour')::int`,
-      avgTradeAmount: sql<number>`avg(${agentTrades.amount})`,
-      totalVolume: sql<number>`sum(${agentTrades.amount})`,
-    })
-    .from(agentTrades)
-    .leftJoin(users, eq(agentTrades.agentUserId, users.id))
-    .where(eq(users.isAgent, true));
+  const stats = await db.query<TradeStats>(
+    `SELECT 
+       COUNT(*)::int AS "totalTrades",
+       COUNT(DISTINCT at."agentUserId")::int AS "uniqueAgents",
+       COUNT(*) FILTER (WHERE at."executedAt" > NOW() - INTERVAL '24 hours')::int AS "tradesLast24h",
+       COUNT(*) FILTER (WHERE at."executedAt" > NOW() - INTERVAL '1 hour')::int AS "tradesLastHour",
+       AVG(at.amount::numeric) AS "avgTradeAmount",
+       SUM(at.amount::numeric) AS "totalVolume"
+     FROM "AgentTrade" at
+     LEFT JOIN "User" u ON at."agentUserId" = u.id
+     WHERE u."isAgent" = true`
+  );
 
   const stat = stats[0];
   console.log('\n📈 Trading Statistics:');
@@ -89,27 +112,25 @@ async function checkAgentTrades() {
   console.log(`Total Trading Volume: $${stat.totalVolume?.toFixed(2) || 0}`);
 
   // Get most active agents
-  const activeAgents = await db
-    .select({
-      agentUserId: agentTrades.agentUserId,
-      username: users.username,
-      displayName: users.displayName,
-      tradeCount: sql<number>`count(*)::int`,
-      lastTradeAt: sql<Date>`max(${agentTrades.executedAt})`,
-      totalVolume: sql<number>`sum(${agentTrades.amount})`,
-    })
-    .from(agentTrades)
-    .leftJoin(users, eq(agentTrades.agentUserId, users.id))
-    .where(eq(users.isAgent, true))
-    .groupBy(agentTrades.agentUserId, users.username, users.displayName)
-    .orderBy(desc(sql`count(*)`))
-    .limit(10);
+  const activeAgents = await db.query<ActiveAgent>(
+    `SELECT 
+       at."agentUserId", u.username, u."displayName",
+       COUNT(*)::int AS "tradeCount",
+       MAX(at."executedAt") AS "lastTradeAt",
+       SUM(at.amount::numeric) AS "totalVolume"
+     FROM "AgentTrade" at
+     LEFT JOIN "User" u ON at."agentUserId" = u.id
+     WHERE u."isAgent" = true
+     GROUP BY at."agentUserId", u.username, u."displayName"
+     ORDER BY COUNT(*) DESC
+     LIMIT 10`
+  );
 
   console.log('\n🏆 Most Active Agents:');
   console.log('='.repeat(120));
   activeAgents.forEach((agent, idx) => {
     const agentName = agent.username || agent.displayName || agent.agentUserId;
-    const lastTradeAgo = getTimeAgo(agent.lastTradeAt);
+    const lastTradeAgo = getTimeAgo(new Date(agent.lastTradeAt));
     console.log(
       `${idx + 1}. ${agentName} | ${agent.tradeCount} trades | ` +
         `$${agent.totalVolume?.toFixed(2) || 0} volume | Last trade: ${lastTradeAgo}`
@@ -132,7 +153,9 @@ async function checkAgentTrades() {
   // Get time of most recent trade
   if (recentTrades.length > 0) {
     const mostRecent = recentTrades[0];
-    console.log(`\nMost recent trade: ${getTimeAgo(mostRecent.executedAt)}`);
+    console.log(
+      `\nMost recent trade: ${getTimeAgo(new Date(mostRecent.executedAt))}`
+    );
     console.log(
       `Agent: ${mostRecent.username || mostRecent.displayName || mostRecent.agentUserId}`
     );
@@ -162,7 +185,7 @@ checkAgentTrades()
     console.log('\n✅ Check complete');
     process.exit(0);
   })
-  .catch((error) => {
+  .catch((error: Error) => {
     console.error('\n❌ Check failed:', error);
     process.exit(1);
   });

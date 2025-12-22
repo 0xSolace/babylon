@@ -47,9 +47,11 @@
 import {
   authenticate,
   cachedDb,
+  InternalServerError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+
 import { db, eq, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -160,7 +162,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           },
           'GET /api/users/me'
         );
-      } else if (referrerByUsername?.id === canonicalUserId) {
+      } else if (
+        referrerByUsername &&
+        referrerByUsername.id === canonicalUserId
+      ) {
         logger.warn(
           'Self-referral attempt blocked (username lookup)',
           { userId: canonicalUserId, referralCode: normalizedCode },
@@ -187,7 +192,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             },
             'GET /api/users/me'
           );
-        } else if (referrerByCode?.id === canonicalUserId) {
+        } else if (referrerByCode && referrerByCode.id === canonicalUserId) {
           logger.warn(
             'Self-referral attempt blocked (referralCode lookup)',
             { userId: canonicalUserId, referralCode: normalizedCode },
@@ -231,7 +236,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .returning(userSelectFields);
 
     if (!newUser) {
-      throw new Error('Failed to create user record');
+      throw new InternalServerError('Failed to create user record');
     }
     dbUser = newUser;
 
@@ -274,7 +279,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         .returning(userSelectFields);
 
       if (!updatedUser) {
-        throw new Error('Failed to update user record');
+        throw new InternalServerError('Failed to update user record');
       }
       dbUser = updatedUser;
 
@@ -320,7 +325,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // At this point dbUser should always be defined (either fetched or created)
   if (!dbUser) {
-    throw new Error('Failed to create or find user record');
+    throw new InternalServerError('Failed to create or find user record');
   }
 
   // Get cached profile stats
@@ -362,7 +367,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     isActor: dbUser.isActor,
     createdAt: dbUser.createdAt.toISOString(),
     updatedAt: dbUser.updatedAt.toISOString(),
-    stats: stats ? stats : undefined,
+    stats: stats ?? undefined,
   };
 
   const needsOnboarding = !dbUser.profileComplete;

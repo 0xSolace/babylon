@@ -23,6 +23,7 @@ export {
   type CQLClient,
   createCQLClient,
   getCQLClient,
+  type QueryParam,
   resetCQLClient,
 } from './cql-client';
 
@@ -158,13 +159,11 @@ export async function asUser<T>(
 
   const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const privyDidRegex = /^did:privy:[a-z0-9]+$/i;
   const oauth3DidRegex = /^did:oauth3:[a-z0-9]+$/i;
   const snowflakeRegex = /^\d{15,20}$/;
 
   if (
     !uuidRegex.test(userId) &&
-    !privyDidRegex.test(userId) &&
     !oauth3DidRegex.test(userId) &&
     !snowflakeRegex.test(userId)
   ) {
@@ -273,6 +272,12 @@ export { exportJsonState, getJsonState, loadJsonSnapshot, saveJsonSnapshot };
 export * from './decentralized';
 
 // ============================================================================
+// Validation Schemas (Drizzle-Zod)
+// ============================================================================
+
+export * from './validation';
+
+// ============================================================================
 // Utility Exports
 // ============================================================================
 
@@ -297,14 +302,15 @@ export {
   isRetryableError,
   withRetry,
 } from './helpers';
-
-export * from './moderation/filters';
-
+// Query monitoring (stub for performance route)
+export { queryMonitor } from './query-monitor';
+// User block utilities
 export {
-  type QueryMetrics,
-  queryMonitor,
-  type SlowQueryStats,
-} from './query-monitor';
+  getBlockedByUserIds,
+  getBlockedUserIds,
+  getMutedUserIds,
+  hasBlocked,
+} from './user-utils';
 
 // ============================================================================
 // Initialization

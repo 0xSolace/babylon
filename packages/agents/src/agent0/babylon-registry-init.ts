@@ -7,10 +7,10 @@
  */
 
 import { db } from '@babylon/db';
+import type { JsonValue } from '@babylon/shared';
 import { getA2AEndpoint, getMCPEndpoint } from '@babylon/shared';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
-import type { JsonValue } from '../types/common';
 import { getAgent0Client } from './index';
 
 /**

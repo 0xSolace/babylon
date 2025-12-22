@@ -6,6 +6,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { byFileName, walkDirectory } from './utils';
 
 interface ApiParameter {
   name: string;
@@ -25,18 +26,6 @@ interface ApiRoute {
   parameters?: ApiParameter[];
   responses?: Record<string, ApiResponse>;
   tags?: string[];
-}
-
-async function* walkDirectory(dir: string): AsyncGenerator<string> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      yield* walkDirectory(fullPath);
-    } else if (entry.isFile() && entry.name === 'route.ts') {
-      yield fullPath;
-    }
-  }
 }
 
 async function extractApiInfo(filePath: string): Promise<ApiRoute | null> {
@@ -172,11 +161,12 @@ async function generateOpenAPISpec(routes: ApiRoute[]) {
     paths,
     components: {
       securitySchemes: {
-        PrivyAuth: {
+        OAuth3Auth: {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Privy authentication token',
+          description:
+            'OAuth3 authentication token (via Jeju decentralized auth)',
         },
       },
     },
@@ -188,7 +178,10 @@ async function generateOpenAPISpec(routes: ApiRoute[]) {
 async function generateMarkdownDocs(routes: ApiRoute[]) {
   const groupedRoutes = routes.reduce(
     (acc, route) => {
-      const tag = route.tags?.[0] || 'General';
+      if (!route.tags || route.tags.length === 0) {
+        throw new Error(`Route ${route.path} is missing tags`);
+      }
+      const tag = route.tags[0];
       if (!acc[tag]) acc[tag] = [];
       acc[tag].push(route);
       return acc;
@@ -202,7 +195,7 @@ async function generateMarkdownDocs(routes: ApiRoute[]) {
   markdown += '```\nhttps://babylon.market\n```\n\n';
   markdown += '## Authentication\n\n';
   markdown +=
-    'Most endpoints require authentication via Privy. Include the JWT token in the Authorization header:\n\n';
+    'Most endpoints require authentication via OAuth3 (Jeju decentralized auth). Include the JWT token in the Authorization header:\n\n';
   markdown += '```\nAuthorization: Bearer YOUR_TOKEN\n```\n\n';
 
   for (const [tag, tagRoutes] of Object.entries(groupedRoutes)) {
@@ -233,7 +226,7 @@ async function main() {
   const apiDir = path.join(process.cwd(), '../src/app/api');
   const routes: ApiRoute[] = [];
 
-  for await (const filePath of walkDirectory(apiDir)) {
+  for await (const filePath of walkDirectory(apiDir, byFileName('route.ts'))) {
     const route = await extractApiInfo(filePath);
     if (route) {
       routes.push(route);

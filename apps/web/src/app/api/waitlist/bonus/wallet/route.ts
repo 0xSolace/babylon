@@ -67,13 +67,8 @@ import {
   WaitlistService,
   withErrorHandling,
 } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { logger, WalletBonusSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
-
-const WalletBonusSchema = z.object({
-  walletAddress: z.string().min(1, 'Wallet address is required'),
-});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);

@@ -8,7 +8,7 @@
  */
 
 import { db } from '@babylon/db';
-import { logger } from '../utils/logger';
+import { logger } from '@babylon/shared';
 
 export interface ModelSelectionResult {
   modelId: string;

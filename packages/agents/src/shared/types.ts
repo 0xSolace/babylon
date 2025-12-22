@@ -6,17 +6,11 @@
  * @packageDocumentation
  */
 
-/**
- * JSON-serializable value types
- */
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+// Re-export JsonValue from shared to maintain backward compatibility
+export type { JsonValue } from '@babylon/shared';
+
+// Import JsonValue for use in local types
+import type { JsonValue } from '@babylon/shared';
 
 /**
  * Generic key-value record with string keys

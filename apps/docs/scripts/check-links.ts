@@ -7,6 +7,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { byExtensions, collectFiles } from './utils';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,8 +21,6 @@ interface LinkIssue {
   message: string;
 }
 
-// LinkResult interface removed - not used
-
 const contentDir = resolve(__dirname, '../content');
 const issues: LinkIssue[] = [];
 const allFiles = new Map<string, string>(); // path -> file content
@@ -32,23 +31,8 @@ const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
 /**
  * Get all MDX files recursively
  */
-async function getAllMdxFiles(dir: string): Promise<string[]> {
-  const files: string[] = [];
-  const entries = await readdir(dir, { withFileTypes: true });
-
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await getAllMdxFiles(fullPath)));
-    } else if (
-      entry.isFile() &&
-      (entry.name.endsWith('.mdx') || entry.name.endsWith('.md'))
-    ) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
+function getAllMdxFiles(dir: string): Promise<string[]> {
+  return collectFiles(dir, byExtensions(['.mdx', '.md']));
 }
 
 /**

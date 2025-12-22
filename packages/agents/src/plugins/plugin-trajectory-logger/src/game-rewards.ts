@@ -8,7 +8,7 @@
  * post quality metrics, user engagement, and long-term trajectory outcomes.
  */
 
-import type { JsonValue } from '../../../types/common';
+import type { JsonValue } from '@babylon/shared';
 import type { Trajectory, TrajectoryStep } from './types';
 
 /**

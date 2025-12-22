@@ -1,6 +1,14 @@
 /**
  * Integration Test: Followers/Following and NPC Relationships
  *
+ * @deprecated This test uses Prisma/PostgreSQL which has been replaced with CQL.
+ * This test needs to be refactored to use the CQL database client from @babylon/db.
+ *
+ * TODO: Migrate to CQL:
+ * 1. Replace Prisma imports with CQL client from @babylon/db
+ * 2. Update database queries to use CQL repository methods
+ * 3. Remove PostgreSQL connection string
+ *
  * This test verifies:
  * 1. NPCs are seeded with initial relationships from actors.json
  * 2. Follower/following counts are accurate across all models
@@ -61,7 +69,7 @@ describe('Followers/Following and Relationships Integration Tests', () => {
       // Create a test user if none exists
       const createdUser = await prisma.user.create({
         data: {
-          privyId: `test-privy-${Date.now()}`,
+          oauth3Id: `test-oauth3-${Date.now()}`,
           username: `testuser${Date.now()}`,
           displayName: 'Test User',
           isActor: false,

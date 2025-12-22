@@ -17,7 +17,7 @@
  *     summary: Get post interaction counts
  *     description: Returns like, comment, and share counts. For authenticated users, also returns interaction state.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -171,9 +171,9 @@ export const GET = withErrorHandling(
 
         // Get all interaction counts in parallel
         const [
-          [likeCountResult],
-          [commentCountResult],
-          [shareCountResult],
+          likeCountResults,
+          commentCountResults,
+          shareCountResults,
           [userLike],
           [userShare],
         ] = await Promise.all([
@@ -219,6 +219,17 @@ export const GET = withErrorHandling(
                 .limit(1)
             : Promise.resolve([null]),
         ]);
+
+        // Type assertions for aggregate query results
+        const likeCountResult = (
+          likeCountResults as unknown as Array<{ count: number }>
+        )[0];
+        const commentCountResult = (
+          commentCountResults as unknown as Array<{ count: number }>
+        )[0];
+        const shareCountResult = (
+          shareCountResults as unknown as Array<{ count: number }>
+        )[0];
 
         return {
           likeCount: Number(likeCountResult?.count ?? 0),

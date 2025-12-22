@@ -17,7 +17,7 @@
  *     summary: Like a comment
  *     description: Adds a like reaction to a comment. Creates notification for comment author.
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -58,7 +58,7 @@
  *     summary: Unlike a comment
  *     description: Removes a like reaction from a comment
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -221,18 +221,14 @@ export const POST = withErrorHandling(
     }
 
     // Get updated like count
-    const [likeCountResult] = await db
-      .select({ count: count() })
+    const likeCountResult = (await db
+      .select({ likeCount: count() })
       .from(reactions)
       .where(
         and(eq(reactions.commentId, commentId), eq(reactions.type, 'like'))
-      );
+      )) as unknown as Array<{ likeCount: number }>;
 
-    if (!likeCountResult) {
-      throw new Error('Failed to get like count');
-    }
-
-    const likeCount = Number(likeCountResult.count);
+    const likeCount = likeCountResult[0]?.likeCount ?? 0;
 
     logger.info(
       'Comment liked successfully',
@@ -303,18 +299,14 @@ export const DELETE = withErrorHandling(
     await db.delete(reactions).where(eq(reactions.id, reaction.id));
 
     // Get updated like count
-    const [likeCountResult] = await db
-      .select({ count: count() })
+    const unlikeCountResult = (await db
+      .select({ likeCount: count() })
       .from(reactions)
       .where(
         and(eq(reactions.commentId, commentId), eq(reactions.type, 'like'))
-      );
+      )) as unknown as Array<{ likeCount: number }>;
 
-    if (!likeCountResult) {
-      throw new Error('Failed to get like count');
-    }
-
-    const likeCount = Number(likeCountResult.count);
+    const likeCount = unlikeCountResult[0]?.likeCount ?? 0;
 
     logger.info(
       'Comment unliked successfully',

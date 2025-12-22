@@ -575,7 +575,20 @@ export class TrajectoryMetricsExtractor {
         metrics.predictionsMade++;
 
         // Check if prediction was correct
-        if (action.correctness?.predictionCorrect === true) {
+        // correctness can be on action object or nested in result
+        const result = action.result as Record<string, unknown> | undefined;
+        const actionCorrectness = (
+          action as { correctness?: { predictionCorrect?: boolean } }
+        ).correctness;
+        const resultCorrectness = result?.correctness as
+          | { predictionCorrect?: boolean }
+          | undefined;
+
+        if (
+          result?.predictionCorrect === true ||
+          actionCorrectness?.predictionCorrect === true ||
+          resultCorrectness?.predictionCorrect === true
+        ) {
           metrics.correctPredictions++;
         }
       }

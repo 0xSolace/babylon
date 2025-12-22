@@ -208,9 +208,18 @@ export function logLLMCallFromAction(
         | 'response'
         | 'other') || 'action',
     actionType: (actionContext.actionType as string) || undefined,
-    promptTokens: (actionContext.promptTokens as number) || undefined,
-    completionTokens: (actionContext.completionTokens as number) || undefined,
-    latencyMs: (actionContext.latencyMs as number) || undefined,
+    promptTokens:
+      actionContext.promptTokens !== undefined
+        ? (actionContext.promptTokens as number)
+        : undefined,
+    completionTokens:
+      actionContext.completionTokens !== undefined
+        ? (actionContext.completionTokens as number)
+        : undefined,
+    latencyMs:
+      actionContext.latencyMs !== undefined
+        ? (actionContext.latencyMs as number)
+        : 0,
   });
 }
 

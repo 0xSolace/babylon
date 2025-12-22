@@ -13,9 +13,9 @@
  * - limit: number of entries to return (default: 100, max: 1000)
  */
 
-import { getAirdropBonusService } from '@babylon/api/src/services/airdrop-bonus-service';
-import { getServerSession } from '@babylon/auth';
-import { NextRequest, NextResponse } from 'next/server';
+import { getAirdropBonusService, optionalAuth } from '@babylon/api';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 interface LeaderboardEntry {
   rank: number;
@@ -39,8 +39,18 @@ interface LeaderboardResponse {
   message?: string;
 }
 
+interface LeaderboardEntryData {
+  rank: number;
+  userId: string;
+  username: string;
+  displayName: string;
+  profileImageUrl: string | null;
+  pointsEarned: number;
+  estimatedBonus: bigint | string;
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const session = await getServerSession();
+  const authUser = await optionalAuth(request);
   const searchParams = request.nextUrl.searchParams;
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '100'), 1000);
 
@@ -52,8 +62,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let bonusPeriodActive = false;
   let daysRemaining = 0;
 
-  if (session?.user?.id) {
-    const userStatus = await bonusService.getUserBonusStatus(session.user.id);
+  if (authUser?.userId) {
+    const userStatus = await bonusService.getUserBonusStatus(authUser.userId);
     if (userStatus) {
       currentUserRank = userStatus.leaderboardPosition;
       bonusPeriodActive = userStatus.bonusPeriodActive;
@@ -61,20 +71,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const formattedLeaderboard: LeaderboardEntry[] = leaderboard.map((entry) => {
-    const estimatedBonusNum = Number(entry.estimatedBonus) / 1e18;
-    return {
-      rank: entry.rank,
-      userId: entry.userId,
-      username: entry.username,
-      displayName: entry.displayName,
-      profileImageUrl: entry.profileImageUrl,
-      pointsEarned: entry.pointsEarned,
-      estimatedBonus: entry.estimatedBonus.toString(),
-      estimatedBonusFormatted: `${estimatedBonusNum.toLocaleString()} BBLN`,
-      isCurrentUser: session?.user?.id === entry.userId,
-    };
-  });
+  const formattedLeaderboard: LeaderboardEntry[] = leaderboard.map(
+    (entry: LeaderboardEntryData) => {
+      const estimatedBonusNum = Number(entry.estimatedBonus) / 1e18;
+      return {
+        rank: entry.rank,
+        userId: entry.userId,
+        username: entry.username,
+        displayName: entry.displayName,
+        profileImageUrl: entry.profileImageUrl,
+        pointsEarned: entry.pointsEarned,
+        estimatedBonus: entry.estimatedBonus.toString(),
+        estimatedBonusFormatted: `${estimatedBonusNum.toLocaleString()} BBLN`,
+        isCurrentUser: authUser?.userId === entry.userId,
+      };
+    }
+  );
 
   return NextResponse.json({
     success: true,

@@ -4,7 +4,7 @@
 
 export {
   GameOrchestrator,
-  type GameState,
   type OrchestratorConfig,
+  type OrchestratorGameState,
   type OrchestratorPhase,
 } from './orchestrator.js';

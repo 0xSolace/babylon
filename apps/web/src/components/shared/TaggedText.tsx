@@ -87,7 +87,7 @@ export function TaggedText({ text, onTagClick, className }: TaggedTextProps) {
   }
 
   // If no tags found, return plain text
-  if (parts.length === 0 || (parts.length === 1 && !parts[0].isTag)) {
+  if (parts.length === 0 || (parts.length === 1 && !parts[0]?.isTag)) {
     return <span className={className}>{text}</span>;
   }
 

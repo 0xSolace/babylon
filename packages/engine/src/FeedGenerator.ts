@@ -3230,7 +3230,7 @@ ${voiceContext}
       characterName: replier.name,
       characterInfo: fullCharacterContext,
       relationshipContext: relationshipContext,
-      groupContext: groupContext || undefined,
+      groupContext: groupContext || '',
       ...(this.worldContext || {}),
     });
 

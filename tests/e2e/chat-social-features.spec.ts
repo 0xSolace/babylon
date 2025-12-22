@@ -17,13 +17,13 @@ let testUser1: {
   id: string;
   username: string;
   displayName: string;
-  privyId: string;
+  oauth3Id: string;
 };
 let testUser2: {
   id: string;
   username: string;
   displayName: string;
-  privyId: string;
+  oauth3Id: string;
 };
 let dmChatId: string;
 
@@ -40,7 +40,7 @@ test.describe('Chat and Social Features E2E', () => {
         id: true,
         username: true,
         displayName: true,
-        privyId: true,
+        oauth3Id: true,
       },
       take: 2,
     });

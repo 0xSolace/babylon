@@ -36,9 +36,9 @@ describe('DM Chat ID Generation', () => {
     expect(chatId).toContain(uuid2);
   });
 
-  test('should handle Privy DID format users', () => {
-    const did1 = 'did:privy:cm6sqq4og01qw9l70rbmyjn20';
-    const did2 = 'did:privy:babylon-support-demo';
+  test('should handle OAuth3 DID format users', () => {
+    const did1 = 'did:jeju:cm6sqq4og01qw9l70rbmyjn20';
+    const did2 = 'did:jeju:babylon-support-demo';
 
     const chatId = generateDMChatId(did1, did2);
     expect(chatId.length).toBeGreaterThan(3);

@@ -17,7 +17,7 @@
  *     summary: Get pending invites
  *     description: Returns all pending group invites for authenticated user
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Invites retrieved successfully

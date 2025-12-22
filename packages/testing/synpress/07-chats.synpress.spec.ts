@@ -27,7 +27,7 @@ test.describe('Chats Page - Updated Design', () => {
     // Use 1920x1080 to ensure we're in desktop layout (xl breakpoint is 1280px)
     await page.setViewportSize({ width: 1920, height: 1080 });
 
-    // Capture console errors for debugging Privy initialization issues
+    // Capture console errors for debugging OAuth3 initialization issues
     const consoleErrors: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
@@ -298,7 +298,7 @@ test.describe('Profile Message Button', () => {
     // Set a consistent viewport size to ensure consistent rendering
     await page.setViewportSize({ width: 1920, height: 1080 });
 
-    // Capture console errors for debugging Privy initialization issues
+    // Capture console errors for debugging OAuth3 initialization issues
     const consoleErrors: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
@@ -382,7 +382,7 @@ test.describe('Real-time Updates', () => {
     // Set a consistent viewport size to ensure consistent rendering
     await page.setViewportSize({ width: 1920, height: 1080 });
 
-    // Capture console errors for debugging Privy initialization issues
+    // Capture console errors for debugging OAuth3 initialization issues
     const consoleErrors: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') {

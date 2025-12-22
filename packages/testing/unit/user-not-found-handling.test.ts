@@ -6,7 +6,7 @@ import type { MockUserRecord, UserFindUniqueArgs } from '../types/test-types';
 // Mock result storage - will be set by tests
 let mockDbResult: MockUserRecord | null = null;
 
-// Create a chainable mock that mimics Drizzle's query builder
+// Create a chainable mock that mimics CQL query builder
 const createChainableMock = () => {
   const chain = {
     from: (_table?: unknown) => chain,
@@ -155,22 +155,37 @@ mock.module('@babylon/api', () => {
   };
 });
 
-// Mock database (auth-middleware uses Drizzle query builder)
+// Mock CQL database client (auth-middleware uses CQL query builder)
 // Include all exports that may be needed by dependencies
 mock.module('@babylon/db', () => ({
   db: {
     select: mockSelect,
+    // CQL raw query methods
+    query: mock(async () => []),
+    queryOne: mock(async () => null),
+    exec: mock(async () => ({ rowsAffected: 0 })),
+    $queryRaw: mock(async () => []),
+    $executeRaw: mock(async () => 0),
+    // CQL table repositories
     user: {
       findUnique: mockFindUnique,
+      findMany: mock(async () => []),
+      create: mock(async () => ({})),
+      update: mock(async () => ({})),
+      delete: mock(async () => ({})),
     },
   },
+  // CQL initialization functions
+  initializeDB: mock(async () => {}),
+  resetDB: mock(() => {}),
+  getDB: mock(() => ({})),
   // Tables
   users: {
     id: 'id',
     oauth3Id: 'oauth3Id',
     walletAddress: 'walletAddress',
   },
-  actors: {},
+  actorState: {},
   agentLogs: {},
   agentMessages: {},
   agentRegistries: {},
@@ -179,7 +194,7 @@ mock.module('@babylon/db', () => ({
   worldFacts: {},
   referrals: {},
   pointsTransactions: {},
-  // Operators
+  // Operators (re-exported from drizzle-orm via CQL)
   eq: () => ({}),
   and: () => ({}),
   or: () => ({}),

@@ -17,7 +17,7 @@
  *     summary: Appeal ban
  *     description: Submits ban appeal with optional stake for faster review
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -80,16 +80,10 @@ import {
 import type { JsonValue } from '@babylon/db';
 import { db } from '@babylon/db';
 import { WalletService } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { AppealSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { type Address, createPublicClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
-import { z } from 'zod';
-
-const AppealSchema = z.object({
-  reason: z.string().min(10).max(2000),
-  stakeTxHash: z.string().optional(), // For staked appeals ($10)
-});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);

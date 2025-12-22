@@ -5,11 +5,46 @@
  * Diagnose why agents aren't trading
  */
 
-import { db } from '@babylon/db';
-import { agentRegistries, games, users } from '@babylon/db/schema';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { db, initializeDB } from '@babylon/db';
+
+interface GameState {
+  id: string;
+  currentDay: number;
+  isContinuous: boolean;
+  isRunning: boolean;
+  lastTickAt: Date | null;
+  createdAt: Date;
+}
+
+interface AgentRegistry {
+  agentId: string;
+  name: string;
+  type: string;
+  status: string;
+  userId: string | null;
+  registeredAt: Date;
+  lastActiveAt: Date | null;
+}
+
+interface UserAgent {
+  id: string;
+  username: string | null;
+  isAgent: boolean;
+  autonomousTrading: boolean;
+  agentStatus: string | null;
+  agentPointsBalance: number;
+  agentLastTickAt: Date | null;
+}
+
+interface RegistryForUser {
+  userId: string | null;
+  agentId: string;
+  name: string;
+  status: string;
+}
 
 async function checkAgentStatus() {
+  await initializeDB();
   console.log('🔍 Checking agent status and game state...\n');
 
   // 1. Check GAME_START env var
@@ -24,24 +59,20 @@ async function checkAgentStatus() {
   console.log('2️⃣  Game State:');
   console.log('='.repeat(120));
 
-  const gameStates = await db
-    .select({
-      id: games.id,
-      currentDay: games.currentDay,
-      isContinuous: games.isContinuous,
-      isRunning: games.isRunning,
-      lastTickAt: games.lastTickAt,
-      createdAt: games.createdAt,
-    })
-    .from(games)
-    .orderBy(desc(games.createdAt))
-    .limit(5);
+  const gameStates = await db.query<GameState>(
+    `SELECT id, "currentDay", "isContinuous", "isRunning", "lastTickAt", "createdAt"
+     FROM "Game"
+     ORDER BY "createdAt" DESC
+     LIMIT 5`
+  );
 
   if (gameStates.length === 0) {
     console.log('❌ No games found in database!');
   } else {
     gameStates.forEach((game, idx) => {
-      const lastTick = game.lastTickAt ? getTimeAgo(game.lastTickAt) : 'never';
+      const lastTick = game.lastTickAt
+        ? getTimeAgo(new Date(game.lastTickAt))
+        : 'never';
       console.log(
         `${idx + 1}. Game ${game.id} (Day ${game.currentDay}) | ` +
           `isContinuous: ${game.isContinuous} | ` +
@@ -68,19 +99,12 @@ async function checkAgentStatus() {
   console.log('3️⃣  Agent Registry:');
   console.log('='.repeat(120));
 
-  const registeredAgents = await db
-    .select({
-      agentId: agentRegistries.agentId,
-      name: agentRegistries.name,
-      type: agentRegistries.type,
-      status: agentRegistries.status,
-      userId: agentRegistries.userId,
-      registeredAt: agentRegistries.registeredAt,
-      lastActiveAt: agentRegistries.lastActiveAt,
-    })
-    .from(agentRegistries)
-    .orderBy(desc(agentRegistries.registeredAt))
-    .limit(30);
+  const registeredAgents = await db.query<AgentRegistry>(
+    `SELECT "agentId", name, type, status, "userId", "registeredAt", "lastActiveAt"
+     FROM "AgentRegistry"
+     ORDER BY "registeredAt" DESC
+     LIMIT 30`
+  );
 
   console.log(`Total registered agents: ${registeredAgents.length}`);
 
@@ -88,7 +112,7 @@ async function checkAgentStatus() {
     console.log('\nRegistered agents:');
     registeredAgents.slice(0, 15).forEach((agent, idx) => {
       const lastActive = agent.lastActiveAt
-        ? getTimeAgo(agent.lastActiveAt)
+        ? getTimeAgo(new Date(agent.lastActiveAt))
         : 'never';
       console.log(
         `${idx + 1}. ${agent.name} | ` +
@@ -129,19 +153,12 @@ async function checkAgentStatus() {
   console.log('4️⃣  User Table Agents:');
   console.log('='.repeat(120));
 
-  const userAgents = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      isAgent: users.isAgent,
-      autonomousTrading: users.autonomousTrading,
-      agentStatus: users.agentStatus,
-      agentPointsBalance: users.agentPointsBalance,
-      agentLastTickAt: users.agentLastTickAt,
-    })
-    .from(users)
-    .where(eq(users.isAgent, true))
-    .limit(20);
+  const userAgents = await db.query<UserAgent>(
+    `SELECT id, username, "isAgent", "autonomousTrading", "agentStatus", "agentPointsBalance", "agentLastTickAt"
+     FROM "User"
+     WHERE "isAgent" = true
+     LIMIT 20`
+  );
 
   console.log(`Users with isAgent=true: ${userAgents.length}`);
 
@@ -152,7 +169,7 @@ async function checkAgentStatus() {
 
     tradingAgents.slice(0, 10).forEach((user, idx) => {
       const lastTick = user.agentLastTickAt
-        ? getTimeAgo(user.agentLastTickAt)
+        ? getTimeAgo(new Date(user.agentLastTickAt))
         : 'never';
       console.log(
         `  ${idx + 1}. ${user.username} | ` +
@@ -164,15 +181,13 @@ async function checkAgentStatus() {
 
     // Check if these users are in AgentRegistry
     const userIds = userAgents.map((u) => u.id);
-    const registeredForUsers = await db
-      .select({
-        userId: agentRegistries.userId,
-        agentId: agentRegistries.agentId,
-        name: agentRegistries.name,
-        status: agentRegistries.status,
-      })
-      .from(agentRegistries)
-      .where(inArray(agentRegistries.userId, userIds));
+    const placeholders = userIds.map((_, i) => `$${i + 1}`).join(', ');
+    const registeredForUsers = await db.query<RegistryForUser>(
+      `SELECT "userId", "agentId", name, status
+       FROM "AgentRegistry"
+       WHERE "userId" IN (${placeholders})`,
+      userIds
+    );
 
     console.log(
       `\n🔗 Linked to AgentRegistry: ${registeredForUsers.length}/${userAgents.length}`
@@ -277,7 +292,7 @@ checkAgentStatus()
     console.log('\n✅ Check complete');
     process.exit(0);
   })
-  .catch((error) => {
+  .catch((error: Error) => {
     console.error('\n❌ Check failed:', error);
     process.exit(1);
   });

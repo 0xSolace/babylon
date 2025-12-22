@@ -19,7 +19,7 @@ describe('Feedback API Integration', () => {
     // Create test users
     const user1 = await prisma.user.create({
       data: {
-        privyId: `test-feedback-${Date.now()}-1`,
+        oauth3Id: `test-feedback-${Date.now()}-1`,
         username: `testuser1-${Date.now()}`,
         displayName: 'Test User 1',
       },
@@ -27,7 +27,7 @@ describe('Feedback API Integration', () => {
 
     const user2 = await prisma.user.create({
       data: {
-        privyId: `test-feedback-${Date.now()}-2`,
+        oauth3Id: `test-feedback-${Date.now()}-2`,
         username: `testuser2-${Date.now()}`,
         displayName: 'Test User 2',
       },

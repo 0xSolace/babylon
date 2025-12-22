@@ -1,7 +1,7 @@
 /**
  * Agent Identity Service
  *
- * Handles agent identity management including Privy embedded wallet creation,
+ * Handles agent identity management including OAuth3/Jeju KMS wallet creation,
  * Agent0 network registration (ERC-8004), and on-chain identity verification.
  *
  * @remarks
@@ -23,12 +23,12 @@ import { agentWalletService } from './AgentWalletService';
  */
 export class AgentIdentityService {
   /**
-   * Creates embedded wallet for agent user via Privy
+   * Creates embedded wallet for agent user via OAuth3/Jeju KMS
    *
-   * Delegates to AgentWalletService for actual Privy integration.
+   * Delegates to AgentWalletService for decentralized key management.
    *
    * @param agentUserId - Agent user ID
-   * @returns Wallet address and Privy wallet ID
+   * @returns Wallet address and KMS key ID
    * @throws Error if agent user not found
    */
   async createAgentWallet(agentUserId: string): Promise<{

@@ -4,31 +4,55 @@
  * Check when the last agent tick ran
  */
 
-import { db } from '@babylon/db';
-import { agentLogs, games, users } from '@babylon/db/schema';
-import { desc, eq, sql } from 'drizzle-orm';
+import { db, initializeDB } from '@babylon/db';
+
+interface GameInfo {
+  id: string;
+  currentDay: number;
+  lastTickAt: Date | null;
+  isRunning: boolean;
+}
+
+interface AgentWithTick {
+  id: string;
+  username: string | null;
+  agentLastTickAt: Date | null;
+  agentStatus: string | null;
+  agentPointsBalance: number;
+}
+
+interface TickStat {
+  hasTickedRecently: boolean;
+  count: number;
+}
+
+interface TickLog {
+  agentUserId: string;
+  username: string | null;
+  type: string;
+  level: string;
+  message: string;
+  createdAt: Date;
+}
 
 async function checkLastTick() {
+  await initializeDB();
   console.log('🕐 Checking last agent tick times...\n');
 
   // 1. Check game tick
   console.log('1️⃣  Game Tick:');
   console.log('='.repeat(80));
 
-  const game = await db
-    .select({
-      id: games.id,
-      currentDay: games.currentDay,
-      lastTickAt: games.lastTickAt,
-      isRunning: games.isRunning,
-    })
-    .from(games)
-    .where(eq(games.isContinuous, true))
-    .limit(1);
+  const game = await db.query<GameInfo>(
+    `SELECT id, "currentDay", "lastTickAt", "isRunning"
+     FROM "Game"
+     WHERE "isContinuous" = true
+     LIMIT 1`
+  );
 
   if (game[0]) {
     const lastTick = game[0].lastTickAt
-      ? `${getTimeAgo(game[0].lastTickAt)} (${game[0].lastTickAt.toISOString()})`
+      ? `${getTimeAgo(new Date(game[0].lastTickAt))} (${new Date(game[0].lastTickAt).toISOString()})`
       : 'never';
     console.log(`Game: ${game[0].id}`);
     console.log(`Last Tick: ${lastTick}`);
@@ -40,23 +64,18 @@ async function checkLastTick() {
   console.log('2️⃣  Agent Last Tick (from User table):');
   console.log('='.repeat(80));
 
-  const agentsWithTicks = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      agentLastTickAt: users.agentLastTickAt,
-      agentStatus: users.agentStatus,
-      agentPointsBalance: users.agentPointsBalance,
-    })
-    .from(users)
-    .where(eq(users.isAgent, true))
-    .orderBy(desc(users.agentLastTickAt))
-    .limit(10);
+  const agentsWithTicks = await db.query<AgentWithTick>(
+    `SELECT id, username, "agentLastTickAt", "agentStatus", "agentPointsBalance"
+     FROM "User"
+     WHERE "isAgent" = true
+     ORDER BY "agentLastTickAt" DESC NULLS LAST
+     LIMIT 10`
+  );
 
   console.log('Agents with most recent ticks:');
   agentsWithTicks.forEach((agent, idx) => {
     const lastTick = agent.agentLastTickAt
-      ? `${getTimeAgo(agent.agentLastTickAt)} (${agent.agentLastTickAt.toISOString()})`
+      ? `${getTimeAgo(new Date(agent.agentLastTickAt))} (${new Date(agent.agentLastTickAt).toISOString()})`
       : 'never';
     console.log(
       `${idx + 1}. ${agent.username} | ` +
@@ -67,16 +86,14 @@ async function checkLastTick() {
   });
 
   // Count agents by tick status
-  const tickStats = await db
-    .select({
-      hasTickedRecently: sql<boolean>`CASE WHEN "agentLastTickAt" > NOW() - INTERVAL '1 hour' THEN true ELSE false END`,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(users)
-    .where(eq(users.isAgent, true))
-    .groupBy(
-      sql`CASE WHEN "agentLastTickAt" > NOW() - INTERVAL '1 hour' THEN true ELSE false END`
-    );
+  const tickStats = await db.query<TickStat>(
+    `SELECT 
+       CASE WHEN "agentLastTickAt" > NOW() - INTERVAL '1 hour' THEN true ELSE false END AS "hasTickedRecently",
+       COUNT(*)::int AS count
+     FROM "User"
+     WHERE "isAgent" = true
+     GROUP BY CASE WHEN "agentLastTickAt" > NOW() - INTERVAL '1 hour' THEN true ELSE false END`
+  );
 
   console.log('\nTick Statistics:');
   tickStats.forEach((stat) => {
@@ -91,25 +108,19 @@ async function checkLastTick() {
   console.log('3️⃣  Recent Tick Logs:');
   console.log('='.repeat(80));
 
-  const recentTickLogs = await db
-    .select({
-      agentUserId: agentLogs.agentUserId,
-      username: users.username,
-      type: agentLogs.type,
-      level: agentLogs.level,
-      message: agentLogs.message,
-      createdAt: agentLogs.createdAt,
-    })
-    .from(agentLogs)
-    .leftJoin(users, eq(agentLogs.agentUserId, users.id))
-    .where(eq(agentLogs.type, 'tick'))
-    .orderBy(desc(agentLogs.createdAt))
-    .limit(10);
+  const recentTickLogs = await db.query<TickLog>(
+    `SELECT al."agentUserId", u.username, al.type, al.level, al.message, al."createdAt"
+     FROM "AgentLog" al
+     LEFT JOIN "User" u ON al."agentUserId" = u.id
+     WHERE al.type = 'tick'
+     ORDER BY al."createdAt" DESC
+     LIMIT 10`
+  );
 
   if (recentTickLogs.length > 0) {
     console.log('Most recent tick logs:');
     recentTickLogs.forEach((log, idx) => {
-      const timeAgo = getTimeAgo(log.createdAt);
+      const timeAgo = getTimeAgo(new Date(log.createdAt));
       console.log(
         `${idx + 1}. ${log.username} | ` + `${timeAgo} | ` + `${log.message}`
       );
@@ -125,7 +136,8 @@ async function checkLastTick() {
 
   const anyRecentTicks = agentsWithTicks.some(
     (a) =>
-      a.agentLastTickAt && Date.now() - a.agentLastTickAt.getTime() < 3600000 // 1 hour
+      a.agentLastTickAt &&
+      Date.now() - new Date(a.agentLastTickAt).getTime() < 3600000 // 1 hour
   );
 
   if (anyRecentTicks) {
@@ -134,7 +146,7 @@ async function checkLastTick() {
     const mostRecent = agentsWithTicks.find((a) => a.agentLastTickAt !== null);
     if (mostRecent?.agentLastTickAt) {
       console.log(
-        `⚠️  Last agent tick was ${getTimeAgo(mostRecent.agentLastTickAt)}`
+        `⚠️  Last agent tick was ${getTimeAgo(new Date(mostRecent.agentLastTickAt))}`
       );
       console.log('   Agent tick cron may not be running');
     }
@@ -166,7 +178,7 @@ checkLastTick()
     console.log('\n✅ Check complete');
     process.exit(0);
   })
-  .catch((error) => {
+  .catch((error: Error) => {
     console.error('\n❌ Check failed:', error);
     process.exit(1);
   });

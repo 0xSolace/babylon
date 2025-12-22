@@ -16,7 +16,12 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node", "bun-types"],
+    "baseUrl": ".",
+    "paths": {
+      "@babylon/a2a": ["../../a2a/src/index.ts"],
+      "@babylon/a2a/*": ["../../a2a/src/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

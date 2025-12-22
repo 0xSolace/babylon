@@ -2,7 +2,6 @@
  * OAuth3 Module Exports
  *
  * Decentralized authentication using Jeju OAuth3.
- * NO FALLBACKS - OAuth3 replaces Privy.
  */
 
 export {

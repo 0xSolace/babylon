@@ -16,10 +16,19 @@
  */
 
 import { trackExternalShare } from '@babylon/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Check, Link as LinkIcon, Share2, Twitter } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { ShareVerificationModal } from './ShareVerificationModal';
+
+interface ShareData {
+  platform: string;
+}
+
+interface SharesResponse {
+  shares: ShareData[];
+}
 
 // Farcaster icon component
 function FarcasterIcon({ className }: { className?: string }) {
@@ -64,22 +73,18 @@ export function ExternalShareButton({
     shareId: string;
     platform: 'twitter' | 'farcaster';
   } | null>(null);
-  const [earnedPlatforms, setEarnedPlatforms] = useState<Set<string>>(
-    new Set()
-  );
 
   const shareUrl =
     url || (typeof window !== 'undefined' ? window.location.href : '');
   const shareText = text || 'Check this out!';
 
-  // Check for existing earned shares on mount
-  useEffect(() => {
-    const checkExistingShares = async () => {
-      if (!authenticated || !user) return;
-
+  // Query for existing earned shares
+  const { data: earnedPlatforms = new Set<string>() } = useQuery({
+    queryKey: ['earned-shares', user?.id, contentType],
+    queryFn: async (): Promise<Set<string>> => {
       const token =
         typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-      if (!token) return;
+      if (!token || !user) return new Set<string>();
 
       const response = await fetch(
         `/api/users/${encodeURIComponent(user.id)}/share?contentType=${contentType}`,
@@ -90,21 +95,23 @@ export function ExternalShareButton({
         }
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        const shares = data.shares || [];
-
-        // Track which platforms have already earned points
-        const earned = new Set<string>();
-        shares.forEach((share: { platform: string }) => {
-          earned.add(share.platform);
-        });
-        setEarnedPlatforms(earned);
+      if (!response.ok) {
+        return new Set<string>();
       }
-    };
 
-    checkExistingShares();
-  }, [authenticated, user, contentType]);
+      const data: SharesResponse = await response.json();
+      const shares = data.shares || [];
+
+      // Track which platforms have already earned points
+      const earned = new Set<string>();
+      shares.forEach((share: ShareData) => {
+        earned.add(share.platform);
+      });
+      return earned;
+    },
+    enabled: authenticated && !!user,
+    staleTime: 60_000, // Cache for 1 minute
+  });
 
   const handleShareToTwitter = async () => {
     // Check if shareText already contains the URL to avoid duplication

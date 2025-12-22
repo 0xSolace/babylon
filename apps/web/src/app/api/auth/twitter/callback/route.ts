@@ -59,19 +59,12 @@
 
 import { PointsService, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, TwitterCallbackQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 
 // Configurable redirect destination after OAuth completion
 const OAUTH_REDIRECT_PATH = process.env.OAUTH_REDIRECT_PATH ?? '/rewards';
-
-const TwitterCallbackQuerySchema = z.object({
-  code: z.string().optional(),
-  state: z.string().optional(),
-  error: z.string().optional(),
-});
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams;
@@ -116,7 +109,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Verify state and get user ID from it
-  // State format: "userId|timestamp|random" (using | to avoid conflicts with Privy DIDs)
+  // State format: "userId|timestamp|random" (using | to avoid conflicts with OAuth3 DIDs)
   const stateParts = state.split('|');
   if (stateParts.length < 2) {
     logger.warn(

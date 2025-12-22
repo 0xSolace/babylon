@@ -16,7 +16,7 @@
  *     summary: Get unread message counts
  *     description: Returns counts of pending DMs and unread messages (lightweight polling endpoint)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Counts retrieved successfully

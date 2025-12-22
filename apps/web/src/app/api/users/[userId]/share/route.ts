@@ -18,7 +18,7 @@
  *     summary: Get verified shares
  *     description: Retrieves verified and earned shares for a user
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -40,7 +40,7 @@
  *     summary: Track share action
  *     description: Tracks share and awards points (authenticated user only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -120,7 +120,7 @@ import { z } from 'zod';
 const ShareRequestSchema = z.object({
   platform: z.enum(['twitter', 'farcaster', 'link', 'telegram', 'discord']),
   contentType: z.enum(['post', 'profile', 'market', 'referral', 'leaderboard']),
-  contentId: z.string().optional(), // Allow any string (user IDs can be Privy DIDs or Snowflake IDs)
+  contentId: z.string().optional(), // Allow any string (user IDs can be OAuth3 DIDs or Snowflake IDs)
   url: z.string().url().optional(),
 });
 
@@ -222,7 +222,7 @@ export const POST = withErrorHandling(
 
     // Create share action record (points will be awarded after verification)
     const shareActionId = await generateSnowflakeId();
-    const [shareAction] = await db
+    const shareActionResults = await db
       .insert(shareActions)
       .values({
         id: shareActionId,
@@ -236,6 +236,11 @@ export const POST = withErrorHandling(
       })
       .returning();
 
+    const createdShareAction = shareActionResults[0];
+    if (!createdShareAction) {
+      throw new Error('Failed to create share action');
+    }
+
     logger.info(
       `User ${canonicalUserId} initiated share for ${contentType} on ${platform} (pending verification)`,
       {
@@ -243,13 +248,13 @@ export const POST = withErrorHandling(
         platform,
         contentType,
         contentId,
-        shareId: shareAction.id,
+        shareId: createdShareAction.id,
       },
       'POST /api/users/[userId]/share'
     );
 
     return successResponse({
-      shareAction,
+      shareAction: createdShareAction,
       points: {
         awarded: 0, // Points will be awarded after verification
         newTotal: 0,

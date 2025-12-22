@@ -17,7 +17,7 @@
  *     summary: Get signal analysis
  *     description: Returns signal analysis data (admin only, reveals secret game data)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       200:
  *         description: Signal analysis retrieved successfully

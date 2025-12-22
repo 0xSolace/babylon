@@ -17,7 +17,7 @@
  *     summary: Run agent benchmark
  *     description: Runs agent through benchmark simulation to measure performance
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: agentId

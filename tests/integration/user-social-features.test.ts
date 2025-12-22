@@ -66,7 +66,7 @@ describe('Complete User Social Features Integration', () => {
       // Create test users
       testUser1 = await prisma.user.create({
         data: {
-          privyId: `did:privy:test-social-1-${Date.now()}`,
+          oauth3Id: `did:jeju:testnet:test-social-1-${Date.now()}`,
           username: `socialtest1_${Date.now()}`,
           displayName: 'Social Test User 1',
           bio: 'Test account for social features',
@@ -83,7 +83,7 @@ describe('Complete User Social Features Integration', () => {
 
       testUser2 = await prisma.user.create({
         data: {
-          privyId: `did:privy:test-social-2-${Date.now()}`,
+          oauth3Id: `did:jeju:testnet:test-social-2-${Date.now()}`,
           username: `socialtest2_${Date.now()}`,
           displayName: 'Social Test User 2',
           bio: 'Test account for social features',

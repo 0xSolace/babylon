@@ -2,7 +2,12 @@
  * DID Manager - creates DIDs, links accounts, manages key shares.
  */
 
-import { logger } from '@babylon/shared';
+import {
+  AuthenticationError,
+  logger,
+  NotFoundError,
+  ValidationError,
+} from '@babylon/shared';
 import { type Address, type Hex, verifyMessage } from 'viem';
 import { MPCClient, type MPCClientConfig } from '../mpc/client';
 import type {
@@ -79,7 +84,10 @@ export class DIDManager {
         { authType: authMethod.type, error: keyResult.error },
         'DIDManager'
       );
-      throw new Error(`Failed to create identity: ${keyResult.error}`);
+      throw new ValidationError(
+        `Failed to create identity: ${keyResult.error}`,
+        ['authMethod']
+      );
     }
 
     const did = createDID(keyResult.publicKey, this.config.network);
@@ -124,14 +132,19 @@ export class DIDManager {
     ownershipProof: Hex
   ): Promise<LinkedAccount> {
     const document = this.documents.get(did);
-    if (!document) throw new Error(`DID not found: ${did}`);
+    if (!document) throw new NotFoundError('DID', did);
 
     const isOwner = await this.verifyOwnership(
       did,
       ownershipProof,
       'link-account'
     );
-    if (!isOwner) throw new Error('Ownership verification failed');
+    if (!isOwner) {
+      throw new AuthenticationError(
+        'Ownership verification failed',
+        'INVALID_CREDENTIALS'
+      );
+    }
 
     this.validateAuthMethod(authMethod);
 
@@ -149,8 +162,9 @@ export class DIDManager {
           a.identifier === linkedAccount.identifier
       )
     ) {
-      throw new Error(
-        `Account already linked: ${linkedAccount.type}:${linkedAccount.identifier}`
+      throw new ValidationError(
+        `Account already linked: ${linkedAccount.type}:${linkedAccount.identifier}`,
+        ['linkedAccount']
       );
     }
 
@@ -166,31 +180,41 @@ export class DIDManager {
     ownershipProof: Hex
   ): Promise<void> {
     const document = this.documents.get(did);
-    if (!document) throw new Error(`DID not found: ${did}`);
+    if (!document) throw new NotFoundError('DID', did);
 
     const isOwner = await this.verifyOwnership(
       did,
       ownershipProof,
       'unlink-account'
     );
-    if (!isOwner) throw new Error('Ownership verification failed');
+    if (!isOwner) {
+      throw new AuthenticationError(
+        'Ownership verification failed',
+        'INVALID_CREDENTIALS'
+      );
+    }
 
     if (document.linkedAccounts.length <= 1) {
-      throw new Error('Cannot unlink last account');
+      throw new ValidationError('Cannot unlink last account', [
+        'linkedAccounts',
+      ]);
     }
 
     const index = document.linkedAccounts.findIndex(
       (a) => a.type === type && a.identifier === identifier
     );
-    if (index === -1)
-      throw new Error(`Account not found: ${type}:${identifier}`);
+    if (index === -1) {
+      throw new NotFoundError('Linked Account', `${type}:${identifier}`);
+    }
 
     document.linkedAccounts.splice(index, 1);
     document.updated = Date.now();
   }
 
   async resolve(did: DID): Promise<DIDDocument | null> {
-    if (!validateDID(did)) throw new Error(`Invalid DID: ${did}`);
+    if (!validateDID(did)) {
+      throw new ValidationError(`Invalid DID format: ${did}`, ['did']);
+    }
     return this.documents.get(did) ?? null;
   }
 
@@ -238,22 +262,33 @@ export class DIDManager {
   private validateAuthMethod(authMethod: AuthMethod): void {
     switch (authMethod.type) {
       case 'email':
-        if (!authMethod.email.includes('@')) throw new Error('Invalid email');
+        if (!authMethod.email.includes('@')) {
+          throw new ValidationError('Invalid email format', ['email']);
+        }
         break;
       case 'wallet':
         if (
           !authMethod.address.startsWith('0x') ||
           authMethod.address.length !== 42
-        )
-          throw new Error('Invalid wallet address');
+        ) {
+          throw new ValidationError('Invalid wallet address format', [
+            'address',
+          ]);
+        }
         break;
       case 'farcaster':
-        if (authMethod.fid <= 0) throw new Error('Invalid FID');
+        if (authMethod.fid <= 0) {
+          throw new ValidationError('Invalid FID', ['fid']);
+        }
         break;
       case 'twitter':
       case 'discord':
-        if (!authMethod.code || !authMethod.codeVerifier)
-          throw new Error('Missing OAuth params');
+        if (!authMethod.code || !authMethod.codeVerifier) {
+          throw new ValidationError('Missing OAuth params', [
+            'code',
+            'codeVerifier',
+          ]);
+        }
         break;
     }
   }

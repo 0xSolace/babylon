@@ -17,10 +17,6 @@ export interface AuthenticatedUser {
   dbUserId?: string;
   /** OAuth3 identity ID (decentralized identity) */
   oauth3Id?: string;
-  /**
-   * @deprecated Use oauth3Id instead. Maps to oauth3Id for backwards compatibility.
-   */
-  privyId?: string;
   /** User's wallet address */
   walletAddress?: string;
   /** User's email if available */

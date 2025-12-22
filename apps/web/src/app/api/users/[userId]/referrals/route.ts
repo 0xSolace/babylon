@@ -16,7 +16,7 @@
  *     summary: Get referral stats
  *     description: Returns referral statistics and referred users list (own profile only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -102,15 +102,16 @@ export const GET = withErrorHandling(
     const { userId } = UserIdParamSchema.parse(params);
 
     // Check if the authenticated user has a database record
+    const userIdStr = String(userId);
     if (!authUser.dbUserId) {
       throw new NotFoundError(
         'User profile not found. Please complete onboarding first.',
         'USER_NOT_FOUND',
-        { userId }
+        userIdStr
       );
     }
 
-    const targetUser = await requireUserByIdentifier(userId, { id: true });
+    const targetUser = await requireUserByIdentifier(userIdStr, { id: true });
     const canonicalUserId = targetUser.id;
 
     // Validate query parameters
@@ -233,18 +234,22 @@ export const GET = withErrorHandling(
       .orderBy(desc(users.createdAt));
 
     // Get fee earnings from referrals
-    const [feeEarnings] = await db
+    const feeEarningsResult = await db
       .select({
         total: sum(tradingFees.referrerFee),
       })
       .from(tradingFees)
       .where(eq(tradingFees.referrerId, canonicalUserId));
 
+    // Type assertion for aggregate query result
+    const feeEarnings = (
+      feeEarningsResult as unknown as Array<{ total: string | null }>
+    )[0];
     const totalFeesEarned = Number(feeEarnings?.total ?? 0);
 
     // Calculate weekly referral count (last 7 days) - only completed
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const [weeklyCountResult] = await db
+    const weeklyCountResults = await db
       .select({
         count: count(),
       })
@@ -257,7 +262,13 @@ export const GET = withErrorHandling(
         )
       );
 
-    const weeklyReferralCount = Number(weeklyCountResult?.count ?? 0);
+    // Type assertion for aggregate query result
+    const weeklyCountResult = (
+      weeklyCountResults as unknown as Array<{ count: number }>
+    )[0];
+    const weeklyReferralCount = Number(
+      weeklyCountResult ? weeklyCountResult.count : 0
+    );
 
     // Check if referrer (current user) is following the referred users
     const completedUserIds = completedReferralsData

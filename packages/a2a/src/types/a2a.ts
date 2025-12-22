@@ -11,22 +11,31 @@ import type {
   AgentCapabilities,
   GameNetworkInfo,
   JsonRpcParams,
+  JsonRpcResult,
   JsonValue,
+  PaymentRequest,
 } from '@babylon/shared';
 import {
   AgentCapabilitiesSchema,
   GameNetworkInfoSchema,
   JsonValueSchema,
+  PaymentRequestSchema,
 } from '@babylon/shared';
-import { z } from 'zod';
 
-/**
- * Result type for JSON-RPC responses
- */
-export type JsonRpcResult = JsonValue | Record<string, JsonValue> | JsonValue[];
-
-export type { AgentCapabilities, GameNetworkInfo, JsonRpcParams, JsonValue };
-export { AgentCapabilitiesSchema, GameNetworkInfoSchema, JsonValueSchema };
+export type {
+  AgentCapabilities,
+  GameNetworkInfo,
+  JsonRpcParams,
+  JsonRpcResult,
+  JsonValue,
+  PaymentRequest,
+};
+export {
+  AgentCapabilitiesSchema,
+  GameNetworkInfoSchema,
+  JsonValueSchema,
+  PaymentRequestSchema,
+};
 
 /**
  * JSON-RPC 2.0 request structure
@@ -217,29 +226,6 @@ export interface MarketData {
   resolved: boolean;
   winningOutcome?: number;
 }
-
-/**
- * X402 payment request structure
- */
-export interface PaymentRequest {
-  requestId: string;
-  from: string;
-  to: string;
-  amount: string; // in wei
-  service: string;
-  metadata?: Record<string, JsonValue>;
-  expiresAt: number;
-}
-
-export const PaymentRequestSchema = z.object({
-  requestId: z.string(),
-  from: z.string(),
-  to: z.string(),
-  amount: z.string(),
-  service: z.string(),
-  metadata: z.record(z.string(), JsonValueSchema).optional(),
-  expiresAt: z.number(),
-});
 
 /**
  * Payment receipt structure

@@ -122,10 +122,10 @@ export const GET = withErrorHandling(
     const { userId } = UserIdParamSchema.parse(params);
     const targetUser = await findUserByIdentifier(userId, { id: true });
 
-    // If user doesn't exist yet (new Privy user), return empty data
+    // If user doesn't exist yet (new OAuth3 user), return empty data
     if (!targetUser) {
       logger.info(
-        'User not found - returning empty data (may be new Privy user)',
+        'User not found - returning empty data (may be new OAuth3 user)',
         { userId },
         'GET /api/users/[userId]/posts'
       );
@@ -198,8 +198,14 @@ export const GET = withErrorHandling(
         )
         .groupBy(reactions.commentId);
 
+      // Type assertion for grouped count query results
+      type CommentCountResult = { commentId: string | null; count: number };
+      type ReplyCountResult = { parentCommentId: string | null; count: number };
+      const typedLikeCounts =
+        likeCountsResult as unknown as CommentCountResult[];
+
       const likeCountsMap = new Map(
-        likeCountsResult.map((r) => [r.commentId, Number(r.count)])
+        typedLikeCounts.map((r) => [r.commentId, Number(r.count)])
       );
 
       // Fetch reply counts for comments
@@ -212,8 +218,10 @@ export const GET = withErrorHandling(
         .where(inArray(comments.parentCommentId, commentIds))
         .groupBy(comments.parentCommentId);
 
+      const typedReplyCounts =
+        replyCountsResult as unknown as ReplyCountResult[];
       const replyCountsMap = new Map(
-        replyCountsResult.map((r) => [r.parentCommentId, Number(r.count)])
+        typedReplyCounts.map((r) => [r.parentCommentId, Number(r.count)])
       );
 
       // Check if user has liked comments
@@ -349,8 +357,13 @@ export const GET = withErrorHandling(
       )
       .groupBy(reactions.postId);
 
+    // Type assertion for grouped count query results
+    type PostCountResult = { postId: string | null; count: number };
+    const typedLikeCountsPost =
+      likeCountsResult as unknown as PostCountResult[];
+
     const likeCountsMap = new Map(
-      likeCountsResult.map((r) => [r.postId, Number(r.count)])
+      typedLikeCountsPost.map((r) => [r.postId, Number(r.count)])
     );
 
     // Fetch comment counts
@@ -363,8 +376,10 @@ export const GET = withErrorHandling(
       .where(inArray(comments.postId, postIds))
       .groupBy(comments.postId);
 
+    const typedCommentCounts =
+      commentCountsResult as unknown as PostCountResult[];
     const commentCountsMap = new Map(
-      commentCountsResult.map((r) => [r.postId, Number(r.count)])
+      typedCommentCounts.map((r) => [r.postId, Number(r.count)])
     );
 
     // Fetch share counts
@@ -377,8 +392,9 @@ export const GET = withErrorHandling(
       .where(inArray(shares.postId, postIds))
       .groupBy(shares.postId);
 
+    const typedShareCounts = shareCountsResult as unknown as PostCountResult[];
     const shareCountsMap = new Map(
-      shareCountsResult.map((r) => [r.postId, Number(r.count)])
+      typedShareCounts.map((r) => [r.postId, Number(r.count)])
     );
 
     // Check if user has liked/shared posts
@@ -482,7 +498,7 @@ export const GET = withErrorHandling(
             {
               id: a.id,
               name: a.name,
-              profileImageUrl: a.profileImageUrl ?? null,
+              profileImageUrl: a.profileImageUrl || null,
             },
           ])
       );
@@ -536,14 +552,29 @@ export const GET = withErrorHandling(
             .groupBy(shares.postId),
         ]);
 
+      // Type assertions for grouped count query results
+      type OriginalPostCountResult = { postId: string | null; count: number };
+      const typedOrigReactions =
+        originalPostReactions as unknown as OriginalPostCountResult[];
+      const typedOrigComments =
+        originalPostComments as unknown as OriginalPostCountResult[];
+      const typedOrigShares =
+        originalPostShares as unknown as OriginalPostCountResult[];
+
       originalReactionMap = new Map(
-        originalPostReactions.map((r) => [r.postId!, Number(r.count)])
+        typedOrigReactions
+          .filter((r) => r.postId !== null)
+          .map((r) => [r.postId!, Number(r.count)])
       );
       originalCommentMap = new Map(
-        originalPostComments.map((c) => [c.postId, Number(c.count)])
+        typedOrigComments
+          .filter((c) => c.postId !== null)
+          .map((c) => [c.postId!, Number(c.count)])
       );
       originalShareMap = new Map(
-        originalPostShares.map((s) => [s.postId, Number(s.count)])
+        typedOrigShares
+          .filter((s) => s.postId !== null)
+          .map((s) => [s.postId!, Number(s.count)])
       );
     }
 
@@ -633,7 +664,7 @@ export const GET = withErrorHandling(
                 originalActor?.name ||
                 originalOrg?.name ||
                 originalPost.authorId,
-              authorUsername: originalUser?.username || null,
+              authorUsername: originalUser ? originalUser.username : null,
               authorProfileImageUrl:
                 originalUser?.profileImageUrl ||
                 originalActor?.profileImageUrl ||

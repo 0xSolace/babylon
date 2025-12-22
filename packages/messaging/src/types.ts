@@ -1,3 +1,4 @@
+import { BabylonError } from '@babylon/shared';
 import type { Address, Hex } from 'viem';
 
 /**
@@ -171,12 +172,8 @@ export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
 /**
  * Custom error for messaging operations
  */
-export class MessagingError extends Error {
-  constructor(
-    message: string,
-    public code: ErrorCode
-  ) {
-    super(message);
-    this.name = 'MessagingError';
+export class MessagingError extends BabylonError {
+  constructor(message: string, code: ErrorCode) {
+    super(message, code, 500, true);
   }
 }

@@ -12,6 +12,7 @@ import express, { type Request, type Response } from 'express';
 import { createServer } from 'http';
 import { createPublicClient, http } from 'viem';
 import { WebSocketServer } from 'ws';
+import { z } from 'zod';
 import { agentCard } from './agent-card';
 import { setupDatabase } from './database/setup';
 import { A2AHandler } from './handlers/a2a-handler';
@@ -20,6 +21,21 @@ import { PortfolioHandler } from './handlers/portfolio-handler';
 import { SocialHandler } from './handlers/social-handler';
 import { AgentRegistry } from './services/agent-registry';
 import { LocalBlockchain } from './services/local-blockchain';
+
+// JSON-RPC 2.0 Request Schema
+const JsonRpcRequestSchema = z.object({
+  jsonrpc: z.literal('2.0'),
+  method: z.string().min(1),
+  params: z.record(z.string(), z.unknown()).optional().default({}),
+  id: z.union([z.string(), z.number()]).optional(),
+});
+
+// Agent Headers Schema (optional fields)
+const AgentHeadersSchema = z.object({
+  agentId: z.string().optional(),
+  agentAddress: z.string().optional(),
+  tokenId: z.string().optional(),
+});
 
 dotenv.config();
 
@@ -71,26 +87,36 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // JSON-RPC 2.0 endpoint
 app.post('/api/a2a', async (req: Request, res: Response) => {
-  const { jsonrpc, method, params, id } = req.body;
-
-  if (jsonrpc !== '2.0') {
+  // Validate request body
+  const bodyResult = JsonRpcRequestSchema.safeParse(req.body);
+  if (!bodyResult.success) {
     return res.json({
       jsonrpc: '2.0',
-      error: { code: -32600, message: 'Invalid Request' },
-      id,
+      error: {
+        code: -32600,
+        message: 'Invalid Request',
+        data: bodyResult.error.format(),
+      },
+      id: req.body?.id ?? null,
     });
   }
 
-  // Extract agent info from headers
-  const agentId = req.headers['x-agent-id'] as string;
-  const agentAddress = req.headers['x-agent-address'] as string;
-  const tokenId = req.headers['x-agent-token-id'] as string;
+  const { method, params, id } = bodyResult.data;
+
+  // Validate and extract agent headers
+  const headersResult = AgentHeadersSchema.safeParse({
+    agentId: req.headers['x-agent-id'],
+    agentAddress: req.headers['x-agent-address'],
+    tokenId: req.headers['x-agent-token-id'],
+  });
+
+  const headers = headersResult.success ? headersResult.data : {};
 
   // Handle method
   const result = await a2aHandler.handleMethod(method, params, {
-    agentId,
-    address: agentAddress,
-    tokenId: parseInt(tokenId || '0'),
+    agentId: headers.agentId,
+    address: headers.agentAddress,
+    tokenId: parseInt(headers.tokenId ?? '0'),
   });
 
   res.json({
@@ -106,25 +132,57 @@ const server = createServer(app);
 // Create WebSocket server for real-time updates
 const wss = new WebSocketServer({ server, path: '/ws' });
 
+// WebSocket message schema (includes agent context)
+const WsMessageSchema = z.object({
+  jsonrpc: z.literal('2.0').optional(),
+  method: z.string().min(1),
+  params: z.record(z.string(), z.unknown()).optional().default({}),
+  id: z.union([z.string(), z.number()]).optional(),
+  agentId: z.string().optional(),
+  address: z.string().optional(),
+  tokenId: z.number().optional(),
+});
+
 wss.on('connection', (ws) => {
   console.log('New WebSocket connection');
 
   ws.on('message', async (data) => {
-    const message = JSON.parse(data.toString());
-    const { method, params, id } = message;
+    const parsed = JSON.parse(data.toString()) as unknown;
+    const result = WsMessageSchema.safeParse(parsed);
+
+    if (!result.success) {
+      ws.send(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32600,
+            message: 'Invalid Request',
+            data: result.error.format(),
+          },
+          id: null,
+        })
+      );
+      return;
+    }
+
+    const message = result.data;
 
     // Handle WebSocket A2A methods
-    const result = await a2aHandler.handleMethod(method, params, {
-      agentId: message.agentId,
-      address: message.address,
-      tokenId: message.tokenId,
-    });
+    const response = await a2aHandler.handleMethod(
+      message.method,
+      message.params,
+      {
+        agentId: message.agentId,
+        address: message.address,
+        tokenId: message.tokenId,
+      }
+    );
 
     ws.send(
       JSON.stringify({
         jsonrpc: '2.0',
-        result,
-        id,
+        result: response,
+        id: message.id,
       })
     );
   });

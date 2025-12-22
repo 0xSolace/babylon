@@ -83,7 +83,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     await rssFeedService.getUntransformedHeadlines(20); // Process 20 at a time
 
   const generator = createParodyHeadlineGenerator();
-  const parodies = await generator.processHeadlines(untransformedHeadlines);
+  // processHeadlines expects string[] - extract titles from headline objects
+  const headlineStrings = untransformedHeadlines.map((h) => h.title);
+  const parodies = await generator.processHeadlines(headlineStrings);
   logger.info(
     `Generated ${parodies.length} parody headlines`,
     { count: parodies.length },
@@ -130,7 +132,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   if (
     !verifyCronAuth(request, {
       jobName: 'WorldFactsCron',
-      allowVercelCronUserAgent: true,
     })
   ) {
     logger.warn('Unauthorized GET request to cron endpoint', undefined, 'Cron');

@@ -16,7 +16,7 @@
  *     summary: Refund escrow payment
  *     description: Refunds payment back to recipient (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -61,16 +61,9 @@
 
 import { requireAdmin } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, RefundEscrowSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const RefundEscrowSchema = z.object({
-  escrowId: z.string().min(1, 'Escrow ID is required'),
-  refundTxHash: z.string().min(1, 'Refund transaction hash is required'),
-  reason: z.string().optional(),
-});
 
 export async function POST(req: NextRequest) {
   const _adminUser = await requireAdmin(req);

@@ -138,11 +138,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       totalDeposited: sql`${users.totalDeposited} + ${amount}`,
     })
     .where(eq(users.id, user.id))
-    .returning({
-      id: users.id,
-      virtualBalance: users.virtualBalance,
-      totalDeposited: users.totalDeposited,
-    });
+    .returning();
 
   logger.info(
     `Successfully awarded ${amount} points`,
@@ -164,24 +160,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     message: `Successfully awarded ${amount} points`,
     transaction: {
       id: transaction.id,
-      amount: transaction.amount ? transaction.amount.toString() : '0',
+      amount: transaction.amount?.toString() ?? '0',
       reason: transaction.description,
       timestamp: transaction.createdAt,
-      balanceBefore: transaction.balanceBefore
-        ? transaction.balanceBefore.toString()
-        : '0',
-      balanceAfter: transaction.balanceAfter
-        ? transaction.balanceAfter.toString()
-        : '0',
+      balanceBefore: transaction.balanceBefore?.toString() ?? '0',
+      balanceAfter: transaction.balanceAfter?.toString() ?? '0',
     },
     user: {
       id: updatedUser.id,
-      virtualBalance: updatedUser.virtualBalance
-        ? updatedUser.virtualBalance.toString()
-        : '0',
-      totalDeposited: updatedUser.totalDeposited
-        ? updatedUser.totalDeposited.toString()
-        : '0',
+      virtualBalance: updatedUser.virtualBalance?.toString() ?? '0',
+      totalDeposited: updatedUser.totalDeposited?.toString() ?? '0',
     },
   });
 });

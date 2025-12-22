@@ -11,7 +11,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -69,8 +69,6 @@ export function AdminManagementTab() {
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
 
   const {
     data: admins = [],
@@ -82,43 +80,42 @@ export function AdminManagementTab() {
     queryFn: async () => {
       const response = await fetch('/api/admin/admins');
       if (!response.ok) throw new Error('Failed to fetch admins');
-      const data = await response.json();
+      const data: { admins: AdminUser[] } = await response.json();
       return data.admins || [];
     },
   });
 
-  const searchUsers = useCallback(
-    async (query: string) => {
-      if (!query.trim()) {
-        setAvailableUsers([]);
-        return;
-      }
+  const { data: availableUsers = [], isFetching: loadingUsers } = useQuery<
+    AvailableUser[]
+  >({
+    queryKey: [
+      'admin',
+      'users',
+      'search',
+      searchQuery,
+      admins.map((a) => a.id),
+    ],
+    queryFn: async () => {
+      if (!searchQuery.trim()) return [];
 
-      setLoadingUsers(true);
       const params = new URLSearchParams({
-        search: query,
+        search: searchQuery,
         limit: '10',
         filter: 'users', // Only real users, not actors
       });
       const response = await fetch(`/api/admin/users?${params}`);
-      if (!response.ok) {
-        setAvailableUsers([]);
-        setLoadingUsers(false);
-        return;
-      }
-      const data = await response.json();
+      if (!response.ok) return [];
+
+      const data: { users: AvailableUser[] } = await response.json();
 
       // Filter out users who are already admins
       const adminIds = new Set(admins.map((a) => a.id));
-      const nonAdminUsers = (data.users || []).filter(
+      return (data.users || []).filter(
         (u: AvailableUser) => !adminIds.has(u.id) && !u.isActor
       );
-
-      setAvailableUsers(nonAdminUsers);
-      setLoadingUsers(false);
     },
-    [admins]
-  );
+    enabled: searchQuery.trim().length > 0,
+  });
 
   const addAdminMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -135,13 +132,14 @@ export function AdminManagementTab() {
 
       return response.json();
     },
-    onSuccess: (result) => {
+    onSuccess: (result: {
+      user: { displayName: string | null; username: string | null };
+    }) => {
       toast.success(
         `${result.user.displayName || result.user.username || 'User'} is now an admin`
       );
       setShowAddModal(false);
       setSearchQuery('');
-      setAvailableUsers([]);
       queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] });
     },
     onError: (error) => {
@@ -166,7 +164,9 @@ export function AdminManagementTab() {
 
       return response.json();
     },
-    onSuccess: (result) => {
+    onSuccess: (result: {
+      user: { displayName: string | null; username: string | null };
+    }) => {
       toast.success(
         `${result.user.displayName || result.user.username || 'User'} is no longer an admin`
       );
@@ -339,7 +339,6 @@ export function AdminManagementTab() {
                 onClick={() => {
                   setShowAddModal(false);
                   setSearchQuery('');
-                  setAvailableUsers([]);
                 }}
                 className="text-muted-foreground transition-colors hover:text-foreground"
               >
@@ -359,10 +358,7 @@ export function AdminManagementTab() {
                 type="text"
                 placeholder="Search by username, display name, or wallet..."
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  searchUsers(e.target.value);
-                }}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-lg border border-border bg-background py-2 pr-4 pl-10 focus:border-primary focus:outline-none"
                 autoFocus
               />

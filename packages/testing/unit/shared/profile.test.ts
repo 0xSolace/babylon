@@ -49,23 +49,19 @@ describe('Profile URL Utilities', () => {
     });
 
     it('should return false for DID identifiers', () => {
-      expect(isUsername('did:privy:abc123')).toBe(false);
+      expect(isUsername('did:jeju:localnet:abc123')).toBe(false);
+      expect(isUsername('did:jeju:mainnet:0x1234567890abcdef')).toBe(false);
       expect(isUsername('did:ethr:0x123')).toBe(false);
     });
 
-    it('should return false for identifiers containing privy', () => {
-      expect(isUsername('privy-user-123')).toBe(false);
-      expect(isUsername('some-privy-id')).toBe(false);
-      expect(isUsername('PRIVY_USER')).toBe(false);
+    it('should return false for identifiers with dashes', () => {
+      expect(isUsername('oauth3-user-123')).toBe(false);
+      expect(isUsername('some-user-id')).toBe(false);
     });
 
     it('should return false for UUID identifiers', () => {
       expect(isUsername('550e8400-e29b-41d4-a716-446655440000')).toBe(false);
       expect(isUsername('123e4567-e89b-12d3-a456-426614174000')).toBe(false);
-    });
-
-    it('should return false for identifiers with dashes (non-UUID)', () => {
-      expect(isUsername('some-user-id')).toBe(false);
     });
 
     it('should return true for long usernames without dashes', () => {

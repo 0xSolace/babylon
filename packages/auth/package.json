@@ -25,12 +25,13 @@
     "@babylon/shared": "workspace:*",
     "arctic": "2.3.0",
     "jose": "5.10.0",
-    "viem": "2.41.2"
+    "viem": "2.43.2",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/bun": "1.3.2",
-    "@types/react": "18.3.0",
-    "typescript": "5.7.2"
+    "@types/react": "^19.2.2",
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "react": ">=18.0.0"

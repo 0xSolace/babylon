@@ -45,7 +45,7 @@ export class BabylonApiClient {
   }
 
   /**
-   * Set authentication token (from Privy or other auth provider)
+   * Set authentication token (from OAuth3 or other auth provider)
    */
   setAuthToken(token: string): void {
     this.authToken = token;

@@ -16,7 +16,7 @@
  *     summary: Initiate Twitter OAuth
  *     description: Starts Twitter OAuth 2.0 flow with PKCE (redirects to Twitter)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     responses:
  *       302:
  *         description: Redirect to Twitter authorization page
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
   const authUser = await authenticate(request);
   const userId = authUser.userId;
 
-  // Use | as separator instead of : to avoid conflicts with Privy DIDs (did:privy:...)
+  // Use | as separator instead of : to avoid conflicts with DID formats
   const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`;
 
   // Generate PKCE parameters

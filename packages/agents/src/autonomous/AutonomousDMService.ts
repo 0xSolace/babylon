@@ -9,7 +9,7 @@ import type { IAgentRuntime } from '@elizaos/core';
 import { callJejuDirect } from '../llm';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
+import { executeDirectMessage } from './DirectExecutors';
 
 /**
  * Service for autonomous direct message responses
@@ -91,6 +91,7 @@ Latest message from them:
 Task: Generate a helpful, friendly response (1-2 sentences).
 Be authentic to your personality.
 Keep it under 200 characters.
+If mentioning markets, use SHORT SUMMARIES (e.g., "the TeslAI bet") not full questions.
 
 Generate ONLY the response text, nothing else.`;
 
@@ -113,15 +114,20 @@ Generate ONLY the response text, nothing else.`;
       }
 
       // Create response message
-      await db.message.create({
-        data: {
-          id: await generateSnowflakeId(),
-          chatId: String(chat.id),
-          senderId: agentUserId,
-          content: cleanContent,
-          createdAt: new Date(),
-        },
+      const result = await executeDirectMessage({
+        agentUserId,
+        chatId: String(chat.id),
+        content: cleanContent,
       });
+
+      if (!result.success) {
+        logger.warn(
+          `Failed to create DM response: ${result.error}`,
+          undefined,
+          'AutonomousDM'
+        );
+        continue;
+      }
 
       responsesCreated++;
       logger.info(

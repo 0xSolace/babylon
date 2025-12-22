@@ -2,8 +2,8 @@
  * Type definitions for Babylon Agent System
  */
 
+import type { JsonValue } from '@babylon/shared';
 import type { Character } from '@elizaos/core';
-import type { JsonValue } from './types/common';
 
 // Re-export all types from types/index.ts for backwards compatibility
 export * from './types/index';
@@ -26,7 +26,9 @@ export interface AgentConfig {
   // Wallet
   pointsBalance: number;
   walletAddress?: string;
+  /** @deprecated Use oauth3WalletId - migrating from Privy to OAuth3 */
   privyWalletId?: string;
+  oauth3WalletId?: string;
 
   // Performance
   lifetimePnL: number;

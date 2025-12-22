@@ -18,7 +18,7 @@
  *     summary: Get group members
  *     description: Returns list of group members
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -44,7 +44,7 @@
  *     summary: Invite member
  *     description: Sends invite to user to join group (admin only)
  *     security:
- *       - PrivyAuth: []
+ *       - OAuth3Auth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -91,14 +91,9 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+import { AddMemberSchema, generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const addMemberSchema = z.object({
-  userId: z.string(),
-});
 
 /**
  * POST /api/user-groups/[id]/members
@@ -113,7 +108,7 @@ export const POST = withErrorHandling(
 
     const { id: groupId } = await context.params;
     const body = await request.json();
-    const { userId: inviteeId } = addMemberSchema.parse(body);
+    const { userId: inviteeId } = AddMemberSchema.parse(body);
 
     // Check if requester is admin
     const isAdmin = await db.userGroupAdmin.findFirst({

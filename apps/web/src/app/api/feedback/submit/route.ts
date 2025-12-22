@@ -73,23 +73,13 @@ import {
 } from '@babylon/api';
 import { db } from '@babylon/db';
 import { updateFeedbackMetrics } from '@babylon/engine';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  FeedbackSubmitSchema,
+  generateSnowflakeId,
+  logger,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const FeedbackSubmitSchema = z
-  .object({
-    toUserId: z.string().min(1, 'toUserId is required'),
-    score: z.number().min(0).max(100).optional(),
-    stars: z.number().int().min(1).max(5).optional(),
-    comment: z.string().max(5000).optional(),
-    category: z.string().min(1).optional(),
-  })
-  .refine(({ score, stars }) => score !== undefined || stars !== undefined, {
-    message: 'Either score or stars must be provided',
-    path: ['score'],
-  });
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);

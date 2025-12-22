@@ -94,7 +94,7 @@ export async function requireUserByIdentifier(
 ): Promise<User> {
   const user = await findUserByIdentifier(identifier);
   if (!user) {
-    throw new NotFoundError('User', undefined, { identifier });
+    throw new NotFoundError('User', identifier);
   }
   return user;
 }

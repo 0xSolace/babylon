@@ -6,7 +6,7 @@
  */
 
 import type { JsonValue } from '@babylon/shared';
-import { logger } from '../utils/logger';
+import { logger } from '@babylon/shared';
 import type { BenchmarkGameSnapshot } from './BenchmarkDataGenerator';
 
 export interface BenchmarkValidationResult {

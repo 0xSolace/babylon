@@ -31,10 +31,12 @@ import {
   worldEvents,
 } from '@babylon/db';
 import { logger } from '@babylon/shared';
+import { isSimulationMode } from '../storage-bridge';
 import type {
   EventContext,
   FeedPostContext,
   GroupChatContext,
+  MarketSignalContext,
   MarketSnapshots,
   NPCMarketContext,
   NPCPosition,
@@ -42,6 +44,7 @@ import type {
   PredictionMarketSnapshot,
   RelationshipContext,
 } from '../types/market-context';
+import { SignalExtractionService } from './signal-extraction-service';
 import { StaticDataRegistry } from './static-data-registry';
 
 export class MarketContextService {
@@ -51,6 +54,9 @@ export class MarketContextService {
    * Optimized to minimize database queries by fetching shared data once
    * and reusing it across all NPCs. Filters out test actors.
    *
+   * @param options - Optional overrides for simulation mode
+   * @param options.priceOverrides - Map of ticker -> price for causal simulation
+   * @param options.recentEvents - Array of recent events (for causal simulation)
    * @returns Map of NPC ID to their market context
    *
    * @remarks
@@ -63,8 +69,110 @@ export class MarketContextService {
    * const npcContext = contexts.get('npc-123');
    * ```
    */
-  async buildContextForAllNPCs(): Promise<Map<string, NPCMarketContext>> {
+  async buildContextForAllNPCs(options?: {
+    priceOverrides?: Map<string, number>;
+    recentEvents?: EventContext[];
+  }): Promise<Map<string, NPCMarketContext>> {
     const startTime = Date.now();
+
+    // Simulation Mode Bypass
+    if (isSimulationMode()) {
+      const staticActors = StaticDataRegistry.getAllActors();
+
+      // Filter out test actors
+      const npcs = staticActors
+        .filter((actor) => !actor.name.includes('Group Test') && !actor.isTest)
+        .map((actor) => ({
+          id: actor.id,
+          name: actor.name,
+          description: actor.description,
+          domain: actor.domain,
+          personality: actor.personality,
+          tier: actor.tier,
+          affiliations: actor.affiliations,
+          postStyle: actor.postStyle,
+          postExample: actor.postExample,
+          tradingBalance: '100000', // Mock balance
+          reputationPoints: 10000,
+          hasPool: true,
+        }));
+
+      // In simulation mode, we skip DB queries for messages/relationships/positions
+      // and provide empty/mock data instead
+      const contexts = new Map<string, NPCMarketContext>();
+
+      // Default prices - can be overridden by causal simulation
+      const defaultPrices: Record<string, number> = {
+        BTCAI: 120000,
+        ETHAI: 4000,
+        SOLAI: 200,
+        TSLAI: 450,
+        METAI: 520,
+      };
+
+      // Helper to get price (override or default)
+      const getPrice = (ticker: string): number => {
+        if (options?.priceOverrides?.has(ticker)) {
+          return options.priceOverrides.get(ticker)!;
+        }
+        return defaultPrices[ticker] ?? 100;
+      };
+
+      // Build perp markets list based on available tickers
+      const tickers = options?.priceOverrides
+        ? Array.from(options.priceOverrides.keys())
+        : Object.keys(defaultPrices);
+
+      const perpMarkets: PerpMarketSnapshot[] = tickers.map((ticker) => {
+        const price = getPrice(ticker);
+        return {
+          ticker,
+          currentPrice: price,
+          change24h: 0,
+          changePercent24h: 0,
+          name: ticker,
+          organizationId: ticker.toLowerCase(),
+          high24h: price * 1.01,
+          low24h: price * 0.99,
+          volume24h: 1000000,
+          openInterest: 500000,
+        };
+      });
+
+      const predictionMarkets: PredictionMarketSnapshot[] = [
+        {
+          id: 'q1',
+          text: 'Will BitcAIn hit $150k?',
+          yesPrice: 65,
+          noPrice: 35,
+          totalVolume: 50000,
+          resolutionDate: new Date(Date.now() + 86400000).toISOString(),
+          daysUntilResolution: 2,
+        },
+      ];
+
+      // Use provided events or empty array
+      const recentEvents = options?.recentEvents ?? [];
+
+      for (const npc of npcs) {
+        contexts.set(npc.id, {
+          npcId: npc.id,
+          npcName: npc.name,
+          personality: npc.personality || 'neutral trader',
+          tier: npc.tier || 'B_TIER',
+          availableBalance: 100000,
+          relationships: [], // Empty for simulation
+          recentPosts: [], // Empty for simulation
+          groupChatMessages: [], // Empty for simulation
+          recentEvents, // Use provided events (from causal simulation)
+          perpMarkets,
+          predictionMarkets,
+          currentPositions: [], // Empty for simulation start
+        });
+      }
+
+      return contexts;
+    }
 
     // Fetch all NPCs from static registry and state table
     // Filter out test actors (Group Test Alice, Bob, Charlie)
@@ -99,6 +207,12 @@ export class MarketContextService {
       this.getRecentFeed(),
       this.getRecentEvents(),
     ]);
+
+    // Extract signal analysis for active prediction markets (for better NPC trading)
+    // This is internal context - never exposed to players
+    const marketSignals = await this.extractMarketSignals(
+      marketSnapshots.predictions
+    );
 
     // Get group chats with messages
     const groupChats = await db
@@ -280,6 +394,7 @@ export class MarketContextService {
         perpMarkets: marketSnapshots.perps,
         predictionMarkets: marketSnapshots.predictions,
         currentPositions,
+        marketSignals, // Add signal analysis for better trading decisions
       });
     }
 
@@ -339,6 +454,11 @@ export class MarketContextService {
         this.getInsiderInfo(npcId),
       ]);
 
+    // Extract signal analysis for prediction markets
+    const marketSignals = await this.extractMarketSignals(
+      marketSnapshots.predictions
+    );
+
     // Get relationships for this NPC
     const relationships = await this.getRelationshipsForNPC(npcId);
 
@@ -392,6 +512,7 @@ export class MarketContextService {
       perpMarkets: marketSnapshots.perps,
       predictionMarkets: marketSnapshots.predictions,
       currentPositions,
+      marketSignals, // Add signal analysis for better trading decisions
     };
   }
 
@@ -529,7 +650,7 @@ export class MarketContextService {
       .select()
       .from(posts)
       .where(and(isNull(posts.deletedAt), lte(posts.timestamp, now)))
-      .orderBy(desc(posts.createdAt))
+      .orderBy(desc(posts.timestamp))
       .limit(50);
 
     return postList.map((post) => {
@@ -705,7 +826,8 @@ export class MarketContextService {
    * @returns Array of the NPC's recent posts
    */
   async getRecentPostsByNPC(npcId: string): Promise<FeedPostContext[]> {
-    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
 
     const npcPosts = await db
       .select()
@@ -713,11 +835,12 @@ export class MarketContextService {
       .where(
         and(
           eq(posts.authorId, npcId),
-          gte(posts.createdAt, threeDaysAgo),
+          gte(posts.timestamp, threeDaysAgo),
+          lte(posts.timestamp, now),
           isNull(posts.deletedAt)
         )
       )
-      .orderBy(desc(posts.createdAt))
+      .orderBy(desc(posts.timestamp))
       .limit(10);
 
     return npcPosts.map((post) => {
@@ -927,5 +1050,75 @@ export class MarketContextService {
         daysUntilResolution,
       };
     });
+  }
+
+  /**
+   * Extract signal analysis for prediction markets
+   *
+   * Uses SignalExtractionService to analyze feed content and determine
+   * signal direction for each active market. This helps NPCs make
+   * better-informed trading decisions.
+   *
+   * @internal This data is for NPC AI only - never expose to players
+   * @param predictionMarkets - Active prediction markets to analyze
+   * @returns Array of market signal contexts
+   */
+  private async extractMarketSignals(
+    predictionMarkets: PredictionMarketSnapshot[]
+  ): Promise<MarketSignalContext[]> {
+    if (predictionMarkets.length === 0) {
+      return [];
+    }
+
+    const signals: MarketSignalContext[] = [];
+
+    // Extract signals for up to 5 active markets (limit to avoid overhead)
+    const marketsToAnalyze = predictionMarkets.slice(0, 5);
+
+    for (const market of marketsToAnalyze) {
+      // Get question number from market ID for signal extraction
+      // Market IDs are snowflake strings, need to lookup question number
+      // Try to parse market ID as question number (some markets use question number as ID)
+      const marketIdStr = String(market.id);
+      const marketIdAsNumber = Number.parseInt(marketIdStr, 10);
+      if (Number.isNaN(marketIdAsNumber)) continue;
+
+      try {
+        const analysis =
+          await SignalExtractionService.extractMarketSignal(marketIdAsNumber);
+
+        signals.push({
+          marketId: marketIdStr,
+          yesSignal: analysis.yesSignal,
+          noSignal: analysis.noSignal,
+          netSignal: analysis.netSignal,
+          strength: analysis.signalStrength,
+          suggestedOutcome: analysis.suggestedOutcome,
+          confidence: analysis.confidence,
+        });
+
+        logger.debug(
+          'Extracted market signal',
+          {
+            marketId: market.id,
+            suggestedOutcome: analysis.suggestedOutcome,
+            confidence: (analysis.confidence * 100).toFixed(1) + '%',
+          },
+          'MarketContextService'
+        );
+      } catch (error) {
+        // Signal extraction is optional - continue if it fails
+        logger.debug(
+          'Signal extraction failed for market (non-critical)',
+          {
+            marketId: market.id,
+            error: error instanceof Error ? error.message : 'Unknown',
+          },
+          'MarketContextService'
+        );
+      }
+    }
+
+    return signals;
   }
 }
