@@ -102,7 +102,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser, hasBlocked } from '@babylon/db';
+import {
+  and,
+  asUser,
+  db,
+  eq,
+  groupChatMemberships,
+  hasBlocked,
+} from '@babylon/db';
 import {
   GroupChatService,
   MessageQualityChecker,
@@ -440,12 +447,29 @@ export const POST = withErrorHandling(
           );
         }
       } else if (isGroupChat) {
-        // For group chats, notify all participants except sender
-        const recipientUserIds = chatParticipantsList
-          .filter((p) => p.userId !== user.userId)
-          .map((p) => p.userId);
-        const chatInfo = await asUser(user, async (db) => {
-          return await db.chat.findUnique({
+        // For group chats, notify all participants from both tables
+        // (ChatParticipant for user-created groups, GroupChatMembership for NPC groups)
+        const groupMemberships = await db
+          .select({ userId: groupChatMemberships.userId })
+          .from(groupChatMemberships)
+          .where(
+            and(
+              eq(groupChatMemberships.chatId, chatId),
+              eq(groupChatMemberships.isActive, true)
+            )
+          );
+
+        // Combine and deduplicate recipients from both tables
+        const allRecipientIds = [
+          ...chatParticipantsList.map((p) => p.userId),
+          ...groupMemberships.map((m) => m.userId),
+        ];
+        const recipientUserIds = [...new Set(allRecipientIds)].filter(
+          (id) => id !== user.userId
+        );
+
+        const chatInfo = await asUser(user, async (dbClient) => {
+          return await dbClient.chat.findUnique({
             where: { id: chatId },
             select: { name: true },
           });

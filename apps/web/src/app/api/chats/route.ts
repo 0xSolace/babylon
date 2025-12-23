@@ -441,29 +441,54 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       .filter((c) => c !== null);
 
     // Format user-created group chats (from chatParticipants)
-    const userGroupChatsList = await Promise.all(
-      userGroupChatsDetails.map(async (chat) => {
-        // Get last message for this chat
-        const msgs = await dbClient
-          .select()
-          .from(messages)
-          .where(eq(messages.chatId, chat.id))
-          .orderBy(desc(messages.createdAt))
-          .limit(1);
-        const lastMessage = msgs[0] || null;
+    // First, batch fetch last messages and message counts
+    const userGroupChatIds = userGroupChatsDetails.map((c) => c.id);
+    const [userGroupLastMessages, userGroupMessageCounts] = await Promise.all([
+      Promise.all(
+        userGroupChatIds.map(async (chatId) => {
+          const msgs = await dbClient
+            .select()
+            .from(messages)
+            .where(eq(messages.chatId, chatId))
+            .orderBy(desc(messages.createdAt))
+            .limit(1);
+          return { chatId, messages: msgs };
+        })
+      ),
+      userGroupChatIds.length > 0
+        ? dbClient
+            .select({
+              chatId: messages.chatId,
+              count: count(messages.id),
+            })
+            .from(messages)
+            .where(inArray(messages.chatId, userGroupChatIds))
+            .groupBy(messages.chatId)
+        : Promise.resolve([]),
+    ]);
 
-        return {
-          id: chat.id,
-          name: chat.name || 'Unnamed Group',
-          isGroup: true,
-          lastMessage,
-          messageCount: 0,
-          qualityScore: 1.0,
-          lastMessageAt: lastMessage?.createdAt || null,
-          updatedAt: chat.updatedAt,
-        };
-      })
+    const userGroupMessagesMap = new Map(
+      userGroupLastMessages.map(({ chatId, messages: msgs }) => [chatId, msgs])
     );
+    const userGroupCountMap = new Map(
+      userGroupMessageCounts.map((mc) => [mc.chatId, mc.count])
+    );
+
+    const userGroupChatsList = userGroupChatsDetails.map((chat) => {
+      const lastMessage = userGroupMessagesMap.get(chat.id)?.[0] || null;
+      const messageCount = userGroupCountMap.get(chat.id) ?? 0;
+
+      return {
+        id: chat.id,
+        name: chat.name || 'Unnamed Group',
+        isGroup: true,
+        lastMessage,
+        messageCount,
+        qualityScore: 1.0, // User-created groups don't have quality scoring
+        lastMessageAt: lastMessage?.createdAt || null,
+        updatedAt: chat.updatedAt,
+      };
+    });
 
     // Combine both types of group chats
     const groupChatsList = [...npcGroupChatsList, ...userGroupChatsList];
