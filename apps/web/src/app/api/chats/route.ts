@@ -353,26 +353,37 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
     const chatDetailsMap = new Map(groupChatDetails.map((c) => [c.id, c]));
 
-    // Get DM chats the user participates in
-    const dmParticipantsList = await dbClient
+    // Get all chats the user participates in via chatParticipants
+    const userParticipantsList = await dbClient
       .select()
       .from(chatParticipants)
       .where(eq(chatParticipants.userId, user.userId));
 
     logger.info(
-      'Found DM participants',
+      'Found user chat participants',
       {
         userId: user.userId,
-        count: dmParticipantsList.length,
+        count: userParticipantsList.length,
       },
       'GET /api/chats'
     );
 
-    const dmChatIds = dmParticipantsList.map((p) => p.chatId);
-    const dmChatsDetails = await dbClient
-      .select()
-      .from(chats)
-      .where(and(inArray(chats.id, dmChatIds), eq(chats.isGroup, false)));
+    const userChatIds = userParticipantsList.map((p) => p.chatId);
+
+    // Separate DM chats and user-created group chats
+    const allUserChatsDetails =
+      userChatIds.length > 0
+        ? await dbClient
+            .select()
+            .from(chats)
+            .where(inArray(chats.id, userChatIds))
+        : [];
+
+    const dmChatsDetails = allUserChatsDetails.filter((c) => !c.isGroup);
+    const userGroupChatsDetails = allUserChatsDetails.filter(
+      (c) => c.isGroup && !groupChatIds.includes(c.id)
+    );
+    const dmChatIds = dmChatsDetails.map((c) => c.id);
 
     // Get participants and messages separately
     const [allParticipants, allMessages] = await Promise.all([
@@ -409,8 +420,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       messagesByChatId.set(chatId, messages);
     });
 
-    // Format group chats
-    const groupChatsList = memberships
+    // Format NPC group chats (from groupChatMemberships)
+    const npcGroupChatsList = memberships
       .map((membership) => {
         const chat = chatDetailsMap.get(membership.chatId);
         if (!chat) return null;
@@ -428,6 +439,34 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         };
       })
       .filter((c) => c !== null);
+
+    // Format user-created group chats (from chatParticipants)
+    const userGroupChatsList = await Promise.all(
+      userGroupChatsDetails.map(async (chat) => {
+        // Get last message for this chat
+        const msgs = await dbClient
+          .select()
+          .from(messages)
+          .where(eq(messages.chatId, chat.id))
+          .orderBy(desc(messages.createdAt))
+          .limit(1);
+        const lastMessage = msgs[0] || null;
+
+        return {
+          id: chat.id,
+          name: chat.name || 'Unnamed Group',
+          isGroup: true,
+          lastMessage,
+          messageCount: 0,
+          qualityScore: 1.0,
+          lastMessageAt: lastMessage?.createdAt || null,
+          updatedAt: chat.updatedAt,
+        };
+      })
+    );
+
+    // Combine both types of group chats
+    const groupChatsList = [...npcGroupChatsList, ...userGroupChatsList];
 
     // Format DM chats - get the other participant's name and details
     const directChatsList = await Promise.all(

@@ -311,9 +311,17 @@ export const POST = withErrorHandling(
           }
         }
       }
-      // For group chats, check GroupChatMembership
+      // For group chats, check GroupChatMembership OR ChatParticipant
+      // (NPC group chats use GroupChatMembership, user-created groups use ChatParticipant)
       else if (isGroupChat) {
-        isMember = await GroupChatService.isInChat(user.userId, chatId);
+        const isInGroupChatMembership = await GroupChatService.isInChat(
+          user.userId,
+          chatId
+        );
+        const isInChatParticipant = chatParticipantsList.some(
+          (p) => p.userId === user.userId
+        );
+        isMember = isInGroupChatMembership || isInChatParticipant;
         if (!isMember) {
           throw new AuthorizationError(
             'You are not a member of this group chat',
