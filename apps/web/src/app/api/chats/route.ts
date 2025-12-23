@@ -330,6 +330,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
     // Get chat details for group chats
     const groupChatIds = memberships.map((m) => m.chatId);
+    const groupChatIdSet = new Set(groupChatIds); // Use Set for O(1) deduplication
     const groupChatDetails = await dbClient
       .select()
       .from(chats)
@@ -381,7 +382,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
     const dmChatsDetails = allUserChatsDetails.filter((c) => !c.isGroup);
     const userGroupChatsDetails = allUserChatsDetails.filter(
-      (c) => c.isGroup && !groupChatIds.includes(c.id)
+      (c) => c.isGroup && !groupChatIdSet.has(c.id)
     );
     const dmChatIds = dmChatsDetails.map((c) => c.id);
 

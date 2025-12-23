@@ -321,12 +321,12 @@ export const POST = withErrorHandling(
       // For group chats, check GroupChatMembership OR ChatParticipant
       // (NPC group chats use GroupChatMembership, user-created groups use ChatParticipant)
       else if (isGroupChat) {
+        const isInChatParticipant = chatParticipantsList.some(
+          (p) => p.userId === user.userId
+        );
         const isInGroupChatMembership = await GroupChatService.isInChat(
           user.userId,
           chatId
-        );
-        const isInChatParticipant = chatParticipantsList.some(
-          (p) => p.userId === user.userId
         );
         isMember = isInGroupChatMembership || isInChatParticipant;
         if (!isMember) {
@@ -338,6 +338,11 @@ export const POST = withErrorHandling(
         }
       }
     }
+
+    // Track if this is a user-created group (uses ChatParticipant) vs NPC group (uses GroupChatMembership)
+    const isUserCreatedGroup =
+      isGroupChat &&
+      chatParticipantsList.some((p) => p.userId === user.userId);
 
     // 5. Check kick probability for group chats (not DMs) - skip for now since we don't want to kick during message send
     let sweepDecision: SweepDecision | null = null;
@@ -447,17 +452,19 @@ export const POST = withErrorHandling(
           );
         }
       } else if (isGroupChat) {
-        // For group chats, notify all participants from both tables
-        // (ChatParticipant for user-created groups, GroupChatMembership for NPC groups)
-        const groupMemberships = await db
-          .select({ userId: groupChatMemberships.userId })
-          .from(groupChatMemberships)
-          .where(
-            and(
-              eq(groupChatMemberships.chatId, chatId),
-              eq(groupChatMemberships.isActive, true)
-            )
-          );
+        // For group chats, notify all participants
+        // Only query GroupChatMembership for NPC groups (skip for user-created groups)
+        const groupMemberships = isUserCreatedGroup
+          ? []
+          : await db
+              .select({ userId: groupChatMemberships.userId })
+              .from(groupChatMemberships)
+              .where(
+                and(
+                  eq(groupChatMemberships.chatId, chatId),
+                  eq(groupChatMemberships.isActive, true)
+                )
+              );
 
         // Combine and deduplicate recipients from both tables
         const allRecipientIds = [
